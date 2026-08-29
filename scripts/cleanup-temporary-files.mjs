@@ -1,0 +1,1 @@
+import{readdir,stat,unlink}from'node:fs/promises';import{resolve}from'node:path';const dir=resolve(process.env.STORAGE_PATH??'storage','temporary'),cut=Date.now()-24*3600_000;for(const name of await readdir(dir).catch(()=>[])){const file=resolve(dir,name),s=await stat(file);if(s.isFile()&&s.mtimeMs<cut)await unlink(file);}

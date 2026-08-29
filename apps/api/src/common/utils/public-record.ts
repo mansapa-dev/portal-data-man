@@ -1,0 +1,1 @@
+export function publicRecord<T extends Record<string,unknown>>(record:T|null){if(!record)return record; const safe={...record};delete safe.id;return JSON.parse(JSON.stringify(safe,(_,v)=>typeof v==='bigint'?undefined:v));}

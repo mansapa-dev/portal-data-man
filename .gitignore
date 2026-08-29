@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+storage/imports/*
+storage/exports/*
+storage/temporary/*
+!storage/**/.gitkeep
+coverage/
