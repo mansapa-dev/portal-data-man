@@ -46,6 +46,14 @@ Format: `No.`, `NISN`, `Nama Siswa`, `Kelas`, `No. Telepon Orang Tua`, `Alamat`,
 
 Admin login melalui `POST /api/v1/auth/admin/login`; browser menyimpan session pada cookie HttpOnly, bukan localStorage. Request mutasi mengirim cookie CSRF melalui header `X-CSRF-Token`. OIDC issuer direncanakan pada `/oidc` dengan Authorization Code + PKCE S256 untuk public web client dan Client Credentials untuk service client. Redirect URI wajib exact-match dan client secret hanya disimpan sebagai hash.
 
+### Profil dan kebijakan akun admin
+
+Admin yang telah login dapat memakai `GET/PATCH /api/v1/profile`, `POST /api/v1/profile/change-password`, dan `POST /api/v1/profile/logout-all`. Perubahan password merotasi sesi secara atomic: password, pencabutan sesi lama, pembuatan sesi baru, dan audit harus seluruhnya berhasil sebelum cookie baru diterbitkan.
+
+`AdminUser.email` unik secara global. Email tetap dicadangkan ketika akun di-soft-delete dan tidak dapat digunakan akun baru. Untuk memakai kembali email tersebut, super-admin harus memulihkan akun lama lalu mengganti emailnya melalui mekanisme resmi. Soft delete tidak mengubah email dan tidak pernah melakukan hard delete otomatis. Daftar admin menerima filter `deleted=active|deleted|all`; restore hanya menghapus `deletedAt` dan mempertahankan role serta status sebelumnya.
+
+Audit log tersedia melalui `GET /api/v1/audit-logs` dengan `actorType`, `actorPublicId`, `action`, `entityType`, `entityPublicId`, `dateFrom`, `dateTo`, `page`, `perPage`, dan `sortDirection`. Payload audit menyaring credential dan internal numeric ID secara rekursif.
+
 ## Operasional
 
 - Backup database dengan fasilitas MySQL hosting dan backup folder `storage/` secara terenkripsi.

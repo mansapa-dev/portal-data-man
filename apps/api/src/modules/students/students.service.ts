@@ -3,32 +3,17 @@ import { Prisma, StudentStatus } from '@prisma/client';
 import { ulid } from 'ulid';
 import { publicRecord } from '../../common/utils/public-record';
 import { PrismaService } from '../../database/prisma.service';
+import { AuditService } from '../audit-logs/audit.service';
 import { CreateStudentDto, StudentQueryDto, UpdateStudentDto } from './dto/student.dto';
-
-@Injectable()
-export class StudentsService {
-  constructor(private readonly db: PrismaService) {}
-  async byNisn(nisn: string) { const row = await this.db.student.findFirst({ where: { nisn, deletedAt: null } }); if (!row) throw new NotFoundException('Siswa tidak ditemukan.'); return publicRecord(row); }
-  async list(query: StudentQueryDto) {
-    const where: Prisma.StudentWhereInput = { deletedAt: null, ...(query.nisn ? { nisn: query.nisn } : {}), ...(query.status ? { status: query.status as StudentStatus } : {}), ...(query.search ? { OR: [{ fullName: { contains: query.search } }, { nisn: { contains: query.search } }] } : {}) };
-    const [data, total] = await this.db.$transaction([this.db.student.findMany({ where, skip: (query.page - 1) * query.perPage, take: query.perPage, orderBy: { [query.sortBy]: query.sortDirection } }), this.db.student.count({ where })]);
-    return { message: 'Daftar siswa berhasil diambil.', data: data.map(publicRecord), meta: { page: query.page, perPage: query.perPage, total, totalPages: Math.ceil(total / query.perPage) } };
-  }
-  async one(publicId: string, includeDeleted = false) { const row = await this.db.student.findFirst({ where: { publicId, ...(includeDeleted ? {} : { deletedAt: null }) } }); if (!row) throw new NotFoundException('Siswa tidak ditemukan.'); return row; }
-  async create(dto: CreateStudentDto) {
-    try { const row = await this.db.student.create({ data: { publicId: ulid(), nisn: dto.nisn, fullName: dto.fullName.trim().replace(/\s+/g, ' '), parentPhone: dto.parentPhone ?? null, address: dto.address ?? null, rfidUid: dto.rfidUid?.toUpperCase() ?? null, status: (dto.status as StudentStatus | undefined) ?? StudentStatus.ACTIVE } }); return publicRecord(row); }
-    catch (error) { if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') throw new ConflictException('NISN atau RFID sudah digunakan.'); throw error; }
-  }
-  async update(publicId: string, dto: UpdateStudentDto) {
-    const row = await this.one(publicId); const data: Prisma.StudentUpdateInput = {};
-    if (dto.nisn !== undefined) data.nisn = dto.nisn;
-    if (dto.fullName !== undefined) data.fullName = dto.fullName.trim().replace(/\s+/g, ' ');
-    if (dto.parentPhone !== undefined) data.parentPhone = dto.parentPhone || null;
-    if (dto.address !== undefined) data.address = dto.address || null;
-    if (dto.rfidUid !== undefined) data.rfidUid = dto.rfidUid ? dto.rfidUid.toUpperCase() : null;
-    if (dto.status !== undefined) data.status = dto.status as StudentStatus;
-    return publicRecord(await this.db.student.update({ where: { id: row.id }, data }));
-  }
-  async remove(publicId: string) { const row = await this.one(publicId); await this.db.student.update({ where: { id: row.id }, data: { deletedAt: new Date() } }); }
-  async restore(publicId: string) { const row = await this.one(publicId, true); return publicRecord(await this.db.student.update({ where: { id: row.id }, data: { deletedAt: null } })); }
+@Injectable() export class StudentsService {
+ constructor(private db:PrismaService,private audit:AuditService){}
+ private include={enrollments:{where:{status:'ACTIVE' as const},take:1,orderBy:{enrolledAt:'desc' as const},include:{schoolClass:{select:{publicId:true,code:true,name:true,gradeLevel:true}},semester:{select:{publicId:true,type:true}},academicYear:{select:{publicId:true,name:true}}}}};
+ async byNisn(nisn:string){const row=await this.db.student.findFirst({where:{nisn,deletedAt:null},include:this.include});if(!row)throw new NotFoundException('Siswa tidak ditemukan.');return this.present(row)}
+ private present(row:Record<string,unknown>){const safe=publicRecord(row) as Record<string,unknown>;const enrollments=safe?.enrollments as unknown[]|undefined;return{...safe,activeClass:enrollments?.[0]??null,enrollments:undefined}}
+ async list(q:StudentQueryDto){const enrollmentFilter:Prisma.ClassEnrollmentWhereInput={status:'ACTIVE',...(q.classPublicId?{schoolClass:{publicId:q.classPublicId}}:{}),...(q.academicYearPublicId?{academicYear:{publicId:q.academicYearPublicId}}:{}),...(q.semesterPublicId?{semester:{publicId:q.semesterPublicId}}:{})};const hasEnrollmentFilter=!!(q.classPublicId||q.academicYearPublicId||q.semesterPublicId);const where:Prisma.StudentWhereInput={deletedAt:null,...(q.nisn?{nisn:q.nisn}:{}),...(q.status?{status:q.status}:{}),...(q.search?{OR:[{fullName:{contains:q.search}},{nisn:{contains:q.search}}]}:{}),...(hasEnrollmentFilter?{enrollments:{some:enrollmentFilter}}:{})};const[data,total]=await this.db.$transaction([this.db.student.findMany({where,include:this.include,skip:(q.page-1)*q.perPage,take:q.perPage,orderBy:{[q.sortBy]:q.sortDirection}}),this.db.student.count({where})]);return{message:'Daftar siswa berhasil diambil.',data:data.map(r=>this.present(r as unknown as Record<string,unknown>)),meta:{page:q.page,perPage:q.perPage,total,totalPages:Math.ceil(total/q.perPage)}}}
+ async one(publicId:string,deleted=false){const r=await this.db.student.findFirst({where:{publicId,...(deleted?{}:{deletedAt:null})},include:this.include});if(!r)throw new NotFoundException('Siswa tidak ditemukan.');return r}
+ async create(d:CreateStudentDto,actor:string){try{const r=await this.db.student.create({data:{publicId:ulid(),nisn:d.nisn,fullName:d.fullName.trim().replace(/\s+/g,' '),parentPhone:d.parentPhone??null,address:d.address??null,rfidUid:d.rfidUid?.toUpperCase()??null,status:d.status??StudentStatus.ACTIVE}});await this.audit.write({actorPublicId:actor,action:'CREATE',entityType:'Student',entityPublicId:r.publicId,newValues:r});return publicRecord(r)}catch(e){if(e instanceof Prisma.PrismaClientKnownRequestError&&e.code==='P2002')throw new ConflictException('NISN atau RFID sudah digunakan.');throw e}}
+ async update(id:string,d:UpdateStudentDto,actor:string){const old=await this.one(id),data:Prisma.StudentUpdateInput={};if(d.nisn!==undefined)data.nisn=d.nisn;if(d.fullName!==undefined)data.fullName=d.fullName.trim().replace(/\s+/g,' ');if(d.parentPhone!==undefined)data.parentPhone=d.parentPhone||null;if(d.address!==undefined)data.address=d.address||null;if(d.rfidUid!==undefined)data.rfidUid=d.rfidUid?d.rfidUid.toUpperCase():null;if(d.status!==undefined)data.status=d.status;try{const r=await this.db.student.update({where:{id:old.id},data});await this.audit.write({actorPublicId:actor,action:'UPDATE',entityType:'Student',entityPublicId:id,oldValues:old,newValues:r});return publicRecord(r)}catch(e){if(e instanceof Prisma.PrismaClientKnownRequestError&&e.code==='P2002')throw new ConflictException('NISN atau RFID sudah digunakan.');throw e}}
+ async remove(id:string,actor:string){const old=await this.one(id),r=await this.db.student.update({where:{id:old.id},data:{deletedAt:new Date()}});await this.audit.write({actorPublicId:actor,action:'DELETE',entityType:'Student',entityPublicId:id,oldValues:old,newValues:r})}
+ async restore(id:string,actor:string){const old=await this.one(id,true),r=await this.db.student.update({where:{id:old.id},data:{deletedAt:null}});await this.audit.write({actorPublicId:actor,action:'RESTORE',entityType:'Student',entityPublicId:id,oldValues:old,newValues:r});return publicRecord(r)}
 }

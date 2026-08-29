@@ -1,0 +1,1 @@
+import{Module}from'@nestjs/common';import{AdminUsersController,AdminUsersService}from'./admin-users';@Module({controllers:[AdminUsersController],providers:[AdminUsersService]})export class AdminUsersModule{}

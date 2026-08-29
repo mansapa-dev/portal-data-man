@@ -1,1 +1,1 @@
-export function publicRecord<T extends Record<string,unknown>>(record:T|null){if(!record)return record; const safe={...record};delete safe.id;return JSON.parse(JSON.stringify(safe,(_,v)=>typeof v==='bigint'?undefined:v));}
+const hidden=new Set(['id','passwordHash','secretHash','csrfHash','tokenHash','clientSecretHash']);export function publicRecord<T extends Record<string,unknown>>(record:T|null){if(!record)return record;return JSON.parse(JSON.stringify(record,(key,value)=>hidden.has(key)||typeof value==='bigint'?undefined:value));}
