@@ -17,6 +17,7 @@ import { TeachersModule } from './modules/teachers/teachers.module';
 import { AdminUsersModule } from './modules/admin-users/admin-users.module';
 import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { FilesModule } from './modules/files/files.module';
 
 const staticFrontend = process.env.NODE_ENV === 'production'
   ? [ServeStaticModule.forRoot({ rootPath: resolve(process.cwd(), 'dist/public'), exclude: ['/api/{*path}', '/oidc/{*path}', '/docs/{*path}', '/health'] })]
@@ -28,6 +29,6 @@ const staticFrontend = process.env.NODE_ENV === 'production'
   ThrottlerModule.forRoot([{ ttl: Number(process.env.RATE_LIMIT_TTL_MS ?? 60000), limit: Number(process.env.RATE_LIMIT_MAX ?? 120) }]),
   ...staticFrontend, PrismaModule, HealthModule, AuthModule, AuditLogsModule, StudentsModule,
   ImportsModule, AcademicYearsModule, SemestersModule, ClassesModule, EnrollmentsModule,
-  TeachersModule, AdminUsersModule, DashboardModule,
+  TeachersModule, AdminUsersModule, DashboardModule, FilesModule,
 ] })
 export class AppModule {}
