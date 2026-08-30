@@ -45,7 +45,7 @@ enum Gender {
  FEMALE
 }
 enum AccountStatus {
- PENDING
+ PENDING_SETUP
  ACTIVE
  DISABLED
  LOCKED
@@ -119,6 +119,7 @@ model AuthSession {
  csrfHash String @db.VarChar(255)
  ipAddress String? @db.VarChar(45)
  userAgent String? @db.VarChar(500)
+ lastUsedAt DateTime @default(now())
  expiresAt DateTime
  revokedAt DateTime?
  createdAt DateTime @default(now())
@@ -225,18 +226,32 @@ model TeacherAccount {
  publicId String @unique @db.VarChar(26)
  teacherId BigInt @unique @db.UnsignedBigInt
  username String @unique @db.VarChar(100)
- email String @unique @db.VarChar(191)
- passwordHash String @db.VarChar(255)
- status AccountStatus @default(PENDING)
+ email String? @unique @db.VarChar(191)
+ passwordHash String? @db.VarChar(255)
+ status AccountStatus @default(PENDING_SETUP)
  mustChangePassword Boolean @default(true)
  failedLoginAttempts Int @default(0)
  lockedUntil DateTime?
  lastLoginAt DateTime?
  passwordChangedAt DateTime?
+ activatedAt DateTime?
+ disabledAt DateTime?
  createdAt DateTime @default(now())
  updatedAt DateTime @updatedAt
  teacher Teacher @relation(fields:[teacherId], references:[id])
  sessions AuthSession[]
+ setupTokens TeacherPasswordSetupToken[]
+}
+model TeacherPasswordSetupToken {
+ id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+ publicId String @unique @db.VarChar(26)
+ teacherAccountId BigInt @db.UnsignedBigInt
+ tokenHash String @unique @db.VarChar(64)
+ expiresAt DateTime
+ usedAt DateTime?
+ createdAt DateTime @default(now())
+ teacherAccount TeacherAccount @relation(fields:[teacherAccountId], references:[id], onDelete:Cascade)
+ @@index([teacherAccountId,expiresAt])
 }
 model ClassEnrollment {
  id BigInt @id @default(autoincrement()) @db.UnsignedBigInt

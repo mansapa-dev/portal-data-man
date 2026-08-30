@@ -1,0 +1,2 @@
+import{CanActivate,ExecutionContext,ForbiddenException,Injectable}from'@nestjs/common';import{SessionService}from'../session.service';
+@Injectable()export class TeacherCsrfGuard implements CanActivate{constructor(private sessions:SessionService){}canActivate(c:ExecutionContext){const req=c.switchToHttp().getRequest();if(['GET','HEAD','OPTIONS'].includes(req.method))return true;if(!this.sessions.verifyCsrf(req.teacherSession?.csrfHash,req.headers['x-csrf-token']))throw new ForbiddenException('Token CSRF guru tidak valid.');return true;}}
