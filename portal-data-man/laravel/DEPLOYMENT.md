@@ -2,6 +2,93 @@
 
 Dokumen ini mencakup instalasi baru dan cutover dari Portal Data Node.js. Jalankan seluruh command dari direktori `laravel/`.
 
+## Cara deploy release terbaru dari GitHub ke shared hosting
+
+Repository berisi beberapa aplikasi lama dan folder Laravel. Source production Laravel berada di:
+
+```text
+repository/laravel
+```
+
+Gunakan salah satu cara berikut. Jangan menaruh GitHub Personal Access Token di URL remote, file `.env`, atau command yang tersimpan di history shell.
+
+### Opsi A — cPanel Git Version Control / SSH
+
+Clone repository sekali saja di luar `public_html`:
+
+```bash
+cd /home/CPANEL_USER/apps
+git clone https://github.com/mhdarif09/portal-data-man.git portal-data-man
+cd /home/CPANEL_USER/apps/portal-data-man/laravel
+```
+
+Untuk update release berikutnya:
+
+```bash
+cd /home/CPANEL_USER/apps/portal-data-man
+git fetch origin
+git checkout main
+git pull --ff-only origin main
+cd laravel
+composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
+php artisan migrate --force
+php artisan optimize:clear
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+```
+
+Jika hosting tidak menyediakan Composer, jalankan `composer install --no-dev --prefer-dist --optimize-autoloader` di komputer lokal dengan PHP versi yang kompatibel, lalu upload folder `vendor/`. Jangan upload `node_modules/`.
+
+### Opsi B — cPanel File Manager / FTP
+
+1. Di komputer lokal, build asset dari folder `laravel/`:
+
+   ```bash
+   npm ci
+   npm run build
+   ```
+
+2. Upload source `laravel/` ke `/home/CPANEL_USER/apps/portal-data-man/laravel/`, termasuk `public/build/` hasil build.
+3. Jangan upload `.env` lokal, `node_modules/`, atau folder test.
+4. Buat `.env` production langsung di server berdasarkan `.env.example`.
+5. Pastikan `vendor/` tersedia dari Composer server atau hasil Composer lokal.
+6. Jalankan command Artisan pada bagian **Migration database** dan **Verifikasi dasar**.
+
+### Document root wajib
+
+Atur domain/subdomain di cPanel agar document root menunjuk langsung ke:
+
+```text
+/home/CPANEL_USER/apps/portal-data-man/laravel/public
+```
+
+Jangan menunjuk domain ke root repository atau `/laravel`, karena itu dapat membuka source code dan file `.env` ke publik.
+
+### Urutan update aman
+
+Sebelum update yang mengandung migration:
+
+```bash
+mysqldump --single-transaction -u DB_USER -p DB_NAME > /home/CPANEL_USER/backups/portal-data-before-update.sql
+```
+
+Lalu jalankan:
+
+```bash
+php artisan down --secret="RANDOM_MAINTENANCE_BYPASS"
+git pull --ff-only origin main
+composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
+php artisan migrate --force
+php artisan optimize:clear
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+php artisan up
+```
+
+Build frontend hanya perlu dijalankan di server jika source JavaScript ikut diubah dan server menyediakan Node.js. Jika tidak, build lokal lalu upload `public/build/` dari commit yang sama.
+
 ## Kebutuhan hosting
 
 - PHP 8.2 atau lebih baru.
