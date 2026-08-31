@@ -15,7 +15,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->encryptCookies(except: ['portal_csrf', 'portal_teacher_csrf']);
         $middleware->alias(['role' => RequireAdminRole::class, 'portal.session' => RequirePortalSession::class]);
-        $middleware->validateCsrfTokens(except: ['oidc/token']);
+        $middleware->validateCsrfTokens(except: ['oidc/token', 'oidc/userinfo', 'oidc/logout']);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

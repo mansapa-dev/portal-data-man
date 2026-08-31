@@ -152,3 +152,6 @@ Route::prefix('api/v1')->group(function (): void {
         Route::post('teacher/sessions/logout-all', [TeacherSelfController::class, 'logoutAll']);
     });
 });
+
+// React Router owns portal pages; serve the shell on direct navigation/refresh.
+Route::get('{any}', fn () => view('portal'))->where('any', '^(?!teacher(?:/|$)|api(?:/|$)|oidc(?:/|$)|health$|\.well-known(?:/|$)).*');
