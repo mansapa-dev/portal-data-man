@@ -1,0 +1,1 @@
+import{Module}from'@nestjs/common';import{ClassesController,ClassesService}from'./classes';@Module({controllers:[ClassesController],providers:[ClassesService],exports:[ClassesService]})export class ClassesModule{}

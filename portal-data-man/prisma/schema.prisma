@@ -1,0 +1,386 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum AdminRole {
+ SUPER_ADMIN
+ DATA_ADMIN
+ DATA_OPERATOR
+ AUDITOR
+}
+enum UserStatus {
+ ACTIVE
+ INACTIVE
+ LOCKED
+}
+enum SemesterType {
+ ODD
+ EVEN
+}
+enum ClassStatus {
+ ACTIVE
+ INACTIVE
+ ARCHIVED
+}
+enum StudentStatus {
+ ACTIVE
+ INACTIVE
+ GRADUATED
+ TRANSFERRED
+ DROPPED_OUT
+}
+enum TeacherStatus {
+ ACTIVE
+ INACTIVE
+ RETIRED
+ TRANSFERRED
+}
+enum Gender {
+ MALE
+ FEMALE
+}
+enum AccountStatus {
+ PENDING_SETUP
+ ACTIVE
+ DISABLED
+ LOCKED
+}
+enum EnrollmentStatus {
+ ACTIVE
+ MOVED
+ COMPLETED
+ CANCELLED
+}
+enum ClientType {
+ CONFIDENTIAL_WEB
+ PUBLIC_WEB
+ SERVICE
+}
+enum ClientStatus {
+ ACTIVE
+ INACTIVE
+}
+enum ImportType {
+ STUDENT
+ TEACHER
+}
+enum ImportStatus {
+ UPLOADED
+ VALIDATING
+ READY
+ PROCESSING
+ COMPLETED
+ COMPLETED_WITH_WARNINGS
+ FAILED
+}
+enum ImportRowStatus {
+ VALID
+ INSERTED
+ UPDATED
+ SKIPPED
+ WARNING
+ FAILED
+}
+enum ActorType {
+ ADMIN
+ TEACHER
+ APPLICATION
+ SYSTEM
+}
+
+model AdminUser {
+ id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+ publicId String @unique @db.VarChar(26)
+ name String @db.VarChar(150)
+ email String @unique @db.VarChar(191)
+ passwordHash String @db.VarChar(255)
+ role AdminRole
+ status UserStatus @default(ACTIVE)
+ failedLoginAttempts Int @default(0)
+ lockedUntil DateTime?
+ lastLoginAt DateTime?
+ passwordChangedAt DateTime?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ deletedAt DateTime?
+ sessions AuthSession[]
+}
+model AuthSession {
+ id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+ publicId String @unique @db.VarChar(26)
+ adminUserId BigInt? @db.UnsignedBigInt
+ teacherAccountId BigInt? @db.UnsignedBigInt
+ secretHash String @unique @db.VarChar(255)
+ csrfHash String @db.VarChar(255)
+ ipAddress String? @db.VarChar(45)
+ userAgent String? @db.VarChar(500)
+ lastUsedAt DateTime @default(now())
+ expiresAt DateTime
+ revokedAt DateTime?
+ createdAt DateTime @default(now())
+ rotatedFrom String? @db.VarChar(26)
+ adminUser AdminUser? @relation(fields:[adminUserId], references:[id])
+ teacherAccount TeacherAccount? @relation(fields:[teacherAccountId], references:[id])
+ @@index([expiresAt])
+}
+model PasswordResetToken {
+ id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+ tokenHash String @unique @db.VarChar(255)
+ accountType String @db.VarChar(20)
+ accountPublicId String @db.VarChar(26)
+ expiresAt DateTime
+ consumedAt DateTime?
+ createdAt DateTime @default(now())
+ @@index([accountPublicId])
+}
+model AcademicYear {
+ id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+ publicId String @unique @db.VarChar(26)
+ name String @unique @db.VarChar(30)
+ startDate DateTime @db.Date
+ endDate DateTime @db.Date
+ isActive Boolean @default(false)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ semesters Semester[]
+ classes SchoolClass[]
+ enrollments ClassEnrollment[]
+}
+model Semester {
+ id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+ publicId String @unique @db.VarChar(26)
+ academicYearId BigInt @db.UnsignedBigInt
+ type SemesterType
+ startDate DateTime @db.Date
+ endDate DateTime @db.Date
+ isActive Boolean @default(false)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ academicYear AcademicYear @relation(fields:[academicYearId], references:[id])
+ enrollments ClassEnrollment[]
+ @@unique([academicYearId,type])
+}
+model SchoolClass {
+ id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+ publicId String @unique @db.VarChar(26)
+ academicYearId BigInt @db.UnsignedBigInt
+ code String @db.VarChar(30)
+ name String @db.VarChar(100)
+ gradeLevel Int
+ homeroomTeacherId BigInt? @db.UnsignedBigInt
+ status ClassStatus @default(ACTIVE)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ deletedAt DateTime?
+ academicYear AcademicYear @relation(fields:[academicYearId], references:[id])
+ homeroomTeacher Teacher? @relation(fields:[homeroomTeacherId], references:[id])
+ enrollments ClassEnrollment[]
+ @@unique([academicYearId,code])
+ @@index([updatedAt])
+}
+model Student {
+ id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+ publicId String @unique @db.VarChar(26)
+ nisn String @unique @db.VarChar(10)
+ fullName String @db.VarChar(191)
+ parentPhone String? @db.VarChar(30)
+ address String? @db.Text
+ rfidUid String? @unique @db.VarChar(100)
+ status StudentStatus @default(ACTIVE)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ deletedAt DateTime?
+ enrollments ClassEnrollment[]
+ @@index([fullName])
+ @@index([updatedAt])
+}
+model Teacher {
+ id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+ publicId String @unique @db.VarChar(26)
+ nip String? @unique @db.VarChar(50)
+ nuptk String? @unique @db.VarChar(50)
+ employeeNumber String? @unique @db.VarChar(50)
+ fullName String @db.VarChar(191)
+ gender Gender?
+ email String? @unique @db.VarChar(191)
+ phone String? @db.VarChar(30)
+ address String? @db.Text
+ photoPath String? @db.VarChar(500)
+ status TeacherStatus @default(ACTIVE)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ deletedAt DateTime?
+ account TeacherAccount?
+ classes SchoolClass[]
+ applicationAccess TeacherApplicationAccess[]
+ @@index([fullName])
+ @@index([updatedAt])
+}
+model TeacherAccount {
+ id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+ publicId String @unique @db.VarChar(26)
+ teacherId BigInt @unique @db.UnsignedBigInt
+ username String @unique @db.VarChar(100)
+ email String? @unique @db.VarChar(191)
+ passwordHash String? @db.VarChar(255)
+ status AccountStatus @default(PENDING_SETUP)
+ mustChangePassword Boolean @default(true)
+ failedLoginAttempts Int @default(0)
+ lockedUntil DateTime?
+ lastLoginAt DateTime?
+ passwordChangedAt DateTime?
+ activatedAt DateTime?
+ disabledAt DateTime?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ teacher Teacher @relation(fields:[teacherId], references:[id])
+ sessions AuthSession[]
+ setupTokens TeacherPasswordSetupToken[]
+}
+model TeacherPasswordSetupToken {
+ id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+ publicId String @unique @db.VarChar(26)
+ teacherAccountId BigInt @db.UnsignedBigInt
+ tokenHash String @unique @db.VarChar(64)
+ expiresAt DateTime
+ usedAt DateTime?
+ createdAt DateTime @default(now())
+ teacherAccount TeacherAccount @relation(fields:[teacherAccountId], references:[id], onDelete:Cascade)
+ @@index([teacherAccountId,expiresAt])
+}
+model ClassEnrollment {
+ id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+ publicId String @unique @db.VarChar(26)
+ studentId BigInt @db.UnsignedBigInt
+ schoolClassId BigInt @db.UnsignedBigInt
+ academicYearId BigInt @db.UnsignedBigInt
+ semesterId BigInt @db.UnsignedBigInt
+ attendanceNumber Int?
+ activeEnrollmentKey String? @unique @db.VarChar(64)
+ enrolledAt DateTime @default(now())
+ leftAt DateTime?
+ status EnrollmentStatus @default(ACTIVE)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ student Student @relation(fields:[studentId], references:[id])
+ schoolClass SchoolClass @relation(fields:[schoolClassId], references:[id])
+ academicYear AcademicYear @relation(fields:[academicYearId], references:[id])
+ semester Semester @relation(fields:[semesterId], references:[id])
+ @@unique([schoolClassId,semesterId,attendanceNumber])
+ @@index([studentId,semesterId,status])
+ @@index([updatedAt])
+}
+model ApplicationClient {
+ id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+ publicId String @unique @db.VarChar(26)
+ name String @db.VarChar(150)
+ slug String @unique @db.VarChar(100)
+ clientId String @unique @db.VarChar(191)
+ clientSecretHash String? @db.VarChar(255)
+ clientType ClientType
+ status ClientStatus @default(ACTIVE)
+ redirectUris Json?
+ postLogoutRedirectUris Json?
+ allowedOrigins Json?
+ allowedScopes Json
+ allowedGrantTypes Json
+ logoPath String? @db.VarChar(500)
+ description String? @db.Text
+ accessTokenLifetime Int @default(900)
+ refreshTokenLifetime Int @default(2592000)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ access TeacherApplicationAccess[]
+ auditLogs AuditLog[]
+}
+model TeacherApplicationAccess {
+ id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+ teacherId BigInt @db.UnsignedBigInt
+ applicationClientId BigInt @db.UnsignedBigInt
+ role String @db.VarChar(100)
+ status ClientStatus @default(ACTIVE)
+ grantedAt DateTime @default(now())
+ grantedBy String @db.VarChar(26)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ teacher Teacher @relation(fields:[teacherId], references:[id])
+ applicationClient ApplicationClient @relation(fields:[applicationClientId], references:[id])
+ @@unique([teacherId,applicationClientId])
+}
+model ImportBatch {
+ id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+ publicId String @unique @db.VarChar(26)
+ type ImportType
+ originalFilename String @db.VarChar(255)
+ storedFilename String @db.VarChar(255)
+ fileHash String @db.VarChar(64)
+ status ImportStatus @default(UPLOADED)
+ totalRows Int @default(0)
+ validRows Int @default(0)
+ insertedRows Int @default(0)
+ updatedRows Int @default(0)
+ skippedRows Int @default(0)
+ warningRows Int @default(0)
+ failedRows Int @default(0)
+ createdBy String @db.VarChar(26)
+ startedAt DateTime?
+ completedAt DateTime?
+ summary Json?
+ errorFilePath String? @db.VarChar(500)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ rows ImportRowResult[]
+ @@index([fileHash,type])
+}
+model ImportRowResult {
+ id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+ importBatchId BigInt @db.UnsignedBigInt
+ rowNumber Int
+ identifier String? @db.VarChar(191)
+ status ImportRowStatus
+ messages Json?
+ originalData Json?
+ normalizedData Json?
+ createdAt DateTime @default(now())
+ importBatch ImportBatch @relation(fields:[importBatchId], references:[id], onDelete:Cascade)
+ @@unique([importBatchId,rowNumber])
+}
+model AuditLog {
+ id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+ publicId String @unique @db.VarChar(26)
+ actorType ActorType
+ actorPublicId String? @db.VarChar(26)
+ applicationClientId BigInt? @db.UnsignedBigInt
+ action String @db.VarChar(100)
+ entityType String? @db.VarChar(100)
+ entityPublicId String? @db.VarChar(26)
+ oldValues Json?
+ newValues Json?
+ requestMethod String? @db.VarChar(10)
+ requestPath String? @db.VarChar(500)
+ ipAddress String? @db.VarChar(45)
+ userAgent String? @db.VarChar(500)
+ createdAt DateTime @default(now())
+ applicationClient ApplicationClient? @relation(fields:[applicationClientId], references:[id])
+ @@index([entityType,entityPublicId])
+ @@index([createdAt])
+}
+model OidcPayload {
+ id String @id @db.VarChar(191)
+ kind String @db.VarChar(50)
+ payload Json
+ grantId String? @db.VarChar(191)
+ userCode String? @unique @db.VarChar(191)
+ uid String? @db.VarChar(191)
+ expiresAt DateTime
+ consumedAt DateTime?
+ createdAt DateTime @default(now())
+ @@index([kind,expiresAt])
+ @@index([grantId])
+ @@index([uid])
+}
