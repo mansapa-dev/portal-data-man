@@ -16,11 +16,13 @@ class TeacherPasswordSetupController extends Controller
     {
         $token = $this->token((string) $request->query('token'));
 
-        return ApiResponse::success(['valid' => (bool) $token, 'account' => $token ? ['fullName' => $token->account->teacher->fullName, 'username' => $token->account->username] : null], 'Status token berhasil diperiksa.');
+        return ApiResponse::success(['valid' => (bool) $token, 'account' => $token ? ['fullName' => $token->account->teacher->fullName, 'username' => $token->account->username] : null], 'Status token berhasil diperiksa.')
+            ->cookie('portal_teacher_csrf', $request->session()->token(), config('session.lifetime'), '/', null, $request->isSecure(), false, false, 'lax');
     }
 
     public function store(Request $request): JsonResponse
     {
+        $request->mergeIfMissing(['password_confirmation' => $request->input('passwordConfirmation')]);
         $data = $request->validate(['token' => ['required', 'string'], 'password' => ['required', 'confirmed', Password::min(10)->mixedCase()->numbers()]]);
         $token = $this->token($data['token']);
         abort_unless($token, 422, 'Token setup tidak valid atau kedaluwarsa.');
