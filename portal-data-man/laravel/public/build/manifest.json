@@ -1,0 +1,11 @@
+{
+  "resources/js/portal-react/main.tsx": {
+    "file": "assets/main-BHtULuXx.js",
+    "name": "main",
+    "src": "resources/js/portal-react/main.tsx",
+    "isEntry": true,
+    "css": [
+      "assets/main-BNnZlnEF.css"
+    ]
+  }
+}
