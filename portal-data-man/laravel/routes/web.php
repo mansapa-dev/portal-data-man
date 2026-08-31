@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AcademicYearController;
+use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\AdminProfileController;
 use App\Http\Controllers\AdminUserController;
 use App\Http\Controllers\Auth\AdminSessionController;
@@ -8,6 +9,7 @@ use App\Http\Controllers\Auth\TeacherSessionController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EnrollmentController;
 use App\Http\Controllers\ImportManagementController;
+use App\Http\Controllers\HealthController;
 use App\Http\Controllers\OidcController;
 use App\Http\Controllers\SchoolClassController;
 use App\Http\Controllers\SemesterController;
@@ -25,6 +27,7 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', function () {
     return view('portal');
 });
+Route::get('health', HealthController::class);
 Route::get('teacher/{path?}', fn () => view('teacher'))->where('path', '.*');
 
 Route::get('.well-known/openid-configuration', [OidcController::class, 'discovery']);
@@ -39,6 +42,7 @@ Route::prefix('api/v1')->group(function (): void {
     Route::post('auth/admin/login', [AdminSessionController::class, 'store'])->middleware('throttle:5,1');
     Route::middleware(['auth:admin', 'portal.session:admin'])->group(function (): void {
         Route::get('auth/admin/me', [AdminSessionController::class, 'show']);
+        Route::get('auth/admin/csrf', [AdminSessionController::class, 'csrf']);
         Route::post('auth/admin/logout', [AdminSessionController::class, 'destroy']);
         Route::get('profile', [AdminProfileController::class, 'show']);
         Route::patch('profile', [AdminProfileController::class, 'update']);
@@ -51,7 +55,12 @@ Route::prefix('api/v1')->group(function (): void {
         Route::get('dashboard/data-quality', [DashboardController::class, 'dataQuality']);
         Route::get('imports', [ImportManagementController::class, 'index']);
         Route::get('imports/{importBatch}/rows', [ImportManagementController::class, 'rows']);
+        Route::get('imports/{importBatch}/error-file', [ImportManagementController::class, 'errorFile']);
         Route::get('imports/{importBatch}', [ImportManagementController::class, 'show']);
+        Route::middleware('role:SUPER_ADMIN,AUDITOR')->group(function (): void {
+            Route::get('audit-logs', [AuditLogController::class, 'index']);
+            Route::get('audit-logs/{publicId}', [AuditLogController::class, 'show']);
+        });
         Route::get('teachers', [TeacherController::class, 'index']);
         Route::get('teachers/{teacher}', [TeacherController::class, 'show']);
         Route::get('teachers/{teacher}/account', [TeacherAccountController::class, 'show']);
@@ -89,7 +98,9 @@ Route::prefix('api/v1')->group(function (): void {
             Route::post('semesters/{semester}/activate', [SemesterController::class, 'activate']);
             Route::post('imports/students/validate', [StudentImportController::class, 'validateFile']);
             Route::get('import-templates/students', [SpreadsheetController::class, 'studentTemplate']);
+            Route::get('import-templates/teachers', [SpreadsheetController::class, 'teacherTemplate']);
             Route::get('exports/students', [SpreadsheetController::class, 'students']);
+            Route::get('exports/teachers', [SpreadsheetController::class, 'teachers']);
             Route::get('exports/classes/{schoolClass}/students', [SpreadsheetController::class, 'classStudents']);
             Route::post('classes', [SchoolClassController::class, 'store']);
             Route::patch('classes/{schoolClass}', [SchoolClassController::class, 'update']);

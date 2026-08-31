@@ -18,7 +18,9 @@ class SsoApplicationController extends Controller
 
     public function index(): JsonResponse
     {
-        return ApiResponse::success(ApplicationClient::query()->withCount('access')->orderBy('name')->get(), 'Aplikasi SSO berhasil diambil.');
+        $apps = ApplicationClient::query()->withCount('access')->orderBy('name')->get();
+        $apps->each(fn (ApplicationClient $app) => $app->setAttribute('_count', ['access' => (int) $app->access_count]));
+        return ApiResponse::success($apps, 'Aplikasi SSO berhasil diambil.');
     }
 
     public function show(ApplicationClient $applicationClient): JsonResponse

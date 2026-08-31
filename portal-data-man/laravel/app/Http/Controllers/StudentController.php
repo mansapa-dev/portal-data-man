@@ -3,6 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Student;
+use App\Models\ClassEnrollment;
+use App\Models\AcademicYear;
+use App\Models\Semester;
+use App\Models\SchoolClass;
 use App\Services\AuditService;
 use App\Support\ApiResponse;
 use Illuminate\Database\QueryException;
@@ -17,21 +21,25 @@ class StudentController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $validated = $request->validate(['search' => ['nullable', 'string', 'max:191'], 'status' => ['nullable', Rule::in(['ACTIVE', 'INACTIVE', 'GRADUATED', 'TRANSFERRED', 'DROPPED_OUT'])], 'page' => ['nullable', 'integer', 'min:1'], 'perPage' => ['nullable', 'integer', 'min:1', 'max:100'], 'sortDirection' => ['nullable', Rule::in(['asc', 'desc'])]]);
-        $query = Student::query();
+        $validated = $request->validate(['search' => ['nullable', 'string', 'max:191'], 'status' => ['nullable', Rule::in(['ACTIVE', 'INACTIVE', 'GRADUATED', 'TRANSFERRED', 'DROPPED_OUT'])], 'classPublicId' => ['nullable', 'string', 'size:26'], 'academicYearPublicId' => ['nullable', 'string', 'size:26'], 'semesterPublicId' => ['nullable', 'string', 'size:26'], 'sortBy' => ['nullable', Rule::in(['fullName', 'nisn', 'createdAt'])], 'page' => ['nullable', 'integer', 'min:1'], 'perPage' => ['nullable', 'integer', 'min:1', 'max:100'], 'sortDirection' => ['nullable', Rule::in(['asc', 'desc'])]]);
+        $enrollment = fn ($q) => $q->where('status', 'ACTIVE')->when($validated['classPublicId'] ?? null, fn ($x, $id) => $x->whereHas('schoolClass', fn ($c) => $c->where('publicId', $id)))->when($validated['academicYearPublicId'] ?? null, fn ($x, $id) => $x->whereHas('academicYear', fn ($y) => $y->where('publicId', $id)))->when($validated['semesterPublicId'] ?? null, fn ($x, $id) => $x->whereHas('semester', fn ($s) => $s->where('publicId', $id)));
+        $query = Student::query()->with(['enrollments' => fn ($q) => $enrollment($q)->with('schoolClass')->latest('enrolledAt')->limit(1)])->when($validated['classPublicId'] ?? null, fn ($q) => $q->whereHas('enrollments', $enrollment))->when($validated['academicYearPublicId'] ?? null, fn ($q) => $q->whereHas('enrollments', $enrollment))->when($validated['semesterPublicId'] ?? null, fn ($q) => $q->whereHas('enrollments', $enrollment));
         if ($search = $validated['search'] ?? null) {
             $query->where(fn ($q) => $q->where('nisn', 'like', "%{$search}%")->orWhere('fullName', 'like', "%{$search}%"));
         }
         if ($status = $validated['status'] ?? null) {
             $query->where('status', $status);
         }
-        $page = $query->orderBy('fullName', $validated['sortDirection'] ?? 'asc')->paginate($validated['perPage'] ?? 25);
+        $page = $query->orderBy($validated['sortBy'] ?? 'fullName', $validated['sortDirection'] ?? 'asc')->paginate($validated['perPage'] ?? 25);
+        $page->getCollection()->each(fn (Student $student) => $student->setAttribute('activeClass', $student->enrollments->first()));
 
         return ApiResponse::paginated($page, 'Daftar siswa berhasil diambil.');
     }
 
     public function show(Student $student): JsonResponse
     {
+        $student->load(['enrollments' => fn ($q) => $q->where('status', 'ACTIVE')->with('schoolClass')->latest('enrolledAt')->limit(1)]);
+        $student->setAttribute('activeClass', $student->enrollments->first());
         return ApiResponse::success($student, 'Siswa berhasil diambil.');
     }
 

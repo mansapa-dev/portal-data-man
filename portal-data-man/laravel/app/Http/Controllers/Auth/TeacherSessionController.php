@@ -34,7 +34,7 @@ class TeacherSessionController extends Controller
         $request->session()->regenerate();
         $this->sessions->register($request, $account);
 
-        return response()->json(['success' => true, 'message' => 'Login berhasil.', 'data' => ['publicId' => $account->publicId, 'username' => $account->username, 'fullName' => $account->teacher->fullName]]);
+        return response()->json(['success' => true, 'message' => 'Login berhasil.', 'data' => ['publicId' => $account->publicId, 'username' => $account->username, 'fullName' => $account->teacher->fullName]])->cookie('portal_teacher_csrf', $request->session()->token(), config('session.lifetime'), '/', null, $request->isSecure(), false, false, 'lax');
     }
 
     public function show(Request $request): JsonResponse

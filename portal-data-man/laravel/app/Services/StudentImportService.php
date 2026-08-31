@@ -18,7 +18,7 @@ use Throwable;
 
 class StudentImportService
 {
-    public function __construct(private readonly StudentImportNormalizer $normalizer, private readonly AuditService $audit) {}
+    public function __construct(private readonly StudentImportNormalizer $normalizer, private readonly AuditService $audit, private readonly SpreadsheetExportService $exports) {}
 
     public function validate(UploadedFile $file, Request $request): ImportBatch
     {
@@ -49,6 +49,12 @@ class StudentImportService
             return $batch;
         });
         Storage::disk('local')->putFileAs('imports', $file, $batch->storedFilename);
+        if ($batch->failedRows > 0) {
+            $errorPath = $this->exports->importErrors($batch);
+            Storage::disk('local')->put('import-errors/'.$batch->publicId.'.xlsx', file_get_contents($errorPath));
+            @unlink($errorPath);
+            $batch->update(['errorFilePath' => 'import-errors/'.$batch->publicId.'.xlsx']);
+        }
         $this->audit->write($request, 'IMPORT_VALIDATED', 'ImportBatch', $batch->publicId, null, ['filename' => $batch->originalFilename, ...$summary]);
 
         return $batch->fresh();

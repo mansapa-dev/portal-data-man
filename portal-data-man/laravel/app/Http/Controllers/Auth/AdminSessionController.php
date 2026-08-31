@@ -34,12 +34,24 @@ class AdminSessionController extends Controller
         $request->session()->regenerate();
         $this->sessions->register($request, $user);
 
-        return response()->json(['success' => true, 'message' => 'Login berhasil.', 'data' => $user]);
+        return response()->json(['success' => true, 'message' => 'Login berhasil.', 'data' => $user])->cookie('portal_csrf', $request->session()->token(), config('session.lifetime'), '/', null, $request->isSecure(), false, false, 'lax');
     }
 
     public function show(Request $request): JsonResponse
     {
         return response()->json(['success' => true, 'message' => 'Sesi admin aktif.', 'data' => $request->user('admin')]);
+    }
+
+    public function csrf(Request $request): JsonResponse
+    {
+        abort_unless($request->user('admin'), 401);
+        $request->session()->regenerateToken();
+        $session = $this->sessions->current($request);
+        if ($session) {
+            $session->forceFill(['csrfHash' => hash('sha256', $request->session()->token())])->save();
+        }
+
+        return response()->json(['success' => true, 'message' => 'Token CSRF diperbarui.', 'data' => ['csrf' => $request->session()->token()]]);
     }
 
     public function destroy(Request $request): JsonResponse

@@ -35,7 +35,9 @@ class SchoolClassController extends Controller
         $query->when($filters['gradeLevel'] ?? null, fn ($query, $grade) => $query->where('gradeLevel', $grade));
         $query->when($filters['status'] ?? null, fn ($query, $status) => $query->where('status', $status));
 
-        return ApiResponse::paginated($query->orderBy('code')->paginate($filters['perPage'] ?? 20), 'Daftar kelas berhasil diambil.');
+        $page = $query->orderBy('code')->paginate($filters['perPage'] ?? 20);
+        $page->getCollection()->each(fn (SchoolClass $class) => $class->setAttribute('_count', ['enrollments' => (int) $class->activeStudentsCount]));
+        return ApiResponse::paginated($page, 'Daftar kelas berhasil diambil.');
     }
 
     public function show(SchoolClass $schoolClass): JsonResponse
@@ -122,7 +124,7 @@ class SchoolClassController extends Controller
     {
         $counts = $schoolClass->enrollments()->select('status', DB::raw('COUNT(*) as total'))->groupBy('status')->pluck('total', 'status');
 
-        return ApiResponse::success(['classPublicId' => $schoolClass->publicId, 'byStatus' => $counts], 'Statistik kelas berhasil diambil.');
+        return ApiResponse::success(['classPublicId' => $schoolClass->publicId, 'byStatus' => $counts->map(fn ($total, $status) => ['status' => $status, '_count' => (int) $total])->values()], 'Statistik kelas berhasil diambil.');
     }
 
     private function validated(Request $request, bool $partial = false): array

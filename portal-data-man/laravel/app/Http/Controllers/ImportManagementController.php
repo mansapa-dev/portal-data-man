@@ -7,6 +7,7 @@ use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Storage;
 
 class ImportManagementController extends Controller
 {
@@ -49,5 +50,12 @@ class ImportManagementController extends Controller
         $query = $importBatch->rows()->when($filters['status'] ?? null, fn ($query, $value) => $query->where('status', $value))->when($filters['search'] ?? null, fn ($query, $value) => $query->where('identifier', 'like', "%{$value}%"));
 
         return ApiResponse::paginated($query->orderBy('rowNumber')->paginate($filters['perPage'] ?? 25), 'Detail baris import berhasil diambil.');
+    }
+
+    public function errorFile(ImportBatch $importBatch): mixed
+    {
+        abort_unless($importBatch->errorFilePath && Storage::disk('local')->exists($importBatch->errorFilePath), 404, 'File kesalahan tidak tersedia.');
+
+        return Storage::disk('local')->download($importBatch->errorFilePath, 'import-errors-'.$importBatch->publicId.'.xlsx', ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Cache-Control' => 'private, no-store']);
     }
 }

@@ -30,12 +30,16 @@ class TeacherController extends Controller
             $query->whereHas('account', fn ($q) => $q->where('status', $accountStatus));
         }
 
-        return ApiResponse::paginated($query->orderBy('fullName')->paginate($data['perPage'] ?? 25), 'Daftar guru berhasil diambil.');
+        $page = $query->orderBy('fullName')->paginate($data['perPage'] ?? 25);
+        $page->getCollection()->each(fn (Teacher $teacher) => $teacher->setAttribute('classes', $teacher->homeroomClasses));
+        return ApiResponse::paginated($page, 'Daftar guru berhasil diambil.');
     }
 
     public function show(Teacher $teacher): JsonResponse
     {
-        return ApiResponse::success($teacher->load(['account', 'homeroomClasses']), 'Guru berhasil diambil.');
+        $teacher->load(['account', 'homeroomClasses']);
+        $teacher->setAttribute('classes', $teacher->homeroomClasses);
+        return ApiResponse::success($teacher, 'Guru berhasil diambil.');
     }
 
     public function store(Request $request): JsonResponse
