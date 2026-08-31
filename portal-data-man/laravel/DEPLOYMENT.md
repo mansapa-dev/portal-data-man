@@ -65,9 +65,9 @@ Atur domain/subdomain di cPanel agar document root menunjuk langsung ke:
 
 Jangan menunjuk domain ke root repository atau `/laravel`, karena itu dapat membuka source code dan file `.env` ke publik.
 
-### Jika hosting belum memakai HTTPS
+### Production menggunakan HTTP
 
-Laravel tetap dapat dijalankan melalui HTTP untuk sementara. Gunakan konfigurasi berikut di `.env` server:
+Laravel dapat dijalankan melalui HTTP jika itu memang konfigurasi production hosting. Gunakan konfigurasi berikut di `.env` server:
 
 ```env
 APP_URL=http://sipadu.man1palembang.sch.id
@@ -86,7 +86,7 @@ php artisan optimize:clear
 php artisan config:cache
 ```
 
-HTTP tidak mengenkripsi password, session cookie, CSRF token, atau data API. Gunakan konfigurasi ini hanya untuk testing/internal sementara dan aktifkan HTTPS sebelum aplikasi dipakai publik. Saat HTTPS sudah aktif, ubah `APP_URL` dan `OIDC_ISSUER` menjadi `https://...`, lalu set `SESSION_SECURE_COOKIE=true`.
+HTTP tidak mengenkripsi password, session cookie, CSRF token, atau data API. Ini berarti siapa pun yang dapat mengamati koneksi jaringan berpotensi mengambil alih session atau membaca kredensial. Pastikan akses hanya melalui jaringan tepercaya dan rencanakan migrasi ke HTTPS. Saat HTTPS sudah aktif, ubah `APP_URL` dan `OIDC_ISSUER` menjadi `https://...`, lalu set `SESSION_SECURE_COOKIE=true`.
 
 ### Urutan update aman
 
