@@ -44,6 +44,19 @@ class TeacherSessionController extends Controller
         return response()->json(['success' => true, 'message' => 'Sesi guru aktif.', 'data' => ['publicId' => $account->publicId, 'username' => $account->username, 'fullName' => $account->teacher->fullName]]);
     }
 
+    public function csrf(Request $request): JsonResponse
+    {
+        abort_unless($request->user('teacher'), 401);
+        $request->session()->regenerateToken();
+        $session = $this->sessions->current($request);
+        if ($session) {
+            $session->forceFill(['csrfHash' => hash('sha256', $request->session()->token())])->save();
+        }
+
+        return response()->json(['success' => true, 'message' => 'Token CSRF diperbarui.', 'data' => ['csrf' => $request->session()->token()]])
+            ->cookie('portal_teacher_csrf', $request->session()->token(), config('session.lifetime'), '/', null, $request->isSecure(), false, false, 'lax');
+    }
+
     public function destroy(Request $request): JsonResponse
     {
         $this->sessions->revokeCurrent($request);

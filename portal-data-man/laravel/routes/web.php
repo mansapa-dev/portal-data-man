@@ -140,6 +140,7 @@ Route::prefix('api/v1')->group(function (): void {
     Route::post('auth/teacher/password-setup', [TeacherPasswordSetupController::class, 'store'])->middleware('throttle:10,1');
     Route::middleware(['auth:teacher', 'portal.session:teacher'])->group(function (): void {
         Route::get('auth/teacher/me', [TeacherSessionController::class, 'show']);
+        Route::get('auth/teacher/csrf', [TeacherSessionController::class, 'csrf']);
         Route::post('auth/teacher/logout', [TeacherSessionController::class, 'destroy']);
         Route::get('teacher/profile', [TeacherSelfController::class, 'profile']);
         Route::patch('teacher/profile', [TeacherSelfController::class, 'updateProfile']);
