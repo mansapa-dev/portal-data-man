@@ -1,1 +1,0 @@
-import{execFileSync}from'node:child_process';const run=(args)=>execFileSync('npm',args,{stdio:'inherit'});run(['run','build','-w','@portal-data/shared']);run(['run','build','-w','@portal-data/web']);run(['run','build','-w','@portal-data/api']);

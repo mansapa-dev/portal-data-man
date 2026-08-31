@@ -1,1 +1,0 @@
-import{Module}from'@nestjs/common';import{AcademicYearsController,AcademicYearsService}from'./academic-years';@Module({controllers:[AcademicYearsController],providers:[AcademicYearsService],exports:[AcademicYearsService]})export class AcademicYearsModule{}

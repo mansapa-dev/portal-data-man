@@ -1,1 +1,0 @@
-import{Module}from'@nestjs/common';import{DashboardController,DashboardService}from'./dashboard';@Module({controllers:[DashboardController],providers:[DashboardService]})export class DashboardModule{}

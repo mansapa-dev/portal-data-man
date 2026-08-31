@@ -1,1 +1,0 @@
-import{Module}from'@nestjs/common';import{SsoApplicationsController,SsoApplicationsService}from'./sso';@Module({controllers:[SsoApplicationsController],providers:[SsoApplicationsService],exports:[SsoApplicationsService]})export class SsoModule{}
