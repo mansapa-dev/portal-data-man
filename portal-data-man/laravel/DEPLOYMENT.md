@@ -65,6 +65,29 @@ Atur domain/subdomain di cPanel agar document root menunjuk langsung ke:
 
 Jangan menunjuk domain ke root repository atau `/laravel`, karena itu dapat membuka source code dan file `.env` ke publik.
 
+### Jika hosting belum memakai HTTPS
+
+Laravel tetap dapat dijalankan melalui HTTP untuk sementara. Gunakan konfigurasi berikut di `.env` server:
+
+```env
+APP_URL=http://sipadu.man1palembang.sch.id
+APP_ENV=production
+APP_DEBUG=false
+SESSION_DOMAIN=null
+SESSION_SECURE_COOKIE=false
+SESSION_SAME_SITE=lax
+OIDC_ISSUER=http://sipadu.man1palembang.sch.id/oidc
+```
+
+Setelah mengubah `.env`, bersihkan cache konfigurasi:
+
+```bash
+php artisan optimize:clear
+php artisan config:cache
+```
+
+HTTP tidak mengenkripsi password, session cookie, CSRF token, atau data API. Gunakan konfigurasi ini hanya untuk testing/internal sementara dan aktifkan HTTPS sebelum aplikasi dipakai publik. Saat HTTPS sudah aktif, ubah `APP_URL` dan `OIDC_ISSUER` menjadi `https://...`, lalu set `SESSION_SECURE_COOKIE=true`.
+
 ### Urutan update aman
 
 Sebelum update yang mengandung migration:
