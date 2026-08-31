@@ -263,6 +263,7 @@ npm run build
 ```
 
 Untuk build lokal, jalankan `npm ci && npm run build`, lalu unggah seluruh `public/build/`. Manifest dan nama asset hash harus berasal dari build yang sama.
+Pada repository ini `public/build/` sudah dilacak Git agar deploy melalui `git pull` di shared hosting ikut membawa `manifest.json` dan asset production.
 
 ## Migration database
 
