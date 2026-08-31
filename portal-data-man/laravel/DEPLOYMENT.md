@@ -1,0 +1,273 @@
+# Deployment Portal Data Laravel di cPanel
+
+Dokumen ini mencakup instalasi baru dan cutover dari Portal Data Node.js. Jalankan seluruh command dari direktori `laravel/`.
+
+## Kebutuhan hosting
+
+- PHP 8.2 atau lebih baru.
+- MariaDB 10.6+ atau MySQL 8.
+- Ekstensi PHP: `ctype`, `curl`, `dom`, `fileinfo`, `filter`, `hash`, `intl`, `mbstring`, `openssl`, `pdo_mysql`, `session`, `simplexml`, `tokenizer`, `xml`, `xmlreader`, `xmlwriter`, dan `zip`.
+- Composer 2.
+- Apache `mod_rewrite` atau konfigurasi rewrite ekuivalen.
+- Node.js hanya dibutuhkan saat membangun asset. Asset dapat dibangun lokal lalu diunggah bila cPanel tidak menyediakan Node.
+
+Document root domain/subdomain harus menunjuk ke folder `laravel/public`, bukan root repository dan bukan folder `laravel`.
+
+## Struktur production
+
+```text
+/home/CPANEL_USER/apps/portal-data/laravel
+├── app
+├── bootstrap
+├── config
+├── public                 <- document root
+├── resources
+├── routes
+├── storage                <- wajib writable
+├── vendor
+├── artisan
+└── .env                   <- permission 600, jangan masuk Git
+```
+
+## Backup sebelum cutover
+
+Jangan jalankan migration production sebelum backup database dan storage selesai.
+
+```bash
+mkdir -p /home/CPANEL_USER/backups/portal-data
+mysqldump --single-transaction --routines --triggers \
+  -u DB_USER -p DB_NAME \
+  > /home/CPANEL_USER/backups/portal-data/before-laravel.sql
+tar -czf /home/CPANEL_USER/backups/portal-data/storage-before-laravel.tar.gz \
+  -C /home/CPANEL_USER/apps/portal-data/portal-data-man storage
+```
+
+Pastikan kedua backup memiliki ukuran masuk akal dan dapat dibaca. Jangan menyimpan dump di dalam `public/`.
+
+## Upload atau clone aplikasi
+
+```bash
+cd /home/CPANEL_USER/apps
+git clone REPOSITORY_URL portal-data
+cd /home/CPANEL_USER/apps/portal-data/portal-data-man/laravel
+composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
+```
+
+Jika repository sudah tersedia:
+
+```bash
+git pull --ff-only origin main
+cd laravel
+composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
+```
+
+## Environment production
+
+```bash
+cp .env.example .env
+chmod 600 .env
+php artisan key:generate
+```
+
+Isi `.env` production:
+
+```env
+APP_NAME="Portal Data"
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=https://portal.sekolah.sch.id
+APP_LOCALE=id
+
+DB_CONNECTION=mysql
+DB_HOST=localhost
+DB_PORT=3306
+DB_DATABASE=cpuser_portal_data
+DB_USERNAME=cpuser_portal_user
+DB_PASSWORD=PASSWORD_DATABASE
+
+SESSION_DRIVER=file
+SESSION_LIFETIME=480
+SESSION_ENCRYPT=true
+SESSION_SECURE_COOKIE=true
+SESSION_SAME_SITE=lax
+
+CACHE_STORE=file
+QUEUE_CONNECTION=sync
+FILESYSTEM_DISK=local
+
+MAIL_MAILER=smtp
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USERNAME=portal@sekolah.sch.id
+MAIL_PASSWORD=APP_PASSWORD_SMTP
+MAIL_ENCRYPTION=tls
+MAIL_FROM_ADDRESS=portal@sekolah.sch.id
+MAIL_FROM_NAME="Portal Data"
+
+SUPER_ADMIN_NAME="Administrator Sekolah"
+SUPER_ADMIN_EMAIL=admin@sekolah.sch.id
+SUPER_ADMIN_PASSWORD=PASSWORD_AWAL_MINIMAL_12_KARAKTER
+
+IMPORT_MAX_ROWS=5000
+IMPORT_MAX_FILE_SIZE_MB=10
+EXPORT_MAX_ROWS=10000
+
+OIDC_ISSUER=https://portal.sekolah.sch.id/oidc
+OIDC_KEY_ID=portal-data-production-1
+OIDC_ACCESS_TOKEN_TTL=900
+OIDC_AUTHORIZATION_CODE_TTL=600
+```
+
+Jangan menyalin kredensial development ke production. Ganti password database, password super-admin, SMTP App Password, dan `APP_KEY`.
+
+## Signing key OIDC
+
+Buat signing key persisten satu kali sebelum aplikasi SSO digunakan:
+
+```bash
+php artisan portal:oidc-key-generate
+```
+
+Private key disimpan di `storage/app/private/oidc/private.pem` dengan permission `600`. Backup key ini secara terenkripsi. Jangan menjalankan command dengan `--force` pada deployment rutin karena rotasi mendadak membuat token yang masih aktif gagal diverifikasi.
+
+Endpoint provider:
+
+- Discovery: `https://portal.sekolah.sch.id/oidc/.well-known/openid-configuration`
+- Authorization: `https://portal.sekolah.sch.id/oidc/authorize`
+- Token: `https://portal.sekolah.sch.id/oidc/token`
+- UserInfo: `https://portal.sekolah.sch.id/oidc/userinfo`
+- JWKS: `https://portal.sekolah.sch.id/oidc/jwks`
+
+Client web publik wajib memakai Authorization Code, PKCE `S256`, dan redirect URI exact-match yang didaftarkan dari menu Aplikasi SSO.
+
+## Permission storage
+
+```bash
+mkdir -p storage/app/private/imports \
+  storage/app/private/import-errors \
+  storage/app/private/teacher-photos \
+  storage/framework/cache storage/framework/sessions \
+  storage/framework/views storage/logs bootstrap/cache
+chmod -R u+rwX,g+rwX storage bootstrap/cache
+find storage/app/private -type f -exec chmod 600 {} \;
+```
+
+Gunakan group user web server yang disediakan hosting. Hindari permission `777`.
+
+## Memindahkan storage lama
+
+Database lama menyimpan nama file, bukan isi file. Salin file privat secara terpisah:
+
+```bash
+cp -a ../storage/imports/. storage/app/private/imports/
+cp -a ../storage/import-errors/. storage/app/private/import-errors/
+cp -a ../storage/teacher-photos/. storage/app/private/teacher-photos/ 2>/dev/null || true
+```
+
+Untuk batch lama, nama fisik file mengikuti `ImportBatch.storedFilename`. Jangan meletakkan import, foto, atau dump SQL di `public/`.
+
+## Build asset
+
+Jika Node tersedia di cPanel:
+
+```bash
+npm ci
+npm run build
+```
+
+Untuk build lokal, jalankan `npm ci && npm run build`, lalu unggah seluruh `public/build/`. Manifest dan nama asset hash harus berasal dari build yang sama.
+
+## Migration database
+
+Migration mendukung dua jalur:
+
+1. Database kosong: seluruh schema Portal Data dibuat.
+2. Database Node/Prisma lama yang lengkap: tabel lama diadopsi dan diverifikasi tanpa menghapus data.
+
+Database yang hanya memiliki sebagian tabel akan ditolak. Jangan menggunakan `migrate:fresh` pada database berisi data.
+
+```bash
+php artisan migrate:status
+php artisan migrate --force
+php artisan db:seed --force
+```
+
+Seeder melakukan upsert berdasarkan `SUPER_ADMIN_EMAIL`. Menjalankannya ulang tidak membuat akun duplikat, tetapi akan mengganti password akun tersebut dengan nilai environment saat ini.
+
+Verifikasi dasar:
+
+```bash
+php artisan about
+php artisan migrate:status
+php artisan route:list --path=api/v1
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+```
+
+## Konfigurasi domain cPanel
+
+Di cPanel Domains/Subdomains, atur document root:
+
+```text
+/home/CPANEL_USER/apps/portal-data/portal-data-man/laravel/public
+```
+
+Pastikan `.htaccess` pada `public/` ikut terunggah. Akses ke folder root aplikasi, `.env`, `storage`, dan backup tidak boleh tersedia dari HTTP.
+
+## Smoke test setelah cutover
+
+```bash
+curl -I https://portal.sekolah.sch.id/
+curl -I https://portal.sekolah.sch.id/up
+```
+
+Kemudian periksa melalui browser:
+
+1. Login super-admin.
+2. Dashboard menampilkan 690 siswa, 20 kelas, dan data guru sesuai database.
+3. Daftar siswa dan guru dapat dibaca.
+4. Template XLSX dapat diunduh.
+5. Validasi import bekerja; jangan commit ulang batch produksi hanya untuk smoke test.
+6. Email aktivasi guru terkirim melalui SMTP.
+7. `storage/logs/laravel.log` tidak memuat exception baru.
+
+## Update berikutnya
+
+```bash
+cd /home/CPANEL_USER/apps/portal-data/portal-data-man/laravel
+php artisan down --secret="RANDOM_MAINTENANCE_BYPASS"
+git pull --ff-only origin main
+composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
+npm ci
+npm run build
+php artisan migrate --force
+php artisan optimize:clear
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+php artisan up
+```
+
+Backup database sebelum migration setiap release.
+
+## Rollback cutover
+
+Migration baseline sengaja tidak menyediakan rollback destruktif. Jika cutover gagal:
+
+1. Arahkan document root kembali ke aplikasi lama.
+2. Restore dump database hanya jika Laravel sudah menulis data yang tidak kompatibel.
+3. Restore archive storage bila file berubah.
+4. Simpan log Laravel untuk diagnosis.
+
+Jangan menjalankan `php artisan migrate:rollback`, `migrate:reset`, atau `migrate:fresh` pada production.
+
+## Kapan source Node lama boleh dihapus
+
+Hapus `apps/api`, `apps/web`, `prisma`, root `node_modules`, dan artefak Node hanya setelah:
+
+- seluruh route dan UI mencapai parity;
+- SSO/OIDC Laravel sudah teruji dengan aplikasi klien;
+- SMTP dan portal guru sudah teruji;
+- minimal satu backup restore drill berhasil;
+- aplikasi Laravel stabil di production selama periode observasi yang disepakati.
