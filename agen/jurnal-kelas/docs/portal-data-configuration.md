@@ -31,12 +31,12 @@ Setelah aplikasi dibuat, buka detail aplikasi dan salin Client ID ke `.env` Jurn
 ```dotenv
 PORTAL_DATA_BASE_URL=https://sipadu.man1palembang.sch.id/api/v1
 PORTAL_DATA_ISSUER=https://sipadu.man1palembang.sch.id/oidc
-PORTAL_DATA_CLIENT_ID=portal_jurnal-kelas_xxxxxxxxxxxxxxxx
+PORTAL_DATA_CLIENT_ID=portal_jurnal-kelas_nq1v7vpdlvws0ua8
 PORTAL_DATA_REDIRECT_URI=https://agen.rdmman1plg.id/auth/sso/callback
 PORTAL_DATA_POST_LOGOUT_REDIRECT_URI=https://agen.rdmman1plg.id/login
 ```
 
-Client ini bertipe public dan menggunakan PKCE, sehingga tidak membutuhkan client secret.
+Client ini bertipe public dan menggunakan PKCE, sehingga tidak membutuhkan client secret. Biarkan `PORTAL_DATA_CLIENT_SECRET` kosong.
 
 ## 3. Berikan akses guru
 
