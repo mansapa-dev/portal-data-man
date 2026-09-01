@@ -156,6 +156,7 @@ Route::prefix('api/v1')->group(function (): void {
         Route::get('teacher/profile/photo', [TeacherSelfController::class, 'photo']);
         Route::post('teacher/profile/photo', [TeacherSelfController::class, 'storePhoto']);
         Route::get('teacher/sessions', [TeacherSelfController::class, 'sessions']);
+        Route::get('teacher/applications', [TeacherSelfController::class, 'applications']);
         Route::delete('teacher/sessions/{publicId}', [TeacherSelfController::class, 'revokeSession']);
         Route::post('teacher/sessions/logout-all', [TeacherSelfController::class, 'logoutAll']);
     });

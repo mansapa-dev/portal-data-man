@@ -57,6 +57,31 @@ class TeacherSelfController extends Controller
         return ApiResponse::success($this->sessions->safeList($request->user('teacher'), $request), 'Daftar session berhasil diambil.');
     }
 
+    public function applications(Request $request): JsonResponse
+    {
+        $access = $request->user('teacher')->teacher->applicationAccess()
+            ->with('application')
+            ->where('status', 'ACTIVE')
+            ->whereHas('application', fn ($query) => $query->where('status', 'ACTIVE'))
+            ->orderBy('createdAt')
+            ->get()
+            ->map(function ($item): array {
+                $application = $item->application;
+
+                return [
+                    'publicId' => $application->publicId,
+                    'name' => $application->name,
+                    'slug' => $application->slug,
+                    'description' => $application->description,
+                    'role' => $item->role,
+                    'launchUrl' => $this->applicationOrigin($application->allowedOrigins ?: $application->redirectUris),
+                ];
+            })
+            ->values();
+
+        return ApiResponse::success($access, 'Daftar aplikasi guru berhasil diambil.');
+    }
+
     public function revokeSession(Request $request, string $publicId): JsonResponse
     {
         $account = $request->user('teacher');
@@ -89,5 +114,20 @@ class TeacherSelfController extends Controller
     public function photo(Request $request): StreamedResponse
     {
         return $this->photos->response($request->user('teacher')->teacher);
+    }
+
+    private function applicationOrigin(array $uris): ?string
+    {
+        foreach ($uris as $uri) {
+            $parts = is_string($uri) ? parse_url($uri) : false;
+            if (! is_array($parts) || ! in_array($parts['scheme'] ?? '', ['https', 'http'], true) || empty($parts['host'])) {
+                continue;
+            }
+            $port = isset($parts['port']) ? ':'.$parts['port'] : '';
+
+            return $parts['scheme'].'://'.$parts['host'].$port;
+        }
+
+        return null;
     }
 }

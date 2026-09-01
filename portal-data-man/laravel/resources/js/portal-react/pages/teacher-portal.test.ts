@@ -1,2 +1,3 @@
-import{describe,expect,it}from'vitest';import{validTeacherPassword}from'./teacher-portal';
+import{describe,expect,it}from'vitest';import{validOidcReturnTo,validTeacherPassword}from'./teacher-portal';
 describe('teacher password UI policy',()=>{it('accepts a strong password',()=>expect(validTeacherPassword('PasswordBaru123')).toBe(true));it.each(['Pendek1A','tanpabesar123','TANPAKECIL123','TanpaAngkaaa'])('rejects %s',value=>expect(validTeacherPassword(value)).toBe(false))});
+describe('teacher login OIDC return target',()=>{it('continues the authorization request after login',()=>expect(validOidcReturnTo('/oidc/authorize?client_id=agen&state=abc')).toBe(true));it.each(['/teacher','//evil.example/oidc/authorize','https://evil.example/oidc/authorize','/oidc/authorize-evil'])('rejects unsafe target %s',value=>expect(validOidcReturnTo(value)).toBe(false))});
