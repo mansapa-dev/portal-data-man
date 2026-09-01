@@ -1,0 +1,35 @@
+<?php
+use App\Http\Controllers\ReferenceController;
+use App\Http\Middleware\AuthenticateMiddleware;
+use App\Http\Controllers\AttendanceController;
+use App\Http\Controllers\JournalController;
+use App\Http\Controllers\ReportController;
+use App\Http\Middleware\ScanRateLimitMiddleware;
+use App\Http\Controllers\AuditController;
+use App\Http\Middleware\AuditAccessMiddleware;
+use App\Http\Middleware\TeacherOnlyMiddleware;
+
+$router->get('/api/classes', [ReferenceController::class, 'classes'], [AuthenticateMiddleware::class]);
+$router->get('/api/periods', [ReferenceController::class, 'periods'], [AuthenticateMiddleware::class]);
+$router->get('/api/classes/{publicId}/students', [ReferenceController::class, 'students'], [AuthenticateMiddleware::class]);
+$router->get('/api/subjects', [AttendanceController::class, 'subjects'], [AuthenticateMiddleware::class]);
+$router->post('/api/attendance', [AttendanceController::class, 'create'], [AuthenticateMiddleware::class, TeacherOnlyMiddleware::class]);
+$router->get('/api/attendance/{publicId}', [AttendanceController::class, 'show'], [AuthenticateMiddleware::class]);
+$router->patch('/api/attendance/{publicId}/students/{studentPublicId}', [AttendanceController::class, 'mark'], [AuthenticateMiddleware::class, TeacherOnlyMiddleware::class]);
+$router->post('/api/attendance/{publicId}/mark-all-present', [AttendanceController::class, 'markAll'], [AuthenticateMiddleware::class, TeacherOnlyMiddleware::class]);
+$router->post('/api/attendance/{publicId}/scan', [AttendanceController::class, 'scan'], [AuthenticateMiddleware::class, TeacherOnlyMiddleware::class, ScanRateLimitMiddleware::class]);
+$router->post('/api/attendance/{publicId}/finalize', [AttendanceController::class, 'finalize'], [AuthenticateMiddleware::class, TeacherOnlyMiddleware::class]);
+$router->get('/api/journals', [JournalController::class, 'index'], [AuthenticateMiddleware::class]);
+$router->get('/api/journals/available-attendance', [JournalController::class, 'attendance'], [AuthenticateMiddleware::class]);
+$router->post('/api/journals', [JournalController::class, 'create'], [AuthenticateMiddleware::class, TeacherOnlyMiddleware::class]);
+$router->get('/api/journals/{publicId}', [JournalController::class, 'show'], [AuthenticateMiddleware::class]);
+$router->patch('/api/journals/{publicId}', [JournalController::class, 'update'], [AuthenticateMiddleware::class, TeacherOnlyMiddleware::class]);
+$router->post('/api/journals/{publicId}/documentations', [JournalController::class, 'upload'], [AuthenticateMiddleware::class, TeacherOnlyMiddleware::class]);
+$router->get('/api/journals/{publicId}/documentations/{filePublicId}', [JournalController::class, 'file'], [AuthenticateMiddleware::class]);
+$router->post('/api/journals/{publicId}/finalize', [JournalController::class, 'finalize'], [AuthenticateMiddleware::class, TeacherOnlyMiddleware::class]);
+$router->post('/api/journals/{publicId}/revision', [JournalController::class, 'revise'], [AuthenticateMiddleware::class, TeacherOnlyMiddleware::class]);
+$router->delete('/api/journals/{publicId}', [JournalController::class, 'destroy'], [AuthenticateMiddleware::class, TeacherOnlyMiddleware::class]);
+$router->delete('/api/journals/{publicId}/documentations/{filePublicId}', [JournalController::class, 'deleteFile'], [AuthenticateMiddleware::class, TeacherOnlyMiddleware::class]);
+$router->get('/api/reports/monthly', [ReportController::class, 'monthly'], [AuthenticateMiddleware::class]);
+$router->get('/api/audit-logs', [AuditController::class, 'index'], [AuthenticateMiddleware::class, AuditAccessMiddleware::class]);
+$router->get('/api/audit-logs/{publicId}', [AuditController::class, 'show'], [AuthenticateMiddleware::class, AuditAccessMiddleware::class]);

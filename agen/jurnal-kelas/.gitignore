@@ -1,0 +1,7 @@
+/.env
+/vendor/
+/storage/logs/*.log
+/storage/cache/*
+/storage/tmp/*
+/storage/app/private/*
+!/storage/**/.gitkeep

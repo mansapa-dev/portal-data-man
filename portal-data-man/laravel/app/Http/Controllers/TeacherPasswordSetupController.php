@@ -29,7 +29,7 @@ class TeacherPasswordSetupController extends Controller
         DB::transaction(function () use ($token, $data) {
             $used = TeacherPasswordSetupToken::query()->whereKey($token->id)->whereNull('usedAt')->where('expiresAt', '>', now())->update(['usedAt' => now()]);
             abort_unless($used === 1, 409, 'Token setup sudah digunakan.');
-            $token->account->forceFill(['passwordHash' => Hash::make($data['password']), 'status' => 'ACTIVE', 'mustChangePassword' => false, 'activatedAt' => now(), 'passwordChangedAt' => now(), 'disabledAt' => null])->save();
+            $token->account->forceFill(['passwordHash' => Hash::make($data['password']), 'initialPassword' => null, 'status' => 'ACTIVE', 'mustChangePassword' => false, 'activatedAt' => now(), 'passwordChangedAt' => now(), 'disabledAt' => null])->save();
             TeacherPasswordSetupToken::query()->where('teacherAccountId', $token->teacherAccountId)->where('id', '!=', $token->id)->whereNull('usedAt')->update(['usedAt' => now()]);
         });
 
@@ -42,6 +42,6 @@ class TeacherPasswordSetupController extends Controller
             return null;
         }
 
-return TeacherPasswordSetupToken::query()->with('account.teacher')->where('tokenHash', hash('sha256', $raw))->whereNull('usedAt')->where('expiresAt', '>', now())->whereHas('account', fn ($q) => $q->where('status','PENDING_SETUP'))->first();
+return TeacherPasswordSetupToken::query()->with('account.teacher')->where('tokenHash', hash('sha256', $raw))->whereNull('usedAt')->where('expiresAt', '>', now())->whereHas('account', fn ($q) => $q->where('mustChangePassword', true)->whereIn('status', ['PENDING_SETUP', 'ACTIVE']))->first();
     }
 }

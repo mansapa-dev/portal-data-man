@@ -64,7 +64,19 @@ class SpreadsheetExportService
         $rows = $query->limit(config('exports.max_rows') + 1)->get();
         abort_if($rows->count() > config('exports.max_rows'), 422, 'Jumlah data melebihi batas export. Persempit filter.');
 
-        return [$this->write('Guru', ['NIP', 'NUPTK', 'Nomor Pegawai', 'Nama Guru', 'Jenis Kelamin', 'Email', 'No. Telepon', 'Alamat', 'Status', 'Status Akun', 'Kelas Wali'], $rows->map(fn (Teacher $teacher) => [$teacher->nip ?? '', $teacher->nuptk ?? '', $teacher->employeeNumber ?? '', $teacher->fullName, $teacher->gender ?? '', $teacher->email ?? '', $teacher->phone ?? '', $teacher->address ?? '', $teacher->status, $teacher->account?->status ?? 'BELUM_ADA', $teacher->homeroomClasses->pluck('code')->implode(', ')])), $rows->count()];
+        return [$this->write('Guru', ['NIP', 'NUPTK', 'Nomor Pegawai', 'Nama Guru', 'Jenis Kelamin', 'Email', 'No. Telepon', 'Alamat', 'Status', 'Status Akun', 'Username Portal', 'Password Awal', 'Kelas Wali'], $rows->map(fn (Teacher $teacher) => [$teacher->nip ?? '', $teacher->nuptk ?? '', $teacher->employeeNumber ?? '', $teacher->fullName, $teacher->gender ?? '', $teacher->email ?? '', $teacher->phone ?? '', $teacher->address ?? '', $teacher->status, $teacher->account?->status ?? 'BELUM_ADA', $teacher->account?->username ?? '', $teacher->account?->initialPassword ?? '', $teacher->homeroomClasses->pluck('code')->implode(', ')])), $rows->count()];
+    }
+
+    public function teacherCredentials(Request $request): array
+    {
+        $filters = $request->validate(['search' => ['nullable', 'string']]);
+        $rows = Teacher::query()->with('account')
+            ->whereHas('account', fn ($query) => $query->whereNotNull('initialPassword'))
+            ->when($filters['search'] ?? null, fn ($query, $value) => $query->where(fn ($nested) => $nested->where('fullName', 'like', "%{$value}%")->orWhere('nip', 'like', "%{$value}%")->orWhereHas('account', fn ($account) => $account->where('username', 'like', "%{$value}%"))))
+            ->orderBy('fullName')->limit(config('exports.max_rows') + 1)->get();
+        abort_if($rows->count() > config('exports.max_rows'), 422, 'Jumlah data melebihi batas export. Persempit pencarian.');
+
+        return [$this->write('Akun Guru', ['Nama Guru', 'NIP/NUPTK/Nomor Pegawai', 'Username', 'Password Awal', 'Status Akun', 'Wajib Ganti Password'], $rows->map(fn (Teacher $teacher) => [$teacher->fullName, $teacher->nip ?? $teacher->nuptk ?? $teacher->employeeNumber ?? '', $teacher->account->username, $teacher->account->initialPassword, $teacher->account->status, $teacher->account->mustChangePassword ? 'YA' : 'TIDAK'])), $rows->count()];
     }
 
     public function studentTemplate(): string

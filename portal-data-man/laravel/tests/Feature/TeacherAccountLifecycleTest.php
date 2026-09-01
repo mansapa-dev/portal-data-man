@@ -59,6 +59,7 @@ class TeacherAccountLifecycleTest extends TestCase
             $t->string('username')->unique();
             $t->string('email')->nullable()->unique();
             $t->string('passwordHash')->nullable();
+            $t->text('initialPassword')->nullable();
             $t->string('status')->default('PENDING_SETUP');
             $t->boolean('mustChangePassword')->default(true);
             $t->integer('failedLoginAttempts')->default(0);
@@ -124,7 +125,8 @@ class TeacherAccountLifecycleTest extends TestCase
     {
         $admin = AdminUser::query()->create(['publicId' => '01ADMIN00000000000000000', 'name' => 'Admin', 'email' => 'admin@example.test', 'passwordHash' => 'hash', 'role' => 'SUPER_ADMIN', 'status' => 'ACTIVE']);
         $teacher = Teacher::query()->create(['nip' => '001122334455', 'fullName' => 'Nama Guru', 'email' => 'guru@example.test', 'status' => 'ACTIVE']);
-        $created = $this->actingAs($admin, 'admin')->postJson("/api/v1/teachers/{$teacher->publicId}/account", [])->assertCreated()->assertJsonPath('data.account.username', '001122334455')->assertJsonPath('data.mailStatus', 'SENT');
+        $created = $this->actingAs($admin, 'admin')->postJson("/api/v1/teachers/{$teacher->publicId}/account", [])->assertCreated()->assertJsonPath('data.account.username', '001122334455')->assertJsonPath('data.account.status', 'ACTIVE')->assertJsonPath('data.mailStatus', 'SENT');
+        $this->postJson('/api/v1/auth/teacher/login', ['username' => '001122334455', 'password' => $created->json('data.defaultPassword')])->assertOk();
         Mail::assertSent(TeacherActivationMail::class, fn ($mail) => $mail->hasTo('guru@example.test'));
         $token = parse_url($created->json('data.passwordSetupUrl'), PHP_URL_QUERY);
         parse_str((string) $token, $query);

@@ -13,6 +13,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 class TeacherAccountController extends Controller
@@ -30,9 +31,10 @@ class TeacherAccountController extends Controller
         abort_if($teacher->account()->exists(), 409, 'Guru sudah memiliki akun.');
         $email = $request->validate(['email' => ['nullable', 'email', 'max:191']])['email'] ?? $teacher->email;
         $username = $this->availableUsername($teacher);
+        $defaultPassword = $this->defaultPassword();
         $raw = Str::random(64);
-        $account = DB::transaction(function () use ($request, $teacher, $email, $username, $raw) {
-            $account = $teacher->account()->create(['publicId' => (string) Str::ulid(), 'username' => $username, 'email' => $email ? strtolower($email) : null, 'passwordHash' => null, 'status' => 'PENDING_SETUP']);
+        $account = DB::transaction(function () use ($request, $teacher, $email, $username, $defaultPassword, $raw) {
+            $account = $teacher->account()->create(['publicId' => (string) Str::ulid(), 'username' => $username, 'email' => $email ? strtolower($email) : null, 'passwordHash' => Hash::make($defaultPassword), 'initialPassword' => $defaultPassword, 'status' => 'ACTIVE', 'mustChangePassword' => true, 'activatedAt' => now()]);
             TeacherPasswordSetupToken::query()->create(['publicId' => (string) Str::ulid(), 'teacherAccountId' => $account->id, 'tokenHash' => hash('sha256', $raw), 'expiresAt' => now()->addDay()]);
             $this->audit->write($request, 'TEACHER_ACCOUNT_PROVISIONED', 'TeacherAccount', $account->publicId, null, ['teacherPublicId' => $teacher->publicId, 'username' => $username, 'email' => $email]);
 
@@ -41,14 +43,14 @@ class TeacherAccountController extends Controller
         $setupUrl = url('/teacher/setup-password?token='.urlencode($raw));
         $mailStatus = $this->mail($account, $setupUrl);
 
-        return ApiResponse::success(['account' => $account, 'passwordSetupUrl' => $setupUrl, 'mailStatus' => $mailStatus], 'Akun guru berhasil dibuat.', 201);
+        return ApiResponse::success(['account' => $account, 'defaultPassword' => $defaultPassword, 'passwordSetupUrl' => $setupUrl, 'mailStatus' => $mailStatus], 'Akun guru aktif dengan password awal dan tautan aktivasi berhasil dibuat.', 201);
     }
 
     public function regenerate(Request $request, Teacher $teacher): JsonResponse
     {
         $account = $teacher->account;
         abort_unless($account, 404, 'Akun guru belum tersedia.');
-        abort_unless($account->status === 'PENDING_SETUP', 409, 'Token setup hanya untuk akun yang menunggu setup.');
+        abort_unless($account->mustChangePassword, 409, 'Tautan aktivasi hanya tersedia selama password awal belum diganti.');
         $raw = Str::random(64);
         DB::transaction(function () use ($request, $account, $raw) {
             TeacherPasswordSetupToken::query()->where('teacherAccountId', $account->id)->whereNull('usedAt')->update(['usedAt' => now()]);
@@ -104,6 +106,11 @@ class TeacherAccountController extends Controller
                 return $username;
             }
         }abort(409, 'NIP, NUPTK, atau nomor pegawai belum tersedia atau sudah digunakan.');
+    }
+
+    private function defaultPassword(): string
+    {
+        return 'Guru#'.Str::upper(Str::random(8)).random_int(10, 99);
     }
 
     private function mail(TeacherAccount $account, string $url): string

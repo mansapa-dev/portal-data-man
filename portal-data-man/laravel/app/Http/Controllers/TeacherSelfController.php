@@ -45,7 +45,7 @@ class TeacherSelfController extends Controller
         abort_unless($account->passwordHash && Hash::check($data['currentPassword'], $account->passwordHash), 401, 'Password saat ini tidak valid.');
         abort_if(Hash::check($data['newPassword'], $account->passwordHash), 409, 'Password baru harus berbeda.');
         $current = $request->session()->get('portal_session_public_id');
-        $account->update(['passwordHash' => Hash::make($data['newPassword']), 'passwordChangedAt' => now(), 'mustChangePassword' => false]);
+        $account->update(['passwordHash' => Hash::make($data['newPassword']), 'initialPassword' => null, 'passwordChangedAt' => now(), 'mustChangePassword' => false]);
         $this->sessions->revokeTeacher($account, is_string($current) ? $current : null);
         $this->audit->write($request, 'TEACHER_PASSWORD_CHANGED', 'TeacherAccount', $account->publicId);
 

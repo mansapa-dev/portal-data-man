@@ -1,0 +1,10 @@
+<?php
+namespace App\Application\Audit;
+use App\Infrastructure\Database\Connection;
+use RuntimeException;
+final class AuditLogService
+{
+    public function __construct(private readonly Connection $database){}
+    public function list(array $filters):array{$page=max(1,(int)($filters['page']??1));$per=25;$where=['1=1'];$params=[];if(!empty($filters['action'])){$where[]='action LIKE :action';$params['action']='%'.substr((string)$filters['action'],0,100).'%';}if(!empty($filters['actor'])){$where[]='actor_name_snapshot LIKE :actor';$params['actor']='%'.substr((string)$filters['actor'],0,100).'%';}$sql=' FROM audit_logs WHERE '.implode(' AND ',$where);$count=$this->database->pdo()->prepare('SELECT COUNT(*)'.$sql);$count->execute($params);$total=(int)$count->fetchColumn();$query=$this->database->pdo()->prepare('SELECT public_id AS publicId,actor_name_snapshot AS actorName,actor_role AS actorRole,action,entity_type AS entityType,entity_public_id AS entityPublicId,ip_address AS ipAddress,created_at AS createdAt'.$sql.' ORDER BY created_at DESC LIMIT :limit OFFSET :offset');foreach($params as $key=>$value)$query->bindValue(':'.$key,$value);$query->bindValue(':limit',$per,\PDO::PARAM_INT);$query->bindValue(':offset',($page-1)*$per,\PDO::PARAM_INT);$query->execute();return ['items'=>$query->fetchAll(),'meta'=>['page'=>$page,'total'=>$total,'totalPages'=>(int)ceil($total/$per)]];}
+    public function detail(string $publicId):array{$q=$this->database->pdo()->prepare('SELECT public_id AS publicId,actor_public_id AS actorPublicId,actor_name_snapshot AS actorName,actor_role AS actorRole,action,entity_type AS entityType,entity_public_id AS entityPublicId,before_json AS beforeData,after_json AS afterData,metadata_json AS metadata,ip_address AS ipAddress,user_agent AS userAgent,created_at AS createdAt FROM audit_logs WHERE public_id=:id LIMIT 1');$q->execute(['id'=>$publicId]);$row=$q->fetch();if(!$row)throw new RuntimeException('Audit log tidak ditemukan.');foreach(['beforeData','afterData','metadata'] as $key)$row[$key]=$row[$key]?json_decode($row[$key],true):null;return $row;}
+}

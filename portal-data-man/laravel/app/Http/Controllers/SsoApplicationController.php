@@ -31,7 +31,7 @@ class SsoApplicationController extends Controller
     public function store(Request $request): JsonResponse
     {
         $data = $this->validated($request);
-        $client = ApplicationClient::query()->create(['name' => trim($data['name']), 'slug' => $data['slug'], 'description' => $data['description'] ?? null, 'clientId' => 'portal_'.$data['slug'].'_'.Str::lower(Str::random(16)), 'clientType' => 'PUBLIC_WEB', 'status' => 'ACTIVE', 'redirectUris' => $this->uris($data['redirectUris']), 'postLogoutRedirectUris' => $this->uris($data['postLogoutRedirectUris'] ?? []), 'allowedOrigins' => [], 'allowedScopes' => ['openid', 'profile', 'email', 'portal_role'], 'allowedGrantTypes' => ['authorization_code']]);
+        $client = ApplicationClient::query()->create(['name' => trim($data['name']), 'slug' => $data['slug'], 'description' => $data['description'] ?? null, 'clientId' => 'portal_'.$data['slug'].'_'.Str::lower(Str::random(16)), 'clientType' => 'PUBLIC_WEB', 'status' => 'ACTIVE', 'redirectUris' => $this->uris($data['redirectUris']), 'postLogoutRedirectUris' => $this->uris($data['postLogoutRedirectUris'] ?? []), 'allowedOrigins' => [], 'allowedScopes' => ['openid', 'profile', 'email', 'portal_role', 'portal_data.read'], 'allowedGrantTypes' => ['authorization_code']]);
         $this->audit->write($request, 'SSO_APPLICATION_CREATED', 'ApplicationClient', $client->publicId, null, ['name' => $client->name, 'clientId' => $client->clientId]);
 
         return ApiResponse::success($client, 'Aplikasi SSO berhasil dibuat.', 201);

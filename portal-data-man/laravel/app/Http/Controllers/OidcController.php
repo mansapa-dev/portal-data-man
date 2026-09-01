@@ -22,7 +22,7 @@ class OidcController extends Controller
     {
         $issuer = config('oidc.issuer');
 
-        return response()->json(['issuer' => $issuer, 'authorization_endpoint' => $issuer.'/authorize', 'token_endpoint' => $issuer.'/token', 'userinfo_endpoint' => $issuer.'/userinfo', 'jwks_uri' => $issuer.'/jwks', 'end_session_endpoint' => $issuer.'/logout', 'response_types_supported' => ['code'], 'grant_types_supported' => ['authorization_code'], 'subject_types_supported' => ['public'], 'id_token_signing_alg_values_supported' => ['RS256'], 'token_endpoint_auth_methods_supported' => ['none'], 'code_challenge_methods_supported' => ['S256'], 'scopes_supported' => ['openid', 'profile', 'email', 'portal_role'], 'claims_supported' => ['sub', 'name', 'preferred_username', 'email', 'email_verified', 'portal_teacher_id', 'portal_role']]);
+        return response()->json(['issuer' => $issuer, 'authorization_endpoint' => $issuer.'/authorize', 'token_endpoint' => $issuer.'/token', 'userinfo_endpoint' => $issuer.'/userinfo', 'jwks_uri' => $issuer.'/jwks', 'end_session_endpoint' => $issuer.'/logout', 'response_types_supported' => ['code'], 'grant_types_supported' => ['authorization_code'], 'subject_types_supported' => ['public'], 'id_token_signing_alg_values_supported' => ['RS256'], 'token_endpoint_auth_methods_supported' => ['none'], 'code_challenge_methods_supported' => ['S256'], 'scopes_supported' => ['openid', 'profile', 'email', 'portal_role', 'portal_data.read'], 'claims_supported' => ['sub', 'name', 'preferred_username', 'email', 'email_verified', 'portal_teacher_id', 'portal_role']]);
     }
 
     public function jwks(): JsonResponse

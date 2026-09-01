@@ -1,0 +1,3 @@
+<?php
+namespace App\Domain\Journal;
+final class MonthlySummary{public function calculate(array $rows):array{$s=['totalJournals'=>count($rows),'totalSessions'=>count($rows),'totalStudents'=>0,'present'=>0,'sick'=>0,'permitted'=>0,'absent'=>0,'notParticipating'=>0,'draft'=>0,'attendancePercentage'=>0.0];foreach($rows as $row){foreach(['totalStudents','present','sick','permitted','absent','notParticipating'] as $key)$s[$key]+=(int)($row[$key]??0);if(($row['status']??null)==='DRAFT')$s['draft']++;}$marked=$s['present']+$s['sick']+$s['permitted']+$s['absent']+$s['notParticipating'];$s['attendancePercentage']=$marked?round($s['present']/$marked*100,2):0.0;return $s;}}

@@ -1,0 +1,2 @@
+<?php
+return ['csrf_header' => 'X-CSRF-Token', 'max_upload_bytes' => 2 * 1024 * 1024, 'max_journal_files' => 5, 'allowed_image_mimes' => ['image/jpeg', 'image/png', 'image/webp'], 'csp' => "default-src 'self'; img-src 'self' data: blob:; script-src 'self'; style-src 'self'; connect-src 'self'; media-src 'self' blob:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"];

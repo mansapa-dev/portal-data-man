@@ -9,6 +9,7 @@ use App\Http\Controllers\Auth\TeacherSessionController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EnrollmentController;
 use App\Http\Controllers\ImportManagementController;
+use App\Http\Controllers\IntegrationReferenceController;
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\OidcController;
 use App\Http\Controllers\SchoolClassController;
@@ -37,6 +38,12 @@ Route::get('oidc/authorize', [OidcController::class, 'authorize']);
 Route::post('oidc/token', [OidcController::class, 'token'])->middleware('throttle:60,1');
 Route::match(['GET', 'POST'], 'oidc/userinfo', [OidcController::class, 'userinfo'])->middleware('throttle:120,1');
 Route::match(['GET', 'POST'], 'oidc/logout', [OidcController::class, 'logout']);
+
+Route::prefix('api/v1/integration')->middleware('throttle:120,1')->group(function (): void {
+    Route::get('periods', [IntegrationReferenceController::class, 'periods']);
+    Route::get('classes', [IntegrationReferenceController::class, 'classes']);
+    Route::get('classes/{schoolClass}/students', [IntegrationReferenceController::class, 'classStudents']);
+});
 
 Route::prefix('api/v1')->group(function (): void {
     Route::post('auth/admin/login', [AdminSessionController::class, 'store'])->middleware('throttle:5,1');
@@ -101,6 +108,7 @@ Route::prefix('api/v1')->group(function (): void {
             Route::get('import-templates/teachers', [SpreadsheetController::class, 'teacherTemplate']);
             Route::get('exports/students', [SpreadsheetController::class, 'students']);
             Route::get('exports/teachers', [SpreadsheetController::class, 'teachers']);
+            Route::get('exports/teacher-credentials', [SpreadsheetController::class, 'teacherCredentials']);
             Route::get('exports/classes/{schoolClass}/students', [SpreadsheetController::class, 'classStudents']);
             Route::post('classes', [SchoolClassController::class, 'store']);
             Route::patch('classes/{schoolClass}', [SchoolClassController::class, 'update']);

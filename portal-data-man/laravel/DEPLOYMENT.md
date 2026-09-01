@@ -65,18 +65,18 @@ Atur domain/subdomain di cPanel agar document root menunjuk langsung ke:
 
 Jangan menunjuk domain ke root repository atau `/laravel`, karena itu dapat membuka source code dan file `.env` ke publik.
 
-### Production menggunakan HTTP
+### Production wajib HTTPS
 
-Laravel dapat dijalankan melalui HTTP jika itu memang konfigurasi production hosting. Gunakan konfigurasi berikut di `.env` server:
+Semua domain production harus menggunakan HTTPS. Gunakan konfigurasi berikut di `.env` server:
 
 ```env
-APP_URL=http://sipadu.man1palembang.sch.id
+APP_URL=https://sipadu.man1palembang.sch.id
 APP_ENV=production
 APP_DEBUG=false
 SESSION_DOMAIN=null
-SESSION_SECURE_COOKIE=false
+SESSION_SECURE_COOKIE=true
 SESSION_SAME_SITE=lax
-OIDC_ISSUER=http://sipadu.man1palembang.sch.id/oidc
+OIDC_ISSUER=https://sipadu.man1palembang.sch.id/oidc
 ```
 
 Setelah mengubah `.env`, bersihkan cache konfigurasi:
@@ -86,7 +86,25 @@ php artisan optimize:clear
 php artisan config:cache
 ```
 
-HTTP tidak mengenkripsi password, session cookie, CSRF token, atau data API. Ini berarti siapa pun yang dapat mengamati koneksi jaringan berpotensi mengambil alih session atau membaca kredensial. Pastikan akses hanya melalui jaringan tepercaya dan rencanakan migrasi ke HTTPS. Saat HTTPS sudah aktif, ubah `APP_URL` dan `OIDC_ISSUER` menjadi `https://...`, lalu set `SESSION_SECURE_COOKIE=true`.
+Aktifkan redirect HTTP→HTTPS di cPanel dan pastikan sertifikat valid. Cookie session dan alur OIDC tidak boleh digunakan melalui HTTP.
+
+## Integrasi aplikasi Jurnal Kelas (agen)
+
+Buat aplikasi SSO baru pada Portal Data dengan nilai berikut:
+
+```text
+Nama aplikasi: Jurnal Kelas
+Slug: jurnal-kelas
+Redirect URI: https://agen.rdmman1plg.id/auth/sso/callback
+Post logout redirect URI: https://agen.rdmman1plg.id/login
+Scope: openid profile email portal_data.read
+```
+
+Simpan `client_id` dan `client_secret` melalui `.env` aplikasi agen, bukan di Git. Setelah login, agen membaca referensi semester, kelas, dan siswa melalui endpoint `GET /api/v1/integration/periods`, `GET /api/v1/integration/classes`, dan `GET /api/v1/integration/classes/{publicId}/students` menggunakan scope `portal_data.read`.
+
+### Akun guru dan export kredensial
+
+Link aktivasi akun guru tetap berlaku. Saat akun dibuat, Portal Data menetapkan password awal acak yang hanya ditampilkan sekali pada layar/export admin; password disimpan dalam bentuk hash dan wajib diganti saat login pertama. Perlakukan file export username/password sebagai data rahasia dan hapus setelah dibagikan kepada guru.
 
 ### Urutan update aman
 
@@ -185,7 +203,7 @@ Isi `.env` production:
 APP_NAME="Portal Data"
 APP_ENV=production
 APP_DEBUG=false
-APP_URL=https://portal.sekolah.sch.id
+APP_URL=https://sipadu.man1palembang.sch.id
 APP_LOCALE=id
 
 DB_CONNECTION=mysql
@@ -222,7 +240,7 @@ IMPORT_MAX_ROWS=5000
 IMPORT_MAX_FILE_SIZE_MB=10
 EXPORT_MAX_ROWS=10000
 
-OIDC_ISSUER=https://portal.sekolah.sch.id/oidc
+OIDC_ISSUER=https://sipadu.man1palembang.sch.id/oidc
 OIDC_KEY_ID=portal-data-production-1
 OIDC_ACCESS_TOKEN_TTL=900
 OIDC_AUTHORIZATION_CODE_TTL=600
@@ -242,11 +260,11 @@ Private key disimpan di `storage/app/private/oidc/private.pem` dengan permission
 
 Endpoint provider:
 
-- Discovery: `https://portal.sekolah.sch.id/oidc/.well-known/openid-configuration`
-- Authorization: `https://portal.sekolah.sch.id/oidc/authorize`
-- Token: `https://portal.sekolah.sch.id/oidc/token`
-- UserInfo: `https://portal.sekolah.sch.id/oidc/userinfo`
-- JWKS: `https://portal.sekolah.sch.id/oidc/jwks`
+- Discovery: `https://sipadu.man1palembang.sch.id/oidc/.well-known/openid-configuration`
+- Authorization: `https://sipadu.man1palembang.sch.id/oidc/authorize`
+- Token: `https://sipadu.man1palembang.sch.id/oidc/token`
+- UserInfo: `https://sipadu.man1palembang.sch.id/oidc/userinfo`
+- JWKS: `https://sipadu.man1palembang.sch.id/oidc/jwks`
 
 Client web publik wajib memakai Authorization Code, PKCE `S256`, dan redirect URI exact-match yang didaftarkan dari menu Aplikasi SSO.
 
@@ -329,8 +347,8 @@ Pastikan `.htaccess` pada `public/` ikut terunggah. Akses ke folder root aplikas
 ## Smoke test setelah cutover
 
 ```bash
-curl -I https://portal.sekolah.sch.id/
-curl -I https://portal.sekolah.sch.id/up
+curl -I https://sipadu.man1palembang.sch.id/
+curl -I https://sipadu.man1palembang.sch.id/up
 ```
 
 Kemudian periksa melalui browser:

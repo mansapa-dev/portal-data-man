@@ -1,0 +1,2 @@
+<?php
+return ['base_url' => rtrim((string) env('PORTAL_DATA_BASE_URL', ''), '/'), 'issuer' => rtrim((string) env('PORTAL_DATA_ISSUER', ''), '/'), 'client_id' => env('PORTAL_DATA_CLIENT_ID', ''), 'client_secret' => env('PORTAL_DATA_CLIENT_SECRET', ''), 'redirect_uri' => env('PORTAL_DATA_REDIRECT_URI', ''), 'post_logout_redirect_uri' => env('PORTAL_DATA_POST_LOGOUT_REDIRECT_URI', ''), 'timeout' => (int) env('PORTAL_DATA_TIMEOUT', 8), 'cache_ttl' => (int) env('PORTAL_DATA_CACHE_TTL', 900)];

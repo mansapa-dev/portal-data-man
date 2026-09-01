@@ -17,7 +17,7 @@ class TeacherAccount extends Model implements AuthenticatableContract
 
     protected $guarded = ['id'];
 
-    protected $hidden = ['id', 'teacherId', 'passwordHash'];
+    protected $hidden = ['id', 'teacherId', 'passwordHash', 'initialPassword'];
 
     public const CREATED_AT = 'createdAt';
 
@@ -25,7 +25,7 @@ class TeacherAccount extends Model implements AuthenticatableContract
 
     protected function casts(): array
     {
-        return ['mustChangePassword' => 'boolean', 'lockedUntil' => 'datetime', 'lastLoginAt' => 'datetime', 'passwordChangedAt' => 'datetime', 'activatedAt' => 'datetime', 'disabledAt' => 'datetime'];
+        return ['mustChangePassword' => 'boolean', 'initialPassword' => 'encrypted', 'lockedUntil' => 'datetime', 'lastLoginAt' => 'datetime', 'passwordChangedAt' => 'datetime', 'activatedAt' => 'datetime', 'disabledAt' => 'datetime'];
     }
 
     public function getAuthPasswordName(): string
