@@ -19,8 +19,8 @@ Buka **Portal Data → Aplikasi SSO → Tambah aplikasi**, lalu isi:
 - Nama aplikasi: `Jurnal Kelas`
 - Slug: `jurnal-kelas`
 - Deskripsi: `Absensi dan jurnal pembelajaran MAN 1 Palembang`
-- Redirect URI: `https://agen.rdmman1plg.id/auth/sso/callback`
-- Post logout redirect URI: `https://agen.rdmman1plg.id/login`
+- Redirect URI: `https://agen.rdmman1plg.sch.id/auth/sso/callback`
+- Post logout redirect URI: `https://agen.rdmman1plg.sch.id/login`
 
 URI harus sama persis dengan konfigurasi `.env`, termasuk skema, port, path, dan trailing slash. Production wajib HTTPS.
 
@@ -32,8 +32,8 @@ Setelah aplikasi dibuat, buka detail aplikasi dan salin Client ID ke `.env` Jurn
 PORTAL_DATA_BASE_URL=https://sipadu.man1palembang.sch.id/api/v1
 PORTAL_DATA_ISSUER=https://sipadu.man1palembang.sch.id/oidc
 PORTAL_DATA_CLIENT_ID=portal_jurnal-kelas_nq1v7vpdlvws0ua8
-PORTAL_DATA_REDIRECT_URI=https://agen.rdmman1plg.id/auth/sso/callback
-PORTAL_DATA_POST_LOGOUT_REDIRECT_URI=https://agen.rdmman1plg.id/login
+PORTAL_DATA_REDIRECT_URI=https://agen.rdmman1plg.sch.id/auth/sso/callback
+PORTAL_DATA_POST_LOGOUT_REDIRECT_URI=https://agen.rdmman1plg.sch.id/login
 ```
 
 Client ini bertipe public dan menggunakan PKCE, sehingga tidak membutuhkan client secret. Biarkan `PORTAL_DATA_CLIENT_SECRET` kosong.

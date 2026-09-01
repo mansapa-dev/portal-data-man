@@ -95,8 +95,8 @@ Buat aplikasi SSO baru pada Portal Data dengan nilai berikut:
 ```text
 Nama aplikasi: Jurnal Kelas
 Slug: jurnal-kelas
-Redirect URI: https://agen.rdmman1plg.id/auth/sso/callback
-Post logout redirect URI: https://agen.rdmman1plg.id/login
+Redirect URI: https://agen.rdmman1plg.sch.id/auth/sso/callback
+Post logout redirect URI: https://agen.rdmman1plg.sch.id/login
 Scope: openid profile email portal_data.read
 ```
 
