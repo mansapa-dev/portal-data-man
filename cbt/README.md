@@ -57,7 +57,7 @@ Portal Data harus mengisi `CBT_INTEGRATION_API_KEY` dengan nilai yang sama seper
 
 Jika document root tidak dapat diubah, taruh isi `public` di `public_html`, lalu ubah path `require` pada front controller agar menunjuk ke folder aplikasi di luar `public_html`. Jangan menaruh `.env`, `app`, `database`, atau `storage` privat di web root. HTTPS wajib untuk production dan `SESSION_SECURE_COOKIE=true`.
 
-Runbook lengkap untuk deployment Portal Data dan CBT tersedia di [`docs/deployment-shared-hosting.md`](docs/deployment-shared-hosting.md).
+Dokumentasi integrasi Portal Data tersedia di [`docs/portal-data-integration.md`](docs/portal-data-integration.md). Runbook deployment lengkap tersedia di [`docs/deployment-shared-hosting.md`](docs/deployment-shared-hosting.md).
 
 ## Verifikasi
 
