@@ -23,6 +23,8 @@ Migrasi CBT dari Google Apps Script + Supabase ke PHP Native 8.2+, PDO, dan MySQ
 
 CBT memanggil Portal Data hanya dari backend menggunakan bearer/API key. Contract default:
 
+- `GET /api/v1/integration/cbt/academic-years`
+- `GET /api/v1/integration/cbt/semesters?academic_year_id=<portal_id>`
 - `GET /api/v1/integration/cbt/students?page=1&per_page=100`
 - `GET /api/v1/integration/cbt/teachers?page=1&per_page=100`
 - `GET /api/v1/integration/cbt/classes?page=1&per_page=100`

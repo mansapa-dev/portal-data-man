@@ -9,6 +9,13 @@ final class HttpPortalDataClient implements PortalDataClientInterface
  public function students(int$page,int$limit):array{return$this->page('/api/v1/integration/cbt/students',$page,$limit);}
  public function teachers(int$page,int$limit):array{return$this->page('/api/v1/integration/cbt/teachers',$page,$limit);}
  public function classes(int$page,int$limit):array{return$this->page('/api/v1/integration/cbt/classes',$page,$limit);}
+ public function academicYears():array{return$this->reference('/api/v1/integration/cbt/academic-years');}
+ public function semesters(?string$academicYearId=null):array{return$this->reference('/api/v1/integration/cbt/semesters', $academicYearId?['academic_year_id'=>$academicYearId]:[]);}
+ private function reference(string$path,array$query=[]):array
+ {
+  if($this->base===''||$this->key==='')throw new PortalDataException('Konfigurasi Portal Data belum lengkap.');
+  $curl=curl_init($this->base.$path.($query?('?'.http_build_query($query)):''));curl_setopt_array($curl,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>$this->timeout,CURLOPT_CONNECTTIMEOUT=>$this->timeout,CURLOPT_SSL_VERIFYPEER=>$this->verify,CURLOPT_HTTPHEADER=>['Accept: application/json','Authorization: Bearer '.$this->key,'X-API-Key: '.$this->key]]);$body=curl_exec($curl);$status=(int)curl_getinfo($curl,CURLINFO_HTTP_CODE);$error=curl_error($curl);curl_close($curl);if($body===false||$status<200||$status>=300)throw new PortalDataException('Portal Data tidak tersedia'.($error!==''?': '.$error:'.'));$json=json_decode($body,true);$data=$json['data']??[];return is_array($data)?['items'=>array_values($data),'has_more'=>false]:throw new PortalDataException('Format data Portal tidak sesuai kontrak.');
+ }
  private function page(string$path,int$page,int$limit):array
  {
   if($this->base===''||$this->key==='')throw new PortalDataException('Konfigurasi Portal Data belum lengkap.');

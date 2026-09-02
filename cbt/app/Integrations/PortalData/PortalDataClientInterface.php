@@ -6,4 +6,6 @@ interface PortalDataClientInterface
  public function students(int$page,int$limit):array;
  public function teachers(int$page,int$limit):array;
  public function classes(int$page,int$limit):array;
+ public function academicYears():array;
+ public function semesters(?string$academicYearId=null):array;
 }

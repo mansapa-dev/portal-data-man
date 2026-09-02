@@ -5,12 +5,33 @@ namespace App\Http\Controllers;
 use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\Teacher;
+use App\Models\AcademicYear;
+use App\Models\Semester;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class CbtIntegrationController extends Controller
 {
+    public function academicYears(): JsonResponse
+    {
+        return ApiResponse::success(AcademicYear::query()->orderByDesc('startDate')->get()->map(fn (AcademicYear $year): array => [
+            'id' => $year->publicId, 'name' => $year->name, 'is_active' => (bool) $year->isActive,
+        ]), 'Tahun ajaran Portal Data berhasil diambil.');
+    }
+
+    public function semesters(Request $request): JsonResponse
+    {
+        $query = Semester::query()->with('academicYear')->orderByDesc('startDate');
+        if ($request->filled('academic_year_id')) {
+            $query->whereHas('academicYear', fn ($year) => $year->where('publicId', $request->query('academic_year_id')));
+        }
+        return ApiResponse::success($query->get()->map(fn (Semester $semester): array => [
+            'id' => $semester->publicId, 'type' => $semester->type,
+            'academic_year' => $semester->academicYear?->name, 'is_active' => (bool) $semester->isActive,
+        ]), 'Semester Portal Data berhasil diambil.');
+    }
+
     public function students(Request $request): JsonResponse
     {
         $limit = min(max((int) $request->query('per_page', 100), 1), 200);
