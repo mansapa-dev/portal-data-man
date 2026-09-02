@@ -400,12 +400,8 @@
 
         <div class="card">
           <div class="card-header">
-            <div class="card-title">Manajemen Data & Pendaftaran Siswa (PIN Otomatis)</div>
+          <div class="card-title">Data Siswa Portal Data & PIN CBT</div>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
-              <button class="btn btn-primary" onclick="bukaModalSiswaSatuan()"><i class="fa-solid fa-user-plus"></i> Tambah Siswa Manual</button>
-              <button class="btn btn-warning" onclick="downloadTemplateSiswa()"><i class="fa-solid fa-file-excel"></i> Template Excel</button>
-              <button class="btn btn-success" onclick="document.getElementById('fileImportSiswa').click()"><i class="fa-solid fa-file-arrow-up"></i> Upload Excel</button>
-              <input type="file" id="fileImportSiswa" accept=".xlsx, .xls" style="display:none" onchange="handleImportSiswa(this)">
               <button class="btn btn-secondary" onclick="exportToExcel('data_siswa_cbt.xlsx', 'Siswa', ['NISN', 'Nama', 'Kelas', 'Tingkat', 'PIN', 'Tahun Ajaran', 'Status'], window.cacheSiswaExcel || [])"><i class="fa-solid fa-download"></i> Export</button>
             </div>
           </div>
@@ -585,7 +581,7 @@
       <div id="tabAdminAkun" class="dash-tab hidden">
         <div class="card">
           <div class="card-header">
-            <div class="card-title">Manajemen Akun Administrator & Guru</div>
+            <div class="card-title">Manajemen Akun Administrator CBT</div>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
               <button class="btn btn-secondary" onclick="exportToExcel('data_akun.xlsx', 'Akun', ['username', 'nama_lengkap', 'role', 'status_aktif'], window.cacheAkunExcel || [])"><i class="fa-solid fa-file-excel"></i> Download</button>
               <button class="btn btn-warning" onclick="downloadTemplateAkun()"><i class="fa-solid fa-download"></i> Template</button>
@@ -753,7 +749,11 @@
           <div class="input-group"><label>Tingkat</label><div class="input-wrapper"><select id="inTingkatUjian" required><option value="X">X</option><option value="XI">XI</option><option value="XII">XII</option></select></div></div>
           <div class="input-group"><label>Sesi Ujian</label><div class="input-wrapper"><select id="inSesiUjian"><option value="1">Sesi 1</option><option value="2">Sesi 2</option><option value="3">Sesi 3</option></select></div></div>
         </div>
-        <div class="input-group"><label>Tanggal Ujian</label><div class="input-wrapper"><input type="date" id="inTanggalUjian" required style="padding-left:40px;"></div></div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+          <div class="input-group"><label>Tanggal Ujian</label><div class="input-wrapper"><input type="date" id="inTanggalUjian" required style="padding-left:40px;"></div></div>
+          <div class="input-group"><label>Jam Mulai</label><div class="input-wrapper"><input type="time" id="inJamMulai" required style="padding-left:40px;"></div></div>
+        </div>
+        <div class="input-group"><label>Jam Selesai</label><div class="input-wrapper"><input type="time" id="inJamSelesai" required style="padding-left:40px;"></div></div>
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
           <div class="input-group"><label>Durasi (Menit)</label><div class="input-wrapper"><input type="number" id="inDurasiUjian" required value="90"></div></div>
           <div class="input-group"><label>Target Rombel/Kelas (Opsional)</label><div class="input-wrapper"><input type="text" id="inKelasTarget" placeholder="Misal: XII.1, XII.2"></div></div>
@@ -803,7 +803,7 @@
         <div class="input-group"><label>Username</label><div class="input-wrapper"><i class="fa-solid fa-user left-icon"></i><input type="text" id="inAkunUsername" required></div></div>
         <div class="input-group"><label>Nama Lengkap</label><div class="input-wrapper"><i class="fa-solid fa-id-card left-icon"></i><input type="text" id="inAkunNama" required></div></div>
         <div class="input-group"><label>Password</label><div class="input-wrapper"><i class="fa-solid fa-lock left-icon"></i><input type="text" id="inAkunPass" required placeholder="Password akun"></div></div>
-        <div class="input-group"><label>Role / Hak Akses</label><div class="input-wrapper"><select id="inAkunRole"><option value="admin">Admin</option><option value="guru">Guru Mata Pelajaran</option></select></div></div>
+        <input type="hidden" id="inAkunRole" value="admin">
         <div class="input-group"><label>Status Akun</label><div class="input-wrapper"><select id="inAkunStatus"><option value="true">Aktif</option><option value="false">Nonaktif</option></select></div></div>
         <button type="submit" class="btn btn-primary" style="width:100%; margin-top:8px;">Simpan Akun</button>
       </form>
@@ -1356,6 +1356,8 @@ function bukaModalUjian(data = null) {
     document.getElementById('inTingkatUjian').value = data.tingkat;
     document.getElementById('inSesiUjian').value = data.sesi || 1;
     document.getElementById('inTanggalUjian').value = data.tanggal_ujian || '';
+    document.getElementById('inJamMulai').value = data.jam_mulai || '07:00';
+    document.getElementById('inJamSelesai').value = data.jam_selesai || '08:30';
     document.getElementById('inKelasTarget').value = data.kelas_target || '';
     document.getElementById('inDurasiUjian').value = data.durasi_menit;
     document.getElementById('inTahunAjaran').value = data.tahun_ajaran || '2025/2026';
@@ -1365,6 +1367,8 @@ function bukaModalUjian(data = null) {
     document.getElementById('titleModalUjian').textContent = "Tambah Ujian / Arsip Baru";
     document.getElementById('editUjianId').value = "";
     document.getElementById('inSesiUjian').value = "1";
+    document.getElementById('inJamMulai').value = '07:00';
+    document.getElementById('inJamSelesai').value = '08:30';
   }
   document.getElementById('modalUjian').classList.add('show');
 }
@@ -1378,6 +1382,8 @@ document.getElementById('formUjian').addEventListener('submit', function(e){
     tingkat: document.getElementById('inTingkatUjian').value,
     sesi: document.getElementById('inSesiUjian').value,
     tanggal_ujian: document.getElementById('inTanggalUjian').value,
+    jam_mulai: document.getElementById('inJamMulai').value,
+    jam_selesai: document.getElementById('inJamSelesai').value,
     kelas_target: document.getElementById('inKelasTarget').value,
     durasi_menit: document.getElementById('inDurasiUjian').value,
     tahun_ajaran: document.getElementById('inTahunAjaran').value,
