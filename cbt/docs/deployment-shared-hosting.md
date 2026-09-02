@@ -54,7 +54,61 @@ CBT tidak membutuhkan Docker, Redis, Supervisor, WebSocket, queue worker, atau a
 
 Jangan arahkan document root ke root repository. File `.env`, schema, log, source PHP, dan backup SQL tidak boleh dapat diakses melalui HTTP.
 
-## 4. Persiapan release di komputer lokal
+## 4. Mengatasi Composer masih memakai PHP 7.4
+
+Pesan berikut berarti **PHP CLI** yang menjalankan Composer masih versi 7.4, walaupun versi PHP subdomain mungkin sudah diatur ke 8.2:
+
+```text
+Your Composer dependencies require a PHP version ">= 8.2.0". You are running 7.4.33.
+```
+
+Periksa PHP untuk website dan Terminal secara terpisah:
+
+1. Di cPanel buka **MultiPHP Manager** atau **Select PHP Version**, lalu pilih PHP 8.2/8.3 untuk subdomain CBT.
+2. Di Terminal jalankan:
+
+   ```bash
+   php -v
+   command -v php
+   composer --version
+   ```
+
+3. Cari binary PHP 8.2 yang disediakan hosting. Nama/path yang umum (gunakan hanya yang benar-benar tersedia) adalah:
+
+   ```bash
+   php82 -v
+   /opt/cpanel/ea-php82/root/usr/bin/php -v
+   /opt/alt/php82/usr/bin/php -v
+   ```
+
+4. Jalankan Composer **melalui binary PHP 8.2**, bukan melalui `php` 7.4. Contoh cPanel EasyApache:
+
+   ```bash
+   cd /home/CPANEL_USER/apps/cbt-man1
+   /opt/cpanel/ea-php82/root/usr/bin/php "$(command -v composer)" install \
+     --no-dev --prefer-dist --optimize-autoloader --no-interaction
+   /opt/cpanel/ea-php82/root/usr/bin/php database/migrate.php
+   /opt/cpanel/ea-php82/root/usr/bin/php scripts/preflight.php
+   ```
+
+   Contoh CloudLinux/Alt-PHP:
+
+   ```bash
+   /opt/alt/php82/usr/bin/php "$(command -v composer)" install \
+     --no-dev --prefer-dist --optimize-autoloader --no-interaction
+   ```
+
+   Jika `command -v composer` adalah wrapper shell dan tidak dapat dibuka oleh PHP, cari file `composer.phar`, kemudian jalankan `PHP_82 /path/composer.phar install ...`, atau gunakan menu Composer cPanel dengan PHP 8.2.
+
+5. Pastikan extension pada **PHP 8.2** tersedia, bukan hanya pada PHP 7.4:
+
+   ```bash
+   /opt/cpanel/ea-php82/root/usr/bin/php -m | sort
+   ```
+
+Jangan menjalankan `composer install --ignore-platform-reqs`. Opsi tersebut hanya melewati pemeriksaan Composer; aplikasi tetap gagal ketika dieksekusi oleh PHP 7.4. Jika hosting tidak menyediakan PHP 8.2 untuk web dan CLI, minta provider mengaktifkannya atau pindah paket/server.
+
+## 5. Persiapan release di komputer lokal
 
 ### Portal Data
 
@@ -79,7 +133,7 @@ composer lint
 
 Upload folder `vendor/`, tetapi jangan upload `.env` lokal, log lokal, atau file import sementara.
 
-## 5. Buat subdomain dan database di cPanel
+## 6. Buat subdomain dan database di cPanel
 
 1. Buat subdomain `sipadu.example.sch.id` dengan document root `/home/CPANEL_USER/apps/portal-data/laravel/public`.
 2. Buat subdomain `cbt.example.sch.id` dengan document root `/home/CPANEL_USER/apps/cbt-man1/public`.
@@ -88,7 +142,7 @@ Upload folder `vendor/`, tetapi jangan upload `.env` lokal, log lokal, atau file
 5. Berikan masing-masing user privilege hanya pada database miliknya.
 6. Aktifkan SSL/AutoSSL, lalu paksa HTTPS.
 
-## 6. Generate secret
+## 7. Generate secret
 
 Generate nilai berbeda untuk `APP_KEY`, setup token, dan API key. Contoh melalui PHP lokal:
 
@@ -106,7 +160,7 @@ CBT PORTAL_DATA_API_KEY
 
 Jangan menggunakan password database sebagai integration key.
 
-## 7. Environment Portal Data
+## 8. Environment Portal Data
 
 Buat `/home/CPANEL_USER/apps/portal-data/laravel/.env`:
 
@@ -155,7 +209,7 @@ php artisan view:cache
 
 Pastikan `public/build/manifest.json` tersedia. Jika tidak ada, halaman React Portal Data tidak dapat memuat asset production.
 
-## 8. Environment CBT
+## 9. Environment CBT
 
 Buat `/home/CPANEL_USER/apps/cbt-man1/.env` berdasarkan `.env.example`:
 
@@ -196,7 +250,7 @@ php scripts/preflight.php
 
 Jika tidak ada Terminal/SSH, import `database/schema.sql` melalui phpMyAdmin. Jalankan preflight di komputer staging dengan konfigurasi yang setara; jangan membuat script preflight dapat dipanggil dari web.
 
-## 9. Initial admin CBT
+## 10. Initial admin CBT
 
 Initial admin hanya dapat dibuat jika belum ada admin. Ambil CSRF dahulu dengan browser/dev tool atau cURL yang menyimpan cookie:
 
@@ -215,7 +269,23 @@ curl -b cookie.txt -X POST https://cbt.example.sch.id/api/setup/admin \
 
 Setelah sukses, hapus `SETUP_TOKEN` dari `.env`. Jangan menyimpan `cookie.txt` atau command berisi secret di folder publik.
 
-## 10. Urutan sinkronisasi pertama
+### Alternatif: seed admin melalui phpMyAdmin
+
+Gunakan alternatif ini bila endpoint setup tidak dapat dipanggil. Template tersedia di `database/seed-admin.example.sql`.
+
+1. Buat hash password menggunakan PHP 8.2. Jangan gunakan password contoh dan jangan menyimpan plaintext-nya di SQL:
+
+   ```bash
+   /opt/cpanel/ea-php82/root/usr/bin/php -r "echo password_hash('PASSWORD_KUAT_UNIK_MINIMAL_12', PASSWORD_DEFAULT), PHP_EOL;"
+   ```
+
+2. Salin `database/seed-admin.example.sql` menjadi file lokal, ganti `REPLACE_WITH_PASSWORD_HASH` dengan seluruh hash yang dihasilkan (termasuk karakter `$`), dan sesuaikan username/nama.
+3. Pilih database CBT di phpMyAdmin, buka tab **SQL**, tempel query tersebut, lalu jalankan.
+4. Login dan segera verifikasi/ganti password admin. Hapus salinan SQL yang berisi hash dari komputer bersama, File Manager, dan folder publik.
+
+Query menggunakan `ON DUPLICATE KEY UPDATE`: username yang sama akan diperbarui, bukan membuat akun duplikat. Jangan memakai query ini untuk mengubah akun guru menjadi admin.
+
+## 11. Urutan sinkronisasi pertama
 
 1. Pastikan data tahun ajaran, kelas, siswa, guru, NISN, dan NIP di Portal Data sudah benar.
 2. Login administrator CBT.
@@ -228,7 +298,7 @@ Setelah sukses, hapus `SETUP_TOKEN` dari `.env`. Jangan menyimpan `cookie.txt` a
 
 Login guru tersedia di `/guru`; dashboard berada di `/guru/dashboard`. Guru tidak dapat masuk melalui modal login administrator.
 
-## 11. Hosting yang tidak dapat mengubah document root
+## 12. Hosting yang tidak dapat mengubah document root
 
 Pilihan terbaik tetap meminta provider mengarahkan subdomain ke folder `public`. Jika tidak mungkin:
 
@@ -240,7 +310,7 @@ Pilihan terbaik tetap meminta provider mengarahkan subdomain ke folder `public`.
 
 Jangan menyalin `.env`, `app`, `database`, `storage`, `vendor`, atau file SQL ke `public_html`. Untuk Portal Data gunakan pola front-controller Laravel yang sama dan pastikan asset `public/build` ikut tersedia.
 
-## 12. Verifikasi non-visual setelah deploy
+## 13. Verifikasi non-visual setelah deploy
 
 ```bash
 curl -i https://sipadu.example.sch.id/health
@@ -274,7 +344,7 @@ Checklist:
 - Jawaban tersimpan setelah refresh.
 - Log teknis masuk ke `storage/logs`, bukan tampil di response.
 
-## 13. Backup dan update release
+## 14. Backup dan update release
 
 Sebelum update:
 
@@ -309,7 +379,7 @@ php scripts/preflight.php
 
 Untuk update tanpa downtime panjang, upload release ke folder baru, salin `.env`, jalankan migration, lalu ubah document root/symlink setelah preflight lulus.
 
-## 14. Rollback
+## 15. Rollback
 
 1. Aktifkan maintenance page atau batasi akses.
 2. Arahkan document root kembali ke release sebelumnya.
@@ -317,7 +387,7 @@ Untuk update tanpa downtime panjang, upload release ke folder baru, salin `.env`
 4. Jangan restore database CBT ketika ujian sedang aktif tanpa keputusan operasional sekolah; jawaban setelah waktu backup akan hilang.
 5. Jalankan health check dan non-visual smoke test sebelum membuka trafik.
 
-## 15. Troubleshooting
+## 16. Troubleshooting
 
 - `500` setelah upload: cek versi PHP, `vendor`, permission storage, `.env`, dan log aplikasi.
 - `419 CSRF`: pastikan domain cookie benar, HTTPS aktif, dan client mengambil CSRF dengan cookie yang sama.
