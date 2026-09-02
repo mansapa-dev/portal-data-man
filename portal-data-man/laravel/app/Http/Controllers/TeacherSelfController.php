@@ -140,14 +140,21 @@ class TeacherSelfController extends Controller
 
     private function applicationLaunchUrl(?string $configured, array $redirectUris, string $slug = ''): ?string
     {
+        $normalizedSlug = strtolower($slug);
+        $isJunkes = str_contains($normalizedSlug, 'jurnal')
+            || str_contains($normalizedSlug, 'junkes')
+            || str_contains($normalizedSlug, 'agen');
+
+        if ($isJunkes && $configured && filter_var($configured, FILTER_VALIDATE_URL) && in_array(parse_url($configured, PHP_URL_PATH) ?: '/', ['', '/'], true)) {
+            return rtrim($configured, '/').'/auth/sso/redirect';
+        }
         if ($configured && filter_var($configured, FILTER_VALIDATE_URL)) {
             return $configured;
         }
-        $normalizedSlug = strtolower($slug);
         foreach ($redirectUris as $uri) {
             if (is_string($uri) && str_ends_with(parse_url($uri, PHP_URL_PATH) ?: '', '/auth/sso/callback')) {
                 $ssoBase = substr($uri, 0, -strlen('/callback'));
-                if (str_contains($normalizedSlug, 'jurnal') || str_contains($normalizedSlug, 'junkes') || str_contains($normalizedSlug, 'agen')) {
+                if ($isJunkes) {
                     return $ssoBase.'/redirect';
                 }
                 if (str_contains($normalizedSlug, 'cbt')) {
