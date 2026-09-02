@@ -141,7 +141,7 @@ class TeacherAccountLifecycleTest extends TestCase
         $teacher = Teacher::query()->create(['nip' => '001122334466', 'fullName' => 'Guru Mandiri', 'email' => 'guru@example.test', 'status' => 'ACTIVE']);
         $teacher->account()->create(['username' => '001122334466', 'email' => 'guru@example.test', 'passwordHash' => password_hash('PasswordGuru123', PASSWORD_ARGON2ID), 'status' => 'ACTIVE']);
         $this->postJson('/api/v1/auth/teacher/login', ['username' => '001122334466', 'password' => 'PasswordGuru123'])->assertOk();
-        $this->patchJson('/api/v1/teacher/profile', ['email' => 'baru@example.test', 'phone' => '081234567890', 'address' => 'Alamat Baru'])->assertOk()->assertJsonPath('data.phone', '081234567890');
+        $this->patchJson('/api/v1/teacher/profile', ['fullName' => 'Nama Guru Baru', 'gender' => 'FEMALE', 'email' => 'baru@example.test', 'phone' => '081234567890', 'address' => 'Alamat Baru'])->assertOk()->assertJsonPath('data.fullName', 'Nama Guru Baru')->assertJsonPath('data.gender', 'FEMALE')->assertJsonPath('data.phone', '081234567890');
         $file = UploadedFile::fake()->createWithContent('guru.jpg', "\xFF\xD8\xFF\xE0".str_repeat('a', 100));
         $this->post('/api/v1/teacher/profile/photo', ['file' => $file], ['Accept' => 'application/json'])->assertOk();
         $teacher->refresh();

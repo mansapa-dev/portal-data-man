@@ -10,6 +10,7 @@ use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -27,11 +28,17 @@ class TeacherSelfController extends Controller
 
     public function updateProfile(Request $request): JsonResponse
     {
-        $data = $request->validate(['email' => ['nullable', 'email', 'max:191'], 'phone' => ['nullable', 'string', 'max:30'], 'address' => ['nullable', 'string', 'max:5000']]);
         $account = $request->user('teacher');
         $teacher = $account->teacher;
+        $data = $request->validate([
+            'fullName' => ['required', 'string', 'min:2', 'max:191'],
+            'gender' => ['nullable', Rule::in(['MALE', 'FEMALE'])],
+            'email' => ['nullable', 'email', 'max:191', Rule::unique('Teacher', 'email')->ignore($teacher->id), Rule::unique('TeacherAccount', 'email')->ignore($account->id)],
+            'phone' => ['nullable', 'string', 'max:30'],
+            'address' => ['nullable', 'string', 'max:5000'],
+        ]);
         $old = $teacher->replicate();
-        $teacher->update(['email' => isset($data['email']) ? strtolower($data['email']) : null, 'phone' => $data['phone'] ?? null, 'address' => $data['address'] ?? null]);
+        $teacher->update(['fullName' => preg_replace('/\s+/u', ' ', trim($data['fullName'])), 'gender' => $data['gender'] ?? null, 'email' => isset($data['email']) ? strtolower($data['email']) : null, 'phone' => $data['phone'] ?? null, 'address' => $data['address'] ?? null]);
         $account->update(['email' => isset($data['email']) ? strtolower($data['email']) : null]);
         $this->audit->write($request, 'TEACHER_PROFILE_UPDATED', 'Teacher', $teacher->publicId, $old, $teacher);
 
