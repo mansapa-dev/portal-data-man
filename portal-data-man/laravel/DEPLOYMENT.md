@@ -1,5 +1,7 @@
 # Deployment Portal Data Laravel di cPanel
 
+> Untuk deployment Portal Data bersama CBT MAN 1, termasuk API key server-to-server, urutan sync, health check, backup, dan rollback, gunakan juga `../../cbt/docs/deployment-shared-hosting.md` sebagai runbook utama.
+
 Dokumen ini mencakup instalasi baru dan cutover dari Portal Data Node.js. Jalankan seluruh command dari direktori `laravel/`.
 
 ## Cara deploy release terbaru dari GitHub ke shared hosting
@@ -244,6 +246,9 @@ OIDC_ISSUER=https://sipadu.man1palembang.sch.id/oidc
 OIDC_KEY_ID=portal-data-production-1
 OIDC_ACCESS_TOKEN_TTL=900
 OIDC_AUTHORIZATION_CODE_TTL=600
+
+# Backend-only integration untuk CBT; samakan dengan PORTAL_DATA_API_KEY di CBT.
+CBT_INTEGRATION_API_KEY=RANDOM_MINIMAL_32_KARAKTER
 ```
 
 Jangan menyalin kredensial development ke production. Ganti password database, password super-admin, SMTP App Password, dan `APP_KEY`.

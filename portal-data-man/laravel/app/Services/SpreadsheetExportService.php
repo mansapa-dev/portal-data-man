@@ -86,7 +86,7 @@ class SpreadsheetExportService
 
     public function teacherTemplate(): string
     {
-        return $this->write('Data Guru', ['NIP', 'NUPTK', 'Nomor Pegawai', 'Nama Guru', 'Jenis Kelamin', 'Email', 'No. Telepon', 'Alamat', 'Status'], collect([['198001012010011001', '1234567890123456', 'PEG-001', 'Contoh Guru', 'LAKI_LAKI', 'contoh@example.sch.id', '081234567890', 'Alamat contoh', 'ACTIVE']]));
+        return $this->write('Data Guru', TeacherImportNormalizer::HEADERS, collect([['Contoh Guru', '198001012010011001', '1234567890123456', 'PEG-001', 'contoh@example.sch.id', '081234567890', 'LAKI_LAKI', 'ACTIVE', 'Alamat contoh']]));
     }
 
     public function importErrors(ImportBatch $batch): string

@@ -1,0 +1,28 @@
+<?php
+declare(strict_types=1);
+namespace Cbt\Services;
+use Cbt\Core\Database;
+use Cbt\Integrations\PortalData\PortalDataClientInterface;
+final class PortalDataSyncService
+{
+ public function __construct(private Database$db,private PortalDataClientInterface$portal){}
+ public function sync(string$type,?int$actor):array
+ {
+  $type=strtoupper($type);if(!in_array($type,['STUDENTS','TEACHERS','CLASSES'],true))throw new \InvalidArgumentException('Jenis sinkronisasi tidak valid.');
+  $statement=$this->db->pdo()->prepare("INSERT INTO portal_sync_logs(sync_type,started_at,status,initiated_by) VALUES(:type,UTC_TIMESTAMP(3),'RUNNING',:actor)");$statement->execute(['type'=>$type,'actor'=>$actor]);$log=(int)$this->db->pdo()->lastInsertId();$summary=['total'=>0,'inserted'=>0,'updated'=>0,'unchanged'=>0,'failed'=>0];
+  try{for($page=1;;$page++){$result=match($type){'STUDENTS'=>$this->portal->students($page,100),'TEACHERS'=>$this->portal->teachers($page,100),'CLASSES'=>$this->portal->classes($page,100)};foreach($result['items']as$item){$summary['total']++;try{$changed=$this->upsert($type,$item);$summary[$changed]++;}catch(\Throwable){$summary['failed']++;}}if(!$result['has_more'])break;} $status=$summary['failed']?'PARTIAL':'SUCCESS';$this->finish($log,$status,$summary,null);return$summary+['status'=>$status];}catch(\Throwable$e){$this->finish($log,'FAILED',$summary,$e->getMessage());throw$e;}
+ }
+ private function upsert(string$type,array$d):string{return match($type){'STUDENTS'=>$this->student($d),'TEACHERS'=>$this->teacher($d),'CLASSES'=>$this->schoolClass($d)};}
+ private function student(array$d):string
+ {
+  $portal=(string)($d['id']??$d['student_id']??'');$nisn=trim((string)($d['nisn']??''));$name=trim((string)($d['name']??$d['nama']??''));if($portal===''||!preg_match('/^\d{8,20}$/',$nisn)||$name==='')throw new \UnexpectedValueException('Data siswa invalid.');
+  $existing=$this->row('students','portal_student_id',$portal);$values=['portal'=>$portal,'portal_class'=>$d['class']['id']??$d['class_id']??null,'nisn'=>$nisn,'name'=>$name,'class'=>$d['class']['name']??$d['kelas']??$d['rombel']??null,'grade'=>$d['grade']??$d['tingkat']??null,'year'=>$d['academic_year']??$d['tahun_ajaran']??null,'active'=>(int)($d['is_active']??strtoupper((string)($d['status']??'ACTIVE'))==='ACTIVE')];
+  if($existing&&$this->same($existing,['nisn'=>$values['nisn'],'name_snapshot'=>$values['name'],'class_snapshot'=>$values['class'],'grade_snapshot'=>$values['grade'],'academic_year_snapshot'=>$values['year'],'is_active'=>$values['active']]))return'unchanged';
+  $sql='INSERT INTO students(portal_student_id,portal_class_id,nisn,name_snapshot,class_snapshot,grade_snapshot,academic_year_snapshot,is_active,last_synced_at) VALUES(:portal,:portal_class,:nisn,:name,:class,:grade,:year,:active,UTC_TIMESTAMP(3)) ON DUPLICATE KEY UPDATE portal_class_id=VALUES(portal_class_id),nisn=VALUES(nisn),name_snapshot=VALUES(name_snapshot),class_snapshot=VALUES(class_snapshot),grade_snapshot=VALUES(grade_snapshot),academic_year_snapshot=VALUES(academic_year_snapshot),is_active=VALUES(is_active),last_synced_at=UTC_TIMESTAMP(3)';$this->db->pdo()->prepare($sql)->execute($values);return$existing?'updated':'inserted';
+ }
+ private function teacher(array$d):string{$portal=(string)($d['id']??$d['teacher_id']??'');$name=trim((string)($d['name']??$d['nama']??''));if($portal===''||$name==='')throw new \UnexpectedValueException('Data guru invalid.');$existing=$this->row('teachers','portal_teacher_id',$portal);$v=['portal'=>$portal,'nip'=>$d['nip']??null,'nuptk'=>$d['nuptk']??null,'name'=>$name,'status'=>(($d['is_active']??true)?'ACTIVE':'INACTIVE')];$sql='INSERT INTO teachers(portal_teacher_id,nip,nuptk,name_snapshot,status,last_synced_at) VALUES(:portal,:nip,:nuptk,:name,:status,UTC_TIMESTAMP(3)) ON DUPLICATE KEY UPDATE nip=VALUES(nip),nuptk=VALUES(nuptk),name_snapshot=VALUES(name_snapshot),status=VALUES(status),last_synced_at=UTC_TIMESTAMP(3)';$this->db->pdo()->prepare($sql)->execute($v);return$existing?'updated':'inserted';}
+ private function schoolClass(array$d):string{$portal=(string)($d['id']??$d['class_id']??'');$name=trim((string)($d['name']??$d['nama']??''));if($portal===''||$name==='')throw new \UnexpectedValueException('Data kelas invalid.');$existing=$this->row('portal_classes','portal_class_id',$portal);$v=['portal'=>$portal,'code'=>$d['code']??$d['kode']??$name,'name'=>$name,'grade'=>$d['grade']??$d['tingkat']??null,'year'=>$d['academic_year']??$d['tahun_ajaran']??null];$sql='INSERT INTO portal_classes(portal_class_id,code,name,grade,academic_year,last_synced_at) VALUES(:portal,:code,:name,:grade,:year,UTC_TIMESTAMP(3)) ON DUPLICATE KEY UPDATE code=VALUES(code),name=VALUES(name),grade=VALUES(grade),academic_year=VALUES(academic_year),last_synced_at=UTC_TIMESTAMP(3)';$this->db->pdo()->prepare($sql)->execute($v);return$existing?'updated':'inserted';}
+ private function row(string$table,string$key,string$value):?array{$s=$this->db->pdo()->prepare("SELECT * FROM {$table} WHERE {$key}=:value LIMIT 1");$s->execute(['value'=>$value]);return$s->fetch()?:null;}
+ private function same(array$row,array$values):bool{foreach($values as$k=>$v)if((string)($row[$k]??'')!==(string)($v??''))return false;return true;}
+ private function finish(int$id,string$status,array$s,?string$error):void{$q=$this->db->pdo()->prepare('UPDATE portal_sync_logs SET finished_at=UTC_TIMESTAMP(3),status=:status,total=:total,inserted_count=:inserted,updated_count=:updated,unchanged_count=:unchanged,failed_count=:failed,error_summary=:error WHERE id=:id');$q->execute($s+['id'=>$id,'status'=>$status,'error'=>$error]);}
+}

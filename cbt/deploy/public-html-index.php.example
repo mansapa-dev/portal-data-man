@@ -1,0 +1,13 @@
+<?php
+declare(strict_types=1);
+
+// Ganti path ini dengan absolute path aplikasi CBT di luar public_html.
+$applicationRoot = '/home/CPANEL_USER/apps/cbt-man1';
+
+if (! is_file($applicationRoot.'/public/index.php')) {
+    http_response_code(503);
+    exit('CBT application root is not configured.');
+}
+
+chdir($applicationRoot.'/public');
+require $applicationRoot.'/public/index.php';

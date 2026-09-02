@@ -1,0 +1,4 @@
+<?php
+declare(strict_types=1);
+namespace Cbt\Core;
+final class Session { public static function start():void{if(session_status()===PHP_SESSION_ACTIVE)return;session_name('cbt_session');session_set_cookie_params(['lifetime'=>(int)Config::get('SESSION_LIFETIME',7200),'path'=>'/','secure'=>Config::bool('SESSION_SECURE_COOKIE',true),'httponly'=>true,'samesite'=>(string)Config::get('SESSION_SAME_SITE','Lax')]);session_start();if(!isset($_SESSION['csrf']))$_SESSION['csrf']=bin2hex(random_bytes(32));} public static function regenerate():void{session_regenerate_id(true);} public static function csrf():string{return(string)($_SESSION['csrf']??'');} public static function destroy():void{$_SESSION=[];if(ini_get('session.use_cookies')){$p=session_get_cookie_params();setcookie(session_name(),'',time()-42000,$p['path'],$p['domain'],$p['secure'],$p['httponly']);}session_destroy();} }

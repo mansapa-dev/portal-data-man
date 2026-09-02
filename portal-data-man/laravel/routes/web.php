@@ -20,9 +20,11 @@ use App\Http\Controllers\StudentController;
 use App\Http\Controllers\StudentImportController;
 use App\Http\Controllers\TeacherAccountController;
 use App\Http\Controllers\TeacherController;
+use App\Http\Controllers\TeacherImportController;
 use App\Http\Controllers\TeacherPasswordSetupController;
 use App\Http\Controllers\TeacherPhotoController;
 use App\Http\Controllers\TeacherSelfController;
+use App\Http\Controllers\CbtIntegrationController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -43,6 +45,12 @@ Route::prefix('api/v1/integration')->middleware('throttle:120,1')->group(functio
     Route::get('periods', [IntegrationReferenceController::class, 'periods']);
     Route::get('classes', [IntegrationReferenceController::class, 'classes']);
     Route::get('classes/{schoolClass}/students', [IntegrationReferenceController::class, 'classStudents']);
+});
+
+Route::prefix('api/v1/integration/cbt')->middleware(['throttle:120,1', 'cbt.integration'])->group(function (): void {
+    Route::get('students', [CbtIntegrationController::class, 'students']);
+    Route::get('teachers', [CbtIntegrationController::class, 'teachers']);
+    Route::get('classes', [CbtIntegrationController::class, 'classes']);
 });
 
 Route::prefix('api/v1')->group(function (): void {
@@ -89,6 +97,7 @@ Route::prefix('api/v1')->group(function (): void {
             Route::patch('students/{student}', [StudentController::class, 'update']);
             Route::post('teachers', [TeacherController::class, 'store']);
             Route::patch('teachers/{teacher}', [TeacherController::class, 'update']);
+            Route::post('imports/teachers/validate', [TeacherImportController::class, 'validateFile']);
             Route::post('teachers/{teacher}/account', [TeacherAccountController::class, 'store']);
             Route::post('teachers/{teacher}/account/setup-token', [TeacherAccountController::class, 'regenerate']);
             Route::post('teachers/{teacher}/account/disable', [TeacherAccountController::class, 'disable']);
@@ -125,6 +134,7 @@ Route::prefix('api/v1')->group(function (): void {
             Route::post('sso/applications/{applicationClient}/access', [SsoApplicationController::class, 'grant']);
             Route::post('sso/applications/{applicationClient}/access/{teacherPublicId}/revoke', [SsoApplicationController::class, 'revoke']);
             Route::post('imports/students/{importBatch}/commit', [StudentImportController::class, 'commit']);
+            Route::post('imports/teachers/{importBatch}/commit', [TeacherImportController::class, 'commit']);
             Route::delete('students/{student}', [StudentController::class, 'destroy']);
             Route::post('students/{publicId}/restore', [StudentController::class, 'restore']);
             Route::delete('teachers/{teacher}', [TeacherController::class, 'destroy']);
