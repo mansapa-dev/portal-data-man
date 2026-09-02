@@ -37,7 +37,7 @@
     async getAdminLogPelanggaran() { const r=await api('api/admin/violations');return {success:true,data:r.data}; },
     async getGuruExamResults() { const r=await api('api/teacher/dashboard');return {success:true,...r.data}; },
     async getAdminSiswaList() { const r=await api('api/admin/students');return r.data; },
-    async simpanSiswaSatuanAdmin(session,data) { await api('api/admin/students/pin','POST',data);return {success:true,message:'PIN CBT siswa berhasil disimpan.'}; },
+    async simpanSiswaSatuanAdmin(session,data) { const r=await api('api/admin/students/pin','POST',data);return {success:true,pin:r.data?.pin,message:r.message||'PIN CBT siswa berhasil disimpan.'}; },
     async adminBukaBlokirSiswa(session,id) { await api(`api/admin/students/${id}/reset`,'POST',{});return {success:true,message:'Siswa berhasil dibuka/reset.'}; },
     async hapusSiswaAdmin() { return {success:false,message:'Identitas siswa dikelola Portal Data dan tidak dapat dihapus dari CBT.'}; },
     async hapusSiswaPertingkatAdmin() { return {success:false,message:'Data siswa dikelola Portal Data. Nonaktifkan di Portal lalu jalankan sinkronisasi.'}; },

@@ -1515,13 +1515,19 @@ function loadDataAdminSiswa() {
           <td><span class="badge ${bSt}">${(s.ujian_status||'belum').toUpperCase()}</span></td>
           <td style="display:flex; gap:6px;">
             ${actBtn}
-            <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick='editSiswaSatuan(${JSON.stringify(s)})'><i class="fa-solid fa-pen"></i></button>
-            <button class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="hapusSiswaAdmin(${s.id})"><i class="fa-solid fa-trash"></i></button>
+            <button class="btn btn-primary" style="padding:4px 8px; font-size:11px;" onclick="generatePinAdmin(${s.id})"><i class="fa-solid fa-key"></i> Generate PIN</button>
           </td>
         </tr>`;
       }).join('');
     })
     .getAdminSiswaList(stPengelola);
+}
+
+function generatePinAdmin(id) {
+  showLoading('Membuat PIN siswa...');
+  cbtApi.withSuccessHandler(res => { hideLoading(); loadDataAdminSiswa(); showCustomAlert('PIN berhasil dibuat', `PIN siswa: ${res.pin}`); })
+    .withFailureHandler(err => { hideLoading(); showCustomAlert('Gagal', err.message); })
+    .simpanSiswaSatuanAdmin(stPengelola, { id, pin: '' });
 }
 
 function bukaModalSiswaSatuan(data = null) {
