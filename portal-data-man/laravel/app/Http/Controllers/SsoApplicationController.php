@@ -64,7 +64,7 @@ class SsoApplicationController extends Controller
 
     public function revoke(Request $request, ApplicationClient $applicationClient, string $teacherPublicId): JsonResponse
     {
-        $teacher = Teacher::query()->where('publicId', $teacherPublicId)->firstOrFail();
+        $teacher = Teacher::withTrashed()->where('publicId', $teacherPublicId)->firstOrFail();
         $count = TeacherApplicationAccess::query()->where('applicationClientId', $applicationClient->id)->where('teacherId', $teacher->id)->update(['status' => 'INACTIVE']);
         abort_unless($count, 404, 'Akses tidak ditemukan.');
         $this->audit->write($request, 'SSO_ACCESS_REVOKED', 'ApplicationClient', $applicationClient->publicId, null, ['teacherPublicId' => $teacherPublicId]);

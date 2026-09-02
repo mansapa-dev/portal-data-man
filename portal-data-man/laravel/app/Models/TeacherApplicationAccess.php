@@ -24,7 +24,7 @@ class TeacherApplicationAccess extends Model
 
     public function teacher(): BelongsTo
     {
-        return $this->belongsTo(Teacher::class, 'teacherId');
+        return $this->belongsTo(Teacher::class, 'teacherId')->withTrashed();
     }
 
     public function application(): BelongsTo

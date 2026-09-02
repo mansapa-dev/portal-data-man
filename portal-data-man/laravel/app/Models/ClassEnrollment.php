@@ -17,7 +17,7 @@ class ClassEnrollment extends PortalModel
 
     public function student(): BelongsTo
     {
-        return $this->belongsTo(Student::class, 'studentId');
+        return $this->belongsTo(Student::class, 'studentId')->withTrashed();
     }
 
     public function schoolClass(): BelongsTo
