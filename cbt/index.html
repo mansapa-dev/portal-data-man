@@ -965,7 +965,7 @@ document.getElementById('formLoginSiswa').addEventListener('submit', function(e)
   const alert = document.getElementById('alertLoginSiswa'); alert.className = 'alert';
   
   showLoading('Verifikasi Kredensial...');
-  google.script.run
+  cbtApi
     .withSuccessHandler(res => {
       hideLoading();
       if (!res.success) { alert.className = 'alert error'; alert.textContent = res.message; return; }
@@ -1034,7 +1034,7 @@ function persiapkanUjian(uData) {
   showLoading('Mempersiapkan Lembar Soal...');
   stUjian = uData;
   
-  google.script.run
+  cbtApi
     .withSuccessHandler(res => {
       hideLoading();
       if(!res.success) { showCustomAlert('Gagal', res.message); return; }
@@ -1091,7 +1091,7 @@ function toggleRagu() {
   let sId = stSoal[stIdx].id;
   stRagu[sId] = !stRagu[sId];
   renderSoal(); renderGridNav();
-  google.script.run.simpanJawabanServer({ siswaId: stSiswa.id, ujianId: stUjian.id, soalId: sId, jawaban: stJawab[sId] || null, ragu: stRagu[sId] });
+  cbtApi.simpanJawabanServer({ siswaId: stSiswa.id, ujianId: stUjian.id, soalId: sId, jawaban: stJawab[sId] || null, ragu: stRagu[sId] });
 }
 
 function renderSoal() {
@@ -1118,7 +1118,7 @@ function simpanJawaban(soalId, originalKey, nomorSoal) {
   renderSoal(); renderGridNav();
   document.getElementById('cbtSaveStatus').textContent = 'Menyimpan...';
   
-  google.script.run
+  cbtApi
     .withSuccessHandler(res => { document.getElementById('cbtSaveStatus').textContent = res.success ? 'Tersimpan' : 'Gagal simpan'; })
     .withFailureHandler(() => { document.getElementById('cbtSaveStatus').textContent = 'Tersimpan Lokal'; })
     .simpanJawabanServer({ siswaId: stSiswa.id, ujianId: stUjian.id, soalId: soalId, jawaban: originalKey, ragu: !!stRagu[soalId], nomorUjian: stSiswa.no, namaSiswa: stSiswa.nama, kelas: stSiswa.kelas, nomorSoal: nomorSoal });
@@ -1138,7 +1138,7 @@ function mulaiTimerCBT(endTimeMs) {
 function aktifkanAntiCheat() {
   document.addEventListener('visibilitychange', () => {
     if(document.hidden && isUjianJalan && !isSubmitting) {
-      google.script.run
+      cbtApi
         .withSuccessHandler(res => {
           if(!res.success) return;
           if(res.dihentikan) {
@@ -1170,7 +1170,7 @@ function submitUjianKeServer() {
   isSubmitting = true; isUjianJalan = false; clearInterval(tmrUjian);
   showLoading('Menghitung nilai...');
   
-  google.script.run
+  cbtApi
     .withSuccessHandler(res => {
       hideLoading();
       if(res.success) { document.getElementById('lblNilaiAkhir').textContent = res.hasil.nilai; switchView('viewHasilSiswa'); }
@@ -1182,7 +1182,7 @@ function submitUjianKeServer() {
 
 function bukaModalReview() {
   showLoading('Memuat review...');
-  google.script.run
+  cbtApi
     .withSuccessHandler(res => {
       hideLoading();
       if (!res.success) { showCustomAlert('Gagal', res.message); return; }
@@ -1260,7 +1260,7 @@ document.getElementById('formLoginPengelola').addEventListener('submit', functio
   const alert = document.getElementById('alertLoginPengelola'); alert.className = 'alert';
   
   showLoading('Otentikasi...');
-  google.script.run
+  cbtApi
     .withSuccessHandler(res => {
       hideLoading();
       if(res && res.success) {
@@ -1314,7 +1314,7 @@ function switchDashTab(tabId, btnEl) {
 }
 
 function loadDataAdminDash() {
-  google.script.run
+  cbtApi
     .withSuccessHandler(res => {
       if(res && res.success){
         document.getElementById('statJmlSiswa').textContent = res.totalSiswa;
@@ -1328,7 +1328,7 @@ function loadDataAdminDash() {
 
 function loadDataAdminUjian() {
   const tb = document.getElementById('tblAdminUjian'); tb.innerHTML = `<tr><td colspan="8" align="center">Memuat...</td></tr>`;
-  google.script.run
+  cbtApi
     .withSuccessHandler(rows => {
       if(!rows || rows.length === 0) { tb.innerHTML = `<tr><td colspan="8" align="center">Belum ada ujian.</td></tr>`; return; }
       window.cacheUjianExcel = rows.map(u => [u.id, u.nama_ujian, u.tingkat, u.sesi || 1, u.tanggal_ujian || '', u.kelas_target || '', u.durasi_menit, u.tahun_ajaran || '', u.semester || '', u.status_aktif]);
@@ -1391,7 +1391,7 @@ document.getElementById('formUjian').addEventListener('submit', function(e){
     status_aktif: document.getElementById('inStatusUjian').value
   };
   showLoading('Menyimpan Ujian...');
-  google.script.run
+  cbtApi
     .withSuccessHandler(res => { 
       hideLoading(); 
       if(res.success){ 
@@ -1407,7 +1407,7 @@ document.getElementById('formUjian').addEventListener('submit', function(e){
 
 function loadDataAdminSoal() {
   const tb = document.getElementById('tblAdminSoal'); tb.innerHTML = `<tr><td colspan="6" align="center">Memuat...</td></tr>`;
-  google.script.run
+  cbtApi
     .withSuccessHandler(rows => {
       if(!rows || rows.length === 0) { tb.innerHTML = `<tr><td colspan="6" align="center">Belum ada soal.</td></tr>`; return; }
       window.cacheSoalExcel = rows.map(s => [s.id, s.ujian_id, s.pertanyaan, s.opsi_a, s.opsi_b, s.opsi_c, s.opsi_d, s.opsi_e, s.jawaban_benar, s.poin]);
@@ -1427,7 +1427,7 @@ function loadDataAdminSoal() {
 function bukaModalSoal(data = null) {
   document.getElementById('formSoal').reset();
   showLoading('Memuat daftar ujian...');
-  google.script.run
+  cbtApi
     .withSuccessHandler(ujianList => {
       hideLoading();
       const sel = document.getElementById('inSoalUjianId');
@@ -1470,7 +1470,7 @@ document.getElementById('formSoal').addEventListener('submit', function(e){
     poin: document.getElementById('inPoinSoal').value
   };
   showLoading('Menyimpan Soal...');
-  google.script.run
+  cbtApi
     .withSuccessHandler(res => { 
       hideLoading(); 
       if(res.success){ 
@@ -1488,7 +1488,7 @@ function handleImportSoal(input) {
   handleExcelUpload(input, function(rows) {
     if (rows.length === 0) { showCustomAlert('Peringatan', 'File Excel soal kosong atau tidak valid.'); return; }
     showLoading('Mengimport soal berulang per mapel...');
-    google.script.run
+    cbtApi
       .withSuccessHandler(res => { hideLoading(); showCustomAlert('Informasi', res.message); loadDataAdminSoal(); input.value = ''; })
       .withFailureHandler(err => { hideLoading(); showCustomAlert('Import Gagal', err.message); input.value = ''; })
       .importSoalBulk(stPengelola, rows);
@@ -1497,7 +1497,7 @@ function handleImportSoal(input) {
 
 function loadDataAdminSiswa() {
   const tb = document.getElementById('tblAdminSiswa'); tb.innerHTML = `<tr><td colspan="7" align="center">Memuat data siswa...</td></tr>`;
-  google.script.run
+  cbtApi
     .withSuccessHandler(rows => {
       if(!rows || rows.length===0) { tb.innerHTML=`<tr><td colspan="7" align="center">Tidak ada data siswa.</td></tr>`; return; }
       cacheSiswaGlobal = rows;
@@ -1554,7 +1554,7 @@ document.getElementById('formSiswaSatuan').addEventListener('submit', function(e
     tahun_ajaran: document.getElementById('inSiswaThn').value
   };
   showLoading('Menyimpan siswa...');
-  google.script.run
+  cbtApi
     .withSuccessHandler(res => { 
       hideLoading(); 
       if(res.success){ 
@@ -1571,7 +1571,7 @@ document.getElementById('formSiswaSatuan').addEventListener('submit', function(e
 function hapusSiswaAdmin(id) {
   showCustomConfirm("Konfirmasi Hapus Siswa", "Yakin ingin menghapus siswa ini dari sistem?", () => {
     showLoading('Menghapus siswa...');
-    google.script.run
+    cbtApi
       .withSuccessHandler(res => { 
         hideLoading(); 
         if(res.success) loadDataAdminSiswa(); 
@@ -1586,7 +1586,7 @@ function handleImportSiswa(input) {
   handleExcelUpload(input, function(rows) {
     if (rows.length === 0) { showCustomAlert('Peringatan', 'File Excel siswa kosong.'); return; }
     showLoading(`Mengimport ${rows.length} siswa ke server...`);
-    google.script.run
+    cbtApi
       .withSuccessHandler(res => { hideLoading(); showCustomAlert('Informasi', res.message); loadDataAdminSiswa(); input.value = ''; })
       .withFailureHandler(err => { hideLoading(); showCustomAlert('Import Gagal', err.message); input.value = ''; })
       .importSiswaBulk(stPengelola, rows);
@@ -1596,7 +1596,7 @@ function handleImportSiswa(input) {
 function prosesKenaikanKelas() {
   showCustomConfirm("Kenaikan Kelas & Arsip Siswa XII", "Proses ini akan menaikkan kelas seluruh siswa (X ➔ XI, XI ➔ XII). Data siswa kelas XII akan didownload dulu ke Excel sebagai arsip, lalu dibersihkan dari sistem. Lanjutkan?", () => {
     showLoading('Memproses kenaikan kelas & mengunduh arsip kelas XII...');
-    google.script.run
+    cbtApi
       .withSuccessHandler(res => { 
         hideLoading(); 
         if(res.success) {
@@ -1625,7 +1625,7 @@ function eksekusiHapusPertingkat() {
   document.getElementById('modalHapusPertingkat').classList.remove('show');
   showCustomConfirm("Hapus Per Tingkat", `Yakin ingin menghapus seluruh siswa tingkat ${t}?`, () => {
     showLoading(`Menghapus siswa tingkat ${t}...`);
-    google.script.run
+    cbtApi
       .withSuccessHandler(res => { 
         hideLoading(); 
         if(res.success) loadDataAdminSiswa(); 
@@ -1639,7 +1639,7 @@ function eksekusiHapusPertingkat() {
 function bukaBlokirAdmin(id) {
   showCustomConfirm("Buka Blokir", "Buka blokir dan reset status ujian siswa ini?", () => {
     showLoading('Membuka akses...');
-    google.script.run
+    cbtApi
       .withSuccessHandler(res => { 
         hideLoading(); 
         if(res.success) loadDataAdminSiswa(); 
@@ -1652,7 +1652,7 @@ function bukaBlokirAdmin(id) {
 
 function loadDataAdminLogPelanggaran() {
   const tb = document.getElementById('tblAdminLogPelanggaran'); tb.innerHTML = `<tr><td colspan="7" align="center">Memuat...</td></tr>`;
-  google.script.run
+  cbtApi
     .withSuccessHandler(res => {
       if(!res.success || !res.data || res.data.length === 0) {
         tb.innerHTML = `<tr><td colspan="7" align="center">Tidak ada catatan pelanggaran.</td></tr>`;
@@ -1677,7 +1677,7 @@ function loadDataAdminLogPelanggaran() {
 
 function loadDataAdminHasil() {
   showLoading('Memuat rekap hasil...');
-  google.script.run
+  cbtApi
     .withSuccessHandler(res => {
       hideLoading();
       if(!res.success || !res.data) { showCustomAlert('Gagal', res.message); return; }
@@ -1836,7 +1836,7 @@ function loadDataAdminKartu() {
   const fTingkat = document.getElementById('filterKartuTingkat').value;
   const fKelas = document.getElementById('filterKartuKelas').value.toLowerCase().trim();
 
-  google.script.run
+  cbtApi
     .withSuccessHandler(rows => {
       if(!rows || rows.length === 0) { 
         container.innerHTML = `<div class="alert error">Tidak ada data siswa.</div>`; 
@@ -1885,7 +1885,7 @@ function cetakKartuPesertaUjian() {
 
 function loadDataAdminGuruUjian() {
   const tb = document.getElementById('tblAdminGuruUjian'); tb.innerHTML = `<tr><td colspan="4" align="center">Memuat...</td></tr>`;
-  google.script.run
+  cbtApi
     .withSuccessHandler(res => {
       if(!res.success || !res.data || res.data.length === 0) {
         tb.innerHTML = `<tr><td colspan="4" align="center">Belum ada penugasan guru mapel.</td></tr>`;
@@ -1951,7 +1951,7 @@ document.getElementById('formGuruUjian').addEventListener('submit', function(e){
     ujian_id: document.getElementById('inUjianId').value
   };
   showLoading('Menyimpan penugasan...');
-  google.script.run
+  cbtApi
     .withSuccessHandler(res => { 
       hideLoading(); 
       if(res.success){ 
@@ -1968,7 +1968,7 @@ document.getElementById('formGuruUjian').addEventListener('submit', function(e){
 function hapusGuruUjian(id) {
   showCustomConfirm("Hapus Penugasan", "Hapus penugasan guru ini?", () => {
     showLoading('Menghapus...');
-    google.script.run
+    cbtApi
       .withSuccessHandler(res => { 
         hideLoading(); 
         if(res.success) loadDataAdminGuruUjian(); 
@@ -1981,7 +1981,7 @@ function hapusGuruUjian(id) {
 
 function loadDataAdminAkun() {
   const tb = document.getElementById('tblAdminAkun'); tb.innerHTML = `<tr><td colspan="6" align="center">Memuat...</td></tr>`;
-  google.script.run
+  cbtApi
     .withSuccessHandler(rows => {
       if(!rows || rows.length===0) { tb.innerHTML=`<tr><td colspan="6" align="center">Tidak ada akun.</td></tr>`; return; }
       window.cacheAkunExcel = rows.map(a => [a.username, a.nama_lengkap, a.password, a.role, a.status_aktif]);
@@ -2027,7 +2027,7 @@ document.getElementById('formAkun').addEventListener('submit', function(e){
     status_aktif: document.getElementById('inAkunStatus').value
   };
   showLoading('Menyimpan Akun...');
-  google.script.run
+  cbtApi
     .withSuccessHandler(res => { 
       hideLoading(); 
       if(res.success){ 
@@ -2045,7 +2045,7 @@ function handleImportAkun(input) {
   handleExcelUpload(input, function(rows) {
     if (rows.length === 0) { showCustomAlert('Peringatan', 'File akun kosong.'); return; }
     showLoading('Mengimport akun...');
-    google.script.run
+    cbtApi
       .withSuccessHandler(res => { hideLoading(); showCustomAlert('Informasi', res.message); loadDataAdminAkun(); input.value = ''; })
       .withFailureHandler(err => { hideLoading(); showCustomAlert('Error', err.message); input.value = ''; })
       .importAkunBulk(stPengelola, rows);
@@ -2065,7 +2065,7 @@ document.getElementById('formUbahPassGuru').addEventListener('submit', function(
   const alertEl = document.getElementById('alertUbahPass');
   
   showLoading('Menyimpan password baru...');
-  google.script.run
+  cbtApi
     .withSuccessHandler(res => {
       hideLoading();
       if(res.success) {
@@ -2084,7 +2084,7 @@ document.getElementById('formUbahPassGuru').addEventListener('submit', function(
 function loadDataGuru() {
   const cont = document.getElementById('containerListUjianGuru');
   cont.innerHTML = `<div class="alert info">Mengambil data ujian & mapel yang diampu dari server...</div>`;
-  google.script.run
+  cbtApi
     .withSuccessHandler(res => {
       if(!res || !res.success || !res.ujianList || res.ujianList.length===0){
         cont.innerHTML = `<div class="alert error" style="display:block;">Tidak ada ujian/mapel yang ditugaskan kepada Anda saat ini.</div>`; return;

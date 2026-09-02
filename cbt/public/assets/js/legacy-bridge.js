@@ -47,8 +47,8 @@
     async importSoalBulk(session,rows) { const r=await api('api/admin/questions/import','POST',{rows});return {success:true,message:r.message,summary:r.data}; },
     async importAkunBulk(session,rows) { const r=await api('api/admin/users/import','POST',{rows});return {success:true,message:r.message,summary:r.data}; }
   };
-  window.google = window.google || {};
   window.cbtServerLogout = async function () { try { await api('api/auth/logout','POST',{}); } finally { csrfPromise=refreshCsrf(); } };
-  window.google.script = { run: new Proxy({}, { get(_, name) { const state={success:null,failure:null}; if(name==='withSuccessHandler')return fn=>(state.success=fn,chain(state)); if(name==='withFailureHandler')return fn=>(state.failure=fn,chain(state)); return (...args)=>invoke(name,args,state); function chain(s){return new Proxy({}, {get(_x,n){if(n==='withSuccessHandler')return fn=>(s.success=fn,chain(s));if(n==='withFailureHandler')return fn=>(s.failure=fn,chain(s));return(...a)=>invoke(n,a,s);}});} } }) };
+  window.cbtApi = { run: new Proxy({}, { get(_, name) { const state={success:null,failure:null}; if(name==='withSuccessHandler')return fn=>(state.success=fn,chain(state)); if(name==='withFailureHandler')return fn=>(state.failure=fn,chain(state)); return (...args)=>invoke(name,args,state); function chain(s){return new Proxy({}, {get(_x,n){if(n==='withSuccessHandler')return fn=>(s.success=fn,chain(s));if(n==='withFailureHandler')return fn=>(s.failure=fn,chain(s));return(...a)=>invoke(n,a,s);}});} } }) };
+  window.cbtApi = window.cbtApi.run;
   function invoke(name,args,state){const fn=calls[name];if(!fn){const err=new Error(`Fitur ${String(name)} belum dimigrasikan.`);state.failure?.(err);return;}Promise.resolve(fn(...args)).then(v=>state.success?.(v)).catch(e=>state.failure?.(e));}
 })();
