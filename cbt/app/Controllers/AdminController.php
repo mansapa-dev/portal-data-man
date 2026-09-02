@@ -7,6 +7,7 @@ final class AdminController
 {
  public function __construct(private AdminService$admin){}
  public function dashboard(Request$r):Response{return Response::json($this->admin->dashboard());}
+ public function references(Request$r):Response{return Response::json($this->admin->references());}
  public function exams(Request$r):Response{return Response::json($this->admin->exams());}
  public function saveExam(Request$r):Response{$this->admin->saveExam($r->json(),(int)$_SESSION['auth']['user_id']);return Response::json(null,'Ujian berhasil disimpan.');}
  public function questions(Request$r):Response{return Response::json($this->admin->questions($r->input('exam_id')!==null?(int)$r->input('exam_id'):null));}

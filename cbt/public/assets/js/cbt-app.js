@@ -8,9 +8,12 @@ let stIdx = 0;
 let tmrUjian = null;
 let isUjianJalan = false;
 let isSubmitting = false;
+let antiCheatAttached = false;
 let stPengelola = { userId: null, id: null, role: null, nama: '', username: '' };
 let cacheHasilRaw = [];
 let cacheSiswaGlobal = [];
+let portalReferences = { teachers: [], subjects: [], classes: [], academic_years: [], semesters: [] };
+let portalReferencesLoaded = false;
 
 function showLoading(msg = 'Memuat...') { document.getElementById('loaderText').textContent = msg; document.getElementById('loaderGlobal').classList.add('show'); }
 function hideLoading() { document.getElementById('loaderGlobal').classList.remove('show'); }
@@ -171,7 +174,10 @@ function persiapkanUjian(uData) {
         return { id: s.id, num: i + 1, q: s.pertanyaan, opts: res.serverOrdered ? rawOpts : acakArray(rawOpts, seedOpsi) };
       });
       
-      stJawab = {}; (jawRaw||[]).forEach(j => { stJawab[j.soal_id] = j.jawaban; });
+      stJawab = {}; stRagu = {}; (jawRaw||[]).forEach(j => {
+        if (j.jawaban) stJawab[j.soal_id] = j.jawaban;
+        if (j.ragu) stRagu[j.soal_id] = true;
+      });
       stIdx = 0;
       
       document.getElementById('cbtMapel').textContent = uData.nama_ujian;
@@ -182,7 +188,9 @@ function persiapkanUjian(uData) {
       isUjianJalan = true;
       
       renderGridNav(); renderSoal();
-      mulaiTimerCBT(res.expiresAt ? Date.parse(res.expiresAt) : Date.now() + (uData.durasi_menit * 60000));
+      const serverNow = res.serverTime ? Date.parse(res.serverTime) : Date.now();
+      const clockOffset = Number.isFinite(serverNow) ? serverNow - Date.now() : 0;
+      mulaiTimerCBT(res.expiresAt ? Date.parse(res.expiresAt) : Date.now() + (uData.durasi_menit * 60000), clockOffset);
       aktifkanAntiCheat();
     })
     .withFailureHandler(err => { hideLoading(); showCustomAlert('Error Koneksi', err.message); })
@@ -241,11 +249,11 @@ function simpanJawaban(soalId, originalKey, nomorSoal) {
     .simpanJawabanServer({ siswaId: stSiswa.id, ujianId: stUjian.id, soalId: soalId, jawaban: originalKey, ragu: !!stRagu[soalId], nomorUjian: stSiswa.no, namaSiswa: stSiswa.nama, kelas: stSiswa.kelas, nomorSoal: nomorSoal });
 }
 
-function mulaiTimerCBT(endTimeMs) {
+function mulaiTimerCBT(endTimeMs, clockOffset = 0) {
   clearInterval(tmrUjian);
   const tb = document.getElementById('cbtTimerBox'), tt = document.getElementById('cbtTimer');
   tmrUjian = setInterval(() => {
-    let sisaS = Math.floor((endTimeMs - Date.now()) / 1000);
+    let sisaS = Math.floor((endTimeMs - (Date.now() + clockOffset)) / 1000);
     if(sisaS <= 0) { clearInterval(tmrUjian); tt.textContent = "00:00"; showCustomAlert('Waktu Habis', 'Waktu ujian telah habis!'); prosesKumpulFinal(); return; }
     if(sisaS <= 300) tb.classList.add('danger'); else tb.classList.remove('danger');
     tt.textContent = `${String(Math.floor(sisaS / 60)).padStart(2,'0')}:${String(sisaS % 60).padStart(2,'0')}`;
@@ -253,6 +261,8 @@ function mulaiTimerCBT(endTimeMs) {
 }
 
 function aktifkanAntiCheat() {
+  if (antiCheatAttached) return;
+  antiCheatAttached = true;
   document.addEventListener('visibilitychange', () => {
     if(document.hidden && isUjianJalan && !isSubmitting) {
       cbtApi
@@ -444,7 +454,86 @@ function loadDataAdminDash() {
     .getAdminDashboardStats(stPengelola);
 }
 
+function loadPortalReferences(onReady) {
+  cbtApi.withSuccessHandler(res => {
+    if (res.success) { portalReferences = res; portalReferencesLoaded = true; }
+    if (typeof onReady === 'function') onReady(portalReferences);
+  }).withFailureHandler(err => showCustomAlert('Referensi Portal Data', err.message)).getPortalDataReferences();
+}
+
+window.addEventListener('DOMContentLoaded', async () => {
+  try {
+    const response = await fetch('api/auth/me', { credentials: 'same-origin', cache: 'no-store' });
+    const payload = await response.json();
+    if (!response.ok || !payload.success) return;
+    const staff = payload.data.staff;
+    const student = payload.data.student;
+    if (staff?.role === 'TEACHER') { window.location.replace('guru/dashboard'); return; }
+    if (staff?.role === 'ADMIN') {
+      stPengelola = { userId: staff.id, id: staff.id, role: 'admin', nama: staff.nama, username: staff.username };
+      initDashboardPengelola(staff.nama, 'admin');return;
+    }
+    if (student) {
+      stSiswa = { id: student.id, nama: student.nama, kelas: student.kelas, no: student.nisn };
+      document.getElementById('lblNamaSiswa').textContent = stSiswa.nama;
+      document.getElementById('lblKelasSiswa').textContent = stSiswa.kelas;
+      document.getElementById('lblNoSiswa').textContent = stSiswa.no;
+      cbtApi.withSuccessHandler(result => {
+        renderDaftarJadwal(result.jadwal);switchView('viewPortalSiswa');
+        const active = result.jadwal.find(exam => exam.status_pengerjaan === 'berlangsung');
+        if (active) persiapkanUjian(active);
+      }).withFailureHandler(() => switchView('viewPortalSiswa')).getStudentExamsAPI();
+    }
+  } catch (_) { /* Guest atau server belum siap: pertahankan layar login. */ }
+});
+
+function populateExamPortalOptions(data = null) {
+  document.getElementById('inSubjectUjian').innerHTML = portalReferences.subjects.map(s => `<option value="${s.id}">${s.code} — ${s.name}</option>`).join('');
+  const grades = [...new Set(portalReferences.classes.map(c => c.grade).filter(Boolean))];
+  document.getElementById('inTingkatUjian').innerHTML = grades.map(g => `<option value="${g}">${g}</option>`).join('');
+  document.getElementById('inTahunAjaran').innerHTML = portalReferences.academic_years.map(y => `<option value="${y.portal_academic_year_id}">${y.name}${Number(y.is_active) ? ' (Aktif)' : ''}</option>`).join('');
+  const activeYear = portalReferences.academic_years.find(y => Number(y.is_active));
+  if (!data && activeYear) document.getElementById('inTahunAjaran').value = activeYear.portal_academic_year_id;
+  refreshSemesterOptions(data?.portal_semester_id || '');
+  refreshClassOptions();
+}
+
+function refreshClassOptions(selected = []) {
+  const grade = document.getElementById('inTingkatUjian').value;
+  const year = portalReferences.academic_years.find(y => y.portal_academic_year_id === document.getElementById('inTahunAjaran').value)?.name;
+  const classes = portalReferences.classes.filter(c => (!grade || c.grade === grade) && (!year || c.academic_year === year));
+  document.getElementById('inKelasTarget').innerHTML = classes.map(c => `<option value="${c.portal_class_id}"${selected.includes(c.portal_class_id) ? ' selected' : ''}>${c.code} — ${c.name}</option>`).join('');
+}
+
+function refreshSemesterOptions(selected = '') {
+  const yearId = document.getElementById('inTahunAjaran').value;
+  const semesters = portalReferences.semesters.filter(s => s.portal_academic_year_id === yearId);
+  document.getElementById('inSemester').innerHTML = semesters.map(s => `<option value="${s.portal_semester_id}">${s.type === 'ODD' ? 'Ganjil' : 'Genap'}${Number(s.is_active) ? ' (Aktif)' : ''}</option>`).join('');
+  if (selected) document.getElementById('inSemester').value = selected;
+}
+
+document.getElementById('inTahunAjaran').addEventListener('change', () => { refreshSemesterOptions(); refreshClassOptions(); });
+document.getElementById('inTingkatUjian').addEventListener('change', () => refreshClassOptions());
+
+function sinkronkanSemuaPortalData() {
+  const types = ['academic_years', 'semesters', 'classes', 'students', 'teachers'];
+  const summaries = [];
+  showLoading('Sinkronisasi referensi Portal Data...');
+  const next = index => {
+    if (index >= types.length) {
+      hideLoading(); loadPortalReferences(); loadDataAdminSiswa();
+      showCustomAlert('Sinkronisasi selesai', summaries.map(s => `${s.type}: ${s.total || 0} data`).join('\n'));
+      return;
+    }
+    cbtApi.withSuccessHandler(res => { summaries.push({ type: types[index], ...res }); next(index + 1); })
+      .withFailureHandler(err => { hideLoading(); showCustomAlert('Sinkronisasi gagal', `${types[index]}: ${err.message}`); })
+      .syncPortalData(types[index]);
+  };
+  next(0);
+}
+
 function loadDataAdminUjian() {
+  loadPortalReferences();
   const tb = document.getElementById('tblAdminUjian'); tb.innerHTML = `<tr><td colspan="8" align="center">Memuat...</td></tr>`;
   cbtApi
     .withSuccessHandler(rows => {
@@ -453,7 +542,7 @@ function loadDataAdminUjian() {
       tb.innerHTML = rows.map(u => `
         <tr>
           <td>${u.id}</td>
-          <td><b>${u.nama_ujian}</b></td>
+          <td><b>${u.nama_ujian}</b><br><small>${u.nama_mapel || 'Mapel belum dipilih'}</small></td>
           <td>${u.tingkat}</td>
           <td><span class="badge bg-gray">Sesi ${u.sesi || 1}</span><br><small style="color:var(--text-muted);"><i class="fa-regular fa-calendar"></i> ${u.tanggal_ujian || 'TBD'}</small></td>
           <td><span class="badge bg-gray">${u.kelas_target || 'Semua'}</span></td>
@@ -466,20 +555,24 @@ function loadDataAdminUjian() {
 }
 
 function bukaModalUjian(data = null) {
+  if (!portalReferencesLoaded) { loadPortalReferences(() => bukaModalUjian(data)); return; }
   document.getElementById('formUjian').reset();
+  populateExamPortalOptions(data);
   if(data) {
     document.getElementById('titleModalUjian').textContent = "Edit Data Ujian & Arsip";
     document.getElementById('editUjianId').value = data.id;
     document.getElementById('inNamaUjian').value = data.nama_ujian;
+    document.getElementById('inSubjectUjian').value = data.subject_id || '';
     document.getElementById('inTingkatUjian').value = data.tingkat;
     document.getElementById('inSesiUjian').value = data.sesi || 1;
     document.getElementById('inTanggalUjian').value = data.tanggal_ujian || '';
     document.getElementById('inJamMulai').value = data.jam_mulai || '07:00';
     document.getElementById('inJamSelesai').value = data.jam_selesai || '08:30';
-    document.getElementById('inKelasTarget').value = data.kelas_target || '';
     document.getElementById('inDurasiUjian').value = data.durasi_menit;
-    document.getElementById('inTahunAjaran').value = data.tahun_ajaran || '2025/2026';
-    document.getElementById('inSemester').value = data.semester || 'Genap';
+    document.getElementById('inTahunAjaran').value = data.portal_academic_year_id || '';
+    refreshSemesterOptions(data.portal_semester_id || '');
+    const selectedClasses = String(data.kelas_target || '').split(',').map(v => v.trim());
+    refreshClassOptions(selectedClasses);
     document.getElementById('inStatusUjian').value = String(data.status_aktif);
   } else {
     document.getElementById('titleModalUjian').textContent = "Tambah Ujian / Arsip Baru";
@@ -497,15 +590,16 @@ document.getElementById('formUjian').addEventListener('submit', function(e){
   const payload = {
     id: document.getElementById('editUjianId').value || null,
     nama_ujian: document.getElementById('inNamaUjian').value,
+    subject_id: document.getElementById('inSubjectUjian').value,
     tingkat: document.getElementById('inTingkatUjian').value,
     sesi: document.getElementById('inSesiUjian').value,
     tanggal_ujian: document.getElementById('inTanggalUjian').value,
     jam_mulai: document.getElementById('inJamMulai').value,
     jam_selesai: document.getElementById('inJamSelesai').value,
-    kelas_target: document.getElementById('inKelasTarget').value,
+    kelas_target: Array.from(document.getElementById('inKelasTarget').selectedOptions).map(o => o.value).join(','),
     durasi_menit: document.getElementById('inDurasiUjian').value,
-    tahun_ajaran: document.getElementById('inTahunAjaran').value,
-    semester: document.getElementById('inSemester').value,
+    portal_academic_year_id: document.getElementById('inTahunAjaran').value,
+    portal_semester_id: document.getElementById('inSemester').value,
     status_aktif: document.getElementById('inStatusUjian').value
   };
   showLoading('Menyimpan Ujian...');
@@ -1045,7 +1139,7 @@ function bukaModalGuruUjian() {
   const selUjian = document.getElementById('inUjianId');
   
   selGuru.innerHTML = (window.cacheGuruList || []).map(g => `<option value="${g.id}">${g.nama_lengkap || g.username}</option>`).join('');
-  selUjian.innerHTML = (window.cacheUjianList || []).map(u => `<option value="${u.id}">${u.nama_ujian} (Sesi ${u.sesi || 1}) - Tingkat ${u.tingkat}</option>`).join('');
+  selUjian.innerHTML = (window.cacheUjianList || []).map(u => `<option value="${u.id}">${u.nama_mapel || 'Mapel'} — ${u.nama_ujian} (Sesi ${u.sesi || 1}) - Tingkat ${u.tingkat}</option>`).join('');
   
   document.getElementById('modalGuruUjian').classList.add('show');
 }
@@ -1059,7 +1153,7 @@ function editGuruUjian(r) {
   const selUjian = document.getElementById('inUjianId');
   
   selGuru.innerHTML = (window.cacheGuruList || []).map(g => `<option value="${g.id}">${g.nama_lengkap || g.username}</option>`).join('');
-  selUjian.innerHTML = (window.cacheUjianList || []).map(u => `<option value="${u.id}">${u.nama_ujian} (Sesi ${u.sesi || 1}) - Tingkat ${u.tingkat}</option>`).join('');
+  selUjian.innerHTML = (window.cacheUjianList || []).map(u => `<option value="${u.id}">${u.nama_mapel || 'Mapel'} — ${u.nama_ujian} (Sesi ${u.sesi || 1}) - Tingkat ${u.tingkat}</option>`).join('');
   
   selGuru.value = r.guru_id;
   selUjian.value = r.ujian_id;

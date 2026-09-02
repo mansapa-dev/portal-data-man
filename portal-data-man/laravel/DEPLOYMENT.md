@@ -108,9 +108,9 @@ Simpan `client_id` dan `client_secret` melalui `.env` aplikasi agen, bukan di Gi
 
 Link aktivasi akun guru tetap berlaku. Saat akun dibuat, Portal Data menetapkan password awal acak yang hanya ditampilkan sekali pada layar/export admin; password disimpan dalam bentuk hash dan wajib diganti saat login pertama. Perlakukan file export username/password sebagai data rahasia dan hapus setelah dibagikan kepada guru.
 
-## Integrasi CBT (API key)
+## Integrasi CBT (API key + SSO guru)
 
-CBT saat ini tidak menggunakan OIDC, sehingga tidak perlu didaftarkan sebagai aplikasi SSO atau diberi redirect URI. CBT mengambil data referensi melalui URI berikut:
+CBT menggunakan API key untuk sinkronisasi referensi dan OIDC Authorization Code + PKCE untuk login guru. Daftarkan aplikasi CBT dengan redirect URI exact-match `https://DOMAIN-CBT/auth/sso/callback`, post logout `https://DOMAIN-CBT/guru`, dan scope `openid profile email portal_role`. CBT mengambil data referensi melalui URI berikut:
 
 ```text
 GET /api/v1/integration/cbt/students?page=1&per_page=100

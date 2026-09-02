@@ -46,7 +46,6 @@ $router->get('/auth/sso/start',[$teacherSso,'start']);$router->get('/auth/sso/ca
 $router->post('/api/setup/admin',[$setup,'create'],[$csrf,$audit('INITIAL_ADMIN_CREATED','User')]);
 $router->post('/api/auth/student/login',[$auth,'studentLogin'],[$studentLoginRate,$csrf,$audit('STUDENT_LOGIN','Student')]);
 $router->post('/api/auth/staff/login',[$auth,'staffLogin'],[$staffLoginRate,$csrf,$audit('STAFF_LOGIN','User')]);
-$router->post('/api/auth/teacher/login',[$auth,'teacherLogin'],[$staffLoginRate,$csrf,$audit('TEACHER_LOGIN','Teacher')]);
 $router->post('/api/auth/logout',[$auth,'logout'],[$csrf]);
 $router->post('/api/auth/password',[$auth,'changePassword'],[$staffAuth,$csrf,$audit('PASSWORD_CHANGED','User')]);
 $router->get('/api/student/exams',[$student,'index'],[$studentAuth]);
@@ -56,11 +55,13 @@ $router->post('/api/student/exams/{id}/violations',[$student,'violation'],[$stud
 $router->post('/api/student/exams/{id}/submit',[$student,'submit'],[$studentAuth,$submitRate,$csrf,$audit('EXAM_SUBMITTED','Exam')]);
 $router->get('/api/student/exams/{id}/review',[$student,'review'],[$studentAuth]);
 $router->post('/api/admin/portal-data/sync/{type}',[$sync,'run'],[$adminAuth,$csrf,$audit('PORTAL_DATA_SYNC','PortalData')]);
+$router->get('/api/admin/portal-data/sync/status',[$sync,'status'],[$adminAuth]);
 $router->get('/api/admin/dashboard',[$admin,'dashboard'],[$adminAuth]);
+$router->get('/api/admin/portal-data/references',[$admin,'references'],[$adminAuth]);
 $router->get('/api/admin/students',[$adminStudents,'index'],[$adminAuth]);
 $router->post('/api/admin/students/pin',[$adminStudents,'setPin'],[$adminAuth,$csrf,$audit('STUDENT_PIN_CHANGED','Student')]);
 $router->post('/api/admin/students/{id}/reset',[$adminStudents,'reset'],[$adminAuth,$csrf,$audit('STUDENT_ATTEMPT_RESET','Student')]);
-$router->get('/api/admin/exams',[$admin,'exams'],[$staffAuth]);
+$router->get('/api/admin/exams',[$admin,'exams'],[$adminAuth]);
 $router->post('/api/admin/exams',[$admin,'saveExam'],[$adminAuth,$csrf,$audit('EXAM_SAVED','Exam')]);
 $router->get('/api/admin/questions',[$admin,'questions'],[$adminAuth]);
 $router->post('/api/admin/questions',[$admin,'saveQuestion'],[$adminAuth,$csrf,$audit('QUESTION_SAVED','Question')]);

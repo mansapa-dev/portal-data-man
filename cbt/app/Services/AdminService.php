@@ -8,12 +8,13 @@ final class AdminService
 {
  public function __construct(private Database$db,private AdminRepository$repo){}
  public function dashboard():array{return$this->repo->dashboard();}
+ public function references():array{return$this->repo->references();}
  public function exams():array{return$this->repo->exams();}
  public function saveExam(array$d,int$actor):void
  {
   foreach(['nama_ujian','tingkat','durasi_menit']as$key)if(trim((string)($d[$key]??''))==='')throw new DomainException('Data ujian belum lengkap.',422);
   $date=(string)($d['tanggal_mulai']??$d['tanggal_ujian']??date('Y-m-d'));$endDate=(string)($d['tanggal_selesai']??$date);$timezone=new \DateTimeZone('Asia/Jakarta');$start=new \DateTimeImmutable($date.' '.((string)($d['jam_mulai']??'00:00')).':00',$timezone);$end=new \DateTimeImmutable($endDate.' '.((string)($d['jam_selesai']??'23:59')).':00',$timezone);if($end<=$start)throw new DomainException('Waktu selesai harus setelah waktu mulai.',422);
-  $data=$d+['tahun_ajaran'=>'2025/2026','semester'=>'Genap'];$utc=new \DateTimeZone('UTC');$data['starts_at']=$start->setTimezone($utc)->format('Y-m-d H:i:s');$data['ends_at']=$end->setTimezone($utc)->format('Y-m-d H:i:s');$data['semester']=strtolower((string)$data['semester'])==='ganjil'?'ODD':'EVEN';$data['status']=filter_var($d['status_aktif']??false,FILTER_VALIDATE_BOOL)?'ACTIVE':'INACTIVE';
+  $subject=$this->repo->subject((int)($d['subject_id']??0));if(!$subject)throw new DomainException('Mata pelajaran harus dipilih dari katalog mapel.',422);$yearId=trim((string)($d['portal_academic_year_id']??''));$semesterId=trim((string)($d['portal_semester_id']??''));$period=$this->repo->period($yearId,$semesterId);if(!$period)throw new DomainException('Tahun ajaran dan semester harus dipilih dari Portal Data.',422);$data=$d+['tahun_ajaran'=>$period['academic_year'],'semester'=>$period['semester']];$data['tahun_ajaran']=$period['academic_year'];$data['semester']=$period['semester'];$utc=new \DateTimeZone('UTC');$data['starts_at']=$start->setTimezone($utc)->format('Y-m-d H:i:s');$data['ends_at']=$end->setTimezone($utc)->format('Y-m-d H:i:s');$data['status']=filter_var($d['status_aktif']??false,FILTER_VALIDATE_BOOL)?'ACTIVE':'INACTIVE';
   try{$this->db->transaction(fn()=>$this->repo->saveExam($data,$actor));}catch(\UnexpectedValueException$e){throw new DomainException($e->getMessage(),422);}
  }
  public function questions(?int$id):array{return$this->repo->questions($id);}

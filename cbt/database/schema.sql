@@ -69,10 +69,47 @@ CREATE TABLE IF NOT EXISTS portal_classes (
  UNIQUE KEY uq_classes_portal (portal_class_id), KEY idx_classes_code (code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS portal_academic_years (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ portal_academic_year_id VARCHAR(64) NOT NULL,
+ name VARCHAR(30) NOT NULL,
+ is_active TINYINT(1) NOT NULL DEFAULT 0,
+ last_synced_at DATETIME(3) NULL,
+ UNIQUE KEY uq_academic_years_portal (portal_academic_year_id),
+ UNIQUE KEY uq_academic_years_name (name), KEY idx_academic_years_active (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS portal_semesters (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ portal_semester_id VARCHAR(64) NOT NULL,
+ portal_academic_year_id VARCHAR(64) NOT NULL,
+ type ENUM('ODD','EVEN') NOT NULL,
+ academic_year VARCHAR(30) NOT NULL,
+ is_active TINYINT(1) NOT NULL DEFAULT 0,
+ last_synced_at DATETIME(3) NULL,
+ UNIQUE KEY uq_semesters_portal (portal_semester_id),
+ UNIQUE KEY uq_semesters_period (portal_academic_year_id,type), KEY idx_semesters_active (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS subjects (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ public_id CHAR(26) NOT NULL,
+ code VARCHAR(30) NOT NULL,
+ name VARCHAR(100) NOT NULL,
+ status ENUM('ACTIVE','INACTIVE') NOT NULL DEFAULT 'ACTIVE',
+ created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+ updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+ UNIQUE KEY uq_subjects_public (public_id),
+ UNIQUE KEY uq_subjects_code (code), KEY idx_subjects_status_name (status,name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS exams (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
  public_id CHAR(26) NOT NULL,
  name VARCHAR(191) NOT NULL,
+ portal_academic_year_id VARCHAR(64) NULL,
+ portal_semester_id VARCHAR(64) NULL,
+ subject_id BIGINT UNSIGNED NULL,
  grade VARCHAR(10) NOT NULL,
  duration_minutes SMALLINT UNSIGNED NOT NULL,
  session_number TINYINT UNSIGNED NOT NULL DEFAULT 1,
@@ -86,7 +123,9 @@ CREATE TABLE IF NOT EXISTS exams (
  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
  UNIQUE KEY uq_exams_public (public_id),
  KEY idx_exams_eligibility (status,grade,starts_at,ends_at),
+ KEY idx_exams_portal_period (portal_academic_year_id,portal_semester_id),
  CONSTRAINT fk_exams_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE RESTRICT,
+ CONSTRAINT fk_exams_subject FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE RESTRICT,
  CHECK (duration_minutes > 0), CHECK (ends_at > starts_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -194,7 +233,7 @@ CREATE TABLE IF NOT EXISTS teacher_exam_assignments (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS portal_sync_logs (
- id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, sync_type ENUM('STUDENTS','TEACHERS','CLASSES','ALL') NOT NULL,
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, sync_type ENUM('STUDENTS','TEACHERS','CLASSES','ACADEMIC_YEARS','SEMESTERS','ALL') NOT NULL,
  started_at DATETIME(3) NOT NULL, finished_at DATETIME(3) NULL, status ENUM('RUNNING','SUCCESS','FAILED','PARTIAL') NOT NULL,
  total INT UNSIGNED NOT NULL DEFAULT 0, inserted_count INT UNSIGNED NOT NULL DEFAULT 0, updated_count INT UNSIGNED NOT NULL DEFAULT 0,
  unchanged_count INT UNSIGNED NOT NULL DEFAULT 0, failed_count INT UNSIGNED NOT NULL DEFAULT 0, error_summary TEXT NULL,

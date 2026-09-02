@@ -242,14 +242,13 @@
       <div id="tabAdminSiswa" class="dash-tab hidden">
         <div class="card" style="border: 2px dashed var(--primary); background: #f8fafc;">
           <div class="card-header" style="margin-bottom:12px;">
-            <div class="card-title"><i class="fa-solid fa-stairs" style="color:var(--primary); margin-right:8px;"></i>Manajemen Kenaikan Kelas & Kelulusan Massal</div>
+            <div class="card-title"><i class="fa-solid fa-database" style="color:var(--primary); margin-right:8px;"></i>Master Siswa dari Portal Data</div>
           </div>
           <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">
-            Siswa kelas X naik ke XI, kelas XI naik ke XII, dan siswa kelas XII yang tamat dapat diunduh arsip Excel-nya terlebih dahulu sebelum dibersihkan dari sistem.
+            Identitas siswa, kenaikan kelas, kelulusan, rombel, semester, dan tahun ajaran dikelola di Portal Data. CBT hanya menyimpan cache referensi serta PIN ujian.
           </p>
           <div style="display:flex; gap:12px; flex-wrap:wrap;">
-            <button class="btn btn-primary" onclick="prosesKenaikanKelas()"><i class="fa-solid fa-angles-up"></i> Proses Kenaikan Kelas & Arsip XII</button>
-            <button class="btn btn-danger" onclick="bukaModalHapusPertingkat()"><i class="fa-solid fa-trash-can"></i> Hapus Siswa Berdasarkan Tingkat</button>
+            <button class="btn btn-primary" onclick="sinkronkanSemuaPortalData()"><i class="fa-solid fa-rotate"></i> Sinkronisasi Portal Data</button>
           </div>
         </div>
 
@@ -600,8 +599,9 @@
       <form id="formUjian">
         <input type="hidden" id="editUjianId">
         <div class="input-group"><label>Nama Ujian / Mapel</label><div class="input-wrapper"><i class="fa-solid fa-book left-icon"></i><input type="text" id="inNamaUjian" placeholder="Contoh: Kimia Kelas XII" required></div></div>
+        <div class="input-group"><label>Mata Pelajaran</label><div class="input-wrapper"><select id="inSubjectUjian" required></select></div></div>
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
-          <div class="input-group"><label>Tingkat</label><div class="input-wrapper"><select id="inTingkatUjian" required><option value="X">X</option><option value="XI">XI</option><option value="XII">XII</option></select></div></div>
+          <div class="input-group"><label>Tingkat</label><div class="input-wrapper"><select id="inTingkatUjian" required></select></div></div>
           <div class="input-group"><label>Sesi Ujian</label><div class="input-wrapper"><select id="inSesiUjian"><option value="1">Sesi 1</option><option value="2">Sesi 2</option><option value="3">Sesi 3</option></select></div></div>
         </div>
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
@@ -611,11 +611,11 @@
         <div class="input-group"><label>Jam Selesai</label><div class="input-wrapper"><input type="time" id="inJamSelesai" required style="padding-left:40px;"></div></div>
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
           <div class="input-group"><label>Durasi (Menit)</label><div class="input-wrapper"><input type="number" id="inDurasiUjian" required value="90"></div></div>
-          <div class="input-group"><label>Target Rombel/Kelas (Opsional)</label><div class="input-wrapper"><input type="text" id="inKelasTarget" placeholder="Misal: XII.1, XII.2"></div></div>
+          <div class="input-group"><label>Target Rombel/Kelas (Opsional)</label><div class="input-wrapper"><select id="inKelasTarget" multiple size="4"></select></div></div>
         </div>
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
-          <div class="input-group"><label>Tahun Ajaran</label><div class="input-wrapper"><input type="text" id="inTahunAjaran" value="2025/2026" required></div></div>
-          <div class="input-group"><label>Semester</label><div class="input-wrapper"><select id="inSemester" required><option value="Genap">Genap</option><option value="Ganjil">Ganjil</option></select></div></div>
+          <div class="input-group"><label>Tahun Ajaran</label><div class="input-wrapper"><select id="inTahunAjaran" required></select></div></div>
+          <div class="input-group"><label>Semester</label><div class="input-wrapper"><select id="inSemester" required></select></div></div>
         </div>
         <div class="input-group"><label>Status Aktif</label><div class="input-wrapper"><select id="inStatusUjian"><option value="true">Aktif</option><option value="false">Nonaktif</option></select></div></div>
         <button type="submit" class="btn btn-primary" style="width:100%; margin-top:8px;">Simpan Ujian</button>

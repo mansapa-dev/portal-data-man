@@ -45,6 +45,10 @@ CBT menyimpan snapshot lokal untuk tetap dapat menjalankan ujian ketika Portal D
 6. Buat ujian menggunakan kelas, tahun ajaran, semester, tanggal, jam mulai, dan jam selesai.
 7. Buat penugasan ujian kepada guru yang sudah tersinkronisasi.
 
+Setelah seluruh halaman berhasil diambil tanpa error, referensi lokal yang tidak lagi muncul pada daftar aktif Portal akan dinonaktifkan di CBT. Rekonsiliasi ini tidak dijalankan pada sync berstatus `PARTIAL` atau `FAILED`, sehingga gangguan API tidak menonaktifkan cache yang masih valid.
+
+Riwayat sinkronisasi dapat dibaca admin melalui `GET /api/admin/portal-data/sync/status?limit=20`.
+
 ## Pengujian koneksi
 
 Tanpa key harus ditolak:
@@ -63,11 +67,18 @@ curl -i \
 
 Respons sukses menggunakan format API Portal Data dan tidak boleh mengandung password atau token akun guru.
 
-## Registrasi aplikasi
+## Registrasi SSO guru
 
-CBT versi saat ini menggunakan API key server-to-server, bukan login OIDC. Karena itu CBT **tidak perlu didaftarkan** pada menu **Aplikasi SSO** dan tidak membutuhkan redirect URI atau client secret.
+Sinkronisasi referensi memakai API key server-to-server, sedangkan login guru memakai OIDC Authorization Code + PKCE. Daftarkan CBT pada menu **Aplikasi SSO** Portal Data:
 
-Menu **Aplikasi SSO** hanya dipakai bila aplikasi memiliki alur login guru melalui OIDC (`/oidc/authorize`, `/oidc/token`, dan callback HTTPS). Jangan mendaftarkan URL CBT sebagai redirect URI sebelum callback OIDC benar-benar tersedia.
+```text
+Nama aplikasi: CBT MAN 1 Palembang
+Redirect URI: https://cbt.example.sch.id/auth/sso/callback
+Post logout redirect URI: https://cbt.example.sch.id/guru
+Scope: openid profile email portal_role
+```
+
+Isi `PORTAL_DATA_OIDC_ISSUER`, `PORTAL_DATA_OIDC_CLIENT_ID`, dan `PORTAL_DATA_OIDC_REDIRECT_URI` pada `.env` CBT. Berikan akses aplikasi kepada guru di Portal Data. Guru yang valid dan sudah tersinkron akan dihubungkan otomatis ke akun teknis CBT saat login pertama; password Portal tidak pernah diterima atau disimpan CBT.
 
 ## Keamanan
 

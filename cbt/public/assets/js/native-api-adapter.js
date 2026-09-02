@@ -15,15 +15,18 @@
       const login = await api('api/auth/student/login', 'POST', { nisn, pin });
       const exams = await api('api/student/exams');
       const s = login.data;
-      return { success: true, siswa: { id: s.nisn, nomor_ujian: s.nisn, nisn: s.nisn, nama: s.nama, kelas: s.kelas, tingkat: s.tingkat }, jadwal: exams.data.map(e => ({ id: e.id, nama_ujian: e.nama_ujian, tingkat: e.tingkat, durasi_menit: e.durasi, tanggal_ujian: e.tanggal_mulai, jam_mulai: e.jam_mulai, jam_selesai: e.jam_selesai, sesi: e.sesi || 1, tahun_ajaran: e.tahun_ajaran, semester: e.semester, status_pengerjaan: ({COMPLETED:'selesai',TERMINATED:'terblokir',EXPIRED:'selesai'})[e.status_attempt] || 'belum' })) };
+      return { success: true, siswa: { id: s.nisn, nomor_ujian: s.nisn, nisn: s.nisn, nama: s.nama, kelas: s.kelas, tingkat: s.tingkat }, jadwal: mapExams(exams.data) };
     },
+    async getStudentExamsAPI() { const exams=await api('api/student/exams');return {success:true,jadwal:mapExams(exams.data)}; },
     async loginPenggunaAPI(username, password) { const r = await api('api/auth/staff/login', 'POST', { username, password }); return { success: true, userId:r.data.id, id:r.data.id, nama:r.data.nama, role:r.data.role, username:r.data.username }; },
-    async getServerSoal(examId) { const r = await api(`api/student/exams/${examId}/start`, 'POST', {}); return { success: true, soal: r.data.soal.map(q => ({ id:q.id, pertanyaan:q.pertanyaan, opsi:q.opsi })), jawaban: r.data.jawaban.map(a => ({ soal_id:a.question_id, jawaban:a.answer })), expiresAt:r.data.expires_at, serverOrdered:true }; },
+    async getServerSoal(examId) { const r = await api(`api/student/exams/${examId}/start`, 'POST', {}); return { success: true, soal: r.data.soal.map(q => ({ id:q.id, pertanyaan:q.pertanyaan, opsi:q.opsi })), jawaban: r.data.jawaban.map(a => ({ soal_id:a.question_id, jawaban:a.answer, ragu:!!Number(a.is_flagged) })), expiresAt:r.data.expires_at, serverTime:r.data.server_time, serverOrdered:true }; },
     async simpanJawabanServer(data) { await api(`api/student/exams/${data.ujianId}/answers/${data.soalId}`, 'PUT', { answer:data.jawaban, is_flagged:!!data.ragu }); return { success:true }; },
     async catatPelanggaranServer(studentId, examId) { const r=await api(`api/student/exams/${examId}/violations`,'POST',{event_key:`visibility:${Date.now()}:${Math.random().toString(36).slice(2)}`,type:'TAB_HIDDEN',client_occurred_at:new Date().toISOString().slice(0,23).replace('T',' ')});return {success:true,jumlah:r.data.jumlah,dihentikan:r.data.terminated}; },
     async submitUjian(data) { const r=await api(`api/student/exams/${data.ujian_id}/submit`,'POST',{});return {success:true,hasil:r.data}; },
     async getReviewUjianServer(studentId,examId) { const r=await api(`api/student/exams/${examId}/review`);return {success:true,...r.data}; },
     async getAdminDashboardStats() { const r=await api('api/admin/dashboard');return {success:true,...r.data}; },
+    async getPortalDataReferences() { const r=await api('api/admin/portal-data/references');return {success:true,...r.data}; },
+    async syncPortalData(type) { const r=await api(`api/admin/portal-data/sync/${type}`,'POST',{});return {success:true,...r.data}; },
     async getAdminUjianList() { const r=await api('api/admin/exams');return r.data; },
     async simpanUjianAdmin(session,data) { await api('api/admin/exams','POST',data);return {success:true,message:'Ujian berhasil disimpan.'}; },
     async getAdminSoalList(session,examId) { const r=await api(`api/admin/questions${examId?`?exam_id=${encodeURIComponent(examId)}`:''}`);return r.data; },
@@ -50,5 +53,6 @@
   window.cbtServerLogout = async function () { try { await api('api/auth/logout','POST',{}); } finally { csrfPromise=refreshCsrf(); } };
   window.cbtApi = { run: new Proxy({}, { get(_, name) { const state={success:null,failure:null}; if(name==='withSuccessHandler')return fn=>(state.success=fn,chain(state)); if(name==='withFailureHandler')return fn=>(state.failure=fn,chain(state)); return (...args)=>invoke(name,args,state); function chain(s){return new Proxy({}, {get(_x,n){if(n==='withSuccessHandler')return fn=>(s.success=fn,chain(s));if(n==='withFailureHandler')return fn=>(s.failure=fn,chain(s));return(...a)=>invoke(n,a,s);}});} } }) };
   window.cbtApi = window.cbtApi.run;
+  function mapExams(exams){return exams.map(e=>({id:e.id,nama_ujian:e.nama_ujian,tingkat:e.tingkat,durasi_menit:e.durasi,tanggal_ujian:e.tanggal_mulai,jam_mulai:e.jam_mulai,jam_selesai:e.jam_selesai,sesi:e.sesi||1,tahun_ajaran:e.tahun_ajaran,semester:e.semester,status_pengerjaan:({IN_PROGRESS:'berlangsung',COMPLETED:'selesai',TERMINATED:'terblokir',EXPIRED:'selesai'})[e.status_attempt]||'belum'}));}
   function invoke(name,args,state){const fn=calls[name];if(!fn){const err=new Error(`Fitur ${String(name)} belum dimigrasikan.`);state.failure?.(err);return;}Promise.resolve(fn(...args)).then(v=>state.success?.(v)).catch(e=>state.failure?.(e));}
 })();

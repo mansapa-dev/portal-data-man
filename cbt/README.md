@@ -14,10 +14,11 @@ CBT berjalan dengan PHP Native 8.2+, PDO, dan MySQL/MariaDB. `index.html` dipert
 1. Salin `.env.example` ke `.env`, isi database serta credential API Portal Data.
 2. Jalankan `composer install --no-dev --optimize-autoloader`.
 3. Jalankan `composer migrate` atau import `database/schema.sql` lewat phpMyAdmin.
-4. Pastikan `storage/logs`, `storage/cache`, dan `storage/imports` writable oleh PHP.
-5. Arahkan document root domain/subdomain ke `cbt/public`.
-6. Ambil CSRF dari `GET /api/auth/me`, lalu buat admin pertama satu kali lewat `POST /api/setup/admin` dengan `setup_token`, `username`, `name`, dan password minimal 12 karakter.
-7. Setelah berhasil, kosongkan/hapus `SETUP_TOKEN` dari `.env`.
+4. Jalankan `composer seed` untuk mengisi katalog mata pelajaran resmi secara idempotent.
+5. Pastikan `storage/logs`, `storage/cache`, dan `storage/imports` writable oleh PHP.
+6. Arahkan document root domain/subdomain ke `cbt/public`.
+7. Ambil CSRF dari `GET /api/auth/me`, lalu buat admin pertama satu kali lewat `POST /api/setup/admin` dengan `setup_token`, `username`, `name`, dan password minimal 12 karakter.
+8. Setelah berhasil, kosongkan/hapus `SETUP_TOKEN` dari `.env`.
 
 ## Portal Data
 

@@ -6,6 +6,6 @@
   "require-dev": {"phpunit/phpunit": "^11.5"},
   "autoload": {"psr-4": {"Cbt\\": "app/"}},
   "autoload-dev": {"psr-4": {"Tests\\": "tests/"}},
-  "scripts": {"test": "@php tests/run.php", "test:phpunit": "phpunit", "lint": "@php scripts/lint.php", "migrate": "@php database/migrate.php"},
+  "scripts": {"test": "@php tests/run.php", "test:phpunit": "phpunit", "lint": "@php scripts/lint.php", "migrate": "@php database/migrate.php", "seed": "@php database/seed.php"},
   "config": {"optimize-autoloader": true, "sort-packages": true}
 }
