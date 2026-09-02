@@ -31,8 +31,14 @@ class SsoApplicationController extends Controller
     public function store(Request $request): JsonResponse
     {
         $data = $this->validated($request);
-        $client = ApplicationClient::query()->create(['name' => trim($data['name']), 'slug' => $data['slug'], 'description' => $data['description'] ?? null, 'clientId' => 'portal_'.$data['slug'].'_'.Str::lower(Str::random(16)), 'clientType' => 'PUBLIC_WEB', 'status' => 'ACTIVE', 'redirectUris' => $this->uris($data['redirectUris']), 'postLogoutRedirectUris' => $this->uris($data['postLogoutRedirectUris'] ?? []), 'allowedOrigins' => [], 'allowedScopes' => ['openid', 'profile', 'email', 'portal_role', 'portal_data.read'], 'allowedGrantTypes' => ['authorization_code']]);
+        $service = $data['applicationType'] === 'SERVICE';
+        $secret = $service ? $this->secret() : null;
+        $client = ApplicationClient::query()->create(['name' => trim($data['name']), 'slug' => $data['slug'], 'description' => $data['description'] ?? null, 'clientId' => 'portal_'.$data['slug'].'_'.Str::lower(Str::random(16)), 'clientSecretHash' => $secret ? password_hash($secret, PASSWORD_DEFAULT) : null, 'clientType' => $service ? 'SERVICE' : 'PUBLIC_WEB', 'status' => 'ACTIVE', 'redirectUris' => $service ? [] : $this->uris($data['redirectUris']), 'postLogoutRedirectUris' => $service ? [] : $this->uris($data['postLogoutRedirectUris'] ?? []), 'allowedOrigins' => [], 'allowedScopes' => $service ? ['portal_data.read'] : ['openid', 'profile', 'email', 'portal_role'], 'allowedGrantTypes' => [$service ? 'client_credentials' : 'authorization_code']]);
         $this->audit->write($request, 'SSO_APPLICATION_CREATED', 'ApplicationClient', $client->publicId, null, ['name' => $client->name, 'clientId' => $client->clientId]);
+
+        if ($secret) {
+            $client->setAttribute('clientSecret', $secret);
+        }
 
         return ApiResponse::success($client, 'Aplikasi SSO berhasil dibuat.', 201);
     }
@@ -40,6 +46,7 @@ class SsoApplicationController extends Controller
     public function update(Request $request, ApplicationClient $applicationClient): JsonResponse
     {
         $data = $this->validated($request, true, $applicationClient);
+        unset($data['applicationType']);
         $old = $applicationClient->replicate();
         foreach (['redirectUris', 'postLogoutRedirectUris'] as $field) {
             if (array_key_exists($field, $data)) {
@@ -54,6 +61,7 @@ class SsoApplicationController extends Controller
 
     public function grant(Request $request, ApplicationClient $applicationClient): JsonResponse
     {
+        abort_if($applicationClient->clientType === 'SERVICE', 422, 'Aplikasi service tidak menggunakan akses guru.');
         $data = $request->validate(['teacherPublicId' => ['required', 'string', 'size:26'], 'role' => ['required', 'regex:/^[A-Za-z0-9:_-]+$/', 'max:100']]);
         $teacher = Teacher::query()->where('publicId', $data['teacherPublicId'])->where('status', 'ACTIVE')->firstOrFail();
         TeacherApplicationAccess::query()->updateOrCreate(['teacherId' => $teacher->id, 'applicationClientId' => $applicationClient->id], ['role' => $data['role'], 'status' => 'ACTIVE', 'grantedAt' => now(), 'grantedBy' => $request->user('admin')->publicId]);
@@ -72,11 +80,23 @@ class SsoApplicationController extends Controller
         return ApiResponse::success(null, 'Akses guru berhasil dicabut.');
     }
 
+    public function rotateSecret(Request $request, ApplicationClient $applicationClient): JsonResponse
+    {
+        abort_unless($applicationClient->clientType === 'SERVICE', 422, 'Client secret hanya tersedia untuk aplikasi service.');
+        $secret = $this->secret();
+        $applicationClient->update(['clientSecretHash' => password_hash($secret, PASSWORD_DEFAULT)]);
+        $this->audit->write($request, 'SSO_CLIENT_SECRET_ROTATED', 'ApplicationClient', $applicationClient->publicId, null, ['clientId' => $applicationClient->clientId]);
+
+        return ApiResponse::success(['clientId' => $applicationClient->clientId, 'clientSecret' => $secret], 'Client secret baru dibuat. Secret lama langsung tidak berlaku.');
+    }
+
     private function validated(Request $request, bool $partial = false, ?ApplicationClient $client = null): array
     {
         $required = $partial ? 'sometimes' : 'required';
 
-        return $request->validate(['name' => [$required, 'string', 'min:2', 'max:150'], 'slug' => [$required, 'regex:/^[a-z0-9-]+$/', 'max:100', Rule::unique('ApplicationClient', 'slug')->ignore($client?->id)], 'description' => ['sometimes', 'nullable', 'string'], 'redirectUris' => [$required, 'array', 'min:1'], 'redirectUris.*' => ['url', 'max:2000'], 'postLogoutRedirectUris' => ['sometimes', 'array'], 'postLogoutRedirectUris.*' => ['url', 'max:2000'], 'status' => ['sometimes', Rule::in(['ACTIVE', 'INACTIVE'])]]);
+        $service = $request->input('applicationType') === 'SERVICE' || $client?->clientType === 'SERVICE';
+
+        return $request->validate(['name' => [$required, 'string', 'min:2', 'max:150'], 'slug' => [$required, 'regex:/^[a-z0-9-]+$/', 'max:100', Rule::unique('ApplicationClient', 'slug')->ignore($client?->id)], 'applicationType' => [$partial ? 'sometimes' : 'required', Rule::in(['SSO', 'SERVICE'])], 'description' => ['sometimes', 'nullable', 'string'], 'redirectUris' => [$service ? 'sometimes' : $required, 'array', $service ? 'max:0' : 'min:1'], 'redirectUris.*' => ['url', 'max:2000'], 'postLogoutRedirectUris' => ['sometimes', 'array'], 'postLogoutRedirectUris.*' => ['url', 'max:2000'], 'status' => ['sometimes', Rule::in(['ACTIVE', 'INACTIVE'])]]);
     }
 
     private function uris(array $values): array
@@ -90,5 +110,10 @@ class SsoApplicationController extends Controller
         }
 
         return $values;
+    }
+
+    private function secret(): string
+    {
+        return rtrim(strtr(base64_encode(random_bytes(48)), '+/', '-_'), '=');
     }
 }

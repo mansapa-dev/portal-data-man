@@ -22,7 +22,7 @@ class OidcController extends Controller
     {
         $issuer = config('oidc.issuer');
 
-        return response()->json(['issuer' => $issuer, 'authorization_endpoint' => $issuer.'/authorize', 'token_endpoint' => $issuer.'/token', 'userinfo_endpoint' => $issuer.'/userinfo', 'jwks_uri' => $issuer.'/jwks', 'end_session_endpoint' => $issuer.'/logout', 'response_types_supported' => ['code'], 'grant_types_supported' => ['authorization_code'], 'subject_types_supported' => ['public'], 'id_token_signing_alg_values_supported' => ['RS256'], 'token_endpoint_auth_methods_supported' => ['none'], 'code_challenge_methods_supported' => ['S256'], 'scopes_supported' => ['openid', 'profile', 'email', 'portal_role', 'portal_data.read'], 'claims_supported' => ['sub', 'name', 'preferred_username', 'email', 'email_verified', 'portal_teacher_id', 'portal_role']]);
+        return response()->json(['issuer' => $issuer, 'authorization_endpoint' => $issuer.'/authorize', 'token_endpoint' => $issuer.'/token', 'userinfo_endpoint' => $issuer.'/userinfo', 'jwks_uri' => $issuer.'/jwks', 'end_session_endpoint' => $issuer.'/logout', 'response_types_supported' => ['code'], 'grant_types_supported' => ['authorization_code', 'client_credentials'], 'subject_types_supported' => ['public'], 'id_token_signing_alg_values_supported' => ['RS256'], 'token_endpoint_auth_methods_supported' => ['none', 'client_secret_post', 'client_secret_basic'], 'code_challenge_methods_supported' => ['S256'], 'scopes_supported' => ['openid', 'profile', 'email', 'portal_role', 'portal_data.read'], 'claims_supported' => ['sub', 'name', 'preferred_username', 'email', 'email_verified', 'portal_teacher_id', 'portal_role', 'client_id']]);
     }
 
     public function jwks(): JsonResponse
@@ -55,6 +55,10 @@ class OidcController extends Controller
 
     public function token(Request $request): JsonResponse
     {
+        if ($request->input('grant_type') === 'client_credentials') {
+            return $this->clientCredentialsToken($request);
+        }
+
         $data = $request->validate(['grant_type' => ['required', 'in:authorization_code'], 'client_id' => ['required', 'string'], 'code' => ['required', 'string'], 'redirect_uri' => ['required', 'url'], 'code_verifier' => ['required', 'string', 'min:43', 'max:128']]);
         $code = OidcPayload::query()->whereKey(hash('sha256', $data['code']))->where('kind', 'AuthorizationCode')->whereNull('consumedAt')->where('expiresAt', '>', now())->first();
         if (! $code) {
@@ -80,6 +84,40 @@ class OidcController extends Controller
         $idToken = $this->tokens->sign([...$base, 'nonce' => $payload['nonce'], ...$this->claims($account, $payload['role'])]);
 
         return response()->json(['access_token' => $accessToken, 'token_type' => 'Bearer', 'expires_in' => config('oidc.access_token_ttl'), 'scope' => implode(' ', $payload['scope']), 'id_token' => $idToken])->header('Cache-Control', 'no-store')->header('Pragma', 'no-cache');
+    }
+
+    private function clientCredentialsToken(Request $request): JsonResponse
+    {
+        $basicUser = $request->getUser();
+        $basicSecret = $request->getPassword();
+        $data = $request->validate([
+            'grant_type' => ['required', 'in:client_credentials'],
+            'client_id' => [$basicUser ? 'nullable' : 'required', 'nullable', 'string'],
+            'client_secret' => [$basicSecret ? 'nullable' : 'required', 'nullable', 'string'],
+            'scope' => ['nullable', 'string'],
+        ]);
+        $clientId = (string) ($basicUser ?: ($data['client_id'] ?? ''));
+        $secret = (string) ($basicSecret ?: ($data['client_secret'] ?? ''));
+        $client = ApplicationClient::query()->where('clientId', $clientId)->where('clientType', 'SERVICE')->where('status', 'ACTIVE')->first();
+        if (! $client || ! $client->clientSecretHash || ! password_verify($secret, $client->clientSecretHash) || ! in_array('client_credentials', $client->allowedGrantTypes ?? [], true)) {
+            return response()->json(['error' => 'invalid_client', 'error_description' => 'Kredensial aplikasi tidak valid.'], 401)
+                ->header('WWW-Authenticate', 'Basic realm="Portal Data OIDC"')->header('Cache-Control', 'no-store');
+        }
+        $requested = array_values(array_unique(array_filter(explode(' ', trim((string) ($data['scope'] ?? 'portal_data.read'))))));
+        if (! $requested || array_diff($requested, $client->allowedScopes ?? [])) {
+            return $this->oauthError('invalid_scope', 'Scope aplikasi tidak diizinkan.');
+        }
+        $now = time();
+        $ttl = max(60, min((int) $client->accessTokenLifetime, 3600));
+        $accessToken = $this->tokens->sign([
+            'iss' => config('oidc.issuer'), 'sub' => $client->clientId, 'aud' => $client->clientId,
+            'client_id' => $client->clientId, 'iat' => $now, 'exp' => $now + $ttl,
+            'jti' => (string) Str::uuid(), 'scope' => implode(' ', $requested),
+            'token_use' => 'access', 'grant_type' => 'client_credentials',
+        ]);
+
+        return response()->json(['access_token' => $accessToken, 'token_type' => 'Bearer', 'expires_in' => $ttl, 'scope' => implode(' ', $requested)])
+            ->header('Cache-Control', 'no-store')->header('Pragma', 'no-cache');
     }
 
     public function userinfo(Request $request): JsonResponse

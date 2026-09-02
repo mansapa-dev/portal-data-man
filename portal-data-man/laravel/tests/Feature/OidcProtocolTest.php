@@ -68,6 +68,25 @@ class OidcProtocolTest extends TestCase
         $this->actingAs($account, 'teacher')->get('/oidc/authorize?'.$query)->assertStatus(400);
     }
 
+    public function test_service_client_credentials_returns_scoped_access_token(): void
+    {
+        $secret = 'service-secret-for-test-2026';
+        $client = ApplicationClient::query()->create([
+            'name' => 'CBT Sync', 'slug' => 'cbt-sync', 'clientId' => 'portal_cbt_sync_test',
+            'clientSecretHash' => password_hash($secret, PASSWORD_DEFAULT), 'clientType' => 'SERVICE',
+            'status' => 'ACTIVE', 'redirectUris' => [], 'postLogoutRedirectUris' => [], 'allowedOrigins' => [],
+            'allowedScopes' => ['portal_data.read'], 'allowedGrantTypes' => ['client_credentials'],
+        ]);
+
+        $response = $this->postJson('/oidc/token', [
+            'grant_type' => 'client_credentials', 'client_id' => $client->clientId,
+            'client_secret' => $secret, 'scope' => 'portal_data.read',
+        ])->assertOk()->assertJsonPath('token_type', 'Bearer')->assertJsonPath('scope', 'portal_data.read');
+
+        $this->assertNotEmpty($response->json('access_token'));
+        $this->postJson('/oidc/token', ['grant_type' => 'client_credentials', 'client_id' => $client->clientId, 'client_secret' => 'wrong', 'scope' => 'portal_data.read'])->assertStatus(401)->assertJsonPath('error', 'invalid_client');
+    }
+
     private function createTables(): void
     {
         Schema::create('Teacher', function (Blueprint $t) {

@@ -15,7 +15,7 @@ Browser siswa/guru/admin
         +--> cbt.example.sch.id -> /home/CPANEL_USER/apps/cbt-man1/public
         |                              |
         |                              +--> MySQL database CBT
-        |                              +--> HTTPS backend request + API key
+        |                              +--> HTTPS backend request + OAuth service token
         |
         +--> sipadu.example.sch.id -> /home/CPANEL_USER/apps/portal-data/laravel/public
                                            |
@@ -144,21 +144,13 @@ Upload folder `vendor/`, tetapi jangan upload `.env` lokal, log lokal, atau file
 
 ## 7. Generate secret
 
-Generate nilai berbeda untuk `APP_KEY`, setup token, dan API key. Contoh melalui PHP lokal:
+Generate nilai berbeda untuk `APP_KEY` dan setup token. Client Secret sinkronisasi dibuat melalui registrasi aplikasi Portal Data, bukan melalui `.env` Portal.
 
 ```bash
 php -r "echo bin2hex(random_bytes(32)), PHP_EOL;"
 ```
 
-Gunakan satu nilai acak yang sama hanya untuk pasangan berikut:
-
-```text
-Portal Data CBT_INTEGRATION_API_KEY
-                =
-CBT PORTAL_DATA_API_KEY
-```
-
-Jangan menggunakan password database sebagai integration key.
+Setelah Portal aktif, buka **Aplikasi & Integrasi**, buat aplikasi **Sinkronisasi CBT**, lalu simpan Client ID dan Client Secret yang ditampilkan satu kali.
 
 ## 8. Environment Portal Data
 
@@ -191,7 +183,6 @@ QUEUE_CONNECTION=sync
 FILESYSTEM_DISK=local
 
 OIDC_ISSUER=https://sipadu.example.sch.id/oidc
-CBT_INTEGRATION_API_KEY=RANDOM_SHARED_INTEGRATION_KEY
 ```
 
 Kemudian:
@@ -229,7 +220,8 @@ DB_USERNAME=CPANEL_USER_cbt_user
 DB_PASSWORD=PASSWORD_DATABASE_CBT
 
 PORTAL_DATA_BASE_URL=https://sipadu.example.sch.id
-PORTAL_DATA_API_KEY=RANDOM_SHARED_INTEGRATION_KEY
+PORTAL_DATA_SYNC_CLIENT_ID=CLIENT_ID_DARI_PORTAL
+PORTAL_DATA_SYNC_CLIENT_SECRET=CLIENT_SECRET_DARI_PORTAL
 PORTAL_DATA_TIMEOUT=5
 PORTAL_DATA_VERIFY_SSL=true
 
@@ -317,16 +309,16 @@ curl -i https://sipadu.example.sch.id/health
 curl -i https://cbt.example.sch.id/health
 ```
 
-Endpoint integration tanpa key harus menghasilkan `401`:
+Endpoint integration tanpa bearer token harus menghasilkan `401`:
 
 ```bash
 curl -i https://sipadu.example.sch.id/api/v1/integration/cbt/teachers
 ```
 
-Dengan key harus menghasilkan `200` dan tidak mengandung password:
+CBT memperoleh bearer token otomatis melalui Client Credentials. Untuk pengujian manual ikuti `docs/portal-data-integration.md`; endpoint dengan token valid harus menghasilkan `200` dan tidak mengandung password.
 
 ```bash
-curl -H "X-API-Key: RANDOM_SHARED_INTEGRATION_KEY" \
+curl -H "Authorization: Bearer ACCESS_TOKEN_SERVICE" \
   "https://sipadu.example.sch.id/api/v1/integration/cbt/teachers?page=1&per_page=2"
 ```
 
@@ -336,7 +328,7 @@ Checklist:
 - HTTP dialihkan ke HTTPS.
 - Response cookie memiliki `Secure`, `HttpOnly`, dan `SameSite`.
 - `/health` CBT melaporkan database `ok`.
-- API Portal tanpa key ditolak.
+- API Portal tanpa bearer token ditolak.
 - Sinkronisasi kelas, siswa, dan guru menghasilkan summary.
 - Login guru memakai NIP dan hanya melihat ujian assigned.
 - Login siswa mempertahankan leading zero NISN.
@@ -392,7 +384,7 @@ Untuk update tanpa downtime panjang, upload release ke folder baru, salin `.env`
 - `500` setelah upload: cek versi PHP, `vendor`, permission storage, `.env`, dan log aplikasi.
 - `419 CSRF`: pastikan domain cookie benar, HTTPS aktif, dan client mengambil CSRF dengan cookie yang sama.
 - Guru tidak dapat login: sync guru, pastikan NIP tidak kosong, akun CBT menggunakan NIP yang sama, `teacher_id` terhubung, dan status keduanya aktif.
-- Sync `401`: samakan `CBT_INTEGRATION_API_KEY` Portal dengan `PORTAL_DATA_API_KEY` CBT, lalu `php artisan config:cache` ulang.
+- Sync `401`: pastikan aplikasi service aktif, Client ID/Secret CBT benar, secret belum dirotasi, dan key OIDC Portal tersedia.
 - Sync timeout: periksa DNS/SSL/firewall outbound hosting; active exam tetap memakai database CBT lokal.
 - Asset Portal Data kosong: build lokal dan upload `public/build`, lalu periksa `manifest.json`.
 - PIN tampil `BELUM DISET`: atur `APP_KEY` dan set ulang PIN dari admin CBT.

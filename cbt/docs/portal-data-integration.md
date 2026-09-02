@@ -1,29 +1,26 @@
 # Integrasi CBT dengan Portal Data
 
-Dokumen ini menjelaskan koneksi CBT PHP Native ke Portal Data Laravel. CBT mengambil data guru, siswa, kelas, tahun ajaran, dan semester melalui HTTP API backend. Tidak ada Google Apps Script, Supabase, atau akses langsung ke database Portal Data.
+CBT mengambil guru, siswa, kelas, tahun ajaran, dan semester melalui HTTP API backend. Portal Data tetap menjadi sumber kebenaran; CBT menyimpan snapshot lokal agar ujian tetap berjalan ketika Portal sementara tidak tersedia.
 
-## Konfigurasi
+## Registrasi client sinkronisasi
 
-Portal Data (`.env`):
+Di Portal Data buka **Aplikasi & Integrasi → Tambah aplikasi**, lalu pilih **Sinkronisasi CBT — Client Credentials**. Isi nama dan slug, kemudian simpan. Portal menampilkan Client ID dan Client Secret satu kali. Portal hanya menyimpan hash secret di database.
 
-```env
-CBT_INTEGRATION_API_KEY=RANDOM_SHARED_INTEGRATION_KEY
-```
-
-CBT (`.env`):
+Masukkan keduanya hanya pada `.env` CBT:
 
 ```env
 PORTAL_DATA_BASE_URL=https://sipadu.example.sch.id
-PORTAL_DATA_API_KEY=RANDOM_SHARED_INTEGRATION_KEY
-PORTAL_DATA_TIMEOUT=5
+PORTAL_DATA_SYNC_CLIENT_ID=CLIENT_ID_DARI_PORTAL
+PORTAL_DATA_SYNC_CLIENT_SECRET=CLIENT_SECRET_DARI_PORTAL
+PORTAL_DATA_TIMEOUT=15
 PORTAL_DATA_VERIFY_SSL=true
 ```
 
-Nilai kedua key harus sama. Key hanya disimpan di server dan tidak boleh dimasukkan ke JavaScript, HTML, atau URL.
+Portal Data tidak membutuhkan API key di `.env`. CBT menukar kredensial tersebut dengan access token singkat melalui `POST /oidc/token`, grant `client_credentials`, dan scope `portal_data.read`.
 
-## Daftar endpoint
+## Endpoint data
 
-Semua endpoint berikut berada di Portal Data dan dilindungi middleware `cbt.integration`:
+Semua endpoint dilindungi bearer access token service:
 
 ```text
 GET /api/v1/integration/cbt/academic-years
@@ -33,57 +30,36 @@ GET /api/v1/integration/cbt/teachers?page=1&per_page=100
 GET /api/v1/integration/cbt/classes?page=1&per_page=100
 ```
 
-CBT menyimpan snapshot lokal untuk tetap dapat menjalankan ujian ketika Portal Data sedang tidak tersedia. Portal Data tetap menjadi sumber kebenaran untuk identitas guru, siswa, kelas, tahun ajaran, dan semester.
+## Pengujian koneksi
+
+Minta token tanpa menampilkan secret di command history:
+
+```bash
+read -rsp "Client secret: " PORTAL_CLIENT_SECRET; echo
+TOKEN_RESPONSE=$(curl -sS -X POST https://sipadu.example.sch.id/oidc/token \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data-urlencode "grant_type=client_credentials" \
+  --data-urlencode "client_id=CLIENT_ID_DARI_PORTAL" \
+  --data-urlencode "client_secret=${PORTAL_CLIENT_SECRET}" \
+  --data-urlencode "scope=portal_data.read")
+unset PORTAL_CLIENT_SECRET
+```
+
+CBT melakukan pertukaran token dan refresh otomatis; administrator tidak perlu menjalankan curl dalam penggunaan normal.
 
 ## Urutan sinkronisasi
 
-1. Pastikan tahun ajaran dan semester aktif sudah dibuat di Portal Data.
-2. Import atau perbarui data guru pada menu **Data Guru**.
-3. Pastikan kelas dan enrollment siswa sudah benar.
-4. Login sebagai admin CBT.
-5. Jalankan sinkronisasi kelas, siswa, lalu guru dari menu admin.
-6. Buat ujian menggunakan kelas, tahun ajaran, semester, tanggal, jam mulai, dan jam selesai.
-7. Buat penugasan ujian kepada guru yang sudah tersinkronisasi.
+1. Tahun ajaran.
+2. Semester.
+3. Kelas dan tingkat.
+4. Siswa.
+5. Guru.
 
-Setelah seluruh halaman berhasil diambil tanpa error, referensi lokal yang tidak lagi muncul pada daftar aktif Portal akan dinonaktifkan di CBT. Rekonsiliasi ini tidak dijalankan pada sync berstatus `PARTIAL` atau `FAILED`, sehingga gangguan API tidak menonaktifkan cache yang masih valid.
+Referensi lokal yang tidak lagi muncul akan dinonaktifkan hanya setelah satu jenis sinkronisasi selesai tanpa kegagalan. Riwayat tersedia melalui `GET /api/admin/portal-data/sync/status?limit=20`.
 
-Riwayat sinkronisasi dapat dibaca admin melalui `GET /api/admin/portal-data/sync/status?limit=20`.
+## SSO guru
 
-## Pengujian koneksi
+Login guru memakai aplikasi terpisah bertipe **SSO Guru — Authorization Code + PKCE**. Daftarkan redirect URI `https://cbt.example.sch.id/auth/sso/callback`, post logout URI `https://cbt.example.sch.id/guru`, lalu isi `PORTAL_DATA_OIDC_CLIENT_ID` di CBT dan berikan akses kepada guru.
 
-Tanpa key harus ditolak:
-
-```bash
-curl -i https://sipadu.example.sch.id/api/v1/integration/cbt/teachers
-```
-
-Dengan key harus berhasil:
-
-```bash
-curl -i \
-  -H "X-API-Key: RANDOM_SHARED_INTEGRATION_KEY" \
-  "https://sipadu.example.sch.id/api/v1/integration/cbt/teachers?page=1&per_page=2"
-```
-
-Respons sukses menggunakan format API Portal Data dan tidak boleh mengandung password atau token akun guru.
-
-## Registrasi SSO guru
-
-Sinkronisasi referensi memakai API key server-to-server, sedangkan login guru memakai OIDC Authorization Code + PKCE. Daftarkan CBT pada menu **Aplikasi SSO** Portal Data:
-
-```text
-Nama aplikasi: CBT MAN 1 Palembang
-Redirect URI: https://cbt.example.sch.id/auth/sso/callback
-Post logout redirect URI: https://cbt.example.sch.id/guru
-Scope: openid profile email portal_role
-```
-
-Isi `PORTAL_DATA_OIDC_ISSUER`, `PORTAL_DATA_OIDC_CLIENT_ID`, dan `PORTAL_DATA_OIDC_REDIRECT_URI` pada `.env` CBT. Berikan akses aplikasi kepada guru di Portal Data. Guru yang valid dan sudah tersinkron akan dihubungkan otomatis ke akun teknis CBT saat login pertama; password Portal tidak pernah diterima atau disimpan CBT.
-
-## Keamanan
-
-- Gunakan HTTPS pada kedua domain.
-- Gunakan key acak yang berbeda dari password database.
-- Jalankan `php artisan config:cache` setelah mengubah `.env` Portal Data.
-- Jangan commit `.env`, API key, export kredensial, atau file seed admin.
-- Jika key bocor, ganti nilainya di kedua aplikasi lalu bersihkan cache konfigurasi.
+Jangan memakai client sinkronisasi sebagai client SSO. Jangan memasukkan Client Secret ke JavaScript, HTML, URL, Git, screenshot, atau tiket support. Bila bocor, gunakan tombol **Buat ulang client secret** pada detail aplikasi; secret lama langsung tidak berlaku.

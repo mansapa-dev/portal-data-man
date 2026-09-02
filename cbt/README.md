@@ -22,7 +22,7 @@ CBT berjalan dengan PHP Native 8.2+, PDO, dan MySQL/MariaDB. `index.html` dipert
 
 ## Portal Data
 
-CBT memanggil Portal Data hanya dari backend menggunakan bearer/API key. Contract default:
+CBT memanggil Portal Data hanya dari backend menggunakan access token OAuth Client Credentials. Contract default:
 
 - `GET /api/v1/integration/cbt/academic-years`
 - `GET /api/v1/integration/cbt/semesters?academic_year_id=<portal_id>`
@@ -32,7 +32,7 @@ CBT memanggil Portal Data hanya dari backend menggunakan bearer/API key. Contrac
 
 Endpoint sync admin: `POST /api/admin/portal-data/sync/students`, `/teachers`, atau `/classes`. Sinkronisasi bersifat upsert berdasarkan ID Portal; NISN disimpan sebagai string. Saat Portal Data down, attempt aktif tetap memakai cache dan snapshot lokal CBT.
 
-Portal Data harus mengisi `CBT_INTEGRATION_API_KEY` dengan nilai yang sama seperti `PORTAL_DATA_API_KEY` di CBT. Key hanya dikirim backend-to-backend melalui header dan tidak masuk ke aset browser.
+Daftarkan aplikasi bertipe **Sinkronisasi CBT** di Portal Data. Simpan Client ID dan Client Secret yang tampil satu kali sebagai `PORTAL_DATA_SYNC_CLIENT_ID` dan `PORTAL_DATA_SYNC_CLIENT_SECRET` di `.env` CBT. Portal menyimpan hash secret di database; tidak ada API key yang perlu disamakan antar-file `.env`.
 
 ## Portal Guru
 

@@ -2,7 +2,7 @@
 
 use App\Http\Middleware\RequireAdminRole;
 use App\Http\Middleware\RequirePortalSession;
-use App\Http\Middleware\RequireCbtIntegrationKey;
+use App\Http\Middleware\RequireCbtServiceToken;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -15,7 +15,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->encryptCookies(except: ['portal_csrf', 'portal_teacher_csrf']);
-        $middleware->alias(['role' => RequireAdminRole::class, 'portal.session' => RequirePortalSession::class, 'cbt.integration' => RequireCbtIntegrationKey::class]);
+        $middleware->alias(['role' => RequireAdminRole::class, 'portal.session' => RequirePortalSession::class, 'cbt.integration' => RequireCbtServiceToken::class]);
         $middleware->validateCsrfTokens(except: ['oidc/token', 'oidc/userinfo', 'oidc/logout']);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
