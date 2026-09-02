@@ -51,4 +51,18 @@ class TeacherImportTest extends TestCase
 
         app(TeacherImportNormalizer::class)->normalize(['Nama Lengkap' => 'Guru Tanpa Identifier']);
     }
+
+    public function test_unresolved_excel_formulas_in_optional_contacts_are_ignored(): void
+    {
+        $data = app(TeacherImportNormalizer::class)->normalize([
+            'Nama Lengkap' => 'Guru Formula',
+            'NIP' => '198001012010011002',
+            'Email' => '=LOWER(A2)&"@example.sch.id"',
+            'Telepon' => '="08"&RANDBETWEEN(1000000000,9999999999)',
+        ]);
+
+        $this->assertNull($data['email']);
+        $this->assertNull($data['phone']);
+        $this->assertCount(2, $data['warnings']);
+    }
 }

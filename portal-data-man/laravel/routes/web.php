@@ -133,6 +133,7 @@ Route::prefix('api/v1')->group(function (): void {
             Route::post('sso/applications', [SsoApplicationController::class, 'store']);
             Route::get('sso/applications/{applicationClient}', [SsoApplicationController::class, 'show']);
             Route::patch('sso/applications/{applicationClient}', [SsoApplicationController::class, 'update']);
+            Route::delete('sso/applications/{applicationClient}', [SsoApplicationController::class, 'destroy']);
             Route::post('sso/applications/{applicationClient}/rotate-secret', [SsoApplicationController::class, 'rotateSecret']);
             Route::post('sso/applications/{applicationClient}/access', [SsoApplicationController::class, 'grant']);
             Route::post('sso/applications/{applicationClient}/access/{teacherPublicId}/revoke', [SsoApplicationController::class, 'revoke']);

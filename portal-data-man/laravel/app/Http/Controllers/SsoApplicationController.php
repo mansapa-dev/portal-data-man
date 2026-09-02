@@ -9,6 +9,7 @@ use App\Services\AuditService;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -57,6 +58,19 @@ class SsoApplicationController extends Controller
         $this->audit->write($request, 'SSO_APPLICATION_UPDATED', 'ApplicationClient', $applicationClient->publicId, $old, $applicationClient);
 
         return ApiResponse::success($applicationClient->fresh(), 'Aplikasi SSO berhasil diperbarui.');
+    }
+
+    public function destroy(Request $request, ApplicationClient $applicationClient): JsonResponse
+    {
+        DB::transaction(function () use ($request, $applicationClient): void {
+            $snapshot = $applicationClient->replicate();
+            $accessCount = $applicationClient->access()->count();
+            $applicationClient->access()->delete();
+            $applicationClient->delete();
+            $this->audit->write($request, 'SSO_APPLICATION_DELETED', 'ApplicationClient', $applicationClient->publicId, $snapshot, ['revokedAccessCount' => $accessCount]);
+        });
+
+        return response()->json(null, 204);
     }
 
     public function grant(Request $request, ApplicationClient $applicationClient): JsonResponse

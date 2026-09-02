@@ -4,9 +4,12 @@ namespace App\Services;
 
 use App\Models\ImportBatch;
 use App\Models\Teacher;
+use App\Models\TeacherAccount;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 use OpenSpout\Reader\XLSX\Reader;
 use RuntimeException;
@@ -66,7 +69,7 @@ class TeacherImportService
         abort_unless($batch->status === 'READY', 409, 'Batch sudah atau belum dapat diproses.');
         $claimed = ImportBatch::query()->whereKey($batch->id)->where('status', 'READY')->update(['status' => 'PROCESSING', 'startedAt' => now()]);
         abort_unless($claimed === 1, 409, 'Batch sedang atau sudah diproses.');
-        $counts = ['insertedRows' => 0, 'updatedRows' => 0, 'skippedRows' => 0, 'commitFailedRows' => 0];
+        $counts = ['insertedRows' => 0, 'updatedRows' => 0, 'skippedRows' => 0, 'commitFailedRows' => 0, 'accountsCreated' => 0];
 
         try {
             $batch->rows()->whereNotNull('normalizedData')->orderBy('rowNumber')->chunkById((int) config('imports.chunk_size'), function ($rows) use (&$counts): void {
@@ -96,8 +99,12 @@ class TeacherImportService
                                 }
                                 $status = $changed ? 'UPDATED' : 'SKIPPED';
                             } else {
-                                Teacher::query()->create($values);
+                                $existing = Teacher::query()->create($values);
                                 $status = 'INSERTED';
+                            }
+                            if ($existing->status === 'ACTIVE' && ! $existing->account()->exists()) {
+                                $this->provisionAccount($existing);
+                                $counts['accountsCreated']++;
                             }
                             $counts[strtolower($status).'Rows']++;
                             $row->update(['status' => $status, 'identifier' => $identifiers->first()]);
@@ -114,6 +121,7 @@ class TeacherImportService
                 'insertedRows' => $counts['insertedRows'], 'updatedRows' => $counts['updatedRows'], 'skippedRows' => $counts['skippedRows'],
                 'failedRows' => $batch->failedRows + $counts['commitFailedRows'],
                 'completedAt' => now(),
+                'summary' => [...($batch->summary ?? []), 'accountsCreated' => $counts['accountsCreated']],
             ]);
             $batch->refresh();
             if ($batch->failedRows > 0) {
@@ -151,6 +159,7 @@ class TeacherImportService
         $reader = new Reader;
         $rows = [];
         $headers = null;
+        $seenIdentifiers = [];
 
         try {
             $reader->open($path);
@@ -173,6 +182,21 @@ class TeacherImportService
                     $original = array_combine(TeacherImportNormalizer::HEADERS, array_pad(array_slice($values, 0, count(TeacherImportNormalizer::HEADERS)), count(TeacherImportNormalizer::HEADERS), null));
                     try {
                         $normalized = $this->normalizer->normalize($original);
+                        foreach (['nip', 'nuptk', 'employeeNumber', 'email'] as $field) {
+                            $value = $normalized[$field];
+                            if (! filled($value)) {
+                                continue;
+                            }
+                            if (isset($seenIdentifiers[$field][$value])) {
+                                $normalized[$field] = null;
+                                $normalized['warnings'][] = strtoupper($field).' duplikat dengan baris '.$seenIdentifiers[$field][$value].' dan diabaikan pada baris ini.';
+                            } else {
+                                $seenIdentifiers[$field][$value] = $number;
+                            }
+                        }
+                        if (! collect(['nip', 'nuptk', 'employeeNumber', 'email'])->contains(fn ($field) => filled($normalized[$field]))) {
+                            throw new InvalidArgumentException('Semua identifier merupakan duplikat baris sebelumnya.');
+                        }
                         $rows[] = ['rowNumber' => $number, 'identifier' => collect([$normalized['nip'], $normalized['nuptk'], $normalized['employeeNumber'], $normalized['email']])->filter()->first() ?? null, 'status' => $normalized['warnings'] ? 'WARNING' : 'VALID', 'messages' => $normalized['warnings'], 'originalData' => $original, 'normalizedData' => $normalized];
                     } catch (InvalidArgumentException $error) {
                         $rows[] = ['rowNumber' => $number, 'identifier' => null, 'status' => 'FAILED', 'messages' => [$error->getMessage()], 'originalData' => $original, 'normalizedData' => null];
@@ -194,5 +218,18 @@ class TeacherImportService
         $summary = ['totalRows' => count($rows), 'validRows' => count(array_filter($rows, fn ($row) => $row['status'] === 'VALID')), 'warningRows' => count(array_filter($rows, fn ($row) => $row['status'] === 'WARNING')), 'failedRows' => count(array_filter($rows, fn ($row) => $row['status'] === 'FAILED'))];
 
         return [$rows, $summary];
+    }
+
+    private function provisionAccount(Teacher $teacher): TeacherAccount
+    {
+        $username = collect([$teacher->nip, $teacher->nuptk, $teacher->employeeNumber])
+            ->map(fn ($value) => strtolower(trim((string) $value)))
+            ->first(fn ($value) => $value !== '' && ! TeacherAccount::query()->where('username', $value)->exists());
+        if (! $username) {
+            throw new InvalidArgumentException('Username akun tidak tersedia untuk guru ini.');
+        }
+        $password = 'Guru#'.Str::upper(Str::random(8)).random_int(10, 99);
+
+        return $teacher->account()->create(['username' => $username, 'email' => $teacher->email, 'passwordHash' => Hash::make($password), 'initialPassword' => $password, 'status' => 'ACTIVE', 'mustChangePassword' => true, 'activatedAt' => now()]);
     }
 }

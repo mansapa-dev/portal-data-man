@@ -41,6 +41,15 @@ class StudentApiTest extends TestCase
             $table->dateTime('updatedAt');
             $table->dateTime('deletedAt')->nullable();
         });
+        Schema::create('ClassEnrollment', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('studentId');
+            $table->unsignedBigInteger('schoolClassId')->nullable();
+            $table->string('status')->default('ACTIVE');
+            $table->dateTime('enrolledAt')->nullable();
+            $table->dateTime('createdAt')->nullable();
+            $table->dateTime('updatedAt')->nullable();
+        });
         Schema::create('AuditLog', function (Blueprint $table) {
             $table->id();
             $table->string('publicId', 26)->unique();
@@ -63,6 +72,7 @@ class StudentApiTest extends TestCase
     protected function tearDown(): void
     {
         Schema::dropIfExists('AuditLog');
+        Schema::dropIfExists('ClassEnrollment');
         Schema::dropIfExists('Student');
         Schema::dropIfExists('AdminUser');
         parent::tearDown();

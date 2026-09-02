@@ -20,6 +20,15 @@ class TeacherImportNormalizer
         $phone = $this->clean($values['Telepon'] ?? null);
         $address = $this->clean($values['Alamat'] ?? null);
 
+        if (str_starts_with($email, '=')) {
+            $warnings[] = 'Formula email tidak memiliki hasil tersimpan dan diabaikan.';
+            $email = '';
+        }
+        if (str_starts_with($phone, '=')) {
+            $warnings[] = 'Formula telepon tidak memiliki hasil tersimpan dan diabaikan.';
+            $phone = '';
+        }
+
         $fullName = preg_replace('/\s+/u', ' ', trim($this->text($values['Nama Lengkap'] ?? null)));
         if ($fullName === '') {
             throw new InvalidArgumentException('Nama guru wajib diisi.');
