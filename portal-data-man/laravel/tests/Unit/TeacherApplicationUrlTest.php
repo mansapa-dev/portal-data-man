@@ -18,12 +18,14 @@ class TeacherApplicationUrlTest extends TestCase
         $this->assertNull($method->invoke($controller, ['javascript:alert(1)']));
     }
 
-    public function test_cbt_callback_is_converted_to_sso_start_url(): void
+    public function test_known_apps_use_their_existing_sso_start_endpoint(): void
     {
         $controller = (new ReflectionClass(TeacherSelfController::class))->newInstanceWithoutConstructor();
         $method = (new ReflectionClass(TeacherSelfController::class))->getMethod('applicationLaunchUrl');
 
-        $this->assertSame('https://cbt.example.sch.id/auth/sso/start', $method->invoke($controller, null, ['https://cbt.example.sch.id/auth/sso/callback']));
+        $this->assertSame('https://cbt.example.sch.id/auth/sso/start', $method->invoke($controller, null, ['https://cbt.example.sch.id/auth/sso/callback'], 'cbt-man-1'));
+        $this->assertSame('https://agen.rdmman1plg.id/auth/sso/redirect', $method->invoke($controller, null, ['https://agen.rdmman1plg.id/auth/sso/callback'], 'junkes'));
         $this->assertSame('https://app.example.sch.id/login/sso', $method->invoke($controller, 'https://app.example.sch.id/login/sso', ['https://app.example.sch.id/callback']));
+        $this->assertSame('https://unknown.example.sch.id', $method->invoke($controller, null, ['https://unknown.example.sch.id/auth/sso/callback'], 'unknown'));
     }
 }

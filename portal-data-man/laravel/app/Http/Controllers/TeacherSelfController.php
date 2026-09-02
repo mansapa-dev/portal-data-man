@@ -81,7 +81,7 @@ class TeacherSelfController extends Controller
                     'slug' => $application->slug,
                     'description' => $application->description,
                     'role' => $item->role,
-                    'launchUrl' => $this->applicationLaunchUrl($application->launchUrl, $application->redirectUris),
+                    'launchUrl' => $this->applicationLaunchUrl($application->launchUrl, $application->redirectUris, $application->slug),
                 ];
             })
             ->values();
@@ -138,14 +138,21 @@ class TeacherSelfController extends Controller
         return null;
     }
 
-    private function applicationLaunchUrl(?string $configured, array $redirectUris): ?string
+    private function applicationLaunchUrl(?string $configured, array $redirectUris, string $slug = ''): ?string
     {
         if ($configured && filter_var($configured, FILTER_VALIDATE_URL)) {
             return $configured;
         }
+        $normalizedSlug = strtolower($slug);
         foreach ($redirectUris as $uri) {
             if (is_string($uri) && str_ends_with(parse_url($uri, PHP_URL_PATH) ?: '', '/auth/sso/callback')) {
-                return substr($uri, 0, -strlen('/callback')).'/start';
+                $ssoBase = substr($uri, 0, -strlen('/callback'));
+                if (str_contains($normalizedSlug, 'jurnal') || str_contains($normalizedSlug, 'junkes') || str_contains($normalizedSlug, 'agen')) {
+                    return $ssoBase.'/redirect';
+                }
+                if (str_contains($normalizedSlug, 'cbt')) {
+                    return $ssoBase.'/start';
+                }
             }
         }
 
