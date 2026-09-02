@@ -11,3 +11,4 @@ storage/exports/*
 storage/temporary/*
 !storage/**/.gitkeep
 coverage/
+cbt/database/seed-admin.local.sql

@@ -108,6 +108,26 @@ Simpan `client_id` dan `client_secret` melalui `.env` aplikasi agen, bukan di Gi
 
 Link aktivasi akun guru tetap berlaku. Saat akun dibuat, Portal Data menetapkan password awal acak yang hanya ditampilkan sekali pada layar/export admin; password disimpan dalam bentuk hash dan wajib diganti saat login pertama. Perlakukan file export username/password sebagai data rahasia dan hapus setelah dibagikan kepada guru.
 
+## Integrasi CBT (API key)
+
+CBT saat ini tidak menggunakan OIDC, sehingga tidak perlu didaftarkan sebagai aplikasi SSO atau diberi redirect URI. CBT mengambil data referensi melalui URI berikut:
+
+```text
+GET /api/v1/integration/cbt/students?page=1&per_page=100
+GET /api/v1/integration/cbt/teachers?page=1&per_page=100
+GET /api/v1/integration/cbt/classes?page=1&per_page=100
+```
+
+Dengan domain production (`https://sipadu.example.sch.id`), URI lengkapnya adalah:
+
+```text
+https://sipadu.example.sch.id/api/v1/integration/cbt/students
+https://sipadu.example.sch.id/api/v1/integration/cbt/teachers
+https://sipadu.example.sch.id/api/v1/integration/cbt/classes
+```
+
+Semua URI tersebut wajib dipanggil dari backend CBT dengan header `X-API-Key` (atau `Authorization: Bearer`) yang sama dengan `CBT_INTEGRATION_API_KEY`. Jangan menaruh key di JavaScript/browser. Request tanpa key harus menghasilkan `401`, sedangkan key yang benar menghasilkan `200`.
+
 ### Urutan update aman
 
 Sebelum update yang mengandung migration:
