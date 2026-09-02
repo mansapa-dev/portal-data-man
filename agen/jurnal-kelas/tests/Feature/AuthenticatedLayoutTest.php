@@ -26,6 +26,7 @@ final class AuthenticatedLayoutTest extends TestCase
         self::assertStringContainsString('class="active" href="/journals"', $html);
         self::assertStringContainsString('class="page-topbar"', $html);
         self::assertStringContainsString('class="page-nav-toggle"', $html);
+        self::assertSame(6, substr_count($html, '<svg viewBox="0 0 24 24"'));
         self::assertStringContainsString('Guru Uji', $html);
         self::assertStringNotContainsString('href="/old"', $html);
     }
