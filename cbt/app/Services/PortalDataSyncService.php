@@ -85,5 +85,5 @@ final class PortalDataSyncService
   $sql="UPDATE {$table} SET {$statusColumn}=:inactive WHERE (last_synced_at IS NULL OR last_synced_at < (SELECT started_at FROM portal_sync_logs WHERE id=:log)) AND {$statusColumn}<>:inactive_check";
   $statement=$this->db->pdo()->prepare($sql);$statement->execute(['inactive'=>$inactiveValue,'inactive_check'=>$inactiveValue,'log'=>$logId]);return$statement->rowCount();
  }
- private function finish(int$id,string$status,array$s,?string$error):void{$q=$this->db->pdo()->prepare('UPDATE portal_sync_logs SET finished_at=UTC_TIMESTAMP(3),status=:status,total=:total,inserted_count=:inserted,updated_count=:updated,unchanged_count=:unchanged,failed_count=:failed,error_summary=:error WHERE id=:id');$q->execute($s+['id'=>$id,'status'=>$status,'error'=>$error]);}
+ private function finish(int$id,string$status,array$s,?string$error):void{$q=$this->db->pdo()->prepare('UPDATE portal_sync_logs SET finished_at=UTC_TIMESTAMP(3),status=:status,total=:total,inserted_count=:inserted,updated_count=:updated,unchanged_count=:unchanged,failed_count=:failed,error_summary=:error WHERE id=:id');$q->execute(['id'=>$id,'status'=>$status,'total'=>(int)($s['total']??0),'inserted'=>(int)($s['inserted']??0),'updated'=>(int)($s['updated']??0),'unchanged'=>(int)($s['unchanged']??0),'failed'=>(int)($s['failed']??0),'error'=>$error]);}
 }
