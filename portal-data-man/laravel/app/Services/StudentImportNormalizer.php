@@ -23,7 +23,8 @@ class StudentImportNormalizer
             throw new InvalidArgumentException('Nama siswa wajib diisi.');
         }
         $rawClass = strtoupper((string) preg_replace('/XlI/i', 'XII', trim($this->text($values['Kelas'] ?? null))));
-        if (! preg_match('/^(11|12)\s*-\s*(XI|XII)\.(\d+)$/i', $rawClass, $match)) {
+        if (! preg_match('/^(10|11|12)\s*-\s*(X|XI|XII)\.(\d+)$/i', $rawClass, $match)
+            || ['10' => 'X', '11' => 'XI', '12' => 'XII'][$match[1]] !== strtoupper($match[2])) {
             throw new InvalidArgumentException('Format kelas tidak valid.');
         }
         $phoneDigits = preg_replace('/\D/', '', $this->text($values['No. Telepon Orang Tua'] ?? null));
