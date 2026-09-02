@@ -15,7 +15,7 @@
       const login = await api('api/auth/student/login', 'POST', { nisn, pin });
       const exams = await api('api/student/exams');
       const s = login.data;
-      return { success: true, siswa: { id: s.nisn, nomor_ujian: s.nisn, nisn: s.nisn, nama: s.nama, kelas: s.kelas, tingkat: s.tingkat }, jadwal: exams.data.map(e => ({ id: e.id, nama_ujian: e.nama_ujian, tingkat: e.tingkat, durasi_menit: e.durasi, tanggal_ujian: e.tanggal_mulai, sesi: e.sesi || 1, tahun_ajaran: e.tahun_ajaran, semester: e.semester, status_pengerjaan: ({COMPLETED:'selesai',TERMINATED:'terblokir',EXPIRED:'selesai'})[e.status_attempt] || 'belum' })) };
+      return { success: true, siswa: { id: s.nisn, nomor_ujian: s.nisn, nisn: s.nisn, nama: s.nama, kelas: s.kelas, tingkat: s.tingkat }, jadwal: exams.data.map(e => ({ id: e.id, nama_ujian: e.nama_ujian, tingkat: e.tingkat, durasi_menit: e.durasi, tanggal_ujian: e.tanggal_mulai, jam_mulai: e.jam_mulai, jam_selesai: e.jam_selesai, sesi: e.sesi || 1, tahun_ajaran: e.tahun_ajaran, semester: e.semester, status_pengerjaan: ({COMPLETED:'selesai',TERMINATED:'terblokir',EXPIRED:'selesai'})[e.status_attempt] || 'belum' })) };
     },
     async loginPenggunaAPI(username, password) { const r = await api('api/auth/staff/login', 'POST', { username, password }); return { success: true, userId:r.data.id, id:r.data.id, nama:r.data.nama, role:r.data.role, username:r.data.username }; },
     async getServerSoal(examId) { const r = await api(`api/student/exams/${examId}/start`, 'POST', {}); return { success: true, soal: r.data.soal.map(q => ({ id:q.id, pertanyaan:q.pertanyaan, opsi:q.opsi })), jawaban: r.data.jawaban.map(a => ({ soal_id:a.question_id, jawaban:a.answer })), expiresAt:r.data.expires_at, serverOrdered:true }; },

@@ -11,7 +11,7 @@ final class ExamSessionService
     {
         $student=$this->students->findActiveByNisn($nisn)??throw new DomainException('Data siswa tidak tersedia.',404);
         if((int)$student['id']!==$studentId)throw new DomainException('Sesi siswa tidak valid.',401);
-        return array_map(function(array$exam)use($student){$attempt=$this->attempts->find((int)$student['id'],(int)$exam['id']);return ['id'=>(int)$exam['id'],'nama_ujian'=>$exam['name'],'tingkat'=>$exam['grade'],'durasi'=>(int)$exam['duration_minutes'],'tanggal_mulai'=>$exam['starts_at'],'tanggal_selesai'=>$exam['ends_at'],'tahun_ajaran'=>$exam['academic_year'],'semester'=>$exam['semester'],'status_attempt'=>$attempt['status']??'NOT_STARTED'];},$this->exams->eligibleForStudent($student));
+        return array_map(function(array$exam)use($student){$attempt=$this->attempts->find((int)$student['id'],(int)$exam['id']);return ['id'=>(int)$exam['id'],'nama_ujian'=>$exam['name'],'tingkat'=>$exam['grade'],'durasi'=>(int)$exam['duration_minutes'],'tanggal_mulai'=>$exam['starts_at'],'tanggal_selesai'=>$exam['ends_at'],'jam_mulai'=>substr($exam['starts_at'],11,5),'jam_selesai'=>substr($exam['ends_at'],11,5),'tahun_ajaran'=>$exam['academic_year'],'semester'=>$exam['semester'],'status_attempt'=>$attempt['status']??'NOT_STARTED'];},$this->exams->eligibleForStudent($student));
     }
     public function start(int$studentId,string$nisn,int$examId):array
     {
