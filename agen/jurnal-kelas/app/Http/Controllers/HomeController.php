@@ -9,6 +9,13 @@ use App\Application\Dashboard\DashboardService;
 final class HomeController
 {
     public function __construct(private readonly Config $config,private readonly DashboardService $dashboard) {}
+    public function landing(Request $request): Response
+    {
+        if (isset($_SESSION['user'])) return Response::redirect('/dashboard');
+        ob_start();
+        require dirname(__DIR__, 3).'/resources/views/landing.php';
+        return Response::html((string) ob_get_clean());
+    }
     public function index(Request $request): Response
     {
         if (!isset($_SESSION['user'])) return Response::redirect('/login');

@@ -9,7 +9,7 @@ use App\Http\Controllers\ReportPageController;
 use App\Http\Controllers\AuditController;
 use App\Http\Middleware\AuditAccessMiddleware;
 
-$router->get('/', fn () => \App\Http\Response::redirect('/dashboard'));
+$router->get('/', [HomeController::class, 'landing']);
 $router->get('/login', [AuthController::class, 'login']);
 $router->get('/auth/sso/redirect', [AuthController::class, 'redirect']);
 $router->get('/auth/sso/callback', [AuthController::class, 'callback']);
