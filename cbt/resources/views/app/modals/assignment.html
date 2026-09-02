@@ -1,0 +1,15 @@
+  <div class="modal" id="modalGuruUjian">
+    <div class="modal-content" style="width:min(450px, 90%);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h3 style="font-size:16px; font-weight:800;" id="titleModalGuruUjian">Form Penugasan Guru Mapel</h3>
+        <button style="background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted);" onclick="document.getElementById('modalGuruUjian').classList.remove('show')">&times;</button>
+      </div>
+      <form id="formGuruUjian">
+        <input type="hidden" id="editGuruUjianId">
+        <div class="input-group"><label>Pilih Guru</label><div class="input-wrapper"><select id="inGuruId" required></select></div></div>
+        <div class="input-group"><label>Pilih Ujian / Mapel</label><div class="input-wrapper"><select id="inUjianId" required></select></div></div>
+        <button type="submit" class="btn btn-primary" style="width:100%; margin-top:8px;">Simpan Penugasan</button>
+      </form>
+    </div>
+  </div>
+

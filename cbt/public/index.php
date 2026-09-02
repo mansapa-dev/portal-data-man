@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
 use Cbt\Controllers\{AdminController,AdminStudentController,AuthController,StudentExamController,SyncController,SetupController,TeacherController,TeacherSsoController};
-use Cbt\Core\{Database,Request,Response,Router};
+use Cbt\Core\{Database,Request,Response,Router,ViewRenderer};
 use Cbt\Middleware\{AuditMiddleware,AuthMiddleware,CsrfMiddleware,RateLimitMiddleware};
 use Cbt\Repositories\{AdminRepository,AdminStudentRepository,AttemptRepository,ExamRepository,StudentRepository,UserRepository};
 use Cbt\Services\{AnswerService,AuthService,ExamSessionService,ScoringService,ViolationService};
@@ -15,6 +15,7 @@ use Cbt\Integrations\PortalData\HttpPortalDataClient;
 $request=Request::capture();
 if($request->path==='/'||$request->path==='/index.php'){
  $html=file_get_contents(dirname(__DIR__).'/index.html')?:'';
+ $html=(new ViewRenderer(dirname(__DIR__).'/resources/views/app'))->render($html);
  $html=str_replace('</body>','<script src="assets/js/native-api-adapter.js"></script></body>',$html);
  Response::html($html)->send();
 }

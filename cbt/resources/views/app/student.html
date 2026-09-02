@@ -1,0 +1,109 @@
+  <!-- VIEW: LOGIN SISWA -->
+  <main class="center-wrapper" id="viewLoginSiswa">
+    <div class="auth-card">
+      <div class="auth-header">
+        <i class="fa-solid fa-user-graduate"></i>
+        <h2>Portal Siswa</h2>
+        <p>Silakan masuk menggunakan kredensial ujian Anda.</p>
+      </div>
+      <div id="alertLoginSiswa" class="alert"></div>
+      <form id="formLoginSiswa">
+        <div class="input-group">
+          <label>Nomor Peserta</label>
+          <div class="input-wrapper">
+            <i class="fa-regular fa-id-badge left-icon"></i>
+            <input type="text" id="inNoUjian" placeholder="Masukkan NISN" inputmode="numeric" required autocomplete="off">
+          </div>
+        </div>
+        <div class="input-group">
+          <label>PIN Ujian</label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-key left-icon"></i>
+            <input type="password" id="inPin" placeholder="••••" maxlength="4" required autocomplete="off">
+            <button type="button" class="toggle-pw" onclick="const x=document.getElementById('inPin'); x.type=x.type==='password'?'text':'password'; this.querySelector('i').classList.toggle('fa-eye'); this.querySelector('i').classList.toggle('fa-eye-slash');"><i class="fa-regular fa-eye"></i></button>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%; margin-top:12px;">Masuk Ujian <i class="fa-solid fa-arrow-right"></i></button>
+      </form>
+    </div>
+  </main>
+
+  <!-- VIEW: PORTAL SISWA -->
+  <main class="center-wrapper hidden" id="viewPortalSiswa">
+    <div class="auth-card" style="max-width:500px;">
+      <div class="auth-header" style="text-align:left; display:flex; justify-content:space-between; align-items:flex-start;">
+        <div>
+          <h2>Data Peserta</h2>
+          <p style="font-size:14px; color:var(--text-main); font-weight:700; margin-top:8px;" id="lblNamaSiswa">-</p>
+          <p style="font-size:12px; color:var(--text-muted);">Kelas: <span id="lblKelasSiswa">-</span> | No: <span id="lblNoSiswa">-</span></p>
+        </div>
+        <i class="fa-solid fa-circle-check" style="color:var(--success); font-size:32px;"></i>
+      </div>
+      <hr style="border:0; border-top:1px solid var(--border); margin:20px 0;">
+      
+      <h3 style="font-size:14px; font-weight:700; margin-bottom:12px;">Daftar Ujian Aktif:</h3>
+      <div id="listJadwalUjian" style="display:flex; flex-direction:column; gap:12px;"></div>
+      
+      <button class="btn btn-secondary" style="width:100%; margin-top:24px;" onclick="appResetLogout()"><i class="fa-solid fa-sign-out-alt"></i> Keluar</button>
+    </div>
+  </main>
+
+  <!-- VIEW: RUANG UJIAN CBT -->
+  <div class="cbt-wrapper hidden" id="viewRuangUjian">
+    <div class="cbt-header">
+      <div class="cbt-identity">
+        <div class="id-item"><span class="id-label">Mata Pelajaran</span><span class="id-val" id="cbtMapel">Nama Ujian</span></div>
+        <div class="id-item"><span class="id-label">Peserta</span><span class="id-val" id="cbtNama">Nama Siswa</span></div>
+        <div class="id-item"><span class="id-label">No Ujian</span><span class="id-val" id="cbtNo">Nomor</span></div>
+      </div>
+      <div class="timer-box" id="cbtTimerBox">
+        <span class="id-label" style="color:inherit;">SISA WAKTU</span>
+        <span class="timer-time" id="cbtTimer">--:--</span>
+      </div>
+    </div>
+
+    <div class="cbt-grid">
+      <div class="q-panel">
+        <div class="q-meta">
+          <span class="q-num" id="cbtSoalNum">Soal 1</span>
+          <span style="font-size:12px; color:var(--text-muted); font-weight:600;"><i class="fa-solid fa-cloud-arrow-up" style="margin-right:4px;"></i><span id="cbtSaveStatus">Tersimpan</span></span>
+        </div>
+        <div class="q-text" id="cbtSoalText">Memuat pertanyaan...</div>
+        <div class="opt-list" id="cbtOptionList"></div>
+        <div class="q-nav-actions">
+          <button class="btn btn-secondary" onclick="navigasiSoal(-1)"><i class="fa-solid fa-chevron-left"></i> Sebelumnya</button>
+          <button class="btn btn-warning" id="btnRagu" onclick="toggleRagu()"><i class="fa-solid fa-flag"></i> Ragu-ragu</button>
+          <button class="btn btn-primary" onclick="navigasiSoal(1)">Berikutnya <i class="fa-solid fa-chevron-right"></i></button>
+        </div>
+      </div>
+
+      <div class="nav-panel">
+        <h3 style="font-size:13px; font-weight:700; margin-bottom:16px; color:var(--text-main);">Navigasi Soal</h3>
+        <div class="nav-grid" id="cbtNavGrid"></div>
+        <hr style="border:0; border-top:1px solid var(--border); margin:16px 0;">
+        <button class="btn btn-danger" style="width:100%;" onclick="bukaModalSubmit()"><i class="fa-solid fa-paper-plane"></i> SELESAI UJIAN</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- VIEW: HASIL UJIAN SISWA -->
+  <main class="center-wrapper hidden" id="viewHasilSiswa">
+    <div class="auth-card" style="text-align:center;">
+      <div style="width:80px; height:80px; background:#dcfce7; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 20px;">
+        <i class="fa-solid fa-check-double" style="font-size:40px; color:var(--success);"></i>
+      </div>
+      <h2 style="font-size:24px; font-weight:800; color:var(--text-main);">Ujian Selesai!</h2>
+      <p style="font-size:13px; color:var(--text-muted); margin-top:8px;">Jawaban Anda telah berhasil dikirim ke server.</p>
+      
+      <div style="margin:20px 0; padding:16px; background:var(--secondary-bg); border-radius:12px;">
+        <span style="font-size:12px; font-weight:600; color:var(--text-muted);">NILAI ANDA</span>
+        <div style="font-size:48px; font-weight:900; color:var(--primary);" id="lblNilaiAkhir">0</div>
+      </div>
+      
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <button class="btn btn-secondary" onclick="bukaModalReview()"><i class="fa-solid fa-magnifying-glass"></i> Review Status (Benar/Salah)</button>
+        <button class="btn btn-primary" onclick="appResetLogout()"><i class="fa-solid fa-house"></i> Kembali ke Awal</button>
+      </div>
+    </div>
+  </main>
+

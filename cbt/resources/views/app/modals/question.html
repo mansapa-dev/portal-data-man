@@ -1,0 +1,24 @@
+  <div class="modal" id="modalSoal">
+    <div class="modal-content" style="width:min(550px, 92%);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h3 style="font-size:16px; font-weight:800;" id="titleModalSoal">Form Soal Pilihan Ganda</h3>
+        <button style="background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted);" onclick="document.getElementById('modalSoal').classList.remove('show')">&times;</button>
+      </div>
+      <form id="formSoal">
+        <input type="hidden" id="editSoalId">
+        <div class="input-group"><label>Pilih Ujian</label><div class="input-wrapper"><select id="inSoalUjianId" required></select></div></div>
+        <div class="input-group"><label>Pertanyaan</label><div class="input-wrapper"><textarea id="inPertanyaan" rows="3" required style="padding-left:40px; padding-top:12px;" placeholder="Tulis teks pertanyaan..."></textarea></div></div>
+        <div class="input-group"><label>Opsi A</label><div class="input-wrapper"><input type="text" id="inOpsiA" required placeholder="Jawaban A"></div></div>
+        <div class="input-group"><label>Opsi B</label><div class="input-wrapper"><input type="text" id="inOpsiB" required placeholder="Jawaban B"></div></div>
+        <div class="input-group"><label>Opsi C</label><div class="input-wrapper"><input type="text" id="inOpsiC" required placeholder="Jawaban C"></div></div>
+        <div class="input-group"><label>Opsi D</label><div class="input-wrapper"><input type="text" id="inOpsiD" required placeholder="Jawaban D"></div></div>
+        <div class="input-group"><label>Opsi E (Opsional)</label><div class="input-wrapper"><input type="text" id="inOpsiE" placeholder="Jawaban E"></div></div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+          <div class="input-group"><label>Kunci Jawaban</label><div class="input-wrapper"><select id="inJawabanBenar"><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option><option value="E">E</option></select></div></div>
+          <div class="input-group"><label>Poin Soal</label><div class="input-wrapper"><input type="number" id="inPoinSoal" value="1" required></div></div>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%; margin-top:8px;">Simpan Soal</button>
+      </form>
+    </div>
+  </div>
+

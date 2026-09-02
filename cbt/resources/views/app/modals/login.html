@@ -1,0 +1,26 @@
+  <!-- MODALS -->
+  <div class="modal" id="modalLoginPengelola">
+    <div class="modal-content" style="width:min(400px, 90%);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+        <h3 style="font-size:16px; font-weight:800;"><i class="fa-solid fa-shield-halved" style="color:var(--primary); margin-right:8px;"></i>Login Administrator</h3>
+        <button style="background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted);" onclick="document.getElementById('modalLoginPengelola').classList.remove('show')">&times;</button>
+      </div>
+      <div id="alertLoginPengelola" class="alert"></div>
+      <form id="formLoginPengelola">
+        <div class="input-group">
+          <label>Username</label>
+          <div class="input-wrapper"><i class="fa-solid fa-user left-icon"></i><input type="text" id="inUserPengelola" required autocomplete="off"></div>
+        </div>
+        <div class="input-group">
+          <label>Password</label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-lock left-icon"></i>
+            <input type="password" id="inPassPengelola" required autocomplete="off">
+            <button type="button" class="toggle-pw" onclick="const x=document.getElementById('inPassPengelola'); x.type=x.type==='password'?'text':'password'; this.querySelector('i').classList.toggle('fa-eye'); this.querySelector('i').classList.toggle('fa-eye-slash');"><i class="fa-regular fa-eye"></i></button>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%;">Verifikasi & Masuk</button>
+      </form>
+    </div>
+  </div>
+

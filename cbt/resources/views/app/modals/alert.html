@@ -1,0 +1,12 @@
+  <div class="modal" id="modalCustomAlert">
+    <div class="modal-content" style="width:min(380px, 90%); text-align:center;">
+      <div style="width:50px; height:50px; background:#fef2f2; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 16px; color:var(--danger); font-size:22px;">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+      </div>
+      <h3 style="font-size:16px; font-weight:800; margin-bottom:8px;" id="alertTitle">Informasi Sistem</h3>
+      <p style="font-size:11px; color:var(--text-muted); font-family:monospace; background:var(--secondary-bg); padding:6px; border-radius:6px; margin-bottom:10px;">Server Notice</p>
+      <p style="font-size:13px; color:var(--text-main); margin-bottom:20px; line-height:1.5; word-break: break-word;" id="alertMessage">-</p>
+      <button class="btn btn-primary" style="width:100%;" onclick="document.getElementById('modalCustomAlert').classList.remove('show')">Tutup</button>
+    </div>
+  </div>
+

@@ -1,0 +1,26 @@
+      <!-- TAB ADMIN: KELOLA SOAL -->
+      <div id="tabAdminSoal" class="dash-tab hidden">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Manajemen Bank Soal Ujian (Upload Berulang Per Mapel/Excel)</div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button class="btn btn-secondary" onclick="exportToExcel('tabel_soal.xlsx', 'Soal', ['ID', 'Ujian ID', 'Pertanyaan', 'Opsi A', 'Opsi B', 'Opsi C', 'Opsi D', 'Opsi E', 'Jawaban Benar', 'Poin'], window.cacheSoalExcel || [])"><i class="fa-solid fa-file-excel"></i> Download Excel</button>
+              <button class="btn btn-warning" onclick="downloadTemplateSoal()"><i class="fa-solid fa-download"></i> Template Soal</button>
+              <button class="btn btn-success" onclick="document.getElementById('fileImportSoal').click()"><i class="fa-solid fa-file-arrow-up"></i> Upload Excel Soal</button>
+              <input type="file" id="fileImportSoal" accept=".xlsx, .xls" style="display:none" onchange="handleImportSoal(this)">
+              <button class="btn btn-primary" onclick="bukaModalSoal()"><i class="fa-solid fa-plus"></i> Tambah Soal</button>
+            </div>
+          </div>
+          <div class="search-box">
+            <i class="fa-solid fa-search"></i>
+            <input type="text" id="searchSoal" placeholder="Cari soal..." onkeyup="filterTable('tblAdminSoal', this.value)">
+          </div>
+          <div class="table-responsive">
+            <table>
+              <thead><tr><th>ID</th><th>ID Ujian</th><th>Pertanyaan</th><th>Kunci</th><th>Poin</th><th>Aksi</th></tr></thead>
+              <tbody id="tblAdminSoal"><tr><td colspan="6" align="center">Memuat...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+

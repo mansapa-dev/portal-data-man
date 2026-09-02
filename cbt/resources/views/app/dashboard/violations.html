@@ -1,0 +1,23 @@
+      <!-- TAB ADMIN: LOG PELANGGARAN -->
+      <div id="tabAdminLogPelanggaran" class="dash-tab hidden">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Log Monitoring Kecurangan & Pelanggaran Siswa</div>
+            <div style="display:flex; gap:8px;">
+              <button class="btn btn-secondary" onclick="exportToExcel('log_pelanggaran_cbt.xlsx', 'Pelanggaran', ['Nomor Ujian', 'Nama Siswa', 'Kelas', 'Nama Ujian', 'Jumlah', 'Keterangan', 'Waktu'], window.cachePelanggaranExcel || [])"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
+              <button class="btn btn-secondary" onclick="loadDataAdminLogPelanggaran()"><i class="fa-solid fa-rotate-right"></i> Refresh</button>
+            </div>
+          </div>
+          <div class="search-box">
+            <i class="fa-solid fa-search"></i>
+            <input type="text" id="searchPelanggaran" placeholder="Cari pelanggaran..." onkeyup="filterTable('tblAdminLogPelanggaran', this.value)">
+          </div>
+          <div class="table-responsive">
+            <table>
+              <thead><tr><th>Waktu</th><th>No Peserta</th><th>Nama Siswa</th><th>Kelas</th><th>Ujian</th><th>Pelanggaran</th><th>Keterangan</th></tr></thead>
+              <tbody id="tblAdminLogPelanggaran"><tr><td colspan="7" align="center">Memuat log...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+

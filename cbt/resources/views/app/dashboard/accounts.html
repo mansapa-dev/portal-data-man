@@ -1,0 +1,26 @@
+      <!-- TAB ADMIN: KELOLA AKUN -->
+      <div id="tabAdminAkun" class="dash-tab hidden">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Manajemen Akun Administrator CBT</div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button class="btn btn-secondary" onclick="exportToExcel('data_akun.xlsx', 'Akun', ['username', 'nama_lengkap', 'role', 'status_aktif'], window.cacheAkunExcel || [])"><i class="fa-solid fa-file-excel"></i> Download</button>
+              <button class="btn btn-warning" onclick="downloadTemplateAkun()"><i class="fa-solid fa-download"></i> Template</button>
+              <button class="btn btn-success" onclick="document.getElementById('fileImportAkun').click()"><i class="fa-solid fa-file-arrow-up"></i> Upload</button>
+              <input type="file" id="fileImportAkun" accept=".xlsx, .xls" style="display:none" onchange="handleImportAkun(this)">
+              <button class="btn btn-primary" onclick="bukaModalAkun()"><i class="fa-solid fa-user-plus"></i> Tambah Akun</button>
+            </div>
+          </div>
+          <div class="search-box">
+            <i class="fa-solid fa-search"></i>
+            <input type="text" id="searchAkun" placeholder="Cari akun..." onkeyup="filterTable('tblAdminAkun', this.value)">
+          </div>
+          <div class="table-responsive">
+            <table>
+              <thead><tr><th>Username</th><th>Nama Lengkap</th><th>Password</th><th>Role</th><th>Status</th><th>Aksi</th></tr></thead>
+              <tbody id="tblAdminAkun"><tr><td colspan="6" align="center">Memuat...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+

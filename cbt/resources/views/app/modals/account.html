@@ -1,0 +1,18 @@
+  <div class="modal" id="modalAkun">
+    <div class="modal-content" style="width:min(450px, 90%);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h3 style="font-size:16px; font-weight:800;" id="titleModalAkun">Form Akun Pengelola</h3>
+        <button style="background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted);" onclick="document.getElementById('modalAkun').classList.remove('show')">&times;</button>
+      </div>
+      <form id="formAkun">
+        <input type="hidden" id="editAkunId">
+        <div class="input-group"><label>Username</label><div class="input-wrapper"><i class="fa-solid fa-user left-icon"></i><input type="text" id="inAkunUsername" required></div></div>
+        <div class="input-group"><label>Nama Lengkap</label><div class="input-wrapper"><i class="fa-solid fa-id-card left-icon"></i><input type="text" id="inAkunNama" required></div></div>
+        <div class="input-group"><label>Password</label><div class="input-wrapper"><i class="fa-solid fa-lock left-icon"></i><input type="text" id="inAkunPass" required placeholder="Password akun"></div></div>
+        <input type="hidden" id="inAkunRole" value="admin">
+        <div class="input-group"><label>Status Akun</label><div class="input-wrapper"><select id="inAkunStatus"><option value="true">Aktif</option><option value="false">Nonaktif</option></select></div></div>
+        <button type="submit" class="btn btn-primary" style="width:100%; margin-top:8px;">Simpan Akun</button>
+      </form>
+    </div>
+  </div>
+

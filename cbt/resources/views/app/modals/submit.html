@@ -1,0 +1,14 @@
+  <div class="modal" id="modalSubmitUjian">
+    <div class="modal-content" style="text-align:center; width:min(400px, 90%);">
+      <div style="width:64px; height:64px; background:#fff7ed; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 16px; font-size:28px; color:var(--warning);">
+        <i class="fa-solid fa-circle-exclamation"></i>
+      </div>
+      <h3 style="font-size:18px; font-weight:800; margin-bottom:8px;">Kumpulkan Ujian?</h3>
+      <p style="font-size:13px; color:var(--text-muted); margin-bottom:24px;" id="txtConfirmSubmit">Pastikan semua soal telah terjawab.</p>
+      <div style="display:flex; gap:12px;">
+        <button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById('modalSubmitUjian').classList.remove('show')">Periksa Lagi</button>
+        <button class="btn btn-primary" style="flex:1;" onclick="submitUjianKeServer()">Ya, Kumpulkan</button>
+      </div>
+    </div>
+  </div>
+

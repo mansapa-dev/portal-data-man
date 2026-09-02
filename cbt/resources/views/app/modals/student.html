@@ -1,0 +1,19 @@
+  <div class="modal" id="modalSiswaSatuan">
+    <div class="modal-content" style="width:min(450px, 90%);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h3 style="font-size:16px; font-weight:800;" id="titleModalSiswa">Tambah Siswa / Manual</h3>
+        <button style="background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted);" onclick="document.getElementById('modalSiswaSatuan').classList.remove('show')">&times;</button>
+      </div>
+      <form id="formSiswaSatuan">
+        <input type="hidden" id="editSiswaId">
+        <div class="input-group"><label>NISN</label><div class="input-wrapper"><input type="text" id="inSiswaNo" placeholder="Masukkan NISN" inputmode="numeric" required></div></div>
+        <div class="input-group"><label>Nama Lengkap</label><div class="input-wrapper"><input type="text" id="inSiswaNama" placeholder="Nama siswa" required></div></div>
+        <div class="input-group"><label>Kelas</label><div class="input-wrapper"><input type="text" id="inSiswaKelas" placeholder="Contoh: XI MIPA 1" required></div></div>
+        <div class="input-group"><label>Tingkat</label><div class="input-wrapper"><select id="inSiswaTingkat"><option value="X">X</option><option value="XI">XI</option><option value="XII">XII</option></select></div></div>
+        <div class="input-group"><label>PIN Ujian (Kosongkan untuk otomatis)</label><div class="input-wrapper"><input type="text" id="inSiswaPin" maxlength="4" placeholder="Otomatis ter-generate jika kosong"></div></div>
+        <div class="input-group"><label>Tahun Ajaran</label><div class="input-wrapper"><input type="text" id="inSiswaThn" value="2025/2026" required></div></div>
+        <button type="submit" class="btn btn-primary" style="width:100%; margin-top:8px;">Simpan Siswa</button>
+      </form>
+    </div>
+  </div>
+

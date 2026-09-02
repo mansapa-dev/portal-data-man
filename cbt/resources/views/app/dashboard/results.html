@@ -1,0 +1,93 @@
+      <!-- TAB ADMIN: REKAP & LAPORAN HASIL -->
+      <div id="tabAdminHasil" class="dash-tab hidden">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Rekapitulasi Laporan Ujian & Penandatangan Resmi</div>
+          </div>
+          
+          <!-- KOP SURAT MANUAL -->
+          <div style="margin-bottom:16px; background:#f8fafc; padding:16px; border-radius:8px; border:1px solid var(--border);">
+            <h4 style="font-size:13px; font-weight:700; margin-bottom:10px; color:var(--primary);"><i class="fa-solid fa-heading"></i> Kustomisasi Kop Surat Manual (Cetak Resmi)</h4>
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px;">
+              <div>
+                <label style="font-size:11px; font-weight:700; color:var(--text-muted);">Baris 1 (Kementerian/Yayasan):</label>
+                <input type="text" id="kopBaris1" value="KEMENTERIAN AGAMA REPUBLIK INDONESIA" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); margin-top:4px; font-size:12px;">
+              </div>
+              <div>
+                <label style="font-size:11px; font-weight:700; color:var(--text-muted);">Baris 2 (Kanwil/Kantor):</label>
+                <input type="text" id="kopBaris2" value="KANTOR KEMENTERIAN AGAMA KOTA PALEMBANG" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); margin-top:4px; font-size:12px;">
+              </div>
+              <div>
+                <label style="font-size:11px; font-weight:700; color:var(--text-muted);">Baris 3 (Nama Madrasah/Sekolah):</label>
+                <input type="text" id="kopBaris3" value="MADRASAH ALIYAH NEGERI 1 PALEMBANG" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); margin-top:4px; font-size:12px;">
+              </div>
+              <div>
+                <label style="font-size:11px; font-weight:700; color:var(--text-muted);">Baris 4 (Alamat):</label>
+                <input type="text" id="kopBaris4" value="Jln. Gub. H. Bastari (Jln. Pendidikan), Jakabaring, Palembang, Sumatera Selatan" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); margin-top:4px; font-size:12px;">
+              </div>
+            </div>
+          </div>
+
+          <!-- PENANDATANGAN -->
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; margin-bottom:16px; background:var(--secondary-bg); padding:16px; border-radius:8px;">
+            <div>
+              <label style="font-size:11px; font-weight:700; color:var(--text-muted);">Nama Kepala Madrasah:</label>
+              <input type="text" id="inputKepsek" placeholder="Nama Kepala" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); margin-top:4px; font-size:13px;">
+            </div>
+            <div>
+              <label style="font-size:11px; font-weight:700; color:var(--text-muted);">NIP Kepala Madrasah:</label>
+              <input type="text" id="inputNipKepsek" placeholder="NIP Kepala" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); margin-top:4px; font-size:13px;">
+            </div>
+            <div>
+              <label style="font-size:11px; font-weight:700; color:var(--text-muted);">Nama Wakur Kurikulum:</label>
+              <input type="text" id="inputWakur" placeholder="Nama Wakur" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); margin-top:4px; font-size:13px;">
+            </div>
+            <div>
+              <label style="font-size:11px; font-weight:700; color:var(--text-muted);">NIP Wakur Kurikulum:</label>
+              <input type="text" id="inputNipWakur" placeholder="NIP Wakur" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); margin-top:4px; font-size:13px;">
+            </div>
+          </div>
+
+          <!-- FILTER HASIL -->
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:12px; margin-bottom:20px;">
+            <div>
+              <label style="font-size:11px; font-weight:700; color:var(--text-muted);">Tahun Ajaran:</label>
+              <select id="fltTahunAjaran" onchange="applyFilterHasil()" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); margin-top:4px;"><option value="ALL">Semua Tahun</option></select>
+            </div>
+            <div>
+              <label style="font-size:11px; font-weight:700; color:var(--text-muted);">Semester:</label>
+              <select id="fltSemester" onchange="applyFilterHasil()" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); margin-top:4px;"><option value="ALL">Semua Semester</option><option value="Ganjil">Ganjil</option><option value="Genap">Genap</option></select>
+            </div>
+            <div>
+              <label style="font-size:11px; font-weight:700; color:var(--text-muted);">Tingkat:</label>
+              <select id="fltHasilTingkat" onchange="applyFilterHasil()" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); margin-top:4px;"><option value="ALL">Semua Tingkat</option><option value="X">X</option><option value="XI">XI</option><option value="XII">XII</option></select>
+            </div>
+            <div>
+              <label style="font-size:11px; font-weight:700; color:var(--text-muted);">Rombel / Kelas:</label>
+              <select id="fltHasilKelas" onchange="applyFilterHasil()" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); margin-top:4px;"><option value="ALL">Semua Rombel</option></select>
+            </div>
+            <div>
+              <label style="font-size:11px; font-weight:700; color:var(--text-muted);">Mata Ujian:</label>
+              <select id="fltHasilUjian" onchange="applyFilterHasil()" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); margin-top:4px;"><option value="ALL">Semua Ujian</option></select>
+            </div>
+          </div>
+
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+            <button class="btn btn-secondary" onclick="exportFilterHasil('ujian')"><i class="fa-solid fa-file-excel"></i> Export (Per Ujian)</button>
+            <button class="btn btn-secondary" onclick="exportFilterHasil('rombel')"><i class="fa-solid fa-file-excel"></i> Export (Per Rombel)</button>
+            <button class="btn btn-primary" onclick="cetakLaporanResmiPDF()"><i class="fa-solid fa-print"></i> Cetak Laporan Resmi</button>
+          </div>
+
+          <div class="search-box">
+            <i class="fa-solid fa-search"></i>
+            <input type="text" id="searchHasil" placeholder="Cari hasil..." onkeyup="filterTable('tblAdminHasil', this.value)">
+          </div>
+          <div class="table-responsive">
+            <table>
+              <thead><tr><th>No Ujian</th><th>Nama Siswa</th><th>Tingkat</th><th>Kelas/Rombel</th><th>Mata Ujian</th><th>Nilai</th><th>Status</th></tr></thead>
+              <tbody id="tblAdminHasil"><tr><td colspan="7" align="center">Memuat data...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+

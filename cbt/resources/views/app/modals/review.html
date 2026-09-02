@@ -1,0 +1,11 @@
+  <div class="modal" id="modalReview">
+    <div class="modal-content">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h3 style="font-size:16px; font-weight:800;"><i class="fa-solid fa-magnifying-glass" style="color:var(--primary); margin-right:8px;"></i>Review Status Jawaban</h3>
+        <button style="background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted);" onclick="document.getElementById('modalReview').classList.remove('show')">&times;</button>
+      </div>
+      <div id="listReviewContainer" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:12px; margin-bottom:16px; padding-right:4px;"></div>
+      <button class="btn btn-secondary" style="width:100%;" onclick="document.getElementById('modalReview').classList.remove('show')">Tutup</button>
+    </div>
+  </div>
+

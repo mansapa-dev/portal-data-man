@@ -1,0 +1,34 @@
+      <!-- TAB ADMIN: KONTROL SISWA & KENAIKAN KELAS -->
+      <div id="tabAdminSiswa" class="dash-tab hidden">
+        <div class="card" style="border: 2px dashed var(--primary); background: #f8fafc;">
+          <div class="card-header" style="margin-bottom:12px;">
+            <div class="card-title"><i class="fa-solid fa-database" style="color:var(--primary); margin-right:8px;"></i>Master Siswa dari Portal Data</div>
+          </div>
+          <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">
+            Identitas siswa, kenaikan kelas, kelulusan, rombel, semester, dan tahun ajaran dikelola di Portal Data. CBT hanya menyimpan cache referensi serta PIN ujian.
+          </p>
+          <div style="display:flex; gap:12px; flex-wrap:wrap;">
+            <button class="btn btn-primary" onclick="sinkronkanSemuaPortalData()"><i class="fa-solid fa-rotate"></i> Sinkronisasi Portal Data</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+          <div class="card-title">Data Siswa Portal Data & PIN CBT</div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button class="btn btn-secondary" onclick="exportToExcel('data_siswa_cbt.xlsx', 'Siswa', ['NISN', 'Nama', 'Kelas', 'Tingkat', 'PIN', 'Tahun Ajaran', 'Status'], window.cacheSiswaExcel || [])"><i class="fa-solid fa-download"></i> Export</button>
+            </div>
+          </div>
+          <div class="search-box">
+            <i class="fa-solid fa-search"></i>
+            <input type="text" id="searchSiswa" placeholder="Cari siswa..." onkeyup="filterTable('tblAdminSiswa', this.value)">
+          </div>
+          <div class="table-responsive">
+            <table>
+              <thead><tr><th>No Peserta</th><th>Nama Siswa</th><th>Kelas</th><th>Tingkat</th><th>PIN</th><th>Status Ujian</th><th>Aksi</th></tr></thead>
+              <tbody id="tblAdminSiswa"><tr><td colspan="7" align="center">Memuat data...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+

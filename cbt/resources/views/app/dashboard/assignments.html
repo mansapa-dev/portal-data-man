@@ -1,0 +1,20 @@
+      <!-- TAB ADMIN: PENUGASAN GURU -->
+      <div id="tabAdminGuruUjian" class="dash-tab hidden">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Penugasan Guru Mata Pelajaran</div>
+            <button class="btn btn-primary" onclick="bukaModalGuruUjian()"><i class="fa-solid fa-plus"></i> Tambah Penugasan</button>
+          </div>
+          <div class="search-box">
+            <i class="fa-solid fa-search"></i>
+            <input type="text" id="searchGuruUjian" placeholder="Cari penugasan..." onkeyup="filterTable('tblAdminGuruUjian', this.value)">
+          </div>
+          <div class="table-responsive">
+            <table>
+              <thead><tr><th>Nama Guru</th><th>Mata Ujian Ditugaskan</th><th>Tingkat</th><th>Aksi</th></tr></thead>
+              <tbody id="tblAdminGuruUjian"><tr><td colspan="4" align="center">Memuat penugasan...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+

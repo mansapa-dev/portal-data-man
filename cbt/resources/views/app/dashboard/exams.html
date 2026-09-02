@@ -1,0 +1,23 @@
+      <!-- TAB ADMIN: KELOLA UJIAN -->
+      <div id="tabAdminUjian" class="dash-tab hidden">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Manajemen Jadwal & Arsip Bank Soal (Tahun Ajaran & Semester)</div>
+            <div style="display:flex; gap:8px;">
+              <button class="btn btn-secondary" onclick="exportToExcel('tabel_ujian.xlsx', 'Ujian', ['ID', 'Nama Ujian', 'Tingkat', 'Sesi', 'Tanggal', 'Target Kelas', 'Durasi', 'Tahun Ajaran', 'Semester', 'Status'], window.cacheUjianExcel || [])"><i class="fa-solid fa-file-excel"></i> Download Excel</button>
+              <button class="btn btn-primary" onclick="bukaModalUjian()"><i class="fa-solid fa-plus"></i> Tambah Ujian</button>
+            </div>
+          </div>
+          <div class="search-box">
+            <i class="fa-solid fa-search"></i>
+            <input type="text" id="searchUjian" placeholder="Cari ujian..." onkeyup="filterTable('tblAdminUjian', this.value)">
+          </div>
+          <div class="table-responsive">
+            <table>
+              <thead><tr><th>ID</th><th>Nama Ujian</th><th>Tingkat</th><th>Sesi & Tanggal</th><th>Target Kelas</th><th>Thn Ajaran / Semester</th><th>Status</th><th>Aksi</th></tr></thead>
+              <tbody id="tblAdminUjian"><tr><td colspan="8" align="center">Memuat...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+

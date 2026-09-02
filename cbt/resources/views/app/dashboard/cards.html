@@ -1,0 +1,23 @@
+      <!-- TAB ADMIN: CETAK KARTU UJIAN -->
+      <div id="tabAdminKartu" class="dash-tab hidden">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Cetak Kartu Peserta Ujian</div>
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+              <select id="filterKartuTingkat" onchange="loadDataAdminKartu()" style="padding:6px 12px; border-radius:6px; border:1px solid var(--border); font-size:12px;">
+                <option value="ALL">Semua Tingkat</option>
+                <option value="X">Tingkat X</option>
+                <option value="XI">Tingkat XI</option>
+                <option value="XII">Tingkat XII</option>
+              </select>
+              <input type="text" id="filterKartuKelas" placeholder="Filter Kelas (misal: XI IPA)" onkeyup="loadDataAdminKartu()" style="padding:6px 12px; border-radius:6px; border:1px solid var(--border); font-size:12px; width:180px;">
+              <button class="btn btn-secondary" onclick="loadDataAdminKartu()"><i class="fa-solid fa-rotate-right"></i> Refresh</button>
+              <button class="btn btn-primary" onclick="cetakKartuPesertaUjian()"><i class="fa-solid fa-print"></i> Cetak Kartu</button>
+            </div>
+          </div>
+          <div id="printAreaCards" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:16px;">
+            <div class="alert info">Memuat data kartu siswa...</div>
+          </div>
+        </div>
+      </div>
+
