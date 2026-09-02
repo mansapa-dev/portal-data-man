@@ -1146,6 +1146,7 @@ function aktifkanAntiCheat() {
             document.getElementById('txtPelanggaran').textContent = "Ujian Anda dihentikan karena terdeteksi 3x keluar aplikasi.";
             document.getElementById('btnPahamPelanggaran').onclick = appResetLogout;
             document.getElementById('modalPelanggaran').classList.add('show');
+            if(res.hasil) { document.getElementById('modalPelanggaran').classList.remove('show'); document.getElementById('lblNilaiAkhir').textContent = res.hasil.nilai; switchView('viewHasilSiswa'); }
           } else {
             document.getElementById('txtPelanggaran').textContent = `Peringatan (${res.jumlah}/3): Anda keluar dari aplikasi CBT.`;
             document.getElementById('btnPahamPelanggaran').onclick = () => document.getElementById('modalPelanggaran').classList.remove('show');
