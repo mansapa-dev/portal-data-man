@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AcademicYear;
 use App\Services\AuditService;
 use App\Support\ApiResponse;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -68,6 +69,11 @@ class AcademicYearController extends Controller
         $start = $data['startDate'] ?? $year?->startDate?->toDateString();
         $end = $data['endDate'] ?? $year?->endDate?->toDateString();
         abort_unless($start && $end && $start < $end,422,'Tanggal mulai harus sebelum tanggal selesai.');
+        $startDate = CarbonImmutable::parse($start);
+        $endDate = CarbonImmutable::parse($end);
+        abort_unless($endDate->equalTo($startDate->addYearNoOverflow()->subDay()), 422, 'Tahun ajaran harus tepat satu tahun (tanggal selesai satu hari sebelum tanggal mulai tahun berikutnya).');
+        [$nameStart, $nameEnd] = explode('/', $data['name'] ?? $year?->name);
+        abort_unless((int) $nameStart === $startDate->year && (int) $nameEnd === $endDate->year, 422, 'Nama tahun ajaran harus sesuai dengan rentang tanggal.');
 
         return $data;
     }

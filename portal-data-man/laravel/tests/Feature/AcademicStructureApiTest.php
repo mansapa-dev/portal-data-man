@@ -46,6 +46,15 @@ class AcademicStructureApiTest extends TestCase
         $this->assertTrue(Semester::query()->where('publicId', $even['publicId'])->value('isActive'));
     }
 
+    public function test_academic_year_must_be_one_year_and_semesters_must_use_six_month_halves(): void
+    {
+        $this->actingAs($this->admin, 'admin')->postJson('/api/v1/academic-years', ['name' => '2026/2027', 'startDate' => '2026-07-01', 'endDate' => '2027-07-01'])->assertUnprocessable();
+        $year = $this->actingAs($this->admin, 'admin')->postJson('/api/v1/academic-years', ['name' => '2026/2027', 'startDate' => '2026-07-01', 'endDate' => '2027-06-30'])->assertCreated()->json('data');
+
+        $this->actingAs($this->admin, 'admin')->postJson('/api/v1/semesters', ['academicYearPublicId' => $year['publicId'], 'type' => 'ODD', 'startDate' => '2026-07-01', 'endDate' => '2027-01-01'])->assertUnprocessable();
+        $this->actingAs($this->admin, 'admin')->postJson('/api/v1/semesters', ['academicYearPublicId' => $year['publicId'], 'type' => 'EVEN', 'startDate' => '2026-12-31', 'endDate' => '2027-06-30'])->assertUnprocessable();
+    }
+
     public function test_class_code_is_normalized_and_teacher_cannot_be_duplicate_homeroom(): void
     {
         [$year, , $teacher] = $this->fixtures();

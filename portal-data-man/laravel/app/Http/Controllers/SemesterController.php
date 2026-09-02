@@ -6,6 +6,7 @@ use App\Models\AcademicYear;
 use App\Models\Semester;
 use App\Services\AuditService;
 use App\Support\ApiResponse;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -29,7 +30,7 @@ class SemesterController extends Controller
     {
         $data = $request->validate(['academicYearPublicId' => ['required', 'string', 'size:26'], 'type' => ['required', Rule::in(['ODD', 'EVEN'])], 'startDate' => ['required', 'date'], 'endDate' => ['required', 'date']]);
         $year = AcademicYear::query()->where('publicId', $data['academicYearPublicId'])->firstOrFail();
-        $this->dates($data['startDate'], $data['endDate'], $year);
+        $this->dates($data['startDate'], $data['endDate'], $year, $data['type']);
         abort_if(Semester::query()->where('academicYearId', $year->id)->where('type', $data['type'])->exists(), 409, 'Semester sudah tersedia.');
         $semester = Semester::query()->create(['academicYearId' => $year->id, 'type' => $data['type'], 'startDate' => $data['startDate'], 'endDate' => $data['endDate'], 'isActive' => false]);
         $this->audit->write($request, 'CREATE', 'Semester', $semester->publicId, null, $semester);
@@ -42,7 +43,7 @@ class SemesterController extends Controller
         $data = $request->validate(['startDate' => ['sometimes', 'date'], 'endDate' => ['sometimes', 'date']]);
         $start = $data['startDate'] ?? $semester->startDate->toDateString();
         $end = $data['endDate'] ?? $semester->endDate->toDateString();
-        $this->dates($start, $end, $semester->academicYear);
+        $this->dates($start, $end, $semester->academicYear, $semester->type);
         $old = $semester->replicate();
         $semester->update($data);
         $this->audit->write($request, 'UPDATE', 'Semester', $semester->publicId, $old, $semester);
@@ -62,8 +63,11 @@ class SemesterController extends Controller
         return ApiResponse::success($semester->fresh(), 'Semester berhasil diaktifkan.');
     }
 
-    private function dates(string $start, string $end, AcademicYear $year): void
+    private function dates(string $start, string $end, AcademicYear $year, string $type): void
     {
-        abort_unless($start < $end && $start >= $year->startDate->toDateString() && $end <= $year->endDate->toDateString(),422,'Tanggal semester harus valid dan berada dalam tahun ajaran.');
+        $yearStart = CarbonImmutable::parse($year->startDate);
+        $expectedStart = $type === 'ODD' ? $yearStart : $yearStart->addMonthsNoOverflow(6);
+        $expectedEnd = $type === 'ODD' ? $expectedStart->addMonthsNoOverflow(6)->subDay() : CarbonImmutable::parse($year->endDate);
+        abort_unless(CarbonImmutable::parse($start)->equalTo($expectedStart) && CarbonImmutable::parse($end)->equalTo($expectedEnd), 422, 'Semester harus enam bulan: ganjil pada paruh pertama dan genap pada paruh kedua tahun ajaran.');
     }
 }
