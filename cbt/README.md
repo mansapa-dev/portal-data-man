@@ -1,6 +1,6 @@
 # CBT MAN 1 Palembang
 
-Migrasi CBT dari Google Apps Script + Supabase ke PHP Native 8.2+, PDO, dan MySQL/MariaDB. `index.html` lama dipertahankan sebagai visual specification; `public/assets/js/legacy-bridge.js` menjembatani UI lama ke HTTP API PHP selama migrasi modul berlangsung.
+CBT berjalan dengan PHP Native 8.2+, PDO, dan MySQL/MariaDB. `index.html` dipertahankan sebagai spesifikasi visual; `public/assets/js/native-api-adapter.js` menghubungkan UI ke HTTP API PHP.
 
 ## Kebutuhan
 

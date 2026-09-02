@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
-use Cbt\Controllers\{AdminController,AdminStudentController,AuthController,StudentExamController,SyncController,SetupController,TeacherController};
+use Cbt\Controllers\{AdminController,AdminStudentController,AuthController,StudentExamController,SyncController,SetupController,TeacherController,TeacherSsoController};
 use Cbt\Core\{Database,Request,Response,Router};
 use Cbt\Middleware\{AuditMiddleware,AuthMiddleware,CsrfMiddleware,RateLimitMiddleware};
 use Cbt\Repositories\{AdminRepository,AdminStudentRepository,AttemptRepository,ExamRepository,StudentRepository,UserRepository};
@@ -15,7 +15,7 @@ use Cbt\Integrations\PortalData\HttpPortalDataClient;
 $request=Request::capture();
 if($request->path==='/'||$request->path==='/index.php'){
  $html=file_get_contents(dirname(__DIR__).'/index.html')?:'';
- $html=str_replace('</body>','<script src="assets/js/legacy-bridge.js"></script></body>',$html);
+ $html=str_replace('</body>','<script src="assets/js/native-api-adapter.js"></script></body>',$html);
  Response::html($html)->send();
 }
 if($request->path==='/guru')Response::html((string)include dirname(__DIR__).'/resources/views/teacher/login.php')->send();
@@ -33,7 +33,7 @@ $auth=new AuthController(new AuthService($students,$users));
 $student=new StudentExamController(new ExamSessionService($database,$students,$exams,$attempts),new AnswerService($database,$attempts),new ViolationService($database,$attempts),new ScoringService($database,$attempts));
 $sync=new SyncController(new PortalDataSyncService($database,new HttpPortalDataClient()));
 $setup=new SetupController($database);
-$adminService=new AdminService($database,new AdminRepository($pdo));$admin=new AdminController($adminService);$teacher=new TeacherController($adminService);
+$adminService=new AdminService($database,new AdminRepository($pdo));$admin=new AdminController($adminService);$teacher=new TeacherController($adminService);$teacherSso=new TeacherSsoController($pdo);
 $adminStudents=new AdminStudentController(new AdminStudentService($database,new AdminStudentRepository($pdo),new SecretCipher()));
 $csrf=new CsrfMiddleware();$studentAuth=new AuthMiddleware('student');
 $adminAuth=new AuthMiddleware('auth','ADMIN');
@@ -42,6 +42,7 @@ $studentLoginRate=new RateLimitMiddleware($pdo,'student-login',8,300);$staffLogi
 $audit=fn(string$action,?string$type=null)=>new AuditMiddleware($pdo,$action,$type);
 $router=new Router();
 $router->get('/api/auth/me',[$auth,'me']);
+$router->get('/auth/sso/start',[$teacherSso,'start']);$router->get('/auth/sso/callback',[$teacherSso,'callback']);$router->get('/auth/sso/logout',[$teacherSso,'logout']);
 $router->post('/api/setup/admin',[$setup,'create'],[$csrf,$audit('INITIAL_ADMIN_CREATED','User')]);
 $router->post('/api/auth/student/login',[$auth,'studentLogin'],[$studentLoginRate,$csrf,$audit('STUDENT_LOGIN','Student')]);
 $router->post('/api/auth/staff/login',[$auth,'staffLogin'],[$staffLoginRate,$csrf,$audit('STAFF_LOGIN','User')]);
