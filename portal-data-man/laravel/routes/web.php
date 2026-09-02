@@ -136,6 +136,7 @@ Route::prefix('api/v1')->group(function (): void {
             Route::delete('sso/applications/{applicationClient}', [SsoApplicationController::class, 'destroy']);
             Route::post('sso/applications/{applicationClient}/rotate-secret', [SsoApplicationController::class, 'rotateSecret']);
             Route::post('sso/applications/{applicationClient}/access', [SsoApplicationController::class, 'grant']);
+            Route::post('sso/applications/{applicationClient}/access/bulk', [SsoApplicationController::class, 'grantBulk']);
             Route::post('sso/applications/{applicationClient}/access/{teacherPublicId}/revoke', [SsoApplicationController::class, 'revoke']);
             Route::post('imports/students/{importBatch}/commit', [StudentImportController::class, 'commit']);
             Route::post('imports/teachers/{importBatch}/commit', [TeacherImportController::class, 'commit']);

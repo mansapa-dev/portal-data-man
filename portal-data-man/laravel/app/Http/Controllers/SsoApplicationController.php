@@ -84,6 +84,30 @@ class SsoApplicationController extends Controller
         return $this->show($applicationClient);
     }
 
+    public function grantBulk(Request $request, ApplicationClient $applicationClient): JsonResponse
+    {
+        abort_if($applicationClient->clientType === 'SERVICE', 422, 'Aplikasi service tidak menggunakan akses guru.');
+        $data = $request->validate([
+            'teacherPublicIds' => ['required', 'array', 'min:1', 'max:500'],
+            'teacherPublicIds.*' => ['required', 'string', 'size:26', 'distinct'],
+            'role' => ['required', 'regex:/^[A-Za-z0-9:_-]+$/', 'max:100'],
+        ]);
+        $teachers = Teacher::query()->whereIn('publicId', $data['teacherPublicIds'])->where('status', 'ACTIVE')->get();
+        abort_unless($teachers->count() === count($data['teacherPublicIds']), 422, 'Satu atau lebih guru tidak ditemukan atau tidak aktif.');
+
+        DB::transaction(function () use ($request, $applicationClient, $teachers, $data): void {
+            foreach ($teachers as $teacher) {
+                TeacherApplicationAccess::query()->updateOrCreate(
+                    ['teacherId' => $teacher->id, 'applicationClientId' => $applicationClient->id],
+                    ['role' => $data['role'], 'status' => 'ACTIVE', 'grantedAt' => now(), 'grantedBy' => $request->user('admin')->publicId]
+                );
+            }
+            $this->audit->write($request, 'SSO_ACCESS_BULK_GRANTED', 'ApplicationClient', $applicationClient->publicId, null, ['teacherPublicIds' => $teachers->pluck('publicId')->all(), 'role' => $data['role'], 'total' => $teachers->count()]);
+        });
+
+        return $this->show($applicationClient);
+    }
+
     public function revoke(Request $request, ApplicationClient $applicationClient, string $teacherPublicId): JsonResponse
     {
         $teacher = Teacher::withTrashed()->where('publicId', $teacherPublicId)->firstOrFail();
