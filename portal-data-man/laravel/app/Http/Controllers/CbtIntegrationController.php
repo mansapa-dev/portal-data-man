@@ -37,14 +37,14 @@ class CbtIntegrationController extends Controller
     {
         $limit = min(max((int) $request->query('per_page', 100), 1), 200);
         $page = Student::query()->where('status', 'ACTIVE')->with(['enrollments' => fn ($query) => $query
-            ->where('status', 'ACTIVE')->with(['schoolClass', 'academicYear', 'semester'])->latest('id')])->orderBy('id')->paginate($limit);
+            ->where('status', 'ACTIVE')->with(['schoolClass', 'academicYear', 'semester'])->latest('enrolledAt')])->orderBy('id')->paginate($limit);
         $page->getCollection()->transform(function (Student $student): array {
             $enrollment = $student->enrollments->first();
 
             return ['id' => $student->publicId, 'nisn' => $student->nisn, 'name' => $student->fullName,
                 'status' => $student->status, 'is_active' => $student->status === 'ACTIVE',
                 'class' => $enrollment?->schoolClass ? ['id' => $enrollment->schoolClass->publicId, 'name' => $enrollment->schoolClass->name] : null,
-                'grade' => $enrollment?->schoolClass?->gradeLevel,
+                'grade' => $this->normalizeGrade($enrollment?->schoolClass?->gradeLevel),
                 'academic_year_id' => $enrollment?->academicYear?->publicId,
                 'academic_year' => $enrollment?->academicYear?->name,
                 'semester_id' => $enrollment?->semester?->publicId, 'semester' => $enrollment?->semester?->type];
@@ -69,10 +69,26 @@ class CbtIntegrationController extends Controller
         $limit = min(max((int) $request->query('per_page', 100), 1), 200);
         $page = SchoolClass::query()->with('academicYear')->where('status', 'ACTIVE')->orderBy('id')->paginate($limit);
         $page->getCollection()->transform(fn (SchoolClass $class): array => ['id' => $class->publicId,
-            'code' => $class->code, 'name' => $class->name, 'grade' => $class->gradeLevel,
+            'code' => $class->code, 'name' => $class->name, 'grade' => $this->normalizeGrade($class->gradeLevel),
             'academic_year_id' => $class->academicYear?->publicId,
             'academic_year' => $class->academicYear?->name, 'status' => $class->status]);
 
         return ApiResponse::success($page, 'Referensi kelas CBT berhasil diambil.');
+    }
+
+    private function normalizeGrade(mixed $gradeLevel): ?string
+    {
+        if ($gradeLevel === null || $gradeLevel === '') {
+            return null;
+        }
+        return match ((string) $gradeLevel) {
+            '7', 'VII'   => 'VII',
+            '8', 'VIII'  => 'VIII',
+            '9', 'IX'    => 'IX',
+            '10', 'X'    => 'X',
+            '11', 'XI'   => 'XI',
+            '12', 'XII'  => 'XII',
+            default      => strtoupper(trim((string) $gradeLevel)),
+        };
     }
 }

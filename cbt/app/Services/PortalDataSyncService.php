@@ -24,16 +24,61 @@ final class PortalDataSyncService
   $portal=(string)($d['id']??$d['student_id']??'');$nisn=trim((string)($d['nisn']??''));$name=trim((string)($d['name']??$d['nama']??''));if($portal===''||!preg_match('/^\d{8,20}$/',$nisn)||$name==='')throw new \UnexpectedValueException('Data siswa invalid.');
   $existing=$this->row('students','portal_student_id',$portal);$values=['portal'=>$portal,'portal_class'=>$d['class']['id']??$d['class_id']??null,'nisn'=>$nisn,'name'=>$name,'class'=>$d['class']['name']??$d['kelas']??$d['rombel']??null,'grade'=>$this->normalizeGrade($d['grade']??$d['tingkat']??null),'year'=>$d['academic_year']??$d['tahun_ajaran']??null,'active'=>(int)($d['is_active']??strtoupper((string)($d['status']??'ACTIVE'))==='ACTIVE')];
   if($existing&&$this->same($existing,['portal_class_id'=>$values['portal_class'],'nisn'=>$values['nisn'],'name_snapshot'=>$values['name'],'class_snapshot'=>$values['class'],'grade_snapshot'=>$values['grade'],'academic_year_snapshot'=>$values['year'],'is_active'=>$values['active']])){$this->touch('students',(int)$existing['id']);return'unchanged';}
-  $sql='INSERT INTO students(portal_student_id,portal_class_id,nisn,name_snapshot,class_snapshot,grade_snapshot,academic_year_snapshot,is_active,last_synced_at) VALUES(:portal,:portal_class,:nisn,:name,:class,:grade,:year,:active,UTC_TIMESTAMP(3)) ON DUPLICATE KEY UPDATE portal_class_id=VALUES(portal_class_id),nisn=VALUES(nisn),name_snapshot=VALUES(name_snapshot),class_snapshot=VALUES(class_snapshot),grade_snapshot=VALUES(grade_snapshot),academic_year_snapshot=VALUES(academic_year_snapshot),is_active=VALUES(is_active),last_synced_at=UTC_TIMESTAMP(3)';$this->db->pdo()->prepare($sql)->execute($values);return$existing?'updated':'inserted';
+  // Gunakan INSERT terpisah lalu UPDATE untuk menghindari ON DUPLICATE KEY yang menimpa record siswa berbeda saat NISN collision.
+  if(!$existing){
+   try{
+    $sql='INSERT INTO students(portal_student_id,portal_class_id,nisn,name_snapshot,class_snapshot,grade_snapshot,academic_year_snapshot,is_active,last_synced_at) VALUES(:portal,:portal_class,:nisn,:name,:class,:grade,:year,:active,UTC_TIMESTAMP(3))';
+    $this->db->pdo()->prepare($sql)->execute($values);
+    return'inserted';
+   }catch(\PDOException$e){
+    // NISN collision: ada siswa lain dengan NISN yang sama — update berdasarkan portal_student_id saja.
+    if((string)($e->getCode()??'')==='23000'||str_contains($e->getMessage(),'Duplicate')){
+     $existing=$this->row('students','nisn',$nisn);
+     // Jika portal_student_id di DB berbeda, ini data duplikat NISN di Portal — tidak timpa, lempar.
+     if($existing&&(string)$existing['portal_student_id']!==$portal)throw new \UnexpectedValueException('NISN '.$nisn.' sudah terdaftar untuk siswa lain (portal_id='.$existing['portal_student_id'].').');
+     // Jika sama (race condition), lanjutkan ke UPDATE di bawah.
+     $existing=$existing??$this->row('students','portal_student_id',$portal);
+    }else{throw$e;}
+   }
+  }
+  $sql='UPDATE students SET portal_class_id=:portal_class,nisn=:nisn,name_snapshot=:name,class_snapshot=:class,grade_snapshot=:grade,academic_year_snapshot=:year,is_active=:active,last_synced_at=UTC_TIMESTAMP(3) WHERE portal_student_id=:portal';
+  $this->db->pdo()->prepare($sql)->execute($values);
+  return'updated';
  }
- private function teacher(array$d):string{$portal=(string)($d['id']??$d['teacher_id']??'');$name=trim((string)($d['name']??$d['nama']??''));if($portal===''||$name==='')throw new \UnexpectedValueException('Data guru invalid.');$existing=$this->row('teachers','portal_teacher_id',$portal);$v=['portal'=>$portal,'nip'=>$d['nip']??null,'nuptk'=>$d['nuptk']??null,'name'=>$name,'status'=>(($d['is_active']??true)?'ACTIVE':'INACTIVE')];if($existing&&$this->same($existing,['nip'=>$v['nip'],'nuptk'=>$v['nuptk'],'name_snapshot'=>$v['name'],'status'=>$v['status']])){$this->touch('teachers',(int)$existing['id']);return'unchanged';}$sql='INSERT INTO teachers(portal_teacher_id,nip,nuptk,name_snapshot,status,last_synced_at) VALUES(:portal,:nip,:nuptk,:name,:status,UTC_TIMESTAMP(3)) ON DUPLICATE KEY UPDATE nip=VALUES(nip),nuptk=VALUES(nuptk),name_snapshot=VALUES(name_snapshot),status=VALUES(status),last_synced_at=UTC_TIMESTAMP(3)';$this->db->pdo()->prepare($sql)->execute($v);return$existing?'updated':'inserted';}
+ private function teacher(array$d):string{
+  $portal=(string)($d['id']??$d['teacher_id']??'');$name=trim((string)($d['name']??$d['nama']??''));if($portal===''||$name==='')throw new \UnexpectedValueException('Data guru invalid.');
+  $existing=$this->row('teachers','portal_teacher_id',$portal);
+  $v=['portal'=>$portal,'nip'=>$d['nip']??null,'nuptk'=>$d['nuptk']??null,'name'=>$name,'status'=>(($d['is_active']??true)?'ACTIVE':'INACTIVE')];
+  if($existing&&$this->same($existing,['nip'=>$v['nip'],'nuptk'=>$v['nuptk'],'name_snapshot'=>$v['name'],'status'=>$v['status']])){$this->touch('teachers',(int)$existing['id']);return'unchanged';}
+  // Gunakan INSERT terpisah lalu UPDATE untuk menghindari ON DUPLICATE KEY yang menimpa guru lain saat NIP/NUPTK collision.
+  if(!$existing){
+   try{
+    $sql='INSERT INTO teachers(portal_teacher_id,nip,nuptk,name_snapshot,status,last_synced_at) VALUES(:portal,:nip,:nuptk,:name,:status,UTC_TIMESTAMP(3))';
+    $this->db->pdo()->prepare($sql)->execute($v);
+    return'inserted';
+   }catch(\PDOException$e){
+    // NIP atau NUPTK collision: ada guru lain dengan NIP/NUPTK yang sama.
+    if((string)($e->getCode()??'')==='23000'||str_contains($e->getMessage(),'Duplicate')){
+     // Temukan record yang conflict berdasarkan NIP/NUPTK dan verifikasi bukan guru yang sama.
+     $byNip=$v['nip']?$this->row('teachers','nip',(string)$v['nip']):null;
+     $byNuptk=$v['nuptk']?$this->row('teachers','nuptk',(string)$v['nuptk']):null;
+     $conflict=$byNip??$byNuptk;
+     if($conflict&&(string)$conflict['portal_teacher_id']!==$portal)throw new \UnexpectedValueException('NIP/NUPTK guru sudah terdaftar untuk guru lain (portal_id='.$conflict['portal_teacher_id'].').');
+     $existing=$this->row('teachers','portal_teacher_id',$portal);
+    }else{throw$e;}
+   }
+  }
+  $sql='UPDATE teachers SET nip=:nip,nuptk=:nuptk,name_snapshot=:name,status=:status,last_synced_at=UTC_TIMESTAMP(3) WHERE portal_teacher_id=:portal';
+  $this->db->pdo()->prepare($sql)->execute($v);
+  return'updated';
+ }
  private function schoolClass(array$d):string{$portal=(string)($d['id']??$d['class_id']??'');$name=trim((string)($d['name']??$d['nama']??''));if($portal===''||$name==='')throw new \UnexpectedValueException('Data kelas invalid.');$existing=$this->row('portal_classes','portal_class_id',$portal);$v=['portal'=>$portal,'code'=>$d['code']??$d['kode']??$name,'name'=>$name,'grade'=>$this->normalizeGrade($d['grade']??$d['tingkat']??null),'year'=>$d['academic_year']??$d['tahun_ajaran']??null];if($existing&&$this->same($existing,['code'=>$v['code'],'name'=>$v['name'],'grade'=>$v['grade'],'academic_year'=>$v['year'],'status'=>'ACTIVE'])){$this->touch('portal_classes',(int)$existing['id']);return'unchanged';}$sql="INSERT INTO portal_classes(portal_class_id,code,name,grade,academic_year,status,last_synced_at) VALUES(:portal,:code,:name,:grade,:year,'ACTIVE',UTC_TIMESTAMP(3)) ON DUPLICATE KEY UPDATE code=VALUES(code),name=VALUES(name),grade=VALUES(grade),academic_year=VALUES(academic_year),status='ACTIVE',last_synced_at=UTC_TIMESTAMP(3)";$this->db->pdo()->prepare($sql)->execute($v);return$existing?'updated':'inserted';}
  private function academicYear(array$d):string{$portal=(string)($d['id']??'');$name=trim((string)($d['name']??''));if($portal===''||$name==='')throw new \UnexpectedValueException('Data tahun ajaran invalid.');$existing=$this->row('portal_academic_years','portal_academic_year_id',$portal);$v=['portal'=>$portal,'name'=>$name,'active'=>(int)($d['is_active']??false)];if($existing&&$this->same($existing,['name'=>$name,'is_active'=>$v['active']])){$this->touch('portal_academic_years',(int)$existing['id']);return'unchanged';}$sql='INSERT INTO portal_academic_years(portal_academic_year_id,name,is_active,last_synced_at) VALUES(:portal,:name,:active,UTC_TIMESTAMP(3)) ON DUPLICATE KEY UPDATE name=VALUES(name),is_active=VALUES(is_active),last_synced_at=UTC_TIMESTAMP(3)';$this->db->pdo()->prepare($sql)->execute($v);return$existing?'updated':'inserted';}
  private function semester(array$d):string{$portal=(string)($d['id']??'');$yearId=(string)($d['academic_year_id']??'');$year=trim((string)($d['academic_year']??''));$type=strtoupper((string)($d['type']??''));if($portal===''||$yearId===''||$year===''||!in_array($type,['ODD','EVEN'],true))throw new \UnexpectedValueException('Data semester invalid.');$existing=$this->row('portal_semesters','portal_semester_id',$portal);$v=['portal'=>$portal,'year_id'=>$yearId,'type'=>$type,'year'=>$year,'active'=>(int)($d['is_active']??false)];if($existing&&$this->same($existing,['portal_academic_year_id'=>$yearId,'type'=>$type,'academic_year'=>$year,'is_active'=>$v['active']])){$this->touch('portal_semesters',(int)$existing['id']);return'unchanged';}$sql='INSERT INTO portal_semesters(portal_semester_id,portal_academic_year_id,type,academic_year,is_active,last_synced_at) VALUES(:portal,:year_id,:type,:year,:active,UTC_TIMESTAMP(3)) ON DUPLICATE KEY UPDATE portal_academic_year_id=VALUES(portal_academic_year_id),type=VALUES(type),academic_year=VALUES(academic_year),is_active=VALUES(is_active),last_synced_at=UTC_TIMESTAMP(3)';$this->db->pdo()->prepare($sql)->execute($v);return$existing?'updated':'inserted';}
  private function row(string$table,string$key,string$value):?array{$s=$this->db->pdo()->prepare("SELECT * FROM {$table} WHERE {$key}=:value LIMIT 1");$s->execute(['value'=>$value]);return$s->fetch()?:null;}
  private function same(array$row,array$values):bool{foreach($values as$k=>$v)if((string)($row[$k]??'')!==(string)($v??''))return false;return true;}
  private function touch(string$table,int$id):void{$this->db->pdo()->prepare("UPDATE {$table} SET last_synced_at=UTC_TIMESTAMP(3) WHERE id=:id")->execute(['id'=>$id]);}
- private function normalizeGrade(mixed$grade):?string{$value=strtoupper(trim((string)$grade));return match($value){'10','X'=>'X','11','XI'=>'XI','12','XII'=>'XII',default=>$value!==''?$value:null};}
+ private function normalizeGrade(mixed$grade):?string{$value=strtoupper(trim((string)$grade));return match($value){'7','VII'=>'VII','8','VIII'=>'VIII','9','IX'=>'IX','10','X'=>'X','11','XI'=>'XI','12','XII'=>'XII',default=>$value!==''?$value:null};}
  private function deactivateStale(string$type,int$logId):int
  {
   [$table,$statusColumn,$inactiveValue]=match($type){'STUDENTS'=>['students','is_active',0],'TEACHERS'=>['teachers','status','INACTIVE'],'CLASSES'=>['portal_classes','status','INACTIVE'],'ACADEMIC_YEARS'=>['portal_academic_years','is_active',0],'SEMESTERS'=>['portal_semesters','is_active',0]};
