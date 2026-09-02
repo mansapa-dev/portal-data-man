@@ -7,6 +7,6 @@ final class AdminStudentController
 {
  public function __construct(private AdminStudentService$students){}
  public function index(Request$r):Response{return Response::json($this->students->all());}
- public function setPin(Request$r):Response{$this->students->setPin($r->json());return Response::json(null,'PIN CBT siswa berhasil disimpan.');}
+ public function setPin(Request$r):Response{ $pin=$this->students->setPin($r->json());return Response::json(["pin"=>$pin],'PIN CBT siswa berhasil disimpan.');}
  public function reset(Request$r):Response{$this->students->reset((int)$r->attributes['id']);return Response::json(null,'Attempt siswa berhasil dibuka/reset.');}
 }
