@@ -32,7 +32,7 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
     <header class="topbar">
       <button id="menu" class="menu">☰</button>
       <div style="margin-left:0; text-align:left;">
-        <span style="font-size:13px; font-weight:700; color:var(--green-dark);"><i class="fa-solid fa-graduation-cap"></i> CBT MAN 1 Palembang</span>
+        <span style="font-size:13px; font-weight:700; color:var(--green-dark);">CBT MAN 1 Palembang</span>
       </div>
       <div style="display:flex; align-items:center; gap:14px;">
         <div style="text-align:right;">
