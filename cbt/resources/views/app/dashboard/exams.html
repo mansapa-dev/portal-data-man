@@ -16,7 +16,7 @@
           <div class="filter-bar-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:12px; margin-bottom:16px; background:var(--surface-subtle); padding:14px; border-radius:10px; border:1px solid var(--border);">
             <div>
               <label style="font-size:11px; font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px;">Tingkatan:</label>
-              <select id="fltUjianTingkat" onchange="applyFilterUjian()" style="width:100%; padding:8px 10px; border-radius:8px; border:1.5px solid var(--border); font-size:12.5px; background:var(--surface);">
+              <select id="fltUjianTingkat" onchange="if(typeof populateAdminUjianFilters==='function')populateAdminUjianFilters(); applyFilterUjian();" style="width:100%; padding:8px 10px; border-radius:8px; border:1.5px solid var(--border); font-size:12.5px; background:var(--surface);">
                 <option value="ALL">Semua Tingkat</option>
                 <option value="X">Tingkat X</option>
                 <option value="XI">Tingkat XI</option>

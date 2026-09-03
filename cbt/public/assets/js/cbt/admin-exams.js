@@ -1,7 +1,10 @@
 // Administrator exam schedule management.
 let cacheAdminUjianRows = [];
 
-function formatTargetKelas(targetStr) {
+function formatTargetKelas(targetStr, targetNamesStr) {
+  if (targetNamesStr && targetNamesStr.trim() !== '' && !targetNamesStr.startsWith('01M1')) {
+    return targetNamesStr.split(',').map(s => s.trim()).join(', ');
+  }
   if (!targetStr || targetStr.trim() === '' || targetStr.trim().toLowerCase() === 'semua') {
     return 'Semua Kelas';
   }
@@ -26,15 +29,22 @@ function formatTargetKelas(targetStr) {
 }
 
 function populateAdminUjianFilters() {
+  const tingVal = document.getElementById('fltUjianTingkat')?.value || 'ALL';
+
   // Populate Rombel / Kelas Filter
   const fltKelas = document.getElementById('fltUjianKelas');
   if (fltKelas && portalReferences && portalReferences.classes) {
     const currentVal = fltKelas.value;
-    const sortedClasses = [...portalReferences.classes].sort((a, b) => (a.name || a.code || '').localeCompare(b.name || b.code || ''));
+    const availableClasses = portalReferences.classes.filter(c => tingVal === 'ALL' || c.grade === tingVal);
+    const sortedClasses = [...availableClasses].sort((a, b) => (a.name || a.code || '').localeCompare(b.name || b.code || '', undefined, { numeric: true }));
     fltKelas.innerHTML = `<option value="ALL">Semua Kelas</option>` + sortedClasses.map(c => `
       <option value="${c.portal_class_id}">${c.name || c.code}</option>
     `).join('');
-    if (currentVal) fltKelas.value = currentVal;
+    if (currentVal && sortedClasses.some(c => c.portal_class_id === currentVal)) {
+      fltKelas.value = currentVal;
+    } else {
+      fltKelas.value = 'ALL';
+    }
   }
 
   // Populate Mata Pelajaran Filter
@@ -63,11 +73,13 @@ function applyFilterUjian() {
     // Filter Kelas
     if (kelas !== 'ALL') {
       const targetStr = String(u.kelas_target || '').trim();
+      const targetNames = String(u.nama_kelas_target || '').trim();
       if (targetStr && targetStr.toLowerCase() !== 'semua') {
         const ids = targetStr.split(',').map(s => s.trim());
+        const names = targetNames.split(',').map(s => s.trim());
         const selectedClassObj = portalReferences.classes?.find(c => c.portal_class_id === kelas);
-        const selectedClassName = selectedClassObj?.name || '';
-        const match = ids.includes(kelas) || (selectedClassName && ids.includes(selectedClassName));
+        const selectedClassName = selectedClassObj?.name || selectedClassObj?.code || '';
+        const match = ids.includes(kelas) || (selectedClassName && (names.includes(selectedClassName) || ids.includes(selectedClassName)));
         if (!match) return false;
       }
     }
@@ -79,7 +91,8 @@ function applyFilterUjian() {
     }
     // Search Query
     if (query !== '') {
-      const fullText = `${u.id} ${u.nama_ujian} ${u.nama_mapel || ''} ${u.tingkat} ${u.tanggal_ujian || ''} ${formatTargetKelas(u.kelas_target)} ${u.tahun_ajaran || ''}`.toLowerCase();
+      const formatted = formatTargetKelas(u.kelas_target, u.nama_kelas_target);
+      const fullText = `${u.id} ${u.nama_ujian} ${u.nama_mapel || ''} ${u.tingkat} ${u.tanggal_ujian || ''} ${formatted} ${u.tahun_ajaran || ''}`.toLowerCase();
       if (!fullText.includes(query)) return false;
     }
     return true;
@@ -100,7 +113,7 @@ function applyFilterUjian() {
     u.tingkat, 
     u.sesi || 1, 
     u.tanggal_ujian || '', 
-    formatTargetKelas(u.kelas_target), 
+    formatTargetKelas(u.kelas_target, u.nama_kelas_target), 
     u.durasi_menit, 
     u.tahun_ajaran || '', 
     u.semester || '', 
@@ -108,7 +121,7 @@ function applyFilterUjian() {
   ]);
 
   tb.innerHTML = filtered.map(u => {
-    const formattedKelas = formatTargetKelas(u.kelas_target);
+    const formattedKelas = formatTargetKelas(u.kelas_target, u.nama_kelas_target);
     return `
       <tr>
         <td><strong>#${u.id}</strong></td>
