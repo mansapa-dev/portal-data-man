@@ -63,11 +63,13 @@
   }
 
   function render(section) {
+    window.CbtLiveSessions.stop();
     content.replaceChildren();
     document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.section === section));
-    const titles={overview:'Dashboard',exams:'Ujian Diampu',results:'Hasil Siswa',violations:'Pelanggaran Ujian',account:'Ubah Password'};
+    const titles={overview:'Dashboard',live:'Live Sessions',exams:'Ujian Diampu',results:'Hasil Siswa',violations:'Pelanggaran Ujian',account:'Ubah Password'};
     const pageTitle=document.getElementById('teacherPageTitle');if(pageTitle)pageTitle.textContent=titles[section]||'Dashboard';
 
+    if (section === 'live') { window.CbtLiveSessions.mount(content, api, notice); return; }
     if (section === 'overview') {
       const metrics=el('section',undefined,'teacher-metrics');
       [["fa-calendar-days",data.ujianList.length,'Ujian Diampu','blue'],["fa-circle-check",data.hasilList.length,'Hasil Terkumpul','green'],["fa-shield-halved",data.pelanggaranList.length,'Pelanggaran Tercatat','red']].forEach(([icon,value,label,color])=>{const card=el('article',undefined,`teacher-metric ${color}`);card.innerHTML=`<div class="teacher-metric-icon"><i class="fa-solid ${icon}"></i></div><div><small>${label}</small><strong>${value}</strong><span>Lihat detail <i class="fa-solid fa-arrow-right"></i></span></div>`;metrics.append(card);});
@@ -188,7 +190,7 @@
     csrf = me.data.csrf_token;
     document.getElementById('teacherName').textContent = me.data.staff.nip || me.data.staff.username || 'Guru';
     data = (await api('api/teacher/dashboard')).data;
-    render('overview');
+    render('live');
   } catch (error) {
     notice.textContent = error.message;
   }

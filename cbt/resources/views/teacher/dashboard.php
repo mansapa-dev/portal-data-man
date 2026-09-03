@@ -21,8 +21,9 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
     </div>
     <nav>
       <span class="nav-label">UTAMA</span>
-      <button class="nav-item active" data-section="overview"><i class="fa-solid fa-house"></i> Dashboard</button>
+      <button class="nav-item" data-section="overview"><i class="fa-solid fa-house"></i> Dashboard</button>
       <span class="nav-label">MONITORING</span>
+      <button class="nav-item active" data-section="live"><i class="fa-solid fa-signal"></i> Live Sessions <span class="live-dot" aria-hidden="true"></span></button>
       <button class="nav-item" data-section="exams"><i class="fa-solid fa-calendar-days"></i> Ujian Diampu</button>
       <button class="nav-item" data-section="results"><i class="fa-solid fa-square-poll-vertical"></i> Hasil Siswa</button>
       <button class="nav-item" data-section="violations"><i class="fa-solid fa-shield-halved"></i> Pelanggaran</button>
@@ -61,7 +62,7 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
     <section id="content" class="content-grid"></section>
   </main>
 
-  <script src="../assets/js/teacher/dashboard.js"></script>
+  <script src="../assets/js/teacher/live-sessions.js"></script><script src="../assets/js/teacher/dashboard.js"></script>
 </body>
 </html>
 <?php return ob_get_clean();
