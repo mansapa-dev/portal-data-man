@@ -1,4 +1,6 @@
 // Student authentication and available exam list.
+let cacheStudentJadwal = [];
+
 document.getElementById('formLoginSiswa').addEventListener('submit', function(e) {
   e.preventDefault();
   const no = document.getElementById('inNoUjian').value;
@@ -27,9 +29,12 @@ document.getElementById('formLoginSiswa').addEventListener('submit', function(e)
 });
 
 function renderDaftarJadwal(jadwalArr) {
-  const container = document.getElementById('listJadwalUjian');
-  if (!jadwalArr || jadwalArr.length === 0) {
-    container.innerHTML = `<div class="alert error" style="display:block; margin:0;"><i class="fa-solid fa-circle-info"></i> Tidak ada jadwal ujian aktif untuk kelas/tingkat Anda saat ini.</div>`;
+  cacheStudentJadwal = jadwalArr || [];
+  const container = document.getElementById('listJadwalUjian') || document.getElementById('listJadwalSiswa');
+  if(!container) return;
+
+  if(!jadwalArr || jadwalArr.length === 0) {
+    container.innerHTML = '<div class="alert" style="margin:0;">Tidak ada jadwal ujian aktif untuk kelas/sesi Anda saat ini.</div>';
     return;
   }
   
@@ -42,7 +47,7 @@ function renderDaftarJadwal(jadwalArr) {
       cardClass = 'style="border-color:var(--danger); background:#fef2f2;"';
       btnHtml = `<button class="btn btn-danger" style="padding:8px 16px; font-size:12px; width:auto;" disabled><i class="fa-solid fa-lock"></i> Terblokir</button>`;
     } else {
-      btnHtml = `<button class="btn btn-success" style="padding:8px 16px; font-size:12px; width:auto;" onclick='persiapkanUjian(${JSON.stringify(j)})'><i class="fa-solid fa-play"></i> Mulai Ujian</button>`;
+      btnHtml = `<button class="btn btn-success" style="padding:8px 16px; font-size:12px; width:auto;" onclick="persiapkanUjianById(${j.id})"><i class="fa-solid fa-play"></i> Mulai Ujian</button>`;
     }
     return `
       <div class="card" ${cardClass} style="display:flex; justify-content:space-between; align-items:center; padding:16px; margin:0;">
@@ -54,4 +59,9 @@ function renderDaftarJadwal(jadwalArr) {
       </div>
     `;
   }).join('');
+}
+
+function persiapkanUjianById(id) {
+  const j = (cacheStudentJadwal || []).find(x => String(x.id) === String(id));
+  if (j) persiapkanUjian(j);
 }

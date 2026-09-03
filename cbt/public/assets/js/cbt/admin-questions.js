@@ -361,13 +361,22 @@ function applyFilterDetailSoal() {
         <td style="text-align:center;"><span class="badge bg-green" style="font-size:12px; font-weight:800; padding:4px 8px;">${s.jawaban_benar}</span></td>
         <td style="text-align:center;"><strong style="color:var(--text-main); font-size:13px;">${s.poin || 1}</strong></td>
         <td style="text-align:center;">
-          <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick='editSoal(${JSON.stringify(s)})'>
+          <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="editSoalById(${s.id})">
             <i class="fa-solid fa-pen"></i> Edit
           </button>
         </td>
       </tr>
     `;
   }).join('');
+}
+
+function editSoalById(id) {
+  const s = (cacheAdminSoalRows || []).find(x => String(x.id) === String(id));
+  if (s) bukaModalSoal(s);
+}
+
+function editSoal(s) {
+  bukaModalSoal(s);
 }
 
 function bukaModalSoalUntukMapelAktif() {

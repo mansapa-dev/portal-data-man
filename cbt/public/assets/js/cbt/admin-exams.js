@@ -189,13 +189,22 @@ function applyFilterUjian() {
         <td><small style="font-weight:700;">${u.tahun_ajaran || '2025/2026'}</small><br><small style="color:var(--text-muted);">Semester ${u.semester || 'Genap'}</small></td>
         <td><span class="badge ${u.status_aktif ? 'bg-green' : 'bg-red'}">${u.status_aktif ? 'AKTIF' : 'NONAKTIF'}</span></td>
         <td>
-          <button class="btn btn-secondary" style="padding:5px 10px; font-size:11.5px;" onclick='editUjian(${JSON.stringify(u)})'>
+          <button class="btn btn-secondary" style="padding:5px 10px; font-size:11.5px;" onclick="editUjianById(${u.id})">
             <i class="fa-solid fa-pen"></i> Edit
           </button>
         </td>
       </tr>
     `;
   }).join('');
+}
+
+function editUjianById(id) {
+  const u = (cacheAdminUjianRows || []).find(x => String(x.id) === String(id));
+  if (u) bukaModalUjian(u);
+}
+
+function editUjian(u) {
+  bukaModalUjian(u);
 }
 
 function loadDataAdminUjian() {
@@ -208,7 +217,7 @@ function loadDataAdminUjian() {
 
   cbtApi
     .withSuccessHandler(rows => {
-      cacheAdminUjianRows = rows || [];
+      cacheAdminUjianRows = Array.isArray(rows) ? rows : (rows?.data || []);
       populateAdminUjianFilters();
       applyFilterUjian();
     })

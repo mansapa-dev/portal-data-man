@@ -19,7 +19,7 @@ function loadDataAdminGuruUjian() {
           <td>${r.nama_ujian}</td>
           <td><span class="badge bg-gray">Tingkat ${r.tingkat}</span></td>
           <td style="display:flex; gap:6px;">
-            <button class="btn btn-secondary" style="padding:4px 10px; font-size:11px;" onclick='editGuruUjian(${JSON.stringify(r)})'><i class="fa-solid fa-pen"></i> Edit</button>
+            <button class="btn btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="editGuruUjianById(${r.id})"><i class="fa-solid fa-pen"></i> Edit</button>
             <button class="btn btn-danger" style="padding:4px 10px; font-size:11px;" onclick="hapusGuruUjian(${r.id})"><i class="fa-solid fa-trash"></i> Hapus</button>
           </td>
         </tr>
@@ -40,6 +40,11 @@ function bukaModalGuruUjian() {
   selUjian.innerHTML = (window.cacheUjianList || []).map(u => `<option value="${u.id}">${u.nama_mapel || 'Mapel'} — ${u.nama_ujian} (Sesi ${u.sesi || 1}) - Tingkat ${u.tingkat}</option>`).join('');
   
   document.getElementById('modalGuruUjian').classList.add('show');
+}
+
+function editGuruUjianById(id) {
+  const r = (window.cacheGuruUjianData || []).find(x => String(x.id) === String(id));
+  if (r) editGuruUjian(r);
 }
 
 function editGuruUjian(r) {

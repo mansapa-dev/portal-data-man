@@ -3,23 +3,23 @@ let cacheSiswaGlobal = [];
 let activeSiswaAbjadFilter = 'ALL';
 
 function loadDataAdminSiswa() {
+  const tb = document.getElementById('tblAdminSiswa');
+  if (tb) tb.innerHTML = `<tr><td colspan="8" align="center" style="padding:24px;">Memuat data peserta ujian...</td></tr>`;
+
   loadPortalReferences(() => {
     populateAdminSiswaFilters();
     applyFilterSiswa();
   });
 
-  const tb = document.getElementById('tblAdminSiswa');
-  if (tb) tb.innerHTML = `<tr><td colspan="8" align="center" style="padding:24px;">Memuat data peserta ujian...</td></tr>`;
-
   cbtApi
     .withSuccessHandler(rows => {
-      cacheSiswaGlobal = rows || [];
+      cacheSiswaGlobal = Array.isArray(rows) ? rows : (rows?.data || []);
       populateAdminSiswaFilters();
       applyFilterSiswa();
     })
     .withFailureHandler(err => {
       showCustomAlert('Gagal Memuat Data', `Terjadi kesalahan saat mengambil data siswa: ${err.message}`, 'error');
-      if (tb) tb.innerHTML = `<tr><td colspan="8" align="center" style="padding:24px; color:var(--danger);">Gagal memuat data siswa.</td></tr>`;
+      if (tb) tb.innerHTML = `<tr><td colspan="8" align="center" style="padding:24px; color:var(--danger);">Gagal memuat data siswa: ${err.message}</td></tr>`;
     })
     .getAdminSiswaList(stPengelola);
 }
@@ -27,38 +27,39 @@ function loadDataAdminSiswa() {
 function populateAdminSiswaFilters() {
   const tingVal = document.getElementById('fltSiswaTingkat')?.value || 'ALL';
   const fltKelas = document.getElementById('fltSiswaKelas');
+  if (!fltKelas) return;
 
-  if (fltKelas) {
-    const currentVal = fltKelas.value;
-    const classSet = new Set();
+  const currentVal = fltKelas.value;
+  const classSet = new Set();
 
-    if (portalReferences && portalReferences.classes) {
-      portalReferences.classes.forEach(c => {
-        if (tingVal === 'ALL' || c.grade === tingVal) {
-          const name = c.name || c.code;
-          if (name) classSet.add(name);
-        }
-      });
-    }
+  // 1. From portalReferences
+  if (portalReferences && Array.isArray(portalReferences.classes)) {
+    portalReferences.classes.forEach(c => {
+      if (tingVal === 'ALL' || String(c.grade || '').toUpperCase() === tingVal.toUpperCase()) {
+        const name = c.name || c.code;
+        if (name) classSet.add(name);
+      }
+    });
+  }
 
-    if (cacheSiswaGlobal && cacheSiswaGlobal.length > 0) {
-      cacheSiswaGlobal.forEach(s => {
-        if (tingVal === 'ALL' || String(s.tingkat).toUpperCase() === tingVal.toUpperCase()) {
-          if (s.kelas) classSet.add(s.kelas);
-        }
-      });
-    }
+  // 2. From cacheSiswaGlobal
+  if (cacheSiswaGlobal && Array.isArray(cacheSiswaGlobal)) {
+    cacheSiswaGlobal.forEach(s => {
+      if (tingVal === 'ALL' || String(s.tingkat || '').toUpperCase() === tingVal.toUpperCase()) {
+        if (s.kelas) classSet.add(s.kelas);
+      }
+    });
+  }
 
-    const sortedClasses = Array.from(classSet).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-    fltKelas.innerHTML = `<option value="ALL">Semua Kelas (${sortedClasses.length})</option>` + sortedClasses.map(c => `
-      <option value="${c}">${c}</option>
-    `).join('');
+  const sortedClasses = Array.from(classSet).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  fltKelas.innerHTML = `<option value="ALL">Semua Kelas (${sortedClasses.length})</option>` + sortedClasses.map(c => `
+    <option value="${c}">${c}</option>
+  `).join('');
 
-    if (currentVal && sortedClasses.includes(currentVal)) {
-      fltKelas.value = currentVal;
-    } else {
-      fltKelas.value = 'ALL';
-    }
+  if (currentVal && sortedClasses.includes(currentVal)) {
+    fltKelas.value = currentVal;
+  } else {
+    fltKelas.value = 'ALL';
   }
 }
 
@@ -74,20 +75,28 @@ function applyFilterSiswa() {
   const sort = document.getElementById('fltSiswaSort')?.value || 'nama_asc';
   const query = (document.getElementById('searchSiswa')?.value || '').toLowerCase().trim();
 
+  const allClasses = portalReferences?.classes || [];
+
   // 1. Filter base list
-  let filtered = cacheSiswaGlobal.filter(s => {
+  let filtered = (cacheSiswaGlobal || []).filter(s => {
     // Filter Tingkat
-    if (ting !== 'ALL' && String(s.tingkat || '').toUpperCase() !== ting.toUpperCase()) {
-      return false;
+    if (ting !== 'ALL') {
+      const sTingkat = String(s.tingkat || '').trim().toUpperCase();
+      if (sTingkat !== ting.toUpperCase()) return false;
     }
     // Filter Kelas
     if (kelas !== 'ALL') {
       const studentClass = String(s.kelas || '').trim().toLowerCase();
-      const targetClass = kelas.trim().toLowerCase();
-      const matchedRef = portalReferences.classes?.find(c => c.name?.toLowerCase() === targetClass || c.code?.toLowerCase() === targetClass || c.portal_class_id?.toLowerCase() === targetClass);
-      const refName = matchedRef?.name?.toLowerCase() || '';
-      const refCode = matchedRef?.code?.toLowerCase() || '';
-      const refId = matchedRef?.portal_class_id?.toLowerCase() || '';
+      const targetClass = String(kelas || '').trim().toLowerCase();
+      
+      const matchedRef = allClasses.find(c => 
+        String(c.name || '').toLowerCase() === targetClass || 
+        String(c.code || '').toLowerCase() === targetClass || 
+        String(c.portal_class_id || '').toLowerCase() === targetClass
+      );
+      const refName = String(matchedRef?.name || '').toLowerCase();
+      const refCode = String(matchedRef?.code || '').toLowerCase();
+      const refId = String(matchedRef?.portal_class_id || '').toLowerCase();
 
       const match = studentClass === targetClass ||
                     (refName && studentClass === refName) ||
@@ -102,9 +111,9 @@ function applyFilterSiswa() {
       if (st !== status.toLowerCase()) return false;
     }
     // Filter Abjad Huruf Pertama Nama
-    if (activeSiswaAbjadFilter !== 'ALL') {
+    if (activeSiswaAbjadFilter && activeSiswaAbjadFilter !== 'ALL') {
       const firstChar = String(s.nama || '').trim().charAt(0).toUpperCase();
-      if (firstChar !== activeSiswaAbjadFilter) return false;
+      if (firstChar !== activeSiswaAbjadFilter.toUpperCase()) return false;
     }
     // Search Query (NISN / Nama)
     if (query !== '') {
@@ -116,10 +125,10 @@ function applyFilterSiswa() {
 
   // 2. Sort
   filtered.sort((a, b) => {
-    if (sort === 'nama_asc') return (a.nama || '').localeCompare(b.nama || '');
-    if (sort === 'nama_desc') return (b.nama || '').localeCompare(a.nama || '');
-    if (sort === 'nisn_asc') return String(a.nomor_ujian || '').localeCompare(String(b.nomor_ujian || ''));
-    if (sort === 'kelas_asc') return (a.kelas || '').localeCompare(b.kelas || '', undefined, { numeric: true });
+    if (sort === 'nama_asc') return String(a.nama || '').localeCompare(String(b.nama || ''));
+    if (sort === 'nama_desc') return String(b.nama || '').localeCompare(String(a.nama || ''));
+    if (sort === 'nisn_asc') return String(a.nomor_ujian || a.nisn || '').localeCompare(String(b.nomor_ujian || b.nisn || ''));
+    if (sort === 'kelas_asc') return String(a.kelas || '').localeCompare(String(b.kelas || ''), undefined, { numeric: true });
     return 0;
   });
 
@@ -139,7 +148,7 @@ function applyFilterSiswa() {
   if (lblCount) lblCount.textContent = `${filtered.length} Siswa Ditemukan`;
 
   // 5. Render alphabet pills & table
-  renderSiswaAbjadPills(cacheSiswaGlobal);
+  renderSiswaAbjadPills(cacheSiswaGlobal || []);
   renderTabelSiswa(filtered);
 }
 
@@ -150,8 +159,8 @@ function renderSiswaAbjadPills(allRows) {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
   
   // Count students starting with each letter
-  const counts = { 'ALL': allRows.length };
-  allRows.forEach(s => {
+  const counts = { 'ALL': (allRows || []).length };
+  (allRows || []).forEach(s => {
     const char = String(s.nama || '').trim().charAt(0).toUpperCase();
     if (char && char >= 'A' && char <= 'Z') {
       counts[char] = (counts[char] || 0) + 1;
@@ -181,7 +190,7 @@ function renderTabelSiswa(rows) {
   const tb = document.getElementById('tblAdminSiswa');
   if (!tb) return;
 
-  if (rows.length === 0) {
+  if (!rows || rows.length === 0) {
     tb.innerHTML = `
       <tr>
         <td colspan="8" align="center" style="padding:32px; color:var(--text-muted);">
@@ -228,7 +237,7 @@ function renderTabelSiswa(rows) {
             <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="generatePinAdmin(${s.id})" title="Generate / Ganti PIN">
               <i class="fa-solid fa-key"></i> PIN
             </button>
-            <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick='editSiswaSatuan(${JSON.stringify(s)})' title="Edit PIN">
+            <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="editSiswaSatuanById(${s.id})" title="Edit PIN">
               <i class="fa-solid fa-pen"></i>
             </button>
           </div>
@@ -324,6 +333,11 @@ function eksekusiGeneratePinMassal(e) {
       tingkat: targetGrade,
       kelas: targetClass
     });
+}
+
+function editSiswaSatuanById(id) {
+  const s = (cacheSiswaGlobal || []).find(x => String(x.id) === String(id));
+  if (s) bukaModalSiswaSatuan(s);
 }
 
 function bukaModalSiswaSatuan(data = null) {
