@@ -1,6 +1,9 @@
 <?php
 
 use Illuminate\Foundation\Inspiring;
+use App\Models\AcademicYear;
+use App\Models\Semester;
+use App\Services\SemesterRosterSyncService;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Symfony\Component\Console\Command\Command;
@@ -33,3 +36,38 @@ Artisan::command('portal:oidc-key-generate {--force}', function (): int {
 
     return Command::SUCCESS;
 })->purpose('Generate persistent RSA signing key for OIDC');
+
+Artisan::command('portal:sync-semester-roster {--year= : Public ID tahun ajaran (default: tahun aktif)} {--from=EVEN : Semester sumber: ODD atau EVEN} {--to=ODD : Semester tujuan: ODD atau EVEN} {--apply : Simpan perubahan; tanpa opsi ini hanya preview}', function (SemesterRosterSyncService $sync): int {
+    $year = $this->option('year')
+        ? AcademicYear::query()->where('publicId', $this->option('year'))->first()
+        : AcademicYear::query()->where('isActive', true)->first();
+    if (! $year) {
+        $this->error('Tahun ajaran tidak ditemukan.');
+
+        return Command::FAILURE;
+    }
+    $from = strtoupper((string) $this->option('from'));
+    $to = strtoupper((string) $this->option('to'));
+    if (! in_array($from, ['ODD', 'EVEN'], true) || ! in_array($to, ['ODD', 'EVEN'], true) || $from === $to) {
+        $this->error('Gunakan --from=ODD|EVEN dan --to=ODD|EVEN yang berbeda.');
+
+        return Command::FAILURE;
+    }
+    $source = Semester::query()->where('academicYearId', $year->id)->where('type', $from)->first();
+    $target = Semester::query()->where('academicYearId', $year->id)->where('type', $to)->first();
+    if (! $source || ! $target) {
+        $this->error('Semester sumber atau tujuan tidak tersedia untuk tahun ajaran ini.');
+
+        return Command::FAILURE;
+    }
+    $summary = $sync->synchronize($year, $source, $target, (bool) $this->option('apply'));
+    $this->table(['Kandidat', 'Ditambahkan', 'Sudah ada', 'Konflik kelas', 'Konflik nomor'], [[
+        $summary['candidates'], $summary['created'], $summary['alreadyPresent'], $summary['conflicts'], $summary['attendanceNumberConflicts'],
+    ]]);
+    foreach ($summary['details'] as $detail) {
+        $this->warn("{$detail['student']} · {$detail['class']} — {$detail['reason']}");
+    }
+    $this->info($this->option('apply') ? 'Sinkronisasi roster selesai.' : 'Preview selesai. Tambahkan --apply untuk menyimpan perubahan.');
+
+    return Command::SUCCESS;
+})->purpose('Sync active student roster safely between semesters in one academic year');
