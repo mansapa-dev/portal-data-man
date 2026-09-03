@@ -11,6 +11,9 @@ final class AdminController
  public function exams(Request$r):Response{return Response::json($this->admin->exams());}
  public function saveExam(Request$r):Response{$this->admin->saveExam($r->json(),(int)$_SESSION['auth']['user_id']);return Response::json(null,'Ujian berhasil disimpan.');}
  public function scheduleFollowUpExam(Request$r):Response{$exam=$this->admin->scheduleFollowUpExam($r->json(),(int)$_SESSION['auth']['user_id']);return Response::json($exam,'Jadwal ujian susulan/remedial berhasil dibuat.');}
+ public function followUpCandidates(Request$r):Response{return Response::json($this->admin->followUpCandidates());}
+ public function followUpSchedules(Request$r):Response{return Response::json($this->admin->followUpSchedules());}
+ public function setFollowUpStatus(Request$r):Response{$data=$r->json();$this->admin->setFollowUpStatus((int)$r->attributes['id'],filter_var($data['active']??false,FILTER_VALIDATE_BOOL));return Response::json(null,'Status jadwal berhasil diperbarui.');}
  public function questions(Request$r):Response{return Response::json($this->admin->questions($r->input('exam_id')!==null?(int)$r->input('exam_id'):null));}
  public function saveQuestion(Request$r):Response{$this->admin->saveQuestion($r->json());return Response::json(null,'Soal berhasil disimpan.');}
  public function users(Request$r):Response{return Response::json($this->admin->users());}

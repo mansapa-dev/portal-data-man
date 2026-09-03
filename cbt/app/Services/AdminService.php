@@ -30,6 +30,9 @@ final class AdminService
   $utc=new \DateTimeZone('UTC');
   return $this->db->transaction(fn()=>$this->repo->cloneFollowUpExam($source,$studentIds,$name,$type,$start->setTimezone($utc)->format('Y-m-d H:i:s'),$end->setTimezone($utc)->format('Y-m-d H:i:s'),$actor,filter_var($d['active']??true,FILTER_VALIDATE_BOOL)));
  }
+ public function followUpCandidates():array{return$this->repo->followUpCandidates();}
+ public function followUpSchedules():array{return$this->repo->followUpSchedules();}
+ public function setFollowUpStatus(int$id,bool$active):void{try{$this->repo->setFollowUpStatus($id,$active);}catch(\UnexpectedValueException$e){throw new DomainException($e->getMessage(),404);}}
  public function questions(?int$id):array{return$this->repo->questions($id);}
  public function saveQuestion(array$d):void{foreach(['ujian_id','pertanyaan','opsi_a','opsi_b','opsi_c','opsi_d','jawaban_benar']as$key)if(trim((string)($d[$key]??''))==='')throw new DomainException('Data soal belum lengkap.',422);$answer=strtoupper((string)$d['jawaban_benar']);if(!in_array($answer,['A','B','C','D','E'],true)||((float)($d['poin']??0))<=0)throw new DomainException('Jawaban benar atau poin tidak valid.',422);$d['jawaban_benar']=$answer;$this->repo->saveQuestion($d+['opsi_e'=>'','poin'=>1]);}
  public function users():array{return$this->repo->users();}
