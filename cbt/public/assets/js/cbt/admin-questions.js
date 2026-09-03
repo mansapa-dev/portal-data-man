@@ -194,23 +194,25 @@ function kembaliKeKatalogMapel() {
 function populateDetailSoalFilters() {
   if (!currentSelectedMapelName) return;
 
-  const questionsForMapel = cacheAdminSoalRows.filter(q => (q.nama_mapel || '').trim().toLowerCase() === currentSelectedMapelName.trim().toLowerCase());
   const tingVal = document.getElementById('fltDetailSoalTingkat')?.value || 'ALL';
+  const questionsForMapel = cacheAdminSoalRows.filter(q => (q.nama_mapel || '').trim().toLowerCase() === currentSelectedMapelName.trim().toLowerCase());
 
-  // 1. Populate Jadwal Ujian Filter
+  // 1. Populate Dropdown Jadwal Ujian
   const fltUjian = document.getElementById('fltDetailSoalUjian');
   if (fltUjian) {
     const currentVal = fltUjian.value;
     const examsMap = {};
     questionsForMapel.forEach(q => {
-      const eid = q.exam_id || q.ujian_id;
-      const g = String(q.tingkat || '').toUpperCase();
-      if (eid && !examsMap[eid] && (tingVal === 'ALL' || g === tingVal.toUpperCase())) {
-        examsMap[eid] = q.nama_ujian || `Ujian #${eid}`;
+      if (tingVal === 'ALL' || String(q.tingkat || '').toUpperCase() === tingVal.toUpperCase()) {
+        const eid = q.exam_id || q.ujian_id;
+        if (eid && !examsMap[eid]) {
+          examsMap[eid] = q.nama_ujian || `Ujian #${eid}`;
+        }
       }
     });
 
-    fltUjian.innerHTML = `<option value="ALL">Semua Jadwal Ujian</option>` + Object.entries(examsMap).map(([id, name]) => `
+    const examEntries = Object.entries(examsMap);
+    fltUjian.innerHTML = `<option value="ALL">Semua Jadwal Ujian (${examEntries.length})</option>` + examEntries.map(([id, name]) => `
       <option value="${id}">${name}</option>
     `).join('');
 
@@ -221,36 +223,32 @@ function populateDetailSoalFilters() {
     }
   }
 
-  // 2. Populate Kelas Filter
+  // 2. Populate Dropdown Kelas
   const fltKelas = document.getElementById('fltDetailSoalKelas');
   if (fltKelas) {
     const currentVal = fltKelas.value;
-    const classMap = new Set();
+    const classSet = new Set();
 
-    if (portalReferences && portalReferences.classes && portalReferences.classes.length > 0) {
+    if (portalReferences && portalReferences.classes) {
       portalReferences.classes.forEach(c => {
-        const g = String(c.grade || '').toUpperCase();
-        if (tingVal === 'ALL' || g === tingVal.toUpperCase()) {
+        if (tingVal === 'ALL' || c.grade === tingVal) {
           const name = c.name || c.code;
-          if (name) classMap.add(name);
+          if (name) classSet.add(name);
         }
       });
     }
 
     questionsForMapel.forEach(q => {
-      const g = String(q.tingkat || '').toUpperCase();
-      if (tingVal === 'ALL' || g === tingVal.toUpperCase()) {
-        if (q.target_kelas_names) {
-          q.target_kelas_names.split(',').map(k => k.trim()).filter(Boolean).forEach(k => {
-            if (k.toLowerCase() !== 'semua') classMap.add(k);
-          });
+      const tNames = String(q.target_kelas_names || '').split(',').map(s => s.trim()).filter(Boolean);
+      tNames.forEach(n => {
+        if (n && n.toLowerCase() !== 'semua' && (tingVal === 'ALL' || String(q.tingkat || '').toUpperCase() === tingVal.toUpperCase())) {
+          classSet.add(n);
         }
-      }
+      });
     });
 
-    const sortedClasses = Array.from(classMap).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-
-    fltKelas.innerHTML = `<option value="ALL">Semua Kelas</option>` + sortedClasses.map(c => `
+    const sortedClasses = Array.from(classSet).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    fltKelas.innerHTML = `<option value="ALL">Semua Kelas (${sortedClasses.length})</option>` + sortedClasses.map(c => `
       <option value="${c}">${c}</option>
     `).join('');
 

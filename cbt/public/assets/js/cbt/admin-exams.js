@@ -31,31 +31,72 @@ function formatTargetKelas(targetStr, targetNamesStr) {
 function populateAdminUjianFilters() {
   const tingVal = document.getElementById('fltUjianTingkat')?.value || 'ALL';
 
-  // Populate Rombel / Kelas Filter
+  // 1. Populate Rombel / Kelas Filter
   const fltKelas = document.getElementById('fltUjianKelas');
-  if (fltKelas && portalReferences && portalReferences.classes) {
+  if (fltKelas) {
     const currentVal = fltKelas.value;
-    const availableClasses = portalReferences.classes.filter(c => tingVal === 'ALL' || c.grade === tingVal);
-    const sortedClasses = [...availableClasses].sort((a, b) => (a.name || a.code || '').localeCompare(b.name || b.code || '', undefined, { numeric: true }));
-    fltKelas.innerHTML = `<option value="ALL">Semua Kelas</option>` + sortedClasses.map(c => `
-      <option value="${c.portal_class_id}">${c.name || c.code}</option>
+    const classMap = new Map();
+
+    if (portalReferences && portalReferences.classes) {
+      portalReferences.classes.forEach(c => {
+        if (tingVal === 'ALL' || c.grade === tingVal) {
+          classMap.set(c.portal_class_id, c.name || c.code);
+        }
+      });
+    }
+
+    cacheAdminUjianRows.forEach(u => {
+      const ids = String(u.kelas_target || '').split(',').map(s => s.trim()).filter(Boolean);
+      const names = String(u.nama_kelas_target || '').split(',').map(s => s.trim()).filter(Boolean);
+      ids.forEach((id, idx) => {
+        if (id && id.toLowerCase() !== 'semua' && (tingVal === 'ALL' || String(u.tingkat).toUpperCase() === tingVal.toUpperCase())) {
+          if (!classMap.has(id)) {
+            classMap.set(id, names[idx] || id);
+          }
+        }
+      });
+    });
+
+    const sortedClasses = Array.from(classMap.entries()).sort((a, b) => a[1].localeCompare(b[1], undefined, { numeric: true }));
+    fltKelas.innerHTML = `<option value="ALL">Semua Kelas (${sortedClasses.length})</option>` + sortedClasses.map(([id, name]) => `
+      <option value="${id}">${name}</option>
     `).join('');
-    if (currentVal && sortedClasses.some(c => c.portal_class_id === currentVal)) {
+
+    if (currentVal && classMap.has(currentVal)) {
       fltKelas.value = currentVal;
     } else {
       fltKelas.value = 'ALL';
     }
   }
 
-  // Populate Mata Pelajaran Filter
+  // 2. Populate Mata Pelajaran Filter
   const fltMapel = document.getElementById('fltUjianMapel');
-  if (fltMapel && portalReferences && portalReferences.subjects) {
+  if (fltMapel) {
     const currentVal = fltMapel.value;
-    const sortedSubjects = [...portalReferences.subjects].sort((a, b) => (a.name || a.code || '').localeCompare(b.name || b.code || ''));
-    fltMapel.innerHTML = `<option value="ALL">Semua Mata Pelajaran</option>` + sortedSubjects.map(s => `
-      <option value="${s.id}">${s.code} — ${s.name}</option>
+    const subjectMap = new Map();
+
+    if (portalReferences && portalReferences.subjects) {
+      portalReferences.subjects.forEach(s => {
+        subjectMap.set(String(s.id), `${s.code} — ${s.name}`);
+      });
+    }
+
+    cacheAdminUjianRows.forEach(u => {
+      if (u.subject_id && !subjectMap.has(String(u.subject_id))) {
+        subjectMap.set(String(u.subject_id), `${u.kode_mapel || ''} — ${u.nama_mapel || 'Mapel'}`);
+      }
+    });
+
+    const sortedSubjects = Array.from(subjectMap.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+    fltMapel.innerHTML = `<option value="ALL">Semua Mata Pelajaran (${sortedSubjects.length})</option>` + sortedSubjects.map(([id, name]) => `
+      <option value="${id}">${name}</option>
     `).join('');
-    if (currentVal) fltMapel.value = currentVal;
+
+    if (currentVal && subjectMap.has(currentVal)) {
+      fltMapel.value = currentVal;
+    } else {
+      fltMapel.value = 'ALL';
+    }
   }
 }
 

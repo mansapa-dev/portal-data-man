@@ -147,30 +147,39 @@ function updateTopbarAuthUI(isLoggedIn) {
 }
 
 function toggleMobileSidebar() {
-  const sb = document.getElementById('mainSidebar') || document.querySelector('.sidebar');
+  const sb = document.querySelector('.sidebar') || document.getElementById('mainSidebar');
   const backdrop = document.getElementById('sidebarBackdrop');
-  const toggleBtn = document.getElementById('btnMobileSidebarToggle');
-  if (!sb) return;
-
-  const isOpen = sb.classList.contains('open');
-  if (isOpen) {
-    sb.classList.remove('open');
-    if (backdrop) backdrop.classList.add('hidden');
-    if (toggleBtn) toggleBtn.innerHTML = '<i class="fa-solid fa-bars"></i>';
-  } else {
-    sb.classList.add('open');
-    if (backdrop) backdrop.classList.remove('hidden');
-    if (toggleBtn) toggleBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+  const btn = document.getElementById('btnMobileSidebarToggle');
+  if (sb) {
+    const willOpen = !sb.classList.contains('open');
+    if (willOpen) {
+      sb.classList.add('open');
+      if (backdrop) {
+        backdrop.classList.remove('hidden');
+        backdrop.style.display = 'block';
+      }
+      if (btn) btn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+    } else {
+      sb.classList.remove('open');
+      if (backdrop) {
+        backdrop.classList.add('hidden');
+        backdrop.style.display = 'none';
+      }
+      if (btn) btn.innerHTML = '<i class="fa-solid fa-bars"></i>';
+    }
   }
 }
 
 function closeMobileSidebar() {
-  const sb = document.getElementById('mainSidebar') || document.querySelector('.sidebar');
+  const sb = document.querySelector('.sidebar') || document.getElementById('mainSidebar');
   const backdrop = document.getElementById('sidebarBackdrop');
-  const toggleBtn = document.getElementById('btnMobileSidebarToggle');
+  const btn = document.getElementById('btnMobileSidebarToggle');
   if (sb) sb.classList.remove('open');
-  if (backdrop) backdrop.classList.add('hidden');
-  if (toggleBtn) toggleBtn.innerHTML = '<i class="fa-solid fa-bars"></i>';
+  if (backdrop) {
+    backdrop.classList.add('hidden');
+    backdrop.style.display = 'none';
+  }
+  if (btn) btn.innerHTML = '<i class="fa-solid fa-bars"></i>';
 }
 
 async function appResetLogout() {

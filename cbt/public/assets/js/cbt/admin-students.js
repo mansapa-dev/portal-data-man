@@ -27,40 +27,38 @@ function loadDataAdminSiswa() {
 function populateAdminSiswaFilters() {
   const tingVal = document.getElementById('fltSiswaTingkat')?.value || 'ALL';
   const fltKelas = document.getElementById('fltSiswaKelas');
-  if (!fltKelas) return;
 
-  const currentVal = fltKelas.value;
-  const classMap = new Set();
+  if (fltKelas) {
+    const currentVal = fltKelas.value;
+    const classSet = new Set();
 
-  if (portalReferences && portalReferences.classes && portalReferences.classes.length > 0) {
-    portalReferences.classes.forEach(c => {
-      const g = String(c.grade || '').toUpperCase();
-      if (tingVal === 'ALL' || g === tingVal.toUpperCase()) {
-        const name = c.name || c.code;
-        if (name) classMap.add(name);
-      }
-    });
-  }
+    if (portalReferences && portalReferences.classes) {
+      portalReferences.classes.forEach(c => {
+        if (tingVal === 'ALL' || c.grade === tingVal) {
+          const name = c.name || c.code;
+          if (name) classSet.add(name);
+        }
+      });
+    }
 
-  if (cacheSiswaGlobal && cacheSiswaGlobal.length > 0) {
-    cacheSiswaGlobal.forEach(s => {
-      const g = String(s.tingkat || '').toUpperCase();
-      if (tingVal === 'ALL' || g === tingVal.toUpperCase()) {
-        if (s.kelas && s.kelas.trim() !== '') classMap.add(s.kelas.trim());
-      }
-    });
-  }
+    if (cacheSiswaGlobal && cacheSiswaGlobal.length > 0) {
+      cacheSiswaGlobal.forEach(s => {
+        if (tingVal === 'ALL' || String(s.tingkat).toUpperCase() === tingVal.toUpperCase()) {
+          if (s.kelas) classSet.add(s.kelas);
+        }
+      });
+    }
 
-  const sortedClasses = Array.from(classMap).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    const sortedClasses = Array.from(classSet).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    fltKelas.innerHTML = `<option value="ALL">Semua Kelas (${sortedClasses.length})</option>` + sortedClasses.map(c => `
+      <option value="${c}">${c}</option>
+    `).join('');
 
-  fltKelas.innerHTML = `<option value="ALL">Semua Kelas</option>` + sortedClasses.map(c => `
-    <option value="${c}">${c}</option>
-  `).join('');
-
-  if (currentVal && sortedClasses.includes(currentVal)) {
-    fltKelas.value = currentVal;
-  } else {
-    fltKelas.value = 'ALL';
+    if (currentVal && sortedClasses.includes(currentVal)) {
+      fltKelas.value = currentVal;
+    } else {
+      fltKelas.value = 'ALL';
+    }
   }
 }
 
