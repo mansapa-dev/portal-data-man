@@ -16,8 +16,8 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
 <body class="dashboard-page">
   <aside class="sidebar">
     <div class="brand">
-      <span class="brand-mark"><i class="fa-solid fa-graduation-cap"></i></span>
-      <div><strong>CBT</strong><small>Computer Based Test</small></div>
+      <span class="brand-mark"><img src="../assets/img/logo-man1-palembang.png" alt="Lambang MAN 1 Palembang"></span>
+      <div><strong>MANSAPA ARENA</strong><small>Area Evaluasi dan Asesmen</small></div>
     </div>
     <nav>
       <span class="nav-label">UTAMA</span>
@@ -42,9 +42,6 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
           <small>Portal Guru</small>
           <strong id="teacherName"><?=htmlspecialchars($nip, ENT_QUOTES, 'UTF-8')?></strong>
         </div>
-        <button id="topbarLogoutGuru" type="button" class="btn btn-danger" style="padding:6px 12px; font-size:12px;" title="Keluar dari Portal Guru">
-          <i class="fa-solid fa-arrow-right-from-bracket"></i> Keluar
-        </button>
       </div>
     </header>
 
