@@ -306,6 +306,15 @@ function eksekusiGeneratePinMassal(e) {
     targetGrade = 'XII';
   }
 
+  const labels = { CURRENT_FILTER: 'siswa yang sedang difilter', ALL: 'seluruh siswa aktif', GRADE_X: 'seluruh siswa tingkat X', GRADE_XI: 'seluruh siswa tingkat XI', GRADE_XII: 'seluruh siswa tingkat XII' };
+  showCustomConfirm(
+    'Yakin Generate PIN Otomatis?',
+    `Anda akan mengganti PIN lama untuk ${labels[scope] || 'target yang dipilih'} dengan PIN acak 4 digit. Tindakan ini tidak dapat dibatalkan. Lanjutkan generate PIN?`,
+    () => jalankanGeneratePinMassal(targetGrade, targetClass)
+  );
+}
+
+function jalankanGeneratePinMassal(targetGrade, targetClass) {
   document.getElementById('modalGeneratePinMassal').classList.remove('show');
 
   showLoading('Meng-generate PIN otomatis untuk seluruh target siswa...');

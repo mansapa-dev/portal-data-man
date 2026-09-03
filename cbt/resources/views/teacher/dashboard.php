@@ -16,14 +16,18 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
 <body class="dashboard-page">
   <aside class="sidebar">
     <div class="brand">
-      <span>MAN 1</span>
-      <strong>CBT Guru</strong>
+      <span class="brand-mark"><i class="fa-solid fa-graduation-cap"></i></span>
+      <div><strong>CBT</strong><small>Computer Based Test</small></div>
     </div>
     <nav>
-      <button class="nav-item active" data-section="exams"><i class="fa-solid fa-file-lines" style="margin-right:8px; width:16px;"></i> Ujian Diampu</button>
-      <button class="nav-item" data-section="results"><i class="fa-solid fa-square-poll-vertical" style="margin-right:8px; width:16px;"></i> Hasil Siswa</button>
-      <button class="nav-item" data-section="violations"><i class="fa-solid fa-shield-cat" style="margin-right:8px; width:16px;"></i> Pelanggaran</button>
-      <button class="nav-item" data-section="account"><i class="fa-solid fa-key" style="margin-right:8px; width:16px;"></i> Ubah Password</button>
+      <span class="nav-label">UTAMA</span>
+      <button class="nav-item active" data-section="overview"><i class="fa-solid fa-house"></i> Dashboard</button>
+      <span class="nav-label">MONITORING</span>
+      <button class="nav-item" data-section="exams"><i class="fa-solid fa-calendar-days"></i> Ujian Diampu</button>
+      <button class="nav-item" data-section="results"><i class="fa-solid fa-square-poll-vertical"></i> Hasil Siswa</button>
+      <button class="nav-item" data-section="violations"><i class="fa-solid fa-shield-halved"></i> Pelanggaran</button>
+      <span class="nav-label">PENGATURAN</span>
+      <button class="nav-item" data-section="account"><i class="fa-solid fa-key"></i> Ubah Password</button>
     </nav>
     <button id="logout" class="logout"><i class="fa-solid fa-arrow-right-from-bracket" style="margin-right:6px;"></i> Keluar</button>
   </aside>
@@ -31,10 +35,9 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
   <main class="main">
     <header class="topbar">
       <button id="menu" class="menu">☰</button>
-      <div style="margin-left:0; text-align:left;">
-        <span style="font-size:13px; font-weight:700; color:var(--green-dark);">CBT MAN 1 Palembang</span>
-      </div>
+      <h1 id="teacherPageTitle">Dashboard</h1>
       <div style="display:flex; align-items:center; gap:14px;">
+        <button class="notification-button" type="button" aria-label="Notifikasi"><i class="fa-regular fa-bell"></i></button>
         <div style="text-align:right;">
           <small>Portal Guru</small>
           <strong id="teacherName"><?=htmlspecialchars($nip, ENT_QUOTES, 'UTF-8')?></strong>
@@ -48,8 +51,8 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
     <section class="welcome">
       <div>
         <span class="eyebrow">DASHBOARD GURU CBT</span>
-        <h1>Ujian & Mapel yang Diampu</h1>
-        <p>Pantau data penugasan soal, rekapitulasi nilai, dan log pelanggaran siswa.</p>
+        <h1>Selamat bertugas, Guru</h1>
+        <p>Pantau ujian yang diampu, hasil siswa, serta pelanggaran ujian dari satu tempat.</p>
       </div>
       <div class="nip-card">
         <small>NIP / IDENTITAS</small>

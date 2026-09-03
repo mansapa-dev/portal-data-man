@@ -65,6 +65,17 @@
   function render(section) {
     content.replaceChildren();
     document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.section === section));
+    const titles={overview:'Dashboard',exams:'Ujian Diampu',results:'Hasil Siswa',violations:'Pelanggaran Ujian',account:'Ubah Password'};
+    const pageTitle=document.getElementById('teacherPageTitle');if(pageTitle)pageTitle.textContent=titles[section]||'Dashboard';
+
+    if (section === 'overview') {
+      const metrics=el('section',undefined,'teacher-metrics');
+      [["fa-calendar-days",data.ujianList.length,'Ujian Diampu','blue'],["fa-circle-check",data.hasilList.length,'Hasil Terkumpul','green'],["fa-shield-halved",data.pelanggaranList.length,'Pelanggaran Tercatat','red']].forEach(([icon,value,label,color])=>{const card=el('article',undefined,`teacher-metric ${color}`);card.innerHTML=`<div class="teacher-metric-icon"><i class="fa-solid ${icon}"></i></div><div><small>${label}</small><strong>${value}</strong><span>Lihat detail <i class="fa-solid fa-arrow-right"></i></span></div>`;metrics.append(card);});
+      const overview=panel('Aktivitas Ujian Terbaru', 'Ringkasan ujian yang ditugaskan kepada Anda.');
+      const list=el('div',undefined,'teacher-activity-list');
+      if(data.ujianList.length){data.ujianList.slice(0,5).forEach(x=>{const row=el('div',undefined,'teacher-activity-row');row.innerHTML=`<i class="fa-solid fa-book-open"></i><div><b>${x.nama_ujian}</b><span>Tingkat ${x.tingkat||'-'} · Sesi ${x.sesi||1}</span></div><button type="button" class="teacher-link" data-target="exams">Lihat <i class="fa-solid fa-arrow-right"></i></button>`;list.append(row);});}else list.append(el('p','Belum ada ujian yang ditugaskan kepada Anda.'));
+      overview.append(list);content.append(metrics,overview);return;
+    }
 
     if (section === 'exams') {
       const box = panel('Ujian & Mapel yang Diampu', 'Daftar ujian yang secara resmi ditugaskan administrator kepada NIP Anda.');
@@ -177,12 +188,13 @@
     csrf = me.data.csrf_token;
     document.getElementById('teacherName').textContent = me.data.staff.nip || me.data.staff.username || 'Guru';
     data = (await api('api/teacher/dashboard')).data;
-    render('exams');
+    render('overview');
   } catch (error) {
     notice.textContent = error.message;
   }
 
   document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', () => render(button.dataset.section)));
+  content.addEventListener('click',e=>{const button=e.target.closest('[data-target]');if(button)render(button.dataset.target);});
   document.getElementById('menu').addEventListener('click', () => document.querySelector('.sidebar').classList.toggle('open'));
   const handleLogout = async () => {
     try {
