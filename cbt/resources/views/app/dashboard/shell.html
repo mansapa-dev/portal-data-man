@@ -2,11 +2,14 @@
   <div class="dashboard-layout hidden" id="viewDashboardPengelola">
     <div class="sidebar-backdrop hidden" id="sidebarBackdrop" onclick="toggleMobileSidebar()"></div>
     <aside class="sidebar" id="mainSidebar">
-      <div class="sb-brand">
+      <div class="sb-brand" style="display:flex; justify-content:space-between; align-items:center;">
         <div>
           <div class="sb-brand-title">CBT MAN 1</div>
           <div class="sb-brand-sub" id="lblRolePengelola">ADMINISTRATOR</div>
         </div>
+        <button type="button" class="btn-icon-close-sidebar" onclick="closeMobileSidebar()" aria-label="Tutup Menu">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
       </div>
 
       <div class="sb-section-label">Menu Utama</div>

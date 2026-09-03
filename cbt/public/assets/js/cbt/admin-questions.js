@@ -1,88 +1,247 @@
-// Administrator question bank management with Subject Panels & Image Uploads.
+// Administrator question bank management (2-Level Subject Catalog & Detail View).
 let cacheAdminSoalRows = [];
-let activeSoalMapelFilter = 'ALL';
+let currentSelectedMapelName = null;
 let attachedGambarSoalBase64 = '';
+
+// Icons mapping for Indonesian school subjects
+const subjectIconMap = {
+  'matematika': 'fa-calculator',
+  'fisika': 'fa-atom',
+  'kimia': 'fa-flask',
+  'biologi': 'fa-dna',
+  'bahasa indonesia': 'fa-book',
+  'bahasa inggris': 'fa-earth-americas',
+  'bahasa arab': 'fa-language',
+  'sejarah': 'fa-landmark',
+  'geografi': 'fa-mountain-sun',
+  'sosiologi': 'fa-people-group',
+  'ekonomi': 'fa-coins',
+  'al-qur\'an': 'fa-quran',
+  'qur\'an hadis': 'fa-quran',
+  'akidah akhlak': 'fa-kaaba',
+  'fiqih': 'fa-scale-balanced',
+  'ski': 'fa-mosque',
+  'penjas': 'fa-volleyball',
+  'pjok': 'fa-person-running',
+  'seni budaya': 'fa-palette',
+  'pkn': 'fa-flag',
+  'ppkn': 'fa-shield',
+  'informatika': 'fa-laptop-code',
+  'tik': 'fa-desktop'
+};
+
+function getSubjectIcon(name) {
+  const clean = String(name || '').toLowerCase();
+  for (const [key, icon] of Object.entries(subjectIconMap)) {
+    if (clean.includes(key)) return icon;
+  }
+  return 'fa-book-open';
+}
 
 function loadDataAdminSoal() {
   loadPortalReferences(() => {
-    populateAdminSoalFilters();
-    applyFilterSoal();
+    if (currentSelectedMapelName) {
+      applyFilterDetailSoal();
+    } else {
+      renderKatalogMapelGrid();
+    }
   });
 
-  const container = document.getElementById('containerPanelsSoal');
-  if (container) {
-    container.innerHTML = `
-      <div style="text-align:center; padding:30px; color:var(--text-muted); font-size:13px;">
+  const gridContainer = document.getElementById('gridKatalogMapelContainer');
+  if (gridContainer && !currentSelectedMapelName) {
+    gridContainer.innerHTML = `
+      <div style="text-align:center; padding:30px; color:var(--text-muted); font-size:13px; grid-column:1/-1;">
         <i class="fa-solid fa-spinner fa-spin" style="font-size:20px; color:var(--primary); margin-bottom:8px; display:block;"></i>
-        Memuat bank soal per mata pelajaran...
+        Memuat katalog mata pelajaran...
       </div>`;
   }
 
   cbtApi
     .withSuccessHandler(rows => {
       cacheAdminSoalRows = rows || [];
-      populateAdminSoalFilters();
-      applyFilterSoal();
+      if (currentSelectedMapelName) {
+        populateDetailSoalFilters();
+        applyFilterDetailSoal();
+      } else {
+        renderKatalogMapelGrid();
+      }
     })
     .getAdminSoalList(stPengelola, null);
 }
 
-function populateAdminSoalFilters() {
-  const tingVal = document.getElementById('fltSoalTingkat')?.value || 'ALL';
+// ================= LEVEL 1: KATALOG MATA PELAJARAN =================
+function renderKatalogMapelGrid() {
+  const container = document.getElementById('gridKatalogMapelContainer');
+  if (!container) return;
 
-  // Populate Mapel Filter
-  const fltMapel = document.getElementById('fltSoalMapel');
-  if (fltMapel && portalReferences && portalReferences.subjects) {
-    const currentVal = fltMapel.value;
-    const sortedSubjects = [...portalReferences.subjects].sort((a, b) => (a.name || a.code || '').localeCompare(b.name || b.code || ''));
-    fltMapel.innerHTML = `<option value="ALL">Semua Mata Pelajaran</option>` + sortedSubjects.map(s => `
-      <option value="${s.name}">${s.code} — ${s.name}</option>
-    `).join('');
-    if (currentVal && (currentVal === 'ALL' || sortedSubjects.some(s => s.name === currentVal))) {
-      fltMapel.value = currentVal;
-    }
+  const tingVal = document.getElementById('fltKatalogTingkat')?.value || 'ALL';
+  const query = (document.getElementById('searchKatalogMapel')?.value || '').toLowerCase().trim();
+
+  // Combine subjects from portalReferences & existing question subjects
+  const subjectMap = {};
+
+  if (portalReferences && portalReferences.subjects) {
+    portalReferences.subjects.forEach(s => {
+      const name = s.name;
+      if (!subjectMap[name]) {
+        subjectMap[name] = { id: s.id, code: s.code || '', name: s.name, questions: [] };
+      }
+    });
   }
 
-  // Populate Rombel / Kelas Filter
-  const fltKelas = document.getElementById('fltSoalKelas');
+  cacheAdminSoalRows.forEach(q => {
+    const name = q.nama_mapel || 'Mata Pelajaran Umum';
+    if (!subjectMap[name]) {
+      subjectMap[name] = { id: q.subject_id || 0, code: q.kode_mapel || '', name: name, questions: [] };
+    }
+    subjectMap[name].questions.push(q);
+  });
+
+  let subjectList = Object.values(subjectMap);
+
+  // Apply filters
+  if (tingVal !== 'ALL') {
+    subjectList = subjectList.filter(s => {
+      if (s.questions.length === 0) return true;
+      return s.questions.some(q => String(q.tingkat).toUpperCase() === tingVal.toUpperCase());
+    });
+  }
+
+  if (query !== '') {
+    subjectList = subjectList.filter(s => {
+      return (s.name.toLowerCase().includes(query) || s.code.toLowerCase().includes(query));
+    });
+  }
+
+  // Sort alphabetically
+  subjectList.sort((a, b) => a.name.localeCompare(b.name));
+
+  if (subjectList.length === 0) {
+    container.innerHTML = `
+      <div style="grid-column:1/-1; background:var(--surface); border:1px dashed var(--border); border-radius:12px; padding:36px; text-align:center;">
+        <i class="fa-solid fa-book" style="font-size:36px; color:var(--text-muted); margin-bottom:12px; display:block;"></i>
+        <h4 style="font-size:15px; font-weight:700; color:var(--text-main); margin-bottom:4px;">Mata Pelajaran Tidak Ditemukan</h4>
+        <p style="font-size:12.5px; color:var(--text-muted); margin-bottom:16px;">Sesuaikan kata kunci pencarian atau buat butir soal baru.</p>
+        <button class="btn btn-primary" onclick="bukaModalSoal()"><i class="fa-solid fa-plus"></i> Tambah Soal Baru</button>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = subjectList.map(s => {
+    const totalSoal = s.questions.length;
+    const grades = [...new Set(s.questions.map(q => q.tingkat).filter(Boolean))].sort().join(', ');
+    const iconClass = getSubjectIcon(s.name);
+
+    return `
+      <div class="card subject-katalog-card" style="margin-bottom:0; padding:18px; border:1px solid var(--border); border-radius:12px; transition:all 0.2s ease; cursor:pointer; display:flex; flex-direction:column; justify-content:space-between; position:relative; overflow:hidden;" onclick="pilihDanBukaMapel('${s.name.replace(/'/g, "\\'")}')">
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+            <div style="width:44px; height:44px; border-radius:10px; background:var(--primary-soft); color:var(--primary-dark); display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:800; border:1px solid var(--primary-soft-border);">
+              <i class="fa-solid ${iconClass}"></i>
+            </div>
+            <span class="badge ${totalSoal > 0 ? 'bg-green' : 'bg-gray'}" style="font-size:11px; padding:3px 8px;">
+              ${totalSoal} Soal
+            </span>
+          </div>
+
+          <h4 style="font-size:15px; font-weight:800; color:var(--text-main); margin-bottom:4px; line-height:1.25;">
+            ${s.name}
+          </h4>
+          <div style="font-size:11.5px; font-weight:600; color:var(--text-muted); margin-bottom:14px;">
+            Kode: ${s.code || '-'}
+          </div>
+        </div>
+
+        <div style="border-top:1px solid var(--border); padding-top:12px; margin-top:10px; display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:11px; color:var(--text-muted);">
+            ${grades ? `Tingkat: <b>${grades}</b>` : 'Semua Tingkat'}
+          </span>
+          <span style="font-size:12px; font-weight:700; color:var(--primary-dark); display:inline-flex; align-items:center; gap:4px;">
+            Buka Bank Soal <i class="fa-solid fa-chevron-right" style="font-size:10px;"></i>
+          </span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function applyFilterKatalogMapel() {
+  renderKatalogMapelGrid();
+}
+
+// ================= LEVEL 2: DETAIL BANK SOAL PER MAPEL =================
+function pilihDanBukaMapel(mapelName) {
+  currentSelectedMapelName = mapelName;
+
+  document.getElementById('viewKatalogMapel').classList.add('hidden');
+  document.getElementById('viewDetailMapelSoal').classList.remove('hidden');
+
+  // Update banner title
+  const elTitle = document.getElementById('lblDetailMapelTitle');
+  if (elTitle) elTitle.textContent = mapelName;
+
+  populateDetailSoalFilters();
+  applyFilterDetailSoal();
+}
+
+function kembaliKeKatalogMapel() {
+  currentSelectedMapelName = null;
+  document.getElementById('viewDetailMapelSoal').classList.add('hidden');
+  document.getElementById('viewKatalogMapel').classList.remove('hidden');
+  renderKatalogMapelGrid();
+}
+
+function populateDetailSoalFilters() {
+  if (!currentSelectedMapelName) return;
+
+  const questionsForMapel = cacheAdminSoalRows.filter(q => (q.nama_mapel || '').trim().toLowerCase() === currentSelectedMapelName.trim().toLowerCase());
+
+  // Populate Jadwal Ujian Filter
+  const fltUjian = document.getElementById('fltDetailSoalUjian');
+  if (fltUjian) {
+    const examsMap = {};
+    questionsForMapel.forEach(q => {
+      const eid = q.exam_id || q.ujian_id;
+      if (eid && !examsMap[eid]) {
+        examsMap[eid] = q.nama_ujian || `Ujian #${eid}`;
+      }
+    });
+
+    fltUjian.innerHTML = `<option value="ALL">Semua Jadwal Ujian (${Object.keys(examsMap).length})</option>` + Object.entries(examsMap).map(([id, name]) => `
+      <option value="${id}">${name}</option>
+    `).join('');
+  }
+
+  // Populate Kelas Filter
+  const fltKelas = document.getElementById('fltDetailSoalKelas');
+  const tingVal = document.getElementById('fltDetailSoalTingkat')?.value || 'ALL';
   if (fltKelas && portalReferences && portalReferences.classes) {
-    const currentVal = fltKelas.value;
     const availableClasses = portalReferences.classes.filter(c => tingVal === 'ALL' || c.grade === tingVal);
     const sortedClasses = [...availableClasses].sort((a, b) => (a.name || a.code || '').localeCompare(b.name || b.code || '', undefined, { numeric: true }));
     fltKelas.innerHTML = `<option value="ALL">Semua Kelas</option>` + sortedClasses.map(c => `
       <option value="${c.name || c.code}">${c.name || c.code}</option>
     `).join('');
-    if (currentVal && sortedClasses.some(c => (c.name || c.code) === currentVal)) {
-      fltKelas.value = currentVal;
-    } else {
-      fltKelas.value = 'ALL';
-    }
   }
 }
 
-function selectSoalMapelPill(mapelName) {
-  activeSoalMapelFilter = mapelName;
-  const fltMapel = document.getElementById('fltSoalMapel');
-  if (fltMapel) fltMapel.value = mapelName;
-  applyFilterSoal();
-}
+function applyFilterDetailSoal() {
+  if (!currentSelectedMapelName) return;
 
-function applyFilterSoal() {
-  const ting = document.getElementById('fltSoalTingkat')?.value || 'ALL';
-  const mapel = document.getElementById('fltSoalMapel')?.value || 'ALL';
-  const kelas = document.getElementById('fltSoalKelas')?.value || 'ALL';
-  const query = (document.getElementById('searchSoal')?.value || '').toLowerCase().trim();
+  const ting = document.getElementById('fltDetailSoalTingkat')?.value || 'ALL';
+  const ujianId = document.getElementById('fltDetailSoalUjian')?.value || 'ALL';
+  const kelas = document.getElementById('fltDetailSoalKelas')?.value || 'ALL';
+  const query = (document.getElementById('searchDetailSoal')?.value || '').toLowerCase().trim();
 
-  // Sync active filter
-  activeSoalMapelFilter = mapel;
+  // Filter questions for the selected mapel
+  const mapelQuestions = cacheAdminSoalRows.filter(s => (s.nama_mapel || '').trim().toLowerCase() === currentSelectedMapelName.trim().toLowerCase());
 
-  const filtered = cacheAdminSoalRows.filter(s => {
+  const filtered = mapelQuestions.filter(s => {
     // Filter Tingkat
     if (ting !== 'ALL' && String(s.tingkat || '').toUpperCase() !== ting.toUpperCase()) {
       return false;
     }
-    // Filter Mapel
-    if (mapel !== 'ALL' && String(s.nama_mapel || '').trim().toLowerCase() !== mapel.trim().toLowerCase()) {
+    // Filter Ujian
+    if (ujianId !== 'ALL' && String(s.exam_id || s.ujian_id) !== String(ujianId)) {
       return false;
     }
     // Filter Kelas
@@ -95,17 +254,25 @@ function applyFilterSoal() {
     }
     // Query Search
     if (query !== '') {
-      const qText = `${s.id} ${s.pertanyaan} ${s.opsi_a} ${s.opsi_b} ${s.opsi_c} ${s.opsi_d} ${s.opsi_e || ''} ${s.nama_mapel || ''} ${s.nama_ujian || ''}`.toLowerCase();
+      const qText = `${s.id} ${s.pertanyaan} ${s.opsi_a} ${s.opsi_b} ${s.opsi_c} ${s.opsi_d} ${s.opsi_e || ''} ${s.nama_ujian || ''}`.toLowerCase();
       if (!qText.includes(query)) return false;
     }
     return true;
   });
 
+  // Update banner badges
+  const countBadge = document.getElementById('lblDetailMapelCountBadge');
+  if (countBadge) countBadge.textContent = `${filtered.length} Soal Ditampilkan`;
+
+  const gradesSet = [...new Set(filtered.map(s => s.tingkat).filter(Boolean))].sort().join(', ');
+  const tingkatBadge = document.getElementById('lblDetailMapelTingkatBadge');
+  if (tingkatBadge) tingkatBadge.textContent = gradesSet ? `Tingkat ${gradesSet}` : 'Semua Tingkat';
+
   // Prepare Excel cache
   window.cacheSoalExcel = filtered.map(s => [
     s.id,
     s.exam_id || s.ujian_id,
-    s.nama_mapel || 'Mapel',
+    currentSelectedMapelName,
     s.tingkat || 'Umum',
     s.pertanyaan.replace(/<[^>]*>?/gm, ' '),
     s.opsi_a,
@@ -117,164 +284,71 @@ function applyFilterSoal() {
     s.poin || 1
   ]);
 
-  renderSoalMapelPills(cacheAdminSoalRows);
-  renderSoalPanelsBySubject(filtered);
-}
+  const tb = document.getElementById('tblDetailSoalMapel');
+  if (!tb) return;
 
-function renderSoalMapelPills(allRows) {
-  const container = document.getElementById('soalMapelPillsContainer');
-  if (!container) return;
-
-  // Group counts by mapel
-  const counts = { 'ALL': allRows.length };
-  allRows.forEach(s => {
-    const m = s.nama_mapel || 'Mapel Umum';
-    counts[m] = (counts[m] || 0) + 1;
-  });
-
-  const subjects = Object.keys(counts).filter(k => k !== 'ALL').sort();
-  const pills = ['ALL', ...subjects];
-
-  container.innerHTML = pills.map(p => {
-    const isActive = activeSoalMapelFilter === p;
-    const label = p === 'ALL' ? 'Semua Mapel' : p;
-    const count = counts[p] || 0;
-    return `
-      <button type="button" onclick="selectSoalMapelPill('${p.replace(/'/g, "\\'")}')" class="btn ${isActive ? 'btn-primary' : 'btn-secondary'}" style="padding:5px 12px; font-size:12px; border-radius:20px; white-space:nowrap; display:inline-flex; align-items:center; gap:6px; flex-shrink:0;">
-        <span>${label}</span>
-        <span style="background:${isActive ? 'rgba(255,255,255,0.25)' : 'var(--primary-soft)'}; color:${isActive ? '#fff' : 'var(--primary-dark)'}; padding:2px 7px; border-radius:12px; font-size:11px; font-weight:700;">${count}</span>
-      </button>
-    `;
-  }).join('');
-}
-
-function renderSoalPanelsBySubject(filteredRows) {
-  const container = document.getElementById('containerPanelsSoal');
-  if (!container) return;
-
-  if (filteredRows.length === 0) {
-    container.innerHTML = `
-      <div style="background:var(--surface); border:1px dashed var(--border); border-radius:12px; padding:36px; text-align:center;">
-        <i class="fa-solid fa-clipboard-question" style="font-size:36px; color:var(--text-muted); margin-bottom:12px; display:block;"></i>
-        <h4 style="font-size:15px; font-weight:700; color:var(--text-main); margin-bottom:4px;">Tidak Ada Butir Soal Ditemukan</h4>
-        <p style="font-size:12.5px; color:var(--text-muted); margin-bottom:16px;">Sesuaikan kriteria filter atau buat butir soal baru untuk mata pelajaran ini.</p>
-        <button class="btn btn-primary" onclick="bukaModalSoal()"><i class="fa-solid fa-plus"></i> Tambah Soal Baru</button>
-      </div>`;
+  if (filtered.length === 0) {
+    tb.innerHTML = `
+      <tr>
+        <td colspan="6" align="center" style="padding:36px; color:var(--text-muted);">
+          <i class="fa-solid fa-clipboard-question" style="font-size:32px; color:var(--text-muted); margin-bottom:10px; display:block;"></i>
+          <div style="font-weight:700; font-size:14px; color:var(--text-main);">Belum Ada Butir Soal untuk Filter Ini</div>
+          <p style="font-size:12px; margin-top:4px; margin-bottom:14px;">Tambahkan butir soal atau lakukan upload Excel untuk mata pelajaran ini.</p>
+          <button class="btn btn-primary" style="padding:6px 14px; font-size:12px;" onclick="bukaModalSoalUntukMapelAktif()"><i class="fa-solid fa-plus"></i> Tambah Soal ${currentSelectedMapelName}</button>
+        </td>
+      </tr>`;
     return;
   }
 
-  // Group by nama_mapel
-  const grouped = {};
-  filteredRows.forEach(s => {
-    const mapel = s.nama_mapel || 'Mata Pelajaran Umum';
-    if (!grouped[mapel]) grouped[mapel] = [];
-    grouped[mapel].push(s);
-  });
-
-  const mapelNames = Object.keys(grouped).sort();
-
-  container.innerHTML = mapelNames.map((mapelName, idx) => {
-    const list = grouped[mapelName];
-    const firstExamId = list[0]?.exam_id || list[0]?.ujian_id;
-    const tingkatSet = [...new Set(list.map(s => s.tingkat).filter(Boolean))].join(', ');
-    const panelId = `panel_mapel_${idx}`;
-
+  tb.innerHTML = filtered.map((s, num) => {
     return `
-      <div class="card" style="margin-bottom:0; border:1px solid var(--border); box-shadow:var(--shadow-xs); overflow:hidden;">
-        <!-- PANEL HEADER -->
-        <div style="background:var(--surface-subtle); border-bottom:1.5px solid var(--border); padding:12px 18px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-          <div style="display:flex; align-items:center; gap:10px;">
-            <div style="width:34px; height:34px; border-radius:8px; background:var(--primary-soft); color:var(--primary-dark); display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:800;">
-              <i class="fa-solid fa-book-bookmark"></i>
-            </div>
-            <div>
-              <div style="font-size:14px; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:8px;">
-                <span>${mapelName}</span>
-                <span class="badge bg-green">${list.length} Soal</span>
-                ${tingkatSet ? `<span class="badge bg-blue">Tingkat ${tingkatSet}</span>` : ''}
-              </div>
-              <small style="color:var(--text-muted); font-size:11px;">Kumpulan bank butir soal mata pelajaran ${mapelName}</small>
-            </div>
+      <tr>
+        <td style="font-weight:700; color:var(--text-muted); text-align:center;">${num + 1}</td>
+        <td style="max-width:380px;">
+          <div style="font-size:13px; color:var(--text-main); line-height:1.5;">
+            ${s.pertanyaan}
           </div>
-
-          <div style="display:flex; gap:8px; align-items:center;">
-            <button type="button" class="btn btn-secondary" style="padding:4px 10px; font-size:11.5px;" onclick="bukaModalSoalDenganExam(${firstExamId})">
-              <i class="fa-solid fa-plus"></i> Tambah Soal Mapel Ini
-            </button>
-            <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:12px;" onclick="togglePanelVisibility('${panelId}', this)" title="Sembunyikan / Tampilkan">
-              <i class="fa-solid fa-chevron-up"></i>
-            </button>
+          <small style="color:var(--text-muted); font-size:11px; margin-top:6px; display:block;">
+            <i class="fa-solid fa-calendar-check" style="font-size:10px; color:var(--primary);"></i> Ujian: <b>${s.nama_ujian || 'ID #' + (s.exam_id || s.ujian_id)}</b> 
+            ${s.tingkat ? `<span class="badge bg-blue" style="margin-left:6px;">Tingkat ${s.tingkat}</span>` : ''}
+          </small>
+        </td>
+        <td>
+          <div style="display:flex; flex-direction:column; gap:3px; font-size:11.5px;">
+            <div style="${s.jawaban_benar==='A'?'font-weight:700; color:var(--primary-dark);':''}"><span class="badge ${s.jawaban_benar==='A'?'bg-green':'bg-gray'}" style="padding:1px 5px; font-size:10px;">A</span> ${s.opsi_a}</div>
+            <div style="${s.jawaban_benar==='B'?'font-weight:700; color:var(--primary-dark);':''}"><span class="badge ${s.jawaban_benar==='B'?'bg-green':'bg-gray'}" style="padding:1px 5px; font-size:10px;">B</span> ${s.opsi_b}</div>
+            <div style="${s.jawaban_benar==='C'?'font-weight:700; color:var(--primary-dark);':''}"><span class="badge ${s.jawaban_benar==='C'?'bg-green':'bg-gray'}" style="padding:1px 5px; font-size:10px;">C</span> ${s.opsi_c}</div>
+            <div style="${s.jawaban_benar==='D'?'font-weight:700; color:var(--primary-dark);':''}"><span class="badge ${s.jawaban_benar==='D'?'bg-green':'bg-gray'}" style="padding:1px 5px; font-size:10px;">D</span> ${s.opsi_d}</div>
+            ${s.opsi_e ? `<div style="${s.jawaban_benar==='E'?'font-weight:700; color:var(--primary-dark);':''}"><span class="badge ${s.jawaban_benar==='E'?'bg-green':'bg-gray'}" style="padding:1px 5px; font-size:10px;">E</span> ${s.opsi_e}</div>` : ''}
           </div>
-        </div>
-
-        <!-- PANEL CONTENT TABLE -->
-        <div id="${panelId}" class="table-responsive" style="padding:0;">
-          <table style="margin:0;">
-            <thead>
-              <tr>
-                <th style="width:50px;">No</th>
-                <th>Teks Pertanyaan & Lampiran Gambar</th>
-                <th style="width:180px;">Pilihan Opsi Jawaban</th>
-                <th style="width:90px;">Kunci</th>
-                <th style="width:70px;">Poin</th>
-                <th style="width:80px;">Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${list.map((s, num) => {
-                return `
-                  <tr>
-                    <td style="font-weight:700; color:var(--text-muted); text-align:center;">${num + 1}</td>
-                    <td style="max-width:380px;">
-                      <div style="font-size:13px; color:var(--text-main); line-height:1.45;">
-                        ${s.pertanyaan}
-                      </div>
-                      <small style="color:var(--text-muted); font-size:10.5px; margin-top:4px; display:block;">
-                        <i class="fa-solid fa-calendar-check" style="font-size:10px;"></i> Ujian: <b>${s.nama_ujian || 'ID ' + (s.exam_id || s.ujian_id)}</b>
-                      </small>
-                    </td>
-                    <td>
-                      <div style="display:flex; flex-direction:column; gap:2px; font-size:11.5px;">
-                        <div style="${s.jawaban_benar==='A'?'font-weight:700; color:var(--primary-dark);':''}"><span class="badge ${s.jawaban_benar==='A'?'bg-green':'bg-gray'}" style="padding:1px 5px; font-size:10px;">A</span> ${s.opsi_a}</div>
-                        <div style="${s.jawaban_benar==='B'?'font-weight:700; color:var(--primary-dark);':''}"><span class="badge ${s.jawaban_benar==='B'?'bg-green':'bg-gray'}" style="padding:1px 5px; font-size:10px;">B</span> ${s.opsi_b}</div>
-                        <div style="${s.jawaban_benar==='C'?'font-weight:700; color:var(--primary-dark);':''}"><span class="badge ${s.jawaban_benar==='C'?'bg-green':'bg-gray'}" style="padding:1px 5px; font-size:10px;">C</span> ${s.opsi_c}</div>
-                        <div style="${s.jawaban_benar==='D'?'font-weight:700; color:var(--primary-dark);':''}"><span class="badge ${s.jawaban_benar==='D'?'bg-green':'bg-gray'}" style="padding:1px 5px; font-size:10px;">D</span> ${s.opsi_d}</div>
-                        ${s.opsi_e ? `<div style="${s.jawaban_benar==='E'?'font-weight:700; color:var(--primary-dark);':''}"><span class="badge ${s.jawaban_benar==='E'?'bg-green':'bg-gray'}" style="padding:1px 5px; font-size:10px;">E</span> ${s.opsi_e}</div>` : ''}
-                      </div>
-                    </td>
-                    <td><span class="badge bg-green" style="font-size:12px; font-weight:800;">${s.jawaban_benar}</span></td>
-                    <td><strong style="color:var(--text-main);">${s.poin || 1}</strong></td>
-                    <td>
-                      <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick='editSoal(${JSON.stringify(s)})'>
-                        <i class="fa-solid fa-pen"></i> Edit
-                      </button>
-                    </td>
-                  </tr>
-                `;
-              }).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        </td>
+        <td style="text-align:center;"><span class="badge bg-green" style="font-size:12px; font-weight:800; padding:4px 8px;">${s.jawaban_benar}</span></td>
+        <td style="text-align:center;"><strong style="color:var(--text-main); font-size:13px;">${s.poin || 1}</strong></td>
+        <td style="text-align:center;">
+          <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick='editSoal(${JSON.stringify(s)})'>
+            <i class="fa-solid fa-pen"></i> Edit
+          </button>
+        </td>
+      </tr>
     `;
   }).join('');
 }
 
-function togglePanelVisibility(panelId, btn) {
-  const el = document.getElementById(panelId);
-  if (!el) return;
-  const isHidden = el.style.display === 'none';
-  el.style.display = isHidden ? '' : 'none';
-  if (btn) {
-    btn.innerHTML = isHidden ? '<i class="fa-solid fa-chevron-up"></i>' : '<i class="fa-solid fa-chevron-down"></i>';
+function bukaModalSoalUntukMapelAktif() {
+  let preselectedExamId = null;
+  if (currentSelectedMapelName) {
+    const found = cacheAdminSoalRows.find(s => (s.nama_mapel || '').trim().toLowerCase() === currentSelectedMapelName.trim().toLowerCase());
+    preselectedExamId = found ? (found.exam_id || found.ujian_id) : null;
   }
+  bukaModalSoal(null, preselectedExamId);
 }
 
-function bukaModalSoalDenganExam(examId) {
-  bukaModalSoal(null, examId);
+function exportExcelMapelAktif() {
+  const filename = currentSelectedMapelName ? `bank_soal_${currentSelectedMapelName.toLowerCase().replace(/\s+/g, '_')}.xlsx` : 'bank_soal.xlsx';
+  exportToExcel(filename, 'Soal', ['ID', 'Ujian ID', 'Nama Mapel', 'Tingkat', 'Pertanyaan', 'Opsi A', 'Opsi B', 'Opsi C', 'Opsi D', 'Opsi E', 'Jawaban Benar', 'Poin'], window.cacheSoalExcel || []);
 }
 
-// IMAGE ATTACHMENT HANDLERS
+// ================= QUESTION MODAL & IMAGE ATTACHMENT =================
 function handleGambarSoalFile(input) {
   const file = input.files[0];
   if (!file) return;
@@ -341,6 +415,9 @@ function bukaModalSoal(data = null, preselectedExamId = null) {
 
       if (preselectedExamId) {
         sel.value = preselectedExamId;
+      } else if (currentSelectedMapelName) {
+        const found = ujianList.find(u => (u.nama_mapel || '').toLowerCase() === currentSelectedMapelName.toLowerCase());
+        if (found) sel.value = found.id;
       }
 
       if (data) {
@@ -348,14 +425,13 @@ function bukaModalSoal(data = null, preselectedExamId = null) {
         document.getElementById('editSoalId').value = data.id;
         sel.value = data.exam_id || data.ujian_id;
 
-        // Check if question contains image tag
+        // Extract image tag if present
         let rawPertanyaan = data.pertanyaan || '';
         const imgMatch = rawPertanyaan.match(/<img[^>]+src=["']([^"']+)["']/i);
         if (imgMatch && imgMatch[1]) {
           const imgSrc = imgMatch[1];
           handleGambarSoalUrlInput(imgSrc);
           document.getElementById('inGambarSoalUrl').value = imgSrc;
-          // Clean image tag from textarea for clean text editing
           rawPertanyaan = rawPertanyaan.replace(/<br\s*\/?>\s*<img[^>]*>/gi, '').replace(/<img[^>]*>/gi, '').trim();
         }
 

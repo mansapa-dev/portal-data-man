@@ -1296,6 +1296,35 @@ tr:hover td {
   overflow: hidden;
 }
 
+.subject-katalog-card {
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.subject-katalog-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--primary-light);
+}
+
+.btn-icon-close-sidebar {
+  display: none;
+  background: none;
+  border: none;
+  font-size: 16px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.btn-icon-close-sidebar:hover {
+  color: var(--danger);
+  background: #fee2e2;
+}
+
 /* RESPONSIVE */
 @media (max-width: 900px) {
   .btn-icon-mobile {
