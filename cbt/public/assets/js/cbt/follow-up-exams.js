@@ -1,77 +1,16 @@
-// Scheduling of individual make-up/remedial exams. A new exam is created from the selected source.
-let followUpExams = [];
-let followUpStudents = [];
-let selectedFollowUpStudents = new Set();
-let followUpCandidates = [];
-let followUpSchedules = [];
-
-function loadDataFollowUpExams() {
-  const box = document.getElementById('followUpStudents');
-  if (box) box.innerHTML = '<div style="padding:18px;text-align:center;">Memuat peserta...</div>';
-  cbtApi.withSuccessHandler(exams => {
-    followUpExams = Array.isArray(exams) ? exams : (exams?.data || []);
-    const select = document.getElementById('followUpSource');
-    if (select) select.innerHTML = '<option value="">Pilih ujian yang sudah memiliki soal</option>' + followUpExams.map(e => `<option value="${e.id}">${e.nama_ujian} — Tingkat ${e.tingkat}</option>`).join('');
-  }).withFailureHandler(err => showCustomAlert('Gagal Memuat Ujian', err.message, 'error')).getAdminUjianList(stPengelola);
-  cbtApi.withSuccessHandler(rows => {
-    followUpStudents = Array.isArray(rows) ? rows : (rows?.data || []);
-    renderFollowUpStudents();
-  }).withFailureHandler(err => { if (box) box.innerHTML = `<div style="padding:18px;color:var(--danger);">${err.message}</div>`; }).getAdminSiswaList(stPengelola);
-  loadFollowUpCandidateTable();
-  loadFollowUpScheduleTable();
-}
-
-function loadFollowUpCandidateTable() {
-  cbtApi.withSuccessHandler(rows => { followUpCandidates = Array.isArray(rows) ? rows : []; renderFollowUpCandidates(); })
-    .withFailureHandler(err => { document.getElementById('tblFollowUpCandidates').innerHTML = `<tr><td colspan="5" align="center">${err.message}</td></tr>`; }).getKandidatUjianLanjutan();
-}
-function renderFollowUpCandidates() {
-  const tb = document.getElementById('tblFollowUpCandidates'); if (!tb) return;
-  if (!followUpCandidates.length) { tb.innerHTML = '<tr><td colspan="5" align="center" style="padding:22px;color:var(--text-muted);">Belum ada siswa dengan 3 pelanggaran.</td></tr>'; return; }
-  tb.innerHTML = followUpCandidates.map(c => `<tr><td><b>${c.name}</b><br><small>${c.nisn}</small></td><td>${c.class || '-'}<br><small>Tingkat ${c.grade || '-'}</small></td><td>${c.exam_name}</td><td><span class="badge bg-red">${c.violation_count} kali</span></td><td style="white-space:nowrap;"><button class="btn btn-secondary" style="padding:5px 8px;font-size:11px;" onclick="prepareFollowUpCandidate(${c.student_id},${c.exam_id},'SUSULAN')">Susulan</button> <button class="btn btn-primary" style="padding:5px 8px;font-size:11px;" onclick="prepareFollowUpCandidate(${c.student_id},${c.exam_id},'REMEDIAL')">Remedial</button></td></tr>`).join('');
-}
-function prepareFollowUpCandidate(studentId, examId, type) {
-  selectedFollowUpStudents = new Set([String(studentId)]);
-  document.getElementById('followUpType').value = type;
-  document.getElementById('followUpSource').value = String(examId);
-  renderFollowUpStudents();
-  document.getElementById('formUjianLanjutan').scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-function loadFollowUpScheduleTable() {
-  cbtApi.withSuccessHandler(rows => { followUpSchedules = Array.isArray(rows) ? rows : []; renderFollowUpSchedules(); })
-    .withFailureHandler(err => { document.getElementById('tblFollowUpSchedules').innerHTML = `<tr><td colspan="6" align="center">${err.message}</td></tr>`; }).getJadwalUjianLanjutan();
-}
-function renderFollowUpSchedules() {
-  const tb = document.getElementById('tblFollowUpSchedules'); if (!tb) return;
-  if (!followUpSchedules.length) { tb.innerHTML = '<tr><td colspan="6" align="center" style="padding:22px;color:var(--text-muted);">Belum ada jadwal susulan/remedial.</td></tr>'; return; }
-  tb.innerHTML = followUpSchedules.map(s => { const active = s.status === 'ACTIVE'; return `<tr><td><span class="badge ${s.type === 'REMEDIAL' ? 'bg-blue' : 'bg-gray'}">${s.type}</span></td><td><b>${s.name}</b><br><small>Asal: ${s.source_name}</small></td><td>${s.student_count} siswa<br><small>${s.students || '-'}</small></td><td><small>${String(s.starts_at).replace('T',' ').slice(0,16)}<br>s.d. ${String(s.ends_at).replace('T',' ').slice(0,16)}</small></td><td><span class="badge ${active ? 'bg-green' : 'bg-red'}">${active ? 'AKTIF' : 'NONAKTIF'}</span></td><td><button class="btn ${active ? 'btn-secondary' : 'btn-primary'}" style="padding:5px 8px;font-size:11px;" onclick="toggleFollowUpSchedule(${s.id},${active ? 'false' : 'true'})"><i class="fa-solid fa-power-off"></i> ${active ? 'Nonaktifkan' : 'Aktifkan'}</button></td></tr>`; }).join('');
-}
-function toggleFollowUpSchedule(id, active) {
-  showLoading(active ? 'Mengaktifkan jadwal...' : 'Menonaktifkan jadwal...');
-  cbtApi.withSuccessHandler(() => { hideLoading(); loadFollowUpScheduleTable(); showCustomAlert('Status Diperbarui', active ? 'Jadwal kini aktif untuk siswa yang dituju.' : 'Jadwal kini tidak dapat diakses siswa.', 'success'); }).withFailureHandler(err => { hideLoading(); showCustomAlert('Gagal Memperbarui Status', err.message, 'error'); }).setStatusUjianLanjutan(stPengelola, id, active);
-}
-
-function renderFollowUpStudents() {
-  const box = document.getElementById('followUpStudents');
-  if (!box) return;
-  const query = (document.getElementById('followUpStudentSearch')?.value || '').toLowerCase().trim();
-  const source = followUpExams.find(e => String(e.id) === String(document.getElementById('followUpSource')?.value));
-  const rows = followUpStudents.filter(s => {
-    const matchesSource = !source || String(s.tingkat || '').toUpperCase() === String(source.tingkat || '').toUpperCase();
-    const matchesSearch = !query || `${s.nisn || ''} ${s.nomor_ujian || ''} ${s.nama || ''} ${s.kelas || ''}`.toLowerCase().includes(query);
-    return matchesSource && matchesSearch;
-  });
-  box.innerHTML = rows.length ? rows.map(s => `<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;"><input type="checkbox" value="${s.id}" ${selectedFollowUpStudents.has(String(s.id)) ? 'checked' : ''} onchange="toggleFollowUpStudent(this.value,this.checked)"><span><b>${s.nama || '-'}</b><br><small style="color:var(--text-muted);">${s.nomor_ujian || s.nisn || '-'} · ${s.kelas || '-'} · Tingkat ${s.tingkat || '-'}</small></span></label>`).join('') : '<div style="padding:18px;text-align:center;color:var(--text-muted);">Tidak ada siswa yang sesuai.</div>';
-  const count = document.getElementById('followUpStudentCount');
-  if (count) count.textContent = `(${selectedFollowUpStudents.size} dipilih)`;
-}
-function toggleFollowUpStudent(id, checked) { if (checked) selectedFollowUpStudents.add(String(id)); else selectedFollowUpStudents.delete(String(id)); renderFollowUpStudents(); }
-document.getElementById('followUpSource').addEventListener('change', () => { selectedFollowUpStudents.clear(); renderFollowUpStudents(); });
-document.getElementById('formUjianLanjutan').addEventListener('submit', e => {
-  e.preventDefault();
-  const starts = document.getElementById('followUpStarts').value;
-  const ends = document.getElementById('followUpEnds').value;
-  if (!selectedFollowUpStudents.size) return showCustomAlert('Peserta Belum Dipilih', 'Pilih minimal satu siswa untuk jadwal ini.', 'warning');
-  showLoading('Membuat jadwal ujian khusus...');
-  cbtApi.withSuccessHandler(res => { hideLoading(); selectedFollowUpStudents.clear(); document.getElementById('formUjianLanjutan').reset(); renderFollowUpStudents(); loadFollowUpScheduleTable(); showCustomAlert('Jadwal Berhasil Dibuat', `${res.name} dibuat untuk ${res.targeted_students} siswa.`, 'success'); }).withFailureHandler(err => { hideLoading(); showCustomAlert('Gagal Membuat Jadwal', err.message, 'error'); }).simpanUjianLanjutanAdmin(stPengelola, { type: document.getElementById('followUpType').value, source_exam_id: document.getElementById('followUpSource').value, name: document.getElementById('followUpName').value.trim(), starts_at: starts.replace('T', ' '), ends_at: ends.replace('T', ' '), student_ids: [...selectedFollowUpStudents], active: true });
-});
+let makeUpCandidates=[],selectedMakeUp=new Set(),followUpSchedules=[];
+function loadDataFollowUpExams(){loadMakeUpCandidates();loadRetakeCandidates();loadFollowUpScheduleTable();}
+function switchFollowUpPanel(panel,btn){document.getElementById('followUpMakeupPanel').classList.toggle('hidden',panel!=='makeup');document.getElementById('followUpRetakePanel').classList.toggle('hidden',panel!=='retake');document.querySelectorAll('.follow-up-tab').forEach(x=>{x.classList.toggle('btn-primary',x===btn);x.classList.toggle('btn-secondary',x!==btn);});}
+function loadMakeUpCandidates(){cbtApi.withSuccessHandler(rows=>{makeUpCandidates=Array.isArray(rows)?rows:[];populateMakeUpFilters();filterMakeupCandidates();}).withFailureHandler(e=>document.getElementById('tblMakeupCandidates').innerHTML=`<tr><td colspan="6">${e.message}</td></tr>`).getKandidatUjianSusulan();}
+function populateMakeUpFilters(){const set=(id,key,label)=>document.getElementById(id).innerHTML=`<option value="ALL">${label}</option>`+[...new Set(makeUpCandidates.map(x=>x[key]).filter(Boolean))].map(x=>`<option value="${x}">${x}</option>`).join('');set('fltMakeupClass','class','Semua Kelas');set('fltMakeupSubject','subject_name','Semua Mapel');}
+function filterMakeupCandidates(){const d=document.getElementById('fltMakeupDate').value,c=document.getElementById('fltMakeupClass').value,m=document.getElementById('fltMakeupSubject').value,s=document.getElementById('fltMakeupStatus').value;renderMakeUpCandidates(makeUpCandidates.filter(x=>(!d||String(x.normal_ends_at).slice(0,10)===d)&&(c==='ALL'||x.class===c)&&(m==='ALL'||x.subject_name===m)&&(s==='ALL'||x.status_susulan===s)));}
+function renderMakeUpCandidates(rows){const badge={BELUM_UJIAN:'bg-red',DIJADWALKAN:'bg-blue',SELESAI:'bg-green'},label={BELUM_UJIAN:'BELUM UJIAN',DIJADWALKAN:'DIJADWALKAN',SELESAI:'SELESAI'},tb=document.getElementById('tblMakeupCandidates');tb.innerHTML=rows.length?rows.map(x=>`<tr><td><input type="checkbox" value="${x.student_id}|${x.exam_id}" ${selectedMakeUp.has(`${x.student_id}|${x.exam_id}`)?'checked':''} ${x.status_susulan!=='BELUM_UJIAN'?'disabled':''} onchange="toggleMakeUpCandidate(this.value,this.checked)"></td><td><b>${x.name}</b><br><small>${x.nisn}</small></td><td>${x.class||'-'}</td><td>${x.exam_name}</td><td>${x.subject_name||'-'}</td><td><span class="badge ${badge[x.status_susulan]}">${label[x.status_susulan]}</span></td></tr>`).join(''):'<tr><td colspan="6" align="center">Tidak ada data sesuai filter.</td></tr>';updateMakeUpStats();}
+function updateMakeUpStats(){const n=x=>makeUpCandidates.filter(y=>y.status_susulan===x).length;document.getElementById('statMakeupPending').textContent=n('BELUM_UJIAN');document.getElementById('statMakeupScheduled').textContent=n('DIJADWALKAN');document.getElementById('statMakeupCompleted').textContent=n('SELESAI');document.getElementById('statMakeupSelected').textContent=selectedMakeUp.size;}
+function toggleMakeUpCandidate(k,on){on?selectedMakeUp.add(k):selectedMakeUp.delete(k);updateMakeUpStats();}
+function toggleAllMakeup(on){document.querySelectorAll('#tblMakeupCandidates input:not(:disabled)').forEach(x=>{x.checked=on;toggleMakeUpCandidate(x.value,on);});}
+function openMakeupScheduleModal(){if(!selectedMakeUp.size)return showCustomAlert('Peserta Belum Dipilih','Centang minimal satu siswa.','warning');const ids=[...new Set([...selectedMakeUp].map(x=>x.split('|')[1]))];if(ids.length>1)return showCustomAlert('Pilih Satu Ujian','Peserta dalam satu jadwal harus berasal dari ujian normal yang sama.','warning');const e=makeUpCandidates.find(x=>String(x.exam_id)===ids[0]);document.getElementById('followUpSource').value=ids[0];document.getElementById('modalMakeupExam').textContent=e.exam_name;document.getElementById('modalMakeupParticipants').textContent=`${selectedMakeUp.size} siswa`;document.getElementById('modalMakeupSchedule').classList.add('show');}
+function closeMakeupScheduleModal(){document.getElementById('modalMakeupSchedule').classList.remove('show');}
+function loadRetakeCandidates(){cbtApi.withSuccessHandler(rows=>{const tb=document.getElementById('tblRetakeCandidates');tb.innerHTML=rows?.length?rows.map(x=>`<tr><td><b>${x.name}</b><br><small>${x.nisn}</small></td><td>${x.class}</td><td>${x.exam_name}</td><td><span class="badge bg-red">${x.violation_count} kali</span></td></tr>`).join(''):'<tr><td colspan="4" align="center">Belum ada kandidat ujian ulang.</td></tr>';}).getKandidatUjianLanjutan();}
+function loadFollowUpScheduleTable(){cbtApi.withSuccessHandler(rows=>{followUpSchedules=rows||[];const tb=document.getElementById('tblFollowUpSchedules');tb.innerHTML=followUpSchedules.length?followUpSchedules.map(x=>`<tr><td><span class="badge bg-blue">${x.type==='SUSULAN'?'SUSULAN':'UJIAN ULANG'}</span></td><td><b>${x.name}</b></td><td>${x.student_count} siswa</td><td>${String(x.starts_at).slice(0,16)}<br><small>${x.room||'-'}</small></td><td><span class="badge ${x.status==='ACTIVE'?'bg-green':'bg-red'}">${x.status}</span></td><td><button class="btn btn-secondary" onclick="toggleFollowUpSchedule(${x.id},${x.status!=='ACTIVE'})">${x.status==='ACTIVE'?'Nonaktifkan':'Aktifkan'}</button></td></tr>`).join(''):'<tr><td colspan="6" align="center">Belum ada jadwal.</td></tr>';}).getJadwalUjianLanjutan();}
+function toggleFollowUpSchedule(id,active){cbtApi.withSuccessHandler(loadFollowUpScheduleTable).setStatusUjianLanjutan(stPengelola,id,active);}
+document.getElementById('formUjianLanjutan').addEventListener('submit',e=>{e.preventDefault();const source=followUpSource.value,students=[...selectedMakeUp].filter(x=>x.endsWith(`|${source}`)).map(x=>x.split('|')[0]);cbtApi.withSuccessHandler(()=>{selectedMakeUp.clear();closeMakeupScheduleModal();loadMakeUpCandidates();loadFollowUpScheduleTable();}).withFailureHandler(x=>showCustomAlert('Gagal',x.message,'error')).simpanUjianLanjutanAdmin(stPengelola,{type:'SUSULAN',source_exam_id:source,starts_at:`${followUpDate.value} ${followUpStarts.value}`,ends_at:`${followUpDate.value} ${followUpEnds.value}`,student_ids:students,room:followUpRoom.value,notes:followUpNotes.value,active:true});});

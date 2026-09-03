@@ -28,8 +28,9 @@ final class AdminService
   if($end<=$start)throw new DomainException('Waktu selesai harus setelah waktu mulai.',422);
   $name=trim((string)($d['name']??''));if($name==='')$name=$type==='REMEDIAL'?'Remedial - '.$source['name']:'Susulan - '.$source['name'];
   $utc=new \DateTimeZone('UTC');
-  return $this->db->transaction(fn()=>$this->repo->cloneFollowUpExam($source,$studentIds,$name,$type,$start->setTimezone($utc)->format('Y-m-d H:i:s'),$end->setTimezone($utc)->format('Y-m-d H:i:s'),$actor,filter_var($d['active']??true,FILTER_VALIDATE_BOOL)));
+  return $this->db->transaction(fn()=>$this->repo->cloneFollowUpExam($source,$studentIds,$name,$type,$start->setTimezone($utc)->format('Y-m-d H:i:s'),$end->setTimezone($utc)->format('Y-m-d H:i:s'),$actor,filter_var($d['active']??true,FILTER_VALIDATE_BOOL),trim((string)($d['room']??'')),trim((string)($d['notes']??''))));
  }
+ public function makeUpCandidates():array{return$this->repo->makeUpCandidates();}
  public function followUpCandidates():array{return$this->repo->followUpCandidates();}
  public function followUpSchedules():array{return$this->repo->followUpSchedules();}
  public function setFollowUpStatus(int$id,bool$active):void{try{$this->repo->setFollowUpStatus($id,$active);}catch(\UnexpectedValueException$e){throw new DomainException($e->getMessage(),404);}}

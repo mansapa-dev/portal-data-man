@@ -31,6 +31,7 @@
     async simpanUjianAdmin(session,data) { await api('api/admin/exams','POST',data);return {success:true,message:'Ujian berhasil disimpan.'}; },
     async simpanUjianLanjutanAdmin(session,data) { const r=await api('api/admin/follow-up-exams','POST',data);return {success:true,...r.data,message:r.message}; },
     async getKandidatUjianLanjutan() { const r=await api('api/admin/follow-up-exams/candidates');return r.data; },
+    async getKandidatUjianSusulan() { const r=await api('api/admin/follow-up-exams/make-up-candidates');return r.data; },
     async getJadwalUjianLanjutan() { const r=await api('api/admin/follow-up-exams');return r.data; },
     async setStatusUjianLanjutan(session,id,active) { await api(`api/admin/follow-up-exams/${id}/status`,'POST',{active});return {success:true}; },
     async getAdminSoalList(session,examId) { const r=await api(`api/admin/questions${examId?`?exam_id=${encodeURIComponent(examId)}`:''}`);return r.data; },
