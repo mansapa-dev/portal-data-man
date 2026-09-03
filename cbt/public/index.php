@@ -38,7 +38,7 @@ $adminService=new AdminService($database,new AdminRepository($pdo));$admin=new A
 $adminStudents=new AdminStudentController(new AdminStudentService($database,new AdminStudentRepository($pdo),new SecretCipher()));
 $csrf=new CsrfMiddleware();$studentAuth=new AuthMiddleware('student');
 $adminAuth=new AuthMiddleware('auth','ADMIN');
-$staffAuth=new AuthMiddleware('auth');$teacherAuth=new AuthMiddleware('auth','TEACHER');
+$staffAuth=new AuthMiddleware('auth');
 $studentLoginRate=new RateLimitMiddleware($pdo,'student-login',8,300);$staffLoginRate=new RateLimitMiddleware($pdo,'staff-login',6,300);$violationRate=new RateLimitMiddleware($pdo,'violation',20,60);$submitRate=new RateLimitMiddleware($pdo,'submit',8,60);
 $audit=fn(string$action,?string$type=null)=>new AuditMiddleware($pdo,$action,$type);
 $router=new Router();
@@ -83,5 +83,5 @@ $router->post('/api/admin/teacher-assignments',[$admin,'saveAssignment'],[$admin
 $router->delete('/api/admin/teacher-assignments/{id}',[$admin,'deleteAssignment'],[$adminAuth,$csrf,$audit('TEACHER_ASSIGNMENT_DELETED','TeacherExamAssignment')]);
 $router->get('/api/admin/results',[$admin,'results'],[$adminAuth]);
 $router->get('/api/admin/violations',[$admin,'violations'],[$adminAuth]);
-$router->get('/api/teacher/dashboard',[$teacher,'dashboard'],[$staffAuth]);$router->get('/api/teacher/live-sessions',[$teacher,'liveSessions'],[$teacherAuth]);
+$router->get('/api/teacher/dashboard',[$teacher,'dashboard'],[$staffAuth]);
 $router->dispatch($request)->send();

@@ -63,13 +63,11 @@
   }
 
   function render(section) {
-    window.CbtLiveSessions.stop();
     content.replaceChildren();
     document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.section === section));
-    const titles={overview:'Dashboard',live:'Live Sessions',exams:'Ujian Diampu',results:'Hasil Siswa',violations:'Pelanggaran Ujian'};
+    const titles={overview:'Dashboard',exams:'Ujian Diampu',results:'Hasil Siswa',violations:'Pelanggaran Ujian'};
     const pageTitle=document.getElementById('teacherPageTitle');if(pageTitle)pageTitle.textContent=titles[section]||'Dashboard';
 
-    if (section === 'live') { window.CbtLiveSessions.mount(content, api, notice); return; }
     if (section === 'overview') {
       const metrics=el('section',undefined,'teacher-metrics');
       [["fa-calendar-days",data.ujianList.length,'Ujian Diampu','blue','exams'],["fa-circle-check",data.hasilList.length,'Hasil Terkumpul','green','results'],["fa-shield-halved",data.pelanggaranList.length,'Pelanggaran Tercatat','red','violations']].forEach(([icon,value,label,color,target])=>{const card=el('button',undefined,`teacher-metric ${color}`);card.type='button';card.dataset.target=target;card.setAttribute('aria-label',`${label}: ${value}. Lihat detail`);card.innerHTML=`<div class="teacher-metric-icon"><i class="fa-solid ${icon}"></i></div><div><small>${label}</small><strong>${value}</strong><span>Lihat detail <i class="fa-solid fa-arrow-right"></i></span></div>`;metrics.append(card);});
@@ -170,6 +168,21 @@
 
   }
 
+  async function openSection(section) {
+    if (['overview', 'exams', 'results', 'violations'].includes(section)) {
+      notice.style.color = 'var(--muted)';
+      notice.textContent = 'Memuat data terbaru dari database...';
+      try {
+        data = (await api('api/teacher/dashboard')).data;
+        notice.textContent = '';
+      } catch (error) {
+        notice.style.color = '#c0392b';
+        notice.textContent = `Data terbaru gagal dimuat: ${error.message}`;
+      }
+    }
+    render(section);
+  }
+
   async function api(path, method = 'GET', body) {
     const response = await fetch('../' + path, {
       method,
@@ -191,13 +204,13 @@
     csrf = me.data.csrf_token;
     document.getElementById('teacherName').textContent = me.data.staff.nip || me.data.staff.username || 'Guru';
     data = (await api('api/teacher/dashboard')).data;
-    render('live');
+    render('overview');
   } catch (error) {
     notice.textContent = error.message;
   }
 
-  document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', () => render(button.dataset.section)));
-  content.addEventListener('click',e=>{const button=e.target.closest('[data-target]');if(button)render(button.dataset.target);});
+  document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', () => openSection(button.dataset.section)));
+  content.addEventListener('click',e=>{const button=e.target.closest('[data-target]');if(button)openSection(button.dataset.target);});
   document.getElementById('menu').addEventListener('click', () => document.querySelector('.sidebar').classList.toggle('open'));
   const handleLogout = async () => {
     try {
