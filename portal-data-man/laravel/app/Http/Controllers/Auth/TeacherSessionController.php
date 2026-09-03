@@ -59,7 +59,13 @@ class TeacherSessionController extends Controller
 
     public function show(Request $request): JsonResponse
     {
-        $account = $request->user('teacher')->load('teacher');
+        $account = $request->user('teacher')?->load('teacher');
+        if (! $account || $account->status !== 'ACTIVE' || $account->teacher?->status !== 'ACTIVE') {
+            Auth::guard('teacher')->logout();
+            $request->session()->invalidate();
+
+            return response()->json(['success' => false, 'message' => 'Akun tidak aktif atau belum mengatur password.'], 401);
+        }
 
         return response()->json(['success' => true, 'message' => 'Sesi guru aktif.', 'data' => ['publicId' => $account->publicId, 'username' => $account->username, 'fullName' => $account->teacher->fullName]]);
     }
