@@ -15,7 +15,7 @@
             </div>
           </div>
 
-          <!-- FILTER BAR SISWA: Tingkat, Kelas, Status, Urutan Abjad, Pencarian -->
+          <!-- FILTER BAR SISWA: Tingkat, Kelas, Status, Pencarian -->
           <div class="filter-bar-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:12px; margin-bottom:14px; background:var(--surface-subtle); padding:14px; border-radius:10px; border:1px solid var(--border);">
             <div>
               <label style="font-size:11px; font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px;">Tingkatan:</label>
@@ -38,16 +38,8 @@
                 <option value="ALL">Semua Status</option>
                 <option value="belum">Belum Mulai</option>
                 <option value="berlangsung">Sedang Ujian</option>
+                <option value="selesai">Selesai</option>
                 <option value="dihentikan">Dihentikan / Terblokir</option>
-              </select>
-            </div>
-            <div>
-              <label style="font-size:11px; font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px;">Urutan Abjad:</label>
-              <select id="fltSiswaSort" onchange="applyFilterSiswa()" style="width:100%; padding:8px 10px; border-radius:8px; border:1.5px solid var(--border); font-size:12.5px; background:var(--surface);">
-                <option value="nama_asc">Nama (A ➔ Z)</option>
-                <option value="nama_desc">Nama (Z ➔ A)</option>
-                <option value="nisn_asc">NISN / No Peserta</option>
-                <option value="kelas_asc">Kelas (Rombel)</option>
               </select>
             </div>
             <div>
@@ -59,16 +51,7 @@
             </div>
           </div>
 
-          <!-- QUICK FILTER ABJAD A-Z PILLS -->
-          <div style="margin-bottom:14px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-              <label style="font-size:11px; font-weight:700; color:var(--text-muted);"><i class="fa-solid fa-arrow-down-a-z"></i> Filter Huruf Awal Nama (Abjad):</label>
-              <span id="lblTotalSiswaTerfilter" style="font-size:11.5px; font-weight:700; color:var(--primary-dark);">0 Siswa Ditemukan</span>
-            </div>
-            <div id="siswaAbjadPillsContainer" style="display:flex; gap:4px; overflow-x:auto; padding-bottom:6px; -webkit-overflow-scrolling:touch;">
-              <!-- Rendered dynamically: SEMUA, A, B, C... Z -->
-            </div>
-          </div>
+          <div style="display:flex; justify-content:flex-end; margin-bottom:10px;"><span id="lblTotalSiswaTerfilter" style="font-size:11.5px; font-weight:700; color:var(--primary-dark);">0 Siswa Ditemukan</span></div>
 
           <!-- TABEL DATA SISWA -->
           <div class="table-responsive">

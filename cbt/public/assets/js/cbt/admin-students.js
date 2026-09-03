@@ -1,5 +1,4 @@
-// Administrator student controls backed by Portal Data synchronization, Alphabet Pills, and Batch PIN generation.
-let activeSiswaAbjadFilter = 'ALL';
+// Administrator student controls backed by Portal Data synchronization and batch PIN generation.
 
 function loadDataAdminSiswa() {
   const tb = document.getElementById('tblAdminSiswa');
@@ -62,16 +61,10 @@ function populateAdminSiswaFilters() {
   }
 }
 
-function selectSiswaAbjadPill(letter) {
-  activeSiswaAbjadFilter = letter;
-  applyFilterSiswa();
-}
-
 function applyFilterSiswa() {
   const ting = document.getElementById('fltSiswaTingkat')?.value || 'ALL';
   const kelas = document.getElementById('fltSiswaKelas')?.value || 'ALL';
   const status = document.getElementById('fltSiswaStatus')?.value || 'ALL';
-  const sort = document.getElementById('fltSiswaSort')?.value || 'nama_asc';
   const query = (document.getElementById('searchSiswa')?.value || '').toLowerCase().trim();
 
   const allClasses = portalReferences?.classes || [];
@@ -109,11 +102,6 @@ function applyFilterSiswa() {
       const st = String(s.ujian_status || 'belum').toLowerCase();
       if (st !== status.toLowerCase()) return false;
     }
-    // Filter Abjad Huruf Pertama Nama
-    if (activeSiswaAbjadFilter && activeSiswaAbjadFilter !== 'ALL') {
-      const firstChar = String(s.nama || '').trim().charAt(0).toUpperCase();
-      if (firstChar !== activeSiswaAbjadFilter.toUpperCase()) return false;
-    }
     // Search Query (NISN / Nama)
     if (query !== '') {
       const qText = `${s.nomor_ujian || ''} ${s.nisn || ''} ${s.nama || ''} ${s.kelas || ''} ${s.pin || ''}`.toLowerCase();
@@ -122,16 +110,7 @@ function applyFilterSiswa() {
     return true;
   });
 
-  // 2. Sort
-  filtered.sort((a, b) => {
-    if (sort === 'nama_asc') return String(a.nama || '').localeCompare(String(b.nama || ''));
-    if (sort === 'nama_desc') return String(b.nama || '').localeCompare(String(a.nama || ''));
-    if (sort === 'nisn_asc') return String(a.nomor_ujian || a.nisn || '').localeCompare(String(b.nomor_ujian || b.nisn || ''));
-    if (sort === 'kelas_asc') return String(a.kelas || '').localeCompare(String(b.kelas || ''), undefined, { numeric: true });
-    return 0;
-  });
-
-  // 3. Update Excel Cache
+  // 2. Update Excel Cache
   window.cacheSiswaExcel = filtered.map(s => [
     s.nomor_ujian || s.nisn,
     s.nama,
@@ -142,47 +121,12 @@ function applyFilterSiswa() {
     (s.ujian_status || 'belum').toUpperCase()
   ]);
 
-  // 4. Update count label
+  // 3. Update count label
   const lblCount = document.getElementById('lblTotalSiswaTerfilter');
   if (lblCount) lblCount.textContent = `${filtered.length} Siswa Ditemukan`;
 
-  // 5. Render alphabet pills & table
-  renderSiswaAbjadPills(cacheSiswaGlobal || []);
+  // 4. Render table
   renderTabelSiswa(filtered);
-}
-
-function renderSiswaAbjadPills(allRows) {
-  const container = document.getElementById('siswaAbjadPillsContainer');
-  if (!container) return;
-
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-  
-  // Count students starting with each letter
-  const counts = { 'ALL': (allRows || []).length };
-  (allRows || []).forEach(s => {
-    const char = String(s.nama || '').trim().charAt(0).toUpperCase();
-    if (char && char >= 'A' && char <= 'Z') {
-      counts[char] = (counts[char] || 0) + 1;
-    }
-  });
-
-  const pills = ['ALL', ...alphabet];
-
-  container.innerHTML = pills.map(p => {
-    const isActive = activeSiswaAbjadFilter === p;
-    const count = counts[p] || 0;
-    const isZero = p !== 'ALL' && count === 0;
-
-    return `
-      <button type="button" 
-              onclick="selectSiswaAbjadPill('${p}')" 
-              class="btn ${isActive ? 'btn-primary' : 'btn-secondary'}" 
-              style="padding:3px 8px; font-size:11px; min-width:32px; border-radius:6px; opacity:${isZero ? '0.45' : '1'}; flex-shrink:0; text-align:center;">
-        <b>${p === 'ALL' ? 'Semua' : p}</b>
-        ${count > 0 && p !== 'ALL' ? `<span style="font-size:9.5px; opacity:0.85; margin-left:2px;">(${count})</span>` : ''}
-      </button>
-    `;
-  }).join('');
 }
 
 function renderTabelSiswa(rows) {
@@ -195,7 +139,7 @@ function renderTabelSiswa(rows) {
         <td colspan="8" align="center" style="padding:32px; color:var(--text-muted);">
           <i class="fa-solid fa-users-slash" style="font-size:32px; color:var(--text-muted); margin-bottom:10px; display:block;"></i>
           <div style="font-weight:700; font-size:14px; color:var(--text-main);">Tidak Ada Data Siswa yang Sesuai</div>
-          <p style="font-size:12px; margin-top:4px;">Silakan sesuaikan filter tingkat, kelas, atau huruf abjad yang dipilih.</p>
+          <p style="font-size:12px; margin-top:4px;">Silakan sesuaikan filter tingkat, kelas, status, atau pencarian siswa.</p>
         </td>
       </tr>`;
     return;
@@ -210,6 +154,8 @@ function renderTabelSiswa(rows) {
       actBtn = `<button class="btn btn-success" style="padding:4px 8px; font-size:11px;" onclick="bukaBlokirAdmin(${s.id})" title="Buka Blokir"><i class="fa-solid fa-unlock"></i> Buka</button>`;
     } else if (s.ujian_status === 'berlangsung') {
       statusBadge = '<span class="badge bg-blue"><i class="fa-solid fa-spinner fa-spin"></i> SEDANG UJIAN</span>';
+    } else if (s.ujian_status === 'selesai') {
+      statusBadge = '<span class="badge bg-green"><i class="fa-solid fa-circle-check"></i> SELESAI</span>';
     }
 
     const pinDisplay = s.pin && s.pin !== 'BELUM DISET' 

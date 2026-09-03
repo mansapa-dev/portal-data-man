@@ -83,6 +83,7 @@ function switchDashTab(tabId, btnEl) {
   if (targetTab) targetTab.classList.remove('hidden');
   document.querySelectorAll('.sb-item').forEach(b => b.classList.remove('active'));
   if (btnEl) btnEl.classList.add('active');
+  if (window.innerWidth <= 900) closeMobileSidebar();
 
   const elCurrentTab = document.getElementById('topbarCurrentTab');
   if (elCurrentTab && tabTitles[tabId]) {

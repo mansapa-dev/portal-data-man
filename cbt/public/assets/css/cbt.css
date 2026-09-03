@@ -833,7 +833,7 @@ body {
 /* Shared dashboard chrome — keeps CBT's green identity while using a calmer admin workspace. */
 .dashboard-layout{height:calc(100vh - 56px)}.sidebar{width:232px;padding:20px 12px;background:linear-gradient(165deg,#0b3e2a,#075638 58%,#087049);border:0;color:#fff;box-shadow:8px 0 30px rgba(7,62,42,.15)}.sb-brand{padding:2px 8px 18px;border-bottom-color:rgba(255,255,255,.13)}.sb-brand-identity{display:flex;align-items:center;gap:10px}.sb-brand-mark{display:grid;place-items:center;width:40px;height:40px;border:1px solid rgba(255,255,255,.75);border-radius:8px;color:#fff;font-size:19px}.sb-brand-title{color:#fff;font-size:20px}.sb-brand-sub{color:rgba(255,255,255,.72);font-size:9.5px;text-transform:none;letter-spacing:0}.sb-section-label{margin-top:8px;color:rgba(255,255,255,.58);font-size:9.5px}.sb-item{color:rgba(255,255,255,.86);border-radius:8px}.sb-item:hover{background:rgba(255,255,255,.1);color:#fff}.sb-item.active{border-color:transparent;background:linear-gradient(90deg,#35ab70,#168656);color:#fff;box-shadow:0 5px 14px rgba(0,0,0,.17)}.sb-item.active i.sb-arrow{color:#fff}.sidebar-help-box{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.13)}.sidebar-help-box h5,.sidebar-help-box p{color:#fff}.sidebar-help-box p{opacity:.75}.sidebar-help-box .btn-help{background:#fff;color:var(--primary-dark)}.sidebar-user-footer{border-top-color:rgba(255,255,255,.13)}.user-profile-card{background:rgba(255,255,255,.07)}.user-profile-name,.user-profile-role{color:#fff}.user-profile-role{opacity:.7}.sb-logout-btn{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.12);color:#fff}.sb-logout-btn:hover{background:rgba(255,255,255,.15)}.topbar{height:62px;padding:0 22px;box-shadow:none}.dashboard-top-title h1{margin:0;color:var(--text-main);font-size:20px;font-weight:800}.btn-sidebar-toggle{background:#f1f7f2;color:var(--primary-dark);box-shadow:none}.topbar-guru-link{padding:7px 10px;border-radius:8px;background:var(--primary-soft)}
 
-.dashboard-home-brand{display:flex;align-items:center;gap:8px}.dashboard-home-brand img{width:36px;height:36px;object-fit:contain}.dashboard-home-brand div{display:grid;gap:1px}.dashboard-home-brand strong{font-size:13px;color:var(--primary-dark);letter-spacing:.3px}.dashboard-home-brand span{font-size:9.5px;color:var(--text-muted)}.sb-brand-mark{overflow:hidden;border:0!important;border-radius:0!important;background:transparent!important}.sb-brand-mark img{width:42px;height:42px;object-fit:contain}.dashboard-metric-action{cursor:pointer;transition:transform .18s ease,box-shadow .18s ease}.dashboard-metric-action:hover,.dashboard-metric-action:focus{transform:translateY(-3px);box-shadow:0 12px 22px rgba(15,23,42,.1);outline:2px solid var(--primary-soft-border)}
+.dashboard-home-brand{display:flex;align-items:center;gap:8px}.dashboard-home-brand img{width:36px;height:36px;object-fit:contain}.dashboard-home-brand div{display:grid;gap:1px}.dashboard-home-brand strong{font-size:13px;color:var(--primary-dark);letter-spacing:.3px}.dashboard-home-brand span{font-size:9.5px;color:var(--text-muted)}.sb-brand-mark{display:grid;place-items:center;flex:0 0 46px;width:46px;height:46px;overflow:visible;border:0!important;border-radius:0!important;background:transparent!important}.sb-brand-mark img{display:block;width:42px;height:42px;object-fit:contain}.dashboard-metric-action{cursor:pointer;transition:transform .18s ease,box-shadow .18s ease}.dashboard-metric-action:hover,.dashboard-metric-action:focus{transform:translateY(-3px);box-shadow:0 12px 22px rgba(15,23,42,.1);outline:2px solid var(--primary-soft-border)}
 
 /* HERO BANNER */
 .dash-hero {
@@ -1378,6 +1378,8 @@ tr:hover td {
 
 /* RESPONSIVE */
 @media (max-width: 900px) {
+  .btn-icon-close-sidebar { display:inline-flex; align-items:center; justify-content:center; color:#fff; }
+  .btn-icon-close-sidebar:hover { color:#fff; background:rgba(255,255,255,.12); }
   .btn-icon-mobile {
     display: inline-flex !important;
     position: relative;
@@ -1442,7 +1444,9 @@ tr:hover td {
   .sidebar .sidebar-help-box h5,.sidebar .sidebar-help-box p { color:#fff; opacity:.88; }
   .sidebar .sidebar-user-footer { border-top-color:rgba(255,255,255,.14); }
   .sidebar .user-profile-card { background:rgba(255,255,255,.08); }
-  .dashboard-home-brand span { display:none; }
+  .dashboard-home-brand span { display:block; font-size:8.5px; line-height:1.1; }
+  .dashboard-home-brand strong { font-size:11.5px; line-height:1.1; }
+  .dashboard-home-brand img { width:32px; height:32px; }
 
   .dash-content {
     padding: 14px 10px;
