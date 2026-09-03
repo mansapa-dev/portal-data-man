@@ -27,19 +27,40 @@ function loadDataAdminSiswa() {
 function populateAdminSiswaFilters() {
   const tingVal = document.getElementById('fltSiswaTingkat')?.value || 'ALL';
   const fltKelas = document.getElementById('fltSiswaKelas');
+  if (!fltKelas) return;
 
-  if (fltKelas && portalReferences && portalReferences.classes) {
-    const currentVal = fltKelas.value;
-    const availableClasses = portalReferences.classes.filter(c => tingVal === 'ALL' || c.grade === tingVal);
-    const sortedClasses = [...availableClasses].sort((a, b) => (a.name || a.code || '').localeCompare(b.name || b.code || '', undefined, { numeric: true }));
-    fltKelas.innerHTML = `<option value="ALL">Semua Kelas</option>` + sortedClasses.map(c => `
-      <option value="${c.name || c.code}">${c.name || c.code}</option>
-    `).join('');
-    if (currentVal && sortedClasses.some(c => (c.name || c.code) === currentVal)) {
-      fltKelas.value = currentVal;
-    } else {
-      fltKelas.value = 'ALL';
-    }
+  const currentVal = fltKelas.value;
+  const classMap = new Set();
+
+  if (portalReferences && portalReferences.classes && portalReferences.classes.length > 0) {
+    portalReferences.classes.forEach(c => {
+      const g = String(c.grade || '').toUpperCase();
+      if (tingVal === 'ALL' || g === tingVal.toUpperCase()) {
+        const name = c.name || c.code;
+        if (name) classMap.add(name);
+      }
+    });
+  }
+
+  if (cacheSiswaGlobal && cacheSiswaGlobal.length > 0) {
+    cacheSiswaGlobal.forEach(s => {
+      const g = String(s.tingkat || '').toUpperCase();
+      if (tingVal === 'ALL' || g === tingVal.toUpperCase()) {
+        if (s.kelas && s.kelas.trim() !== '') classMap.add(s.kelas.trim());
+      }
+    });
+  }
+
+  const sortedClasses = Array.from(classMap).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+  fltKelas.innerHTML = `<option value="ALL">Semua Kelas</option>` + sortedClasses.map(c => `
+    <option value="${c}">${c}</option>
+  `).join('');
+
+  if (currentVal && sortedClasses.includes(currentVal)) {
+    fltKelas.value = currentVal;
+  } else {
+    fltKelas.value = 'ALL';
   }
 }
 

@@ -195,32 +195,70 @@ function populateDetailSoalFilters() {
   if (!currentSelectedMapelName) return;
 
   const questionsForMapel = cacheAdminSoalRows.filter(q => (q.nama_mapel || '').trim().toLowerCase() === currentSelectedMapelName.trim().toLowerCase());
+  const tingVal = document.getElementById('fltDetailSoalTingkat')?.value || 'ALL';
 
-  // Populate Jadwal Ujian Filter
+  // 1. Populate Jadwal Ujian Filter
   const fltUjian = document.getElementById('fltDetailSoalUjian');
   if (fltUjian) {
+    const currentVal = fltUjian.value;
     const examsMap = {};
     questionsForMapel.forEach(q => {
       const eid = q.exam_id || q.ujian_id;
-      if (eid && !examsMap[eid]) {
+      const g = String(q.tingkat || '').toUpperCase();
+      if (eid && !examsMap[eid] && (tingVal === 'ALL' || g === tingVal.toUpperCase())) {
         examsMap[eid] = q.nama_ujian || `Ujian #${eid}`;
       }
     });
 
-    fltUjian.innerHTML = `<option value="ALL">Semua Jadwal Ujian (${Object.keys(examsMap).length})</option>` + Object.entries(examsMap).map(([id, name]) => `
+    fltUjian.innerHTML = `<option value="ALL">Semua Jadwal Ujian</option>` + Object.entries(examsMap).map(([id, name]) => `
       <option value="${id}">${name}</option>
     `).join('');
+
+    if (currentVal && examsMap[currentVal]) {
+      fltUjian.value = currentVal;
+    } else {
+      fltUjian.value = 'ALL';
+    }
   }
 
-  // Populate Kelas Filter
+  // 2. Populate Kelas Filter
   const fltKelas = document.getElementById('fltDetailSoalKelas');
-  const tingVal = document.getElementById('fltDetailSoalTingkat')?.value || 'ALL';
-  if (fltKelas && portalReferences && portalReferences.classes) {
-    const availableClasses = portalReferences.classes.filter(c => tingVal === 'ALL' || c.grade === tingVal);
-    const sortedClasses = [...availableClasses].sort((a, b) => (a.name || a.code || '').localeCompare(b.name || b.code || '', undefined, { numeric: true }));
+  if (fltKelas) {
+    const currentVal = fltKelas.value;
+    const classMap = new Set();
+
+    if (portalReferences && portalReferences.classes && portalReferences.classes.length > 0) {
+      portalReferences.classes.forEach(c => {
+        const g = String(c.grade || '').toUpperCase();
+        if (tingVal === 'ALL' || g === tingVal.toUpperCase()) {
+          const name = c.name || c.code;
+          if (name) classMap.add(name);
+        }
+      });
+    }
+
+    questionsForMapel.forEach(q => {
+      const g = String(q.tingkat || '').toUpperCase();
+      if (tingVal === 'ALL' || g === tingVal.toUpperCase()) {
+        if (q.target_kelas_names) {
+          q.target_kelas_names.split(',').map(k => k.trim()).filter(Boolean).forEach(k => {
+            if (k.toLowerCase() !== 'semua') classMap.add(k);
+          });
+        }
+      }
+    });
+
+    const sortedClasses = Array.from(classMap).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
     fltKelas.innerHTML = `<option value="ALL">Semua Kelas</option>` + sortedClasses.map(c => `
-      <option value="${c.name || c.code}">${c.name || c.code}</option>
+      <option value="${c}">${c}</option>
     `).join('');
+
+    if (currentVal && sortedClasses.includes(currentVal)) {
+      fltKelas.value = currentVal;
+    } else {
+      fltKelas.value = 'ALL';
+    }
   }
 }
 

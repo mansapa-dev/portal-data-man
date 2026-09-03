@@ -147,17 +147,30 @@ function updateTopbarAuthUI(isLoggedIn) {
 }
 
 function toggleMobileSidebar() {
-  const sb = document.querySelector('.sidebar');
+  const sb = document.getElementById('mainSidebar') || document.querySelector('.sidebar');
   const backdrop = document.getElementById('sidebarBackdrop');
-  if (sb) sb.classList.toggle('open');
-  if (backdrop) backdrop.classList.toggle('hidden');
+  const toggleBtn = document.getElementById('btnMobileSidebarToggle');
+  if (!sb) return;
+
+  const isOpen = sb.classList.contains('open');
+  if (isOpen) {
+    sb.classList.remove('open');
+    if (backdrop) backdrop.classList.add('hidden');
+    if (toggleBtn) toggleBtn.innerHTML = '<i class="fa-solid fa-bars"></i>';
+  } else {
+    sb.classList.add('open');
+    if (backdrop) backdrop.classList.remove('hidden');
+    if (toggleBtn) toggleBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+  }
 }
 
 function closeMobileSidebar() {
-  const sb = document.querySelector('.sidebar');
+  const sb = document.getElementById('mainSidebar') || document.querySelector('.sidebar');
   const backdrop = document.getElementById('sidebarBackdrop');
+  const toggleBtn = document.getElementById('btnMobileSidebarToggle');
   if (sb) sb.classList.remove('open');
   if (backdrop) backdrop.classList.add('hidden');
+  if (toggleBtn) toggleBtn.innerHTML = '<i class="fa-solid fa-bars"></i>';
 }
 
 async function appResetLogout() {

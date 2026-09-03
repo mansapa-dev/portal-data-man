@@ -1228,18 +1228,22 @@ tr:hover td {
   color: var(--text-main);
 }
 
+.hidden {
+  display: none !important;
+}
+
 /* MOBILE & CUSTOM DROPDOWN COMPONENTS */
 .btn-icon-mobile {
   display: none;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-main);
-  font-size: 14px;
+  font-size: 15px;
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -1252,9 +1256,14 @@ tr:hover td {
 .sidebar-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.45);
+  background: rgba(15, 23, 42, 0.5);
   backdrop-filter: blur(2px);
   z-index: 9998;
+  display: block;
+}
+
+.sidebar-backdrop.hidden {
+  display: none !important;
 }
 
 .custom-dropdown-wrap {
@@ -1329,6 +1338,9 @@ tr:hover td {
 @media (max-width: 900px) {
   .btn-icon-mobile {
     display: inline-flex !important;
+  }
+  .btn-icon-mobile.hidden {
+    display: none !important;
   }
 
   .hide-on-mobile {
