@@ -65,6 +65,7 @@ function applyFilterSiswa() {
   const ting = document.getElementById('fltSiswaTingkat')?.value || 'ALL';
   const kelas = document.getElementById('fltSiswaKelas')?.value || 'ALL';
   const status = document.getElementById('fltSiswaStatus')?.value || 'ALL';
+  const sort = document.getElementById('fltSiswaSort')?.value || 'nama_asc';
   const query = (document.getElementById('searchSiswa')?.value || '').toLowerCase().trim();
 
   const allClasses = portalReferences?.classes || [];
@@ -108,6 +109,14 @@ function applyFilterSiswa() {
       if (!qText.includes(query)) return false;
     }
     return true;
+  });
+
+  filtered.sort((a, b) => {
+    const left = String(a.nama || '').trim();
+    const right = String(b.nama || '').trim();
+    return sort === 'nama_desc'
+      ? right.localeCompare(left, 'id', { sensitivity: 'base' })
+      : left.localeCompare(right, 'id', { sensitivity: 'base' });
   });
 
   // 2. Update Excel Cache

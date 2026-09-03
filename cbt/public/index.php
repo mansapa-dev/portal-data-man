@@ -83,5 +83,7 @@ $router->post('/api/admin/teacher-assignments',[$admin,'saveAssignment'],[$admin
 $router->delete('/api/admin/teacher-assignments/{id}',[$admin,'deleteAssignment'],[$adminAuth,$csrf,$audit('TEACHER_ASSIGNMENT_DELETED','TeacherExamAssignment')]);
 $router->get('/api/admin/results',[$admin,'results'],[$adminAuth]);
 $router->get('/api/admin/violations',[$admin,'violations'],[$adminAuth]);
+$router->get('/api/admin/settings',[$admin,'settings'],[$adminAuth]);
+$router->post('/api/admin/settings',[$admin,'saveSettings'],[$adminAuth,$csrf,$audit('SETTINGS_SAVED','Settings')]);
 $router->get('/api/teacher/dashboard',[$teacher,'dashboard'],[$staffAuth]);
 $router->dispatch($request)->send();

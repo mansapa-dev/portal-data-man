@@ -28,4 +28,6 @@ final class AdminController
  public function violations(Request$r):Response{return Response::json($this->admin->violations());}
  public function importQuestions(Request$r):Response{$summary=$this->admin->importQuestions((array)$r->input('rows',[]));return Response::json($summary,"Import selesai: {$summary['inserted']} berhasil, {$summary['failed']} gagal.");}
  public function importUsers(Request$r):Response{$summary=$this->admin->importUsers((array)$r->input('rows',[]));return Response::json($summary,"Import selesai: {$summary['inserted']} berhasil, {$summary['failed']} gagal.");}
+ public function settings(Request$r):Response{return Response::json($this->admin->settings());}
+ public function saveSettings(Request$r):Response{$this->admin->saveSettings($r->json());return Response::json(null,'Pengaturan berhasil disimpan.');}
 }

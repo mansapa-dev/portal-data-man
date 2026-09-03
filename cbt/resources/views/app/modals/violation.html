@@ -1,8 +1,33 @@
   <div class="modal" id="modalPelanggaran">
-    <div class="modal-content" style="text-align:center; border-top:6px solid var(--danger); width:min(400px, 90%);">
-      <h3 style="font-size:18px; font-weight:800; color:var(--danger); margin-bottom:8px;"><i class="fa-solid fa-triangle-exclamation"></i> Peringatan Sistem!</h3>
-      <p style="font-size:13px; color:var(--text-main); margin-bottom:20px; line-height:1.5;" id="txtPelanggaran"></p>
-      <button class="btn btn-danger" style="width:100%;" id="btnPahamPelanggaran">Saya Mengerti</button>
+    <div class="modal-content" id="modalPelanggaranContent" style="text-align:center; border-top:6px solid var(--danger); width:min(420px, 92%); padding:28px 24px;">
+      <!-- Icon -->
+      <div id="pelanggaranIconWrap" style="width:64px;height:64px;border-radius:50%;background:#fee2e2;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;transition:background .3s;">
+        <i id="pelanggaranIcon" class="fa-solid fa-triangle-exclamation" style="font-size:28px;color:#dc2626;transition:color .3s;"></i>
+      </div>
+
+      <!-- Title -->
+      <h3 id="pelanggaranTitle" style="font-size:17px;font-weight:800;color:var(--danger);margin-bottom:6px;">Peringatan Sistem!</h3>
+
+      <!-- Progress dots -->
+      <div style="display:flex;justify-content:center;gap:10px;margin:14px 0;">
+        <span id="pdot1" style="width:14px;height:14px;border-radius:50%;background:#e5e7eb;border:2px solid #d1d5db;display:inline-block;transition:all .3s;"></span>
+        <span id="pdot2" style="width:14px;height:14px;border-radius:50%;background:#e5e7eb;border:2px solid #d1d5db;display:inline-block;transition:all .3s;"></span>
+        <span id="pdot3" style="width:14px;height:14px;border-radius:50%;background:#e5e7eb;border:2px solid #d1d5db;display:inline-block;transition:all .3s;"></span>
+      </div>
+      <p id="pelanggaranCounter" style="font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--text-muted);margin-bottom:12px;"></p>
+
+      <!-- Message -->
+      <p style="font-size:13px;color:var(--text-main);margin-bottom:20px;line-height:1.6;" id="txtPelanggaran"></p>
+
+      <!-- Countdown bar (hanya tampil saat terminate) -->
+      <div id="pelanggaranCountdownWrap" style="display:none;margin-bottom:18px;">
+        <div style="height:6px;background:#f1f5f9;border-radius:3px;overflow:hidden;">
+          <div id="pelanggaranCountdownBar" style="height:100%;background:var(--danger);width:100%;transition:width 1s linear;border-radius:3px;"></div>
+        </div>
+        <p id="pelanggaranCountdownText" style="font-size:11px;font-weight:700;color:var(--danger);margin-top:6px;"></p>
+      </div>
+
+      <button class="btn btn-danger" style="width:100%;padding:12px;font-weight:700;" id="btnPahamPelanggaran">Saya Mengerti</button>
     </div>
   </div>
 

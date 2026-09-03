@@ -55,7 +55,9 @@
     async importSiswaBulk() { return {success:false,message:'Excel bukan source of truth. Gunakan Sinkronisasi Portal Data.'}; },
     async updatePasswordGuru(session,oldPass,newPass) { await api('api/auth/password','POST',{old_password:oldPass,new_password:newPass});return {success:true,message:'Password berhasil diperbarui.'}; },
     async importSoalBulk(session,rows) { const r=await api('api/admin/questions/import','POST',{rows});return {success:true,message:r.message,summary:r.data}; },
-    async importAkunBulk(session,rows) { const r=await api('api/admin/users/import','POST',{rows});return {success:true,message:r.message,summary:r.data}; }
+    async importAkunBulk(session,rows) { const r=await api('api/admin/users/import','POST',{rows});return {success:true,message:r.message,summary:r.data}; },
+    async getAdminSettings() { const r=await api('api/admin/settings');return {success:true,data:r.data}; },
+    async saveAdminSettings(session,data) { await api('api/admin/settings','POST',data);return {success:true,message:'Pengaturan berhasil disimpan.'}; }
   };
   window.cbtServerLogout = async function () { try { await api('api/auth/logout','POST',{}); } finally { csrfPromise=refreshCsrf(); } };
   window.cbtApi = { run: new Proxy({}, { get(_, name) { const state={success:null,failure:null}; if(name==='withSuccessHandler')return fn=>(state.success=fn,chain(state)); if(name==='withFailureHandler')return fn=>(state.failure=fn,chain(state)); return (...args)=>invoke(name,args,state); function chain(s){return new Proxy({}, {get(_x,n){if(n==='withSuccessHandler')return fn=>(s.success=fn,chain(s));if(n==='withFailureHandler')return fn=>(s.failure=fn,chain(s));return(...a)=>invoke(n,a,s);}});} } }) };
