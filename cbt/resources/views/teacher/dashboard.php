@@ -11,7 +11,7 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Dashboard Guru - CBT MAN 1 Palembang</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="../assets/css/teacher.css">
+  <link rel="stylesheet" href="../assets/css/teacher.css?v=20260903-2">
 </head>
 <body class="dashboard-page">
   <aside class="sidebar">
@@ -27,15 +27,12 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
       <button class="nav-item" data-section="exams"><i class="fa-solid fa-calendar-days"></i> Ujian Diampu</button>
       <button class="nav-item" data-section="results"><i class="fa-solid fa-square-poll-vertical"></i> Hasil Siswa</button>
       <button class="nav-item" data-section="violations"><i class="fa-solid fa-shield-halved"></i> Pelanggaran</button>
-      <span class="nav-label">PENGATURAN</span>
-      <button class="nav-item" data-section="account"><i class="fa-solid fa-key"></i> Ubah Password</button>
     </nav>
-    <button id="logout" class="logout"><i class="fa-solid fa-arrow-right-from-bracket" style="margin-right:6px;"></i> Keluar</button>
   </aside>
 
   <main class="main">
     <header class="topbar">
-      <button id="menu" class="menu">☰</button>
+      <button id="menu" class="menu" aria-label="Buka menu navigasi"><i class="fa-solid fa-bars"></i></button>
       <h1 id="teacherPageTitle">Dashboard</h1>
       <div style="display:flex; align-items:center; gap:14px;">
         <button class="notification-button" type="button" aria-label="Notifikasi"><i class="fa-regular fa-bell"></i></button>
@@ -43,6 +40,7 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
           <small>Portal Guru</small>
           <strong id="teacherName"><?=htmlspecialchars($nip, ENT_QUOTES, 'UTF-8')?></strong>
         </div>
+        <button id="topbarLogoutGuru" type="button" class="topbar-logout" title="Keluar dari dashboard guru"><i class="fa-solid fa-arrow-right-from-bracket"></i><span>Keluar</span></button>
       </div>
     </header>
 
@@ -62,7 +60,7 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
     <section id="content" class="content-grid"></section>
   </main>
 
-  <script src="../assets/js/teacher/live-sessions.js"></script><script src="../assets/js/teacher/dashboard.js"></script>
+  <script src="../assets/js/teacher/live-sessions.js"></script><script src="../assets/js/teacher/dashboard.js?v=20260903-2"></script>
 </body>
 </html>
 <?php return ob_get_clean();

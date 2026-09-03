@@ -66,7 +66,7 @@
     window.CbtLiveSessions.stop();
     content.replaceChildren();
     document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.section === section));
-    const titles={overview:'Dashboard',live:'Live Sessions',exams:'Ujian Diampu',results:'Hasil Siswa',violations:'Pelanggaran Ujian',account:'Ubah Password'};
+    const titles={overview:'Dashboard',live:'Live Sessions',exams:'Ujian Diampu',results:'Hasil Siswa',violations:'Pelanggaran Ujian'};
     const pageTitle=document.getElementById('teacherPageTitle');if(pageTitle)pageTitle.textContent=titles[section]||'Dashboard';
 
     if (section === 'live') { window.CbtLiveSessions.mount(content, api, notice); return; }
@@ -92,19 +92,41 @@
 
     if (section === 'results') {
       const box = panel('Hasil Siswa', 'Rekapitulasi nilai dan status pengerjaan peserta pada ujian yang Anda ampu.');
-      box.append(
-        table(
-          ['NISN', 'Nama Siswa', 'Kelas', 'Ujian', 'Nilai', 'Status'],
-          data.hasilList.map((x) => [
+      box.classList.add('teacher-results-panel');
+      const printHeader = el('header', undefined, 'teacher-print-header');
+      printHeader.innerHTML = '<img src="../assets/img/logo-man1-palembang.png" alt="Lambang MAN 1 Palembang"><div><strong>MAN 1 PALEMBANG</strong><span>REKAP HASIL UJIAN CBT</span></div>';
+      const controls = el('div', undefined, 'teacher-result-controls');
+      const grade = el('select'), studentClass = el('select'), print = el('button', undefined, 'teacher-print-button');
+      grade.setAttribute('aria-label', 'Filter tingkatan');
+      studentClass.setAttribute('aria-label', 'Filter kelas');
+      const grades = [...new Set(data.hasilList.map(x => String(x.tingkat || '').trim()).filter(Boolean))].sort();
+      const classes = [...new Set(data.hasilList.map(x => String(x.kelas || '').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b, 'id', {numeric:true}));
+      grade.append(new Option('Semua Tingkatan', 'ALL'), ...grades.map(x => new Option(`Tingkat ${x}`, x)));
+      studentClass.append(new Option('Semua Kelas', 'ALL'), ...classes.map(x => new Option(x, x)));
+      print.type = 'button'; print.innerHTML = '<i class="fa-solid fa-print"></i> Cetak Hasil';
+      const resultTable = el('div', undefined, 'teacher-result-table');
+      const updateResults = () => {
+        const rows = data.hasilList.filter(x => (grade.value === 'ALL' || String(x.tingkat) === grade.value) && (studentClass.value === 'ALL' || String(x.kelas) === studentClass.value));
+        resultTable.replaceChildren(table(
+          ['NISN', 'Nama Siswa', 'Kelas', 'Tingkat', 'Ujian', 'Nilai', 'Status'],
+          rows.map((x) => [
             x.nomor_ujian,
             x.nama_siswa,
             x.kelas,
+            x.tingkat || '-',
             x.nama_ujian,
             x.nilai !== undefined ? x.nilai : 0,
             createBadge(String(x.status || 'selesai').toUpperCase(), 'green')
           ])
-        )
-      );
+        ));
+      };
+      grade.addEventListener('change', updateResults);
+      studentClass.addEventListener('change', updateResults);
+      print.addEventListener('click', () => window.print());
+      controls.append(grade, studentClass, print);
+      box.prepend(printHeader);
+      box.append(controls, resultTable);
+      updateResults();
       content.append(box);
     }
 
@@ -126,47 +148,6 @@
       content.append(box);
     }
 
-    if (section === 'account') {
-      const box = panel('Ubah Password', 'Perbarui kata sandi akun guru Anda untuk keamanan sistem (minimal 12 karakter).');
-      const form = el('form');
-      form.style.cssText = 'display:grid;gap:14px;max-width:440px';
-      [
-        ['Password Lama', 'old'],
-        ['Password Baru', 'new']
-      ].forEach(([label, id]) => {
-        const wrap = el('label', label);
-        wrap.style.cssText = 'display:grid;gap:6px;font-weight:700;font-size:12.5px';
-        const input = el('input');
-        input.type = 'password';
-        input.id = id;
-        input.required = true;
-        input.style.cssText = 'padding:11px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:13.5px;';
-        wrap.append(input);
-        form.append(wrap);
-      });
-      const button = el('button', 'Simpan Password Baru');
-      button.style.cssText = 'border:0;border-radius:10px;padding:12px;background:var(--green);color:#fff;font-weight:700;cursor:pointer;margin-top:6px;box-shadow:0 4px 12px rgba(76,175,80,0.25);';
-      form.append(button);
-      form.addEventListener('submit', changePassword);
-      box.append(form);
-      content.append(box);
-    }
-  }
-
-  async function changePassword(e) {
-    e.preventDefault();
-    try {
-      await api('api/auth/password', 'POST', {
-        old_password: document.getElementById('old').value,
-        new_password: document.getElementById('new').value
-      });
-      notice.style.color = 'var(--green-dark)';
-      notice.textContent = 'Password berhasil diperbarui.';
-      e.target.reset();
-    } catch (error) {
-      notice.style.color = '#c0392b';
-      notice.textContent = error.message;
-    }
   }
 
   async function api(path, method = 'GET', body) {
@@ -206,8 +187,6 @@
     }
   };
 
-  const btnLogoutSide = document.getElementById('logout');
-  if (btnLogoutSide) btnLogoutSide.addEventListener('click', handleLogout);
   const btnLogoutTop = document.getElementById('topbarLogoutGuru');
   if (btnLogoutTop) btnLogoutTop.addEventListener('click', handleLogout);
 })();
