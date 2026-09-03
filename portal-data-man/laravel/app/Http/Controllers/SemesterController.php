@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\AcademicYear;
+use App\Models\ClassEnrollment;
+use App\Models\SchoolClass;
 use App\Models\Semester;
 use App\Services\AuditService;
 use App\Support\ApiResponse;
@@ -61,6 +63,76 @@ class SemesterController extends Controller
         });
 
         return ApiResponse::success($semester->fresh(), 'Semester berhasil diaktifkan.');
+    }
+
+    public function syncEnrollments(Request $request, Semester $semester): JsonResponse
+    {
+        // Ambil semua kelas aktif di tahun ajaran yang sama dengan semester target
+        $classes = SchoolClass::query()
+            ->where('academicYearId', $semester->academicYearId)
+            ->where('status', 'ACTIVE')
+            ->pluck('id');
+
+        if ($classes->isEmpty()) {
+            return ApiResponse::success(['synced' => 0, 'skipped' => 0], 'Tidak ada kelas aktif di tahun ajaran ini.');
+        }
+
+        // Cari siswa yang sudah punya enrollment di semester target (untuk di-skip)
+        $alreadySynced = ClassEnrollment::query()
+            ->where('semesterId', $semester->id)
+            ->where('status', 'ACTIVE')
+            ->whereIn('schoolClassId', $classes)
+            ->pluck('studentId')
+            ->flip();
+
+        // Ambil enrollment aktif terbaru per siswa per kelas dari tahun ajaran yang sama,
+        // yang BELUM ada di semester target
+        $candidates = ClassEnrollment::query()
+            ->where('academicYearId', $semester->academicYearId)
+            ->where('status', 'ACTIVE')
+            ->whereIn('schoolClassId', $classes)
+            ->where('semesterId', '!=', $semester->id)
+            ->whereNotIn('studentId', $alreadySynced->keys()->all())
+            // Ambil enrollment terbaru per siswa (berdasarkan semesterId terbesar sebagai proxy urutan)
+            ->orderByDesc('semesterId')
+            ->get()
+            ->unique('studentId'); // satu enrollment per siswa (yang terbaru)
+
+        $synced = 0;
+        $skipped = 0;
+
+        DB::transaction(function () use ($candidates, $semester, &$synced, &$skipped, $request) {
+            foreach ($candidates as $source) {
+                $key = "{$source->studentId}:{$semester->id}";
+                // Cek ulang per-record agar aman dari race condition
+                $exists = ClassEnrollment::query()
+                    ->where('activeEnrollmentKey', $key)
+                    ->exists();
+
+                if ($exists) {
+                    $skipped++;
+                    continue;
+                }
+
+                $enrollment = ClassEnrollment::query()->create([
+                    'studentId'           => $source->studentId,
+                    'schoolClassId'       => $source->schoolClassId,
+                    'academicYearId'      => $semester->academicYearId,
+                    'semesterId'          => $semester->id,
+                    'attendanceNumber'    => $source->attendanceNumber,
+                    'activeEnrollmentKey' => $key,
+                    'status'              => 'ACTIVE',
+                ]);
+
+                $this->audit->write($request, 'SYNC', 'ClassEnrollment', $enrollment->publicId, null, $enrollment);
+                $synced++;
+            }
+        });
+
+        return ApiResponse::success(
+            ['synced' => $synced, 'skipped' => $skipped],
+            "Sinkronisasi selesai: {$synced} enrollment dibuat, {$skipped} dilewati (sudah ada)."
+        );
     }
 
     private function dates(string $start, string $end, AcademicYear $year, string $type): void

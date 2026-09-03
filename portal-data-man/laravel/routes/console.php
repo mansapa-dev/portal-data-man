@@ -61,7 +61,8 @@ Artisan::command('portal:sync-semester-roster {--year= : Public ID tahun ajaran 
         return Command::FAILURE;
     }
     $summary = $sync->synchronize($year, $source, $target, (bool) $this->option('apply'));
-    $this->table(['Kandidat', 'Ditambahkan', 'Sudah ada', 'Konflik kelas', 'Konflik nomor'], [[
+    $createdLabel = $this->option('apply') ? 'Ditambahkan' : 'Akan ditambahkan';
+    $this->table(['Kandidat', $createdLabel, 'Sudah ada', 'Konflik kelas', 'Konflik nomor'], [[
         $summary['candidates'], $summary['created'], $summary['alreadyPresent'], $summary['conflicts'], $summary['attendanceNumberConflicts'],
     ]]);
     foreach ($summary['details'] as $detail) {

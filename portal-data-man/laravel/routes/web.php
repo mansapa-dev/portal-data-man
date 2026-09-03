@@ -114,6 +114,7 @@ Route::prefix('api/v1')->group(function (): void {
             Route::post('semesters', [SemesterController::class, 'store']);
             Route::patch('semesters/{semester}', [SemesterController::class, 'update']);
             Route::post('semesters/{semester}/activate', [SemesterController::class, 'activate']);
+            Route::post('semesters/{semester}/sync-enrollments', [SemesterController::class, 'syncEnrollments']);
             Route::post('imports/students/validate', [StudentImportController::class, 'validateFile']);
             Route::get('import-templates/students', [SpreadsheetController::class, 'studentTemplate']);
             Route::get('import-templates/teachers', [SpreadsheetController::class, 'teacherTemplate']);
