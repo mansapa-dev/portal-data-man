@@ -67,6 +67,7 @@ $router->get('/api/admin/exams',[$admin,'exams'],[$adminAuth]);
 $router->post('/api/admin/exams',[$admin,'saveExam'],[$adminAuth,$csrf,$audit('EXAM_SAVED','Exam')]);
 $router->post('/api/admin/follow-up-exams',[$admin,'scheduleFollowUpExam'],[$adminAuth,$csrf,$audit('FOLLOW_UP_EXAM_SCHEDULED','Exam')]);
 $router->get('/api/admin/follow-up-exams/candidates',[$admin,'followUpCandidates'],[$adminAuth]);
+$router->post('/api/admin/follow-up-exams/retake-candidates/approve',[$admin,'approveRetakeCandidates'],[$adminAuth,$csrf,$audit('RETAKE_CANDIDATES_APPROVED','Exam')]);
 $router->get('/api/admin/follow-up-exams/make-up-candidates',[$admin,'makeUpCandidates'],[$adminAuth]);
 $router->get('/api/admin/follow-up-exams',[$admin,'followUpSchedules'],[$adminAuth]);
 $router->post('/api/admin/follow-up-exams/{id}/status',[$admin,'setFollowUpStatus'],[$adminAuth,$csrf,$audit('FOLLOW_UP_EXAM_STATUS_CHANGED','Exam')]);

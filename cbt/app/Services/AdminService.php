@@ -22,6 +22,7 @@ final class AdminService
   $sourceId=(int)($d['source_exam_id']??0);$studentIds=array_values(array_unique(array_filter(array_map('intval',(array)($d['student_ids']??[])))));
   if(!$sourceId||!$studentIds)throw new DomainException('Pilih ujian asal dan minimal satu siswa.',422);
   $type=strtoupper((string)($d['type']??'SUSULAN'));if(!in_array($type,['SUSULAN','REMEDIAL'],true))throw new DomainException('Jenis ujian lanjutan tidak valid.',422);
+  if($type==='REMEDIAL'&&!$this->repo->approvedRetakeCandidates($sourceId,$studentIds))throw new DomainException('Setujui kandidat ujian ulang terlebih dahulu.',422);
   $source=$this->repo->examForFollowUp($sourceId)??throw new DomainException('Ujian asal tidak ditemukan atau belum memiliki soal.',404);
   $timezone=new \DateTimeZone('Asia/Jakarta');
   try{$start=new \DateTimeImmutable(trim((string)$d['starts_at']),$timezone);$end=new \DateTimeImmutable(trim((string)$d['ends_at']),$timezone);}catch(\Throwable){throw new DomainException('Tanggal dan waktu jadwal tidak valid.',422);}
@@ -32,6 +33,7 @@ final class AdminService
  }
  public function makeUpCandidates():array{return$this->repo->makeUpCandidates();}
  public function followUpCandidates():array{return$this->repo->followUpCandidates();}
+ public function approveRetakeCandidates(array$studentIds,int$examId,int$actor):int{$ids=array_values(array_unique(array_filter(array_map('intval',$studentIds))));if(!$examId||!$ids)throw new DomainException('Pilih minimal satu kandidat ujian ulang.',422);return$this->db->transaction(fn()=>$this->repo->approveRetakeCandidates($examId,$ids,$actor));}
  public function followUpSchedules():array{return$this->repo->followUpSchedules();}
  public function setFollowUpStatus(int$id,bool$active):void{try{$this->repo->setFollowUpStatus($id,$active);}catch(\UnexpectedValueException$e){throw new DomainException($e->getMessage(),404);}}
  public function questions(?int$id):array{return$this->repo->questions($id);}

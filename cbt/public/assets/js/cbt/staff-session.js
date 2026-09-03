@@ -66,7 +66,7 @@ function initDashboardPengelola(nama, role) {
 const tabTitles = {
   'tabAdminOverview': 'Ringkasan Sistem',
   'tabAdminUjian': 'Kelola Ujian & Arsip',
-  'tabAdminUjianLanjutan': 'Ujian Susulan & Remedial',
+  'tabAdminUjianLanjutan': 'Ujian Khusus',
   'tabAdminSoal': 'Kelola Bank Soal',
   'tabAdminSiswa': 'Kontrol & Siswa',
   'tabAdminLogPelanggaran': 'Log Pelanggaran Siswa',
@@ -122,6 +122,7 @@ function loadDataAdminDash() {
         document.getElementById('statJmlSubmit').textContent = (res.totalSubmit || 0).toLocaleString('id-ID');
         document.getElementById('statJmlPelanggaran').textContent = (res.totalPelanggaran || 0).toLocaleString('id-ID');
       }
+      if(typeof loadFollowUpDashboardActions==='function')loadFollowUpDashboardActions();
     })
     .getAdminDashboardStats(stPengelola);
 }
