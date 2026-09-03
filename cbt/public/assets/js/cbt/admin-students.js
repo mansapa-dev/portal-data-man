@@ -1,4 +1,5 @@
 // Administrator student controls backed by Portal Data synchronization and batch PIN generation.
+let activeSiswaAbjadFilter = 'ALL';
 
 function loadDataAdminSiswa() {
   const tb = document.getElementById('tblAdminSiswa');
@@ -102,6 +103,10 @@ function applyFilterSiswa() {
       const st = String(s.ujian_status || 'belum').toLowerCase();
       if (st !== status.toLowerCase()) return false;
     }
+    if (activeSiswaAbjadFilter !== 'ALL') {
+      const firstChar = String(s.nama || '').trim().charAt(0).toUpperCase();
+      if (firstChar !== activeSiswaAbjadFilter) return false;
+    }
     // Search Query (NISN / Nama)
     if (query !== '') {
       const qText = `${s.nomor_ujian || ''} ${s.nisn || ''} ${s.nama || ''} ${s.kelas || ''} ${s.pin || ''}`.toLowerCase();
@@ -125,8 +130,29 @@ function applyFilterSiswa() {
   const lblCount = document.getElementById('lblTotalSiswaTerfilter');
   if (lblCount) lblCount.textContent = `${filtered.length} Siswa Ditemukan`;
 
-  // 4. Render table
+  // 4. Render alphabet filter and table
+  renderSiswaAbjadPills(cacheSiswaGlobal || []);
   renderTabelSiswa(filtered);
+}
+
+function selectSiswaAbjadPill(letter) {
+  activeSiswaAbjadFilter = letter;
+  applyFilterSiswa();
+}
+
+function renderSiswaAbjadPills(allRows) {
+  const container = document.getElementById('siswaAbjadPillsContainer');
+  if (!container) return;
+  const counts = { ALL: allRows.length };
+  allRows.forEach(s => {
+    const firstChar = String(s.nama || '').trim().charAt(0).toUpperCase();
+    if (/^[A-Z]$/.test(firstChar)) counts[firstChar] = (counts[firstChar] || 0) + 1;
+  });
+  container.innerHTML = ['ALL', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'].map(letter => {
+    const count = counts[letter] || 0;
+    const label = letter === 'ALL' ? 'Semua' : letter;
+    return `<button type="button" onclick="selectSiswaAbjadPill('${letter}')" class="student-alphabet-pill${activeSiswaAbjadFilter === letter ? ' active' : ''}" ${letter !== 'ALL' && count === 0 ? 'disabled' : ''}><b>${label}</b>${letter !== 'ALL' ? `<span>(${count})</span>` : ''}</button>`;
+  }).join('');
 }
 
 function renderTabelSiswa(rows) {
