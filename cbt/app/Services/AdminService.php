@@ -29,7 +29,7 @@ final class AdminService
   if($end<=$start)throw new DomainException('Waktu selesai harus setelah waktu mulai.',422);
   $name=trim((string)($d['name']??''));if($name==='')$name=$type==='REMEDIAL'?'Remedial - '.$source['name']:'Susulan - '.$source['name'];
   $utc=new \DateTimeZone('UTC');
-  return $this->db->transaction(fn()=>$this->repo->cloneFollowUpExam($source,$studentIds,$name,$type,$start->setTimezone($utc)->format('Y-m-d H:i:s'),$end->setTimezone($utc)->format('Y-m-d H:i:s'),$actor,filter_var($d['active']??true,FILTER_VALIDATE_BOOL),trim((string)($d['room']??'')),trim((string)($d['notes']??''))));
+  return $this->db->transaction(function()use($source,$sourceId,$studentIds,$name,$type,$start,$end,$utc,$actor,$d){$result=$this->repo->cloneFollowUpExam($source,$studentIds,$name,$type,$start->setTimezone($utc)->format('Y-m-d H:i:s'),$end->setTimezone($utc)->format('Y-m-d H:i:s'),$actor,filter_var($d['active']??true,FILTER_VALIDATE_BOOL),trim((string)($d['room']??'')),trim((string)($d['notes']??'')));$this->repo->copyTeacherAssignments($sourceId,(int)$result['id'],$actor);return$result;});
  }
  public function makeUpCandidates():array{return$this->repo->makeUpCandidates();}
  public function followUpCandidates():array{return$this->repo->followUpCandidates();}
