@@ -78,7 +78,6 @@ const tabTitles = {
 };
 
 function switchDashTab(tabId, btnEl) {
-  if (typeof closeMobileSidebar === 'function') closeMobileSidebar();
   document.querySelectorAll('.dash-tab').forEach(t => t.classList.add('hidden'));
   const targetTab = document.getElementById(tabId);
   if (targetTab) targetTab.classList.remove('hidden');

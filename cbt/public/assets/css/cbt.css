@@ -1430,6 +1430,19 @@ tr:hover td {
     left: 0 !important;
   }
 
+  .sidebar { overflow-y:auto; overscroll-behavior:contain; background:var(--surface); color:var(--text-main); }
+  .sidebar .sb-brand { border-bottom-color:var(--border); }
+  .sidebar .sb-brand-title,.sidebar .sb-section-label,.sidebar .sb-item,.sidebar .user-profile-name,.sidebar .user-profile-role { color:var(--text-main); }
+  .sidebar .sb-brand-sub { color:var(--text-muted); }
+  .sidebar .sb-brand-mark { border-color:var(--primary); color:var(--primary-dark); }
+  .sidebar .sb-item:hover { background:var(--primary-soft); color:var(--primary-dark); }
+  .sidebar .sb-item.active { background:var(--primary); color:#fff; box-shadow:0 5px 14px rgba(22,101,52,.18); }
+  .sidebar .sidebar-help-box { background:#f1f8e9; border-color:#dcedc8; }
+  .sidebar .sidebar-help-box h5,.sidebar .sidebar-help-box p { color:var(--primary-dark); opacity:1; }
+  .sidebar .sidebar-user-footer { border-top-color:var(--border); }
+  .sidebar .user-profile-card { background:transparent; }
+  .dashboard-home-brand span { display:none; }
+
   .dash-content {
     padding: 14px 10px;
   }
