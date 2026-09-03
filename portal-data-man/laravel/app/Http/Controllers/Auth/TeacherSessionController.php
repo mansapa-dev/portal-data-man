@@ -32,11 +32,12 @@ class TeacherSessionController extends Controller
             return response()->json(['success' => false, 'message' => "Akun terkunci karena 5x salah password. Coba lagi dalam {$minutes} menit."], 401);
         }
 
-        if ($account && (! $account->passwordHash || $account->status === 'PENDING_SETUP')) {
-            return response()->json(['success' => false, 'message' => 'Akun belum aktif atau belum mengatur password. Silakan gunakan link atur password.'], 401);
+        if ($account && ! $account->passwordHash) {
+            return response()->json(['success' => false, 'message' => 'Akun belum memiliki password.'], 401);
         }
 
-        $valid = $account && $account->status === 'ACTIVE' && $account->teacher?->status === 'ACTIVE' && ! $account->teacher?->deletedAt && $account->passwordHash && password_verify($credentials['password'], $account->passwordHash);
+        $allowedStatus = in_array($account?->status, ['ACTIVE', 'PENDING_SETUP'], true);
+        $valid = $account && $allowedStatus && $account->teacher?->status === 'ACTIVE' && ! $account->teacher?->deletedAt && $account->passwordHash && password_verify($credentials['password'], $account->passwordHash);
         if (! $valid) {
             if ($account) {
                 $attempts = $account->failedLoginAttempts + 1;
@@ -60,11 +61,12 @@ class TeacherSessionController extends Controller
     public function show(Request $request): JsonResponse
     {
         $account = $request->user('teacher')?->load('teacher');
-        if (! $account || $account->status !== 'ACTIVE' || $account->teacher?->status !== 'ACTIVE') {
+        $allowedStatus = in_array($account?->status, ['ACTIVE', 'PENDING_SETUP'], true);
+        if (! $account || ! $allowedStatus || $account->teacher?->status !== 'ACTIVE') {
             Auth::guard('teacher')->logout();
             $request->session()->invalidate();
 
-            return response()->json(['success' => false, 'message' => 'Akun tidak aktif atau belum mengatur password.'], 401);
+            return response()->json(['success' => false, 'message' => 'Akun tidak aktif.'], 401);
         }
 
         return response()->json(['success' => true, 'message' => 'Sesi guru aktif.', 'data' => ['publicId' => $account->publicId, 'username' => $account->username, 'fullName' => $account->teacher->fullName]]);

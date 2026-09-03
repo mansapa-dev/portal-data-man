@@ -73,7 +73,7 @@ class OidcController extends Controller
         if ($claimed !== 1) {
             return $this->oauthError('invalid_grant', 'Authorization code sudah digunakan.');
         }
-        $account = TeacherAccount::query()->with('teacher')->where('publicId', $payload['accountPublicId'])->where('status', 'ACTIVE')->first();
+        $account = TeacherAccount::query()->with('teacher')->where('publicId', $payload['accountPublicId'])->whereIn('status', ['ACTIVE', 'PENDING_SETUP'])->first();
         if (! $account || $account->teacher->status !== 'ACTIVE') {
             return $this->oauthError('invalid_grant', 'Akun guru tidak aktif.');
         }
@@ -127,7 +127,7 @@ class OidcController extends Controller
         if (! $claims || ($claims['token_use'] ?? null) !== 'access') {
             return response()->json(['error' => 'invalid_token'], 401)->header('WWW-Authenticate', 'Bearer error="invalid_token"');
         }
-        $account = TeacherAccount::query()->with('teacher')->where('publicId', $claims['sub'])->where('status', 'ACTIVE')->first();
+        $account = TeacherAccount::query()->with('teacher')->where('publicId', $claims['sub'])->whereIn('status', ['ACTIVE', 'PENDING_SETUP'])->first();
         $access = $account ? TeacherApplicationAccess::query()->where('teacherId', $account->teacherId)->whereHas('application', fn ($query) => $query->where('clientId', $claims['aud'])->where('status', 'ACTIVE'))->where('status', 'ACTIVE')->first() : null;
         if (! $account || ! $access) {
             return response()->json(['error' => 'invalid_token'], 401);
