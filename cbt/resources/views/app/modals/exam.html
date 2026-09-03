@@ -1,33 +1,83 @@
   <div class="modal" id="modalUjian">
-    <div class="modal-content" style="width:min(450px, 90%);">
+    <div class="modal-content" style="width:min(500px, 94%);">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
         <h3 style="font-size:16px; font-weight:800;" id="titleModalUjian">Form Ujian & Sesi</h3>
-        <button style="background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted);" onclick="document.getElementById('modalUjian').classList.remove('show')">&times;</button>
+        <button type="button" style="background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted);" onclick="document.getElementById('modalUjian').classList.remove('show')">&times;</button>
       </div>
       <form id="formUjian">
         <input type="hidden" id="editUjianId">
-        <div class="input-group"><label>Nama Ujian / Mapel</label><div class="input-wrapper"><i class="fa-solid fa-book left-icon"></i><input type="text" id="inNamaUjian" placeholder="Contoh: Kimia Kelas XII" required></div></div>
-        <div class="input-group"><label>Mata Pelajaran</label><div class="input-wrapper"><select id="inSubjectUjian" required></select></div></div>
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
-          <div class="input-group"><label>Tingkat</label><div class="input-wrapper"><select id="inTingkatUjian" required></select></div></div>
-          <div class="input-group"><label>Sesi Ujian</label><div class="input-wrapper"><select id="inSesiUjian"><option value="1">Sesi 1</option><option value="2">Sesi 2</option><option value="3">Sesi 3</option></select></div></div>
+        <div class="input-group">
+          <label>Nama Ujian</label>
+          <div class="input-wrapper"><i class="fa-solid fa-book left-icon"></i><input type="text" id="inNamaUjian" placeholder="Contoh: Kimia Kelas XII" required></div>
+        </div>
+        <div class="input-group">
+          <label>Mata Pelajaran</label>
+          <div class="input-wrapper"><select id="inSubjectUjian" required></select></div>
         </div>
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
-          <div class="input-group"><label>Tanggal Ujian</label><div class="input-wrapper"><input type="date" id="inTanggalUjian" required style="padding-left:40px;"></div></div>
-          <div class="input-group"><label>Jam Mulai</label><div class="input-wrapper"><input type="time" id="inJamMulai" required style="padding-left:40px;"></div></div>
+          <div class="input-group">
+            <label>Tingkat</label>
+            <div class="input-wrapper"><select id="inTingkatUjian" onchange="refreshClassOptions()" required></select></div>
+          </div>
+          <div class="input-group">
+            <label>Sesi Ujian</label>
+            <div class="input-wrapper"><select id="inSesiUjian"><option value="1">Sesi 1</option><option value="2">Sesi 2</option><option value="3">Sesi 3</option></select></div>
+          </div>
         </div>
-        <div class="input-group"><label>Jam Selesai</label><div class="input-wrapper"><input type="time" id="inJamSelesai" required style="padding-left:40px;"></div></div>
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
-          <div class="input-group"><label>Durasi (Menit)</label><div class="input-wrapper"><input type="number" id="inDurasiUjian" required value="90"></div></div>
-          <div class="input-group"><label>Target Rombel/Kelas (Opsional)</label><div class="input-wrapper"><select id="inKelasTarget" multiple size="4"></select></div></div>
+          <div class="input-group">
+            <label>Tanggal Ujian</label>
+            <div class="input-wrapper"><input type="date" id="inTanggalUjian" required style="padding-left:14px;"></div>
+          </div>
+          <div class="input-group">
+            <label>Jam Mulai</label>
+            <div class="input-wrapper"><input type="time" id="inJamMulai" required style="padding-left:14px;"></div>
+          </div>
         </div>
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
-          <div class="input-group"><label>Tahun Ajaran</label><div class="input-wrapper"><select id="inTahunAjaran" required></select></div></div>
-          <div class="input-group"><label>Semester</label><div class="input-wrapper"><select id="inSemester" required></select></div></div>
+          <div class="input-group">
+            <label>Jam Selesai</label>
+            <div class="input-wrapper"><input type="time" id="inJamSelesai" required style="padding-left:14px;"></div>
+          </div>
+          <div class="input-group">
+            <label>Durasi (Menit)</label>
+            <div class="input-wrapper"><input type="number" id="inDurasiUjian" required value="90"></div>
+          </div>
         </div>
-        <div class="input-group"><label>Status Aktif</label><div class="input-wrapper"><select id="inStatusUjian"><option value="true">Aktif</option><option value="false">Nonaktif</option></select></div></div>
+        <div class="input-group">
+          <label>Target Rombel / Kelas (Opsional)</label>
+          <div class="custom-dropdown-wrap" id="wrapKelasDropdown" style="position:relative;">
+            <button type="button" class="dropdown-trigger-btn" id="btnToggleKelasDropdown" onclick="toggleKelasDropdown()" style="width:100%; padding:9px 12px; border:1.5px solid var(--border); border-radius:8px; background:var(--surface); text-align:left; font-size:12.5px; display:flex; justify-content:space-between; align-items:center; cursor:pointer; color:var(--text-main);">
+              <span id="lblSelectedKelas" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:85%;">Semua Kelas</span>
+              <i class="fa-solid fa-chevron-down" style="font-size:10px; color:var(--text-muted);"></i>
+            </button>
+            <div class="dropdown-menu-list hidden" id="listKelasDropdown" style="position:absolute; top:calc(100% + 4px); left:0; right:0; background:var(--surface); border:1.5px solid var(--border); border-radius:8px; box-shadow:var(--shadow-lg); z-index:1000; overflow:hidden;">
+              <div style="padding:6px 10px; border-bottom:1px solid var(--border); background:var(--surface-subtle); display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:11px; font-weight:700; color:var(--text-muted);">PILIH KELAS TARGET</span>
+                <button type="button" onclick="toggleSelectAllKelas()" style="font-size:11px; font-weight:700; color:var(--primary-dark); background:none; border:none; cursor:pointer;">Pilih Semua</button>
+              </div>
+              <div id="containerCheckboxesKelas" style="max-height:160px; overflow-y:auto; padding:6px 8px; display:flex; flex-direction:column; gap:4px;">
+                <!-- Checkboxes rendered dynamically -->
+              </div>
+            </div>
+            <select id="inKelasTarget" multiple style="display:none;"></select>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+          <div class="input-group">
+            <label>Tahun Ajaran</label>
+            <div class="input-wrapper"><select id="inTahunAjaran" onchange="refreshClassOptions()" required></select></div>
+          </div>
+          <div class="input-group">
+            <label>Semester</label>
+            <div class="input-wrapper"><select id="inSemester" required></select></div>
+          </div>
+        </div>
+        <div class="input-group">
+          <label>Status Aktif</label>
+          <div class="input-wrapper"><select id="inStatusUjian"><option value="true">Aktif</option><option value="false">Nonaktif</option></select></div>
+        </div>
         <button type="submit" class="btn btn-primary" style="width:100%; margin-top:8px;">Simpan Ujian</button>
       </form>
     </div>
   </div>
-

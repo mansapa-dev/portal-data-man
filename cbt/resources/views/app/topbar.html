@@ -1,25 +1,32 @@
   <header class="topbar">
-    <div class="brand" style="display:flex; align-items:center; gap:10px;">
-      <img src="assets/img/logo-man1.png" alt="Logo MAN 1 Palembang" style="height:38px; width:auto; object-fit:contain;" onerror="this.src='assets/img/logo.png'">
-      <div class="brand-text">
-        <h1 style="font-size:14px; font-weight:800; color:var(--text-main); line-height:1.2;">CBT MAN 1 PALEMBANG</h1>
-        <p style="font-size:10.5px; color:var(--text-muted); font-weight:500;">Computer Based Test System</p>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <!-- Tombol Hamburger Mobile Sidebar (Tampil saat login di layar HP) -->
+      <button id="btnMobileSidebarToggle" type="button" class="btn-icon-mobile hidden" onclick="toggleMobileSidebar()" aria-label="Menu Navigasi">
+        <i class="fa-solid fa-bars"></i>
+      </button>
+
+      <div class="brand" style="display:flex; align-items:center; gap:10px;">
+        <img src="assets/img/logo-man1.png" alt="Logo MAN 1 Palembang" style="height:36px; width:auto; object-fit:contain;" onerror="this.src='assets/img/logo.png'">
+        <div class="brand-text">
+          <h1 style="font-size:13.5px; font-weight:800; color:var(--text-main); line-height:1.2;">CBT MAN 1 PALEMBANG</h1>
+          <p style="font-size:10px; color:var(--text-muted); font-weight:500;">Computer Based Test System</p>
+        </div>
       </div>
     </div>
     
-    <div style="display:flex; gap:14px; align-items:center;">
-      <span class="topbar-pill">
+    <div style="display:flex; gap:10px; align-items:center;">
+      <span class="topbar-pill hide-on-mobile">
         <span class="dot"></span>
         <span>Sistem Online</span>
       </span>
 
-      <a href="guru" style="font-size:12.5px; font-weight:700; color:var(--primary-dark); text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
-        <i class="fa-solid fa-chalkboard-user"></i> Portal Guru
+      <a href="guru" class="topbar-guru-link" style="font-size:12px; font-weight:700; color:var(--primary-dark); text-decoration:none; display:inline-flex; align-items:center; gap:5px;">
+        <i class="fa-solid fa-chalkboard-user"></i> <span class="hide-on-mobile">Portal Guru</span>
       </a>
 
       <!-- Tombol Logout Pengelola (Hanya Tampil Saat Login) -->
-      <button id="btnTopLogoutPengelola" type="button" class="btn btn-danger hidden" style="padding:6px 12px; font-size:12px;" onclick="appResetLogout()" title="Keluar dari sesi pengelola">
-        <i class="fa-solid fa-arrow-right-from-bracket"></i> Keluar
+      <button id="btnTopLogoutPengelola" type="button" class="btn btn-danger hidden" style="padding:6px 10px; font-size:12px;" onclick="appResetLogout()" title="Keluar dari sesi pengelola">
+        <i class="fa-solid fa-arrow-right-from-bracket"></i> <span class="hide-on-mobile">Keluar</span>
       </button>
 
       <!-- Icon Gembok Rahasia Login Pengelola -->

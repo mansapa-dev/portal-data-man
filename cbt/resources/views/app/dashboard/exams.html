@@ -2,22 +2,53 @@
       <div id="tabAdminUjian" class="dash-tab hidden">
         <div class="card">
           <div class="card-header">
-            <div class="card-title">Manajemen Jadwal & Arsip Bank Soal (Tahun Ajaran & Semester)</div>
-            <div style="display:flex; gap:8px;">
+            <div>
+              <div class="card-title"><i class="fa-solid fa-file-lines" style="color:var(--primary);"></i> Manajemen Jadwal & Arsip Bank Soal</div>
+              <div class="card-subtitle">Pengaturan jadwal pelaksanaan ujian, sesi, target rombel, dan mata pelajaran</div>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
               <button class="btn btn-secondary" onclick="exportToExcel('tabel_ujian.xlsx', 'Ujian', ['ID', 'Nama Ujian', 'Tingkat', 'Sesi', 'Tanggal', 'Target Kelas', 'Durasi', 'Tahun Ajaran', 'Semester', 'Status'], window.cacheUjianExcel || [])"><i class="fa-solid fa-file-excel"></i> Download Excel</button>
               <button class="btn btn-primary" onclick="bukaModalUjian()"><i class="fa-solid fa-plus"></i> Tambah Ujian</button>
             </div>
           </div>
-          <div class="search-box">
-            <i class="fa-solid fa-search"></i>
-            <input type="text" id="searchUjian" placeholder="Cari ujian..." onkeyup="filterTable('tblAdminUjian', this.value)">
+
+          <!-- FILTER UJIAN: Tingkat, Kelas/Rombel, Mata Pelajaran, Search -->
+          <div class="filter-bar-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:12px; margin-bottom:16px; background:var(--surface-subtle); padding:14px; border-radius:10px; border:1px solid var(--border);">
+            <div>
+              <label style="font-size:11px; font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px;">Tingkatan:</label>
+              <select id="fltUjianTingkat" onchange="applyFilterUjian()" style="width:100%; padding:8px 10px; border-radius:8px; border:1.5px solid var(--border); font-size:12.5px; background:var(--surface);">
+                <option value="ALL">Semua Tingkat</option>
+                <option value="X">Tingkat X</option>
+                <option value="XI">Tingkat XI</option>
+                <option value="XII">Tingkat XII</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px; font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px;">Rombel / Kelas:</label>
+              <select id="fltUjianKelas" onchange="applyFilterUjian()" style="width:100%; padding:8px 10px; border-radius:8px; border:1.5px solid var(--border); font-size:12.5px; background:var(--surface);">
+                <option value="ALL">Semua Kelas</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px; font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px;">Mata Pelajaran:</label>
+              <select id="fltUjianMapel" onchange="applyFilterUjian()" style="width:100%; padding:8px 10px; border-radius:8px; border:1.5px solid var(--border); font-size:12.5px; background:var(--surface);">
+                <option value="ALL">Semua Mata Pelajaran</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px; font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px;">Pencarian:</label>
+              <div style="position:relative;">
+                <i class="fa-solid fa-search" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:12px; color:var(--text-muted);"></i>
+                <input type="text" id="searchUjian" placeholder="Cari nama ujian..." onkeyup="applyFilterUjian()" style="width:100%; padding:8px 10px 8px 30px; border-radius:8px; border:1.5px solid var(--border); font-size:12.5px; background:var(--surface);">
+              </div>
+            </div>
           </div>
+
           <div class="table-responsive">
             <table>
-              <thead><tr><th>ID</th><th>Nama Ujian</th><th>Tingkat</th><th>Sesi & Tanggal</th><th>Target Kelas</th><th>Thn Ajaran / Semester</th><th>Status</th><th>Aksi</th></tr></thead>
+              <thead><tr><th>ID</th><th>Nama Ujian & Mapel</th><th>Tingkat</th><th>Sesi & Tanggal</th><th>Target Kelas</th><th>Thn Ajaran / Semester</th><th>Status</th><th>Aksi</th></tr></thead>
               <tbody id="tblAdminUjian"><tr><td colspan="8" align="center">Memuat...</td></tr></tbody>
             </table>
           </div>
         </div>
       </div>
-

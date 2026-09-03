@@ -77,6 +77,7 @@ const tabTitles = {
 };
 
 function switchDashTab(tabId, btnEl) {
+  if (typeof closeMobileSidebar === 'function') closeMobileSidebar();
   document.querySelectorAll('.dash-tab').forEach(t => t.classList.add('hidden'));
   const targetTab = document.getElementById(tabId);
   if (targetTab) targetTab.classList.remove('hidden');
@@ -176,11 +177,85 @@ function populateExamPortalOptions(data = null) {
 }
 
 function refreshClassOptions(selected = []) {
-  const grade = document.getElementById('inTingkatUjian').value;
-  const year = portalReferences.academic_years.find(y => y.portal_academic_year_id === document.getElementById('inTahunAjaran').value)?.name;
+  const grade = document.getElementById('inTingkatUjian')?.value || '';
+  const year = portalReferences.academic_years.find(y => y.portal_academic_year_id === document.getElementById('inTahunAjaran')?.value)?.name;
   const classes = portalReferences.classes.filter(c => (!grade || c.grade === grade) && (!year || c.academic_year === year));
-  document.getElementById('inKelasTarget').innerHTML = classes.map(c => `<option value="${c.portal_class_id}"${selected.includes(c.portal_class_id) ? ' selected' : ''}>${c.code} — ${c.name}</option>`).join('');
+
+  const selectEl = document.getElementById('inKelasTarget');
+  const container = document.getElementById('containerCheckboxesKelas');
+
+  if (selectEl) {
+    selectEl.innerHTML = classes.map(c => `
+      <option value="${c.portal_class_id}"${selected.includes(c.portal_class_id) || selected.includes(c.name) ? ' selected' : ''}>${c.name || c.code}</option>
+    `).join('');
+  }
+
+  if (container) {
+    if (classes.length === 0) {
+      container.innerHTML = `<div style="padding:10px; font-size:12px; color:var(--text-muted); text-align:center;">Tidak ada data rombel untuk tingkat ini.</div>`;
+    } else {
+      container.innerHTML = classes.map(c => {
+        const isChecked = selected.includes(c.portal_class_id) || selected.includes(c.name);
+        return `
+          <label style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:6px; cursor:pointer; font-size:12.5px; user-select:none;" onmouseover="this.style.background='var(--surface-subtle)'" onmouseout="this.style.background='transparent'">
+            <input type="checkbox" value="${c.portal_class_id}" data-name="${c.name || c.code}" class="cb-kelas-item" ${isChecked ? 'checked' : ''} onchange="onKelasCheckboxChange()" style="cursor:pointer; accent-color:var(--primary); width:15px; height:15px;">
+            <span style="font-weight:600; color:var(--text-main);">${c.name || c.code}</span>
+          </label>
+        `;
+      }).join('');
+    }
+  }
+
+  updateLabelSelectedKelas();
 }
+
+function updateLabelSelectedKelas() {
+  const checkboxes = document.querySelectorAll('.cb-kelas-item:checked');
+  const lbl = document.getElementById('lblSelectedKelas');
+  const selectEl = document.getElementById('inKelasTarget');
+
+  if (checkboxes.length === 0) {
+    if (lbl) lbl.textContent = 'Semua Kelas (Opsional)';
+    if (selectEl) Array.from(selectEl.options).forEach(o => o.selected = false);
+  } else {
+    const names = Array.from(checkboxes).map(cb => cb.dataset.name || cb.value);
+    const vals = Array.from(checkboxes).map(cb => cb.value);
+    if (lbl) {
+      lbl.textContent = names.length > 3 ? `${names.length} Kelas (${names.slice(0, 2).join(', ')}...)` : names.join(', ');
+    }
+    if (selectEl) {
+      Array.from(selectEl.options).forEach(o => {
+        o.selected = vals.includes(o.value);
+      });
+    }
+  }
+}
+
+function onKelasCheckboxChange() {
+  updateLabelSelectedKelas();
+}
+
+function toggleKelasDropdown() {
+  const list = document.getElementById('listKelasDropdown');
+  if (list) list.classList.toggle('hidden');
+}
+
+function toggleSelectAllKelas() {
+  const checkboxes = document.querySelectorAll('.cb-kelas-item');
+  if (checkboxes.length === 0) return;
+  const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+  checkboxes.forEach(cb => cb.checked = !allChecked);
+  updateLabelSelectedKelas();
+}
+
+// Close dropdown on outside click
+document.addEventListener('click', (e) => {
+  const wrap = document.getElementById('wrapKelasDropdown');
+  const list = document.getElementById('listKelasDropdown');
+  if (wrap && list && !wrap.contains(e.target)) {
+    list.classList.add('hidden');
+  }
+});
 
 function refreshSemesterOptions(selected = '') {
   const yearId = document.getElementById('inTahunAjaran').value;

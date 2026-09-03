@@ -64,6 +64,7 @@ function switchView(viewId) {
 function updateTopbarAuthUI(isLoggedIn) {
   const btnTopLogout = document.getElementById('btnTopLogoutPengelola');
   const btnIconLock = document.getElementById('btnIconLockPengelola');
+  const btnMobileToggle = document.getElementById('btnMobileSidebarToggle');
   const breadcrumbs = document.getElementById('topbarBreadcrumbs');
 
   if (isLoggedIn) {
@@ -75,6 +76,10 @@ function updateTopbarAuthUI(isLoggedIn) {
       btnIconLock.classList.add('hidden');
       btnIconLock.style.display = 'none';
     }
+    if (btnMobileToggle) {
+      btnMobileToggle.classList.remove('hidden');
+      btnMobileToggle.style.display = 'inline-flex';
+    }
     if (breadcrumbs) breadcrumbs.classList.remove('hidden');
   } else {
     if (btnTopLogout) {
@@ -85,8 +90,26 @@ function updateTopbarAuthUI(isLoggedIn) {
       btnIconLock.classList.remove('hidden');
       btnIconLock.style.display = 'inline-flex';
     }
+    if (btnMobileToggle) {
+      btnMobileToggle.classList.add('hidden');
+      btnMobileToggle.style.display = 'none';
+    }
     if (breadcrumbs) breadcrumbs.classList.add('hidden');
   }
+}
+
+function toggleMobileSidebar() {
+  const sb = document.querySelector('.sidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  if (sb) sb.classList.toggle('open');
+  if (backdrop) backdrop.classList.toggle('hidden');
+}
+
+function closeMobileSidebar() {
+  const sb = document.querySelector('.sidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  if (sb) sb.classList.remove('open');
+  if (backdrop) backdrop.classList.add('hidden');
 }
 
 async function appResetLogout() {
