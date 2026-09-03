@@ -16,19 +16,39 @@ class TeacherSessionController extends Controller
     public function store(Request $request): JsonResponse
     {
         $credentials = $request->validate(['username' => ['required', 'string'], 'password' => ['required', 'string']]);
-        $account = TeacherAccount::query()->with('teacher')->where('username', strtolower(trim($credentials['username'])))->first();
+        $input = trim($credentials['username']);
+        $account = TeacherAccount::query()->with('teacher')
+            ->where('username', strtolower($input))
+            ->orWhere('username', $input)
+            ->orWhereHas('teacher', fn ($q) => $q->where('nip', $input)->orWhere('email', strtolower($input)))
+            ->first();
+
         if ($account?->status === 'LOCKED' && $account->lockedUntil?->isPast()) {
             $account->forceFill(['status' => 'ACTIVE', 'failedLoginAttempts' => 0, 'lockedUntil' => null])->save();
         }
-        $valid = $account && $account->status === 'ACTIVE' && $account->teacher?->status === 'ACTIVE' && ! $account->teacher?->deletedAt && $account->passwordHash && (! $account->lockedUntil || $account->lockedUntil->isPast()) && password_verify($credentials['password'], $account->passwordHash);
+
+        if ($account && $account->lockedUntil && $account->lockedUntil->isFuture()) {
+            $minutes = ceil(now()->diffInSeconds($account->lockedUntil) / 60);
+            return response()->json(['success' => false, 'message' => "Akun terkunci karena 5x salah password. Coba lagi dalam {$minutes} menit."], 401);
+        }
+
+        if ($account && (! $account->passwordHash || $account->status === 'PENDING_SETUP')) {
+            return response()->json(['success' => false, 'message' => 'Akun belum aktif atau belum mengatur password. Silakan gunakan link atur password.'], 401);
+        }
+
+        $valid = $account && $account->status === 'ACTIVE' && $account->teacher?->status === 'ACTIVE' && ! $account->teacher?->deletedAt && $account->passwordHash && password_verify($credentials['password'], $account->passwordHash);
         if (! $valid) {
             if ($account) {
                 $attempts = $account->failedLoginAttempts + 1;
                 $account->forceFill(['failedLoginAttempts' => $attempts, 'status' => $attempts >= 5 ? 'LOCKED' : $account->status, 'lockedUntil' => $attempts >= 5 ? now()->addMinutes(15) : $account->lockedUntil])->save();
+                if ($attempts >= 5) {
+                    return response()->json(['success' => false, 'message' => 'Akun terkunci karena 5x salah password. Coba lagi dalam 15 menit.'], 401);
+                }
             }
 
             return response()->json(['success' => false, 'message' => 'Username atau password tidak valid.'], 401);
         }
+
         $account->forceFill(['failedLoginAttempts' => 0, 'lockedUntil' => null, 'lastLoginAt' => now()])->save();
         Auth::guard('teacher')->login($account);
         $request->session()->regenerate();

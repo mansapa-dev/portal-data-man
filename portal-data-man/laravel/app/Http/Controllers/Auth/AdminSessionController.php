@@ -16,15 +16,22 @@ class AdminSessionController extends Controller
     public function store(Request $request): JsonResponse
     {
         $credentials = $request->validate(['email' => ['required', 'email'], 'password' => ['required', 'string']]);
-        $user = AdminUser::query()->where('email', strtolower($credentials['email']))->first();
+        $user = AdminUser::query()->where('email', strtolower(trim($credentials['email'])))->first();
         if ($user?->status === 'LOCKED' && $user->lockedUntil?->isPast()) {
             $user->forceFill(['status' => 'ACTIVE', 'failedLoginAttempts' => 0, 'lockedUntil' => null])->save();
         }
-        $valid = $user && $user->status === 'ACTIVE' && ! $user->deletedAt && (! $user->lockedUntil || $user->lockedUntil->isPast()) && password_verify($credentials['password'], $user->passwordHash);
+        if ($user && $user->lockedUntil && $user->lockedUntil->isFuture()) {
+            $minutes = ceil(now()->diffInSeconds($user->lockedUntil) / 60);
+            return response()->json(['success' => false, 'message' => "Akun admin terkunci karena 5x salah password. Coba lagi dalam {$minutes} menit."], 401);
+        }
+        $valid = $user && $user->status === 'ACTIVE' && ! $user->deletedAt && password_verify($credentials['password'], $user->passwordHash);
         if (! $valid) {
             if ($user) {
                 $attempts = $user->failedLoginAttempts + 1;
                 $user->forceFill(['failedLoginAttempts' => $attempts, 'status' => $attempts >= 5 ? 'LOCKED' : $user->status, 'lockedUntil' => $attempts >= 5 ? now()->addMinutes(15) : $user->lockedUntil])->save();
+                if ($attempts >= 5) {
+                    return response()->json(['success' => false, 'message' => 'Akun admin terkunci karena 5x salah password. Coba lagi dalam 15 menit.'], 401);
+                }
             }
 
             return response()->json(['success' => false, 'message' => 'Email atau password tidak valid.'], 401);
