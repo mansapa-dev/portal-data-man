@@ -169,6 +169,9 @@ function applyFilterUjian() {
 
   tb.innerHTML = filtered.map(u => {
     const formattedKelas = formatTargetKelas(u.kelas_target, u.nama_kelas_target);
+    const targetDisplay = Number(u.target_student_count || 0) > 0
+      ? `Peserta khusus (${u.target_student_count} siswa)`
+      : formattedKelas;
     return `
       <tr>
         <td><strong>#${u.id}</strong></td>
@@ -182,8 +185,8 @@ function applyFilterUjian() {
           <small style="color:var(--text-muted);"><i class="fa-regular fa-calendar"></i> ${u.tanggal_ujian || 'TBD'}</small>
         </td>
         <td>
-          <span class="badge ${formattedKelas === 'Semua Kelas' ? 'bg-green' : 'bg-gray'}" style="max-width:200px; white-space:normal; line-height:1.35; text-align:left; display:inline-block;">
-            ${formattedKelas}
+          <span class="badge ${Number(u.target_student_count || 0) > 0 ? 'bg-blue' : (formattedKelas === 'Semua Kelas' ? 'bg-green' : 'bg-gray')}" style="max-width:200px; white-space:normal; line-height:1.35; text-align:left; display:inline-block;">
+            ${targetDisplay}
           </span>
         </td>
         <td><small style="font-weight:700;">${u.tahun_ajaran || '2025/2026'}</small><br><small style="color:var(--text-muted);">Semester ${u.semester || 'Genap'}</small></td>

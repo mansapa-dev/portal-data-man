@@ -65,6 +65,7 @@ $router->post('/api/admin/students/generate-pins',[$adminStudents,'generateBatch
 $router->post('/api/admin/students/{id}/reset',[$adminStudents,'reset'],[$adminAuth,$csrf,$audit('STUDENT_ATTEMPT_RESET','Student')]);
 $router->get('/api/admin/exams',[$admin,'exams'],[$adminAuth]);
 $router->post('/api/admin/exams',[$admin,'saveExam'],[$adminAuth,$csrf,$audit('EXAM_SAVED','Exam')]);
+$router->post('/api/admin/follow-up-exams',[$admin,'scheduleFollowUpExam'],[$adminAuth,$csrf,$audit('FOLLOW_UP_EXAM_SCHEDULED','Exam')]);
 $router->get('/api/admin/questions',[$admin,'questions'],[$adminAuth]);
 $router->post('/api/admin/questions',[$admin,'saveQuestion'],[$adminAuth,$csrf,$audit('QUESTION_SAVED','Question')]);
 $router->post('/api/admin/questions/import',[$admin,'importQuestions'],[$adminAuth,$csrf,$audit('QUESTIONS_IMPORTED','Question')]);

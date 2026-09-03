@@ -1,0 +1,27 @@
+      <div id="tabAdminUjianLanjutan" class="dash-tab hidden">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title"><i class="fa-solid fa-rotate-right" style="color:var(--primary);"></i> Ujian Susulan & Remedial</div>
+              <div class="card-subtitle">Buat jadwal khusus dari ujian asal untuk siswa tertentu. Soal disalin agar hasilnya tercatat terpisah.</div>
+            </div>
+          </div>
+          <form id="formUjianLanjutan">
+            <div class="filter-bar-grid" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:14px; padding:14px; background:var(--surface-subtle); border:1px solid var(--border); border-radius:10px;">
+              <div><label class="form-label">Jenis</label><select id="followUpType" class="form-control"><option value="SUSULAN">Ujian Susulan</option><option value="REMEDIAL">Ujian Remedial</option></select></div>
+              <div><label class="form-label">Ujian Asal</label><select id="followUpSource" class="form-control" required><option value="">Pilih ujian yang sudah memiliki soal</option></select></div>
+              <div><label class="form-label">Nama Jadwal</label><input id="followUpName" class="form-control" placeholder="Otomatis bila dikosongkan"></div>
+              <div><label class="form-label">Mulai</label><input id="followUpStarts" type="datetime-local" class="form-control" required></div>
+              <div><label class="form-label">Selesai</label><input id="followUpEnds" type="datetime-local" class="form-control" required></div>
+            </div>
+            <div style="margin-top:16px;">
+              <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:8px;">
+                <label class="form-label" style="margin:0;">Pilih Peserta <span id="followUpStudentCount" style="color:var(--primary);">(0 dipilih)</span></label>
+                <input id="followUpStudentSearch" class="form-control" style="max-width:280px;" placeholder="Cari NISN, nama, atau kelas..." oninput="renderFollowUpStudents()">
+              </div>
+              <div id="followUpStudents" style="max-height:310px; overflow:auto; border:1px solid var(--border); border-radius:9px; background:var(--surface);"></div>
+            </div>
+            <div style="display:flex; justify-content:flex-end; margin-top:16px;"><button class="btn btn-primary" type="submit"><i class="fa-solid fa-calendar-plus"></i> Buat Jadwal Khusus</button></div>
+          </form>
+        </div>
+      </div>

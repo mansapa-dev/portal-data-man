@@ -29,6 +29,7 @@
     async syncPortalData(type) { const r=await api(`api/admin/portal-data/sync/${type}`,'POST',{});return {success:true,...r.data}; },
     async getAdminUjianList() { const r=await api('api/admin/exams');return r.data; },
     async simpanUjianAdmin(session,data) { await api('api/admin/exams','POST',data);return {success:true,message:'Ujian berhasil disimpan.'}; },
+    async simpanUjianLanjutanAdmin(session,data) { const r=await api('api/admin/follow-up-exams','POST',data);return {success:true,...r.data,message:r.message}; },
     async getAdminSoalList(session,examId) { const r=await api(`api/admin/questions${examId?`?exam_id=${encodeURIComponent(examId)}`:''}`);return r.data; },
     async simpanSoalAdmin(session,data) { await api('api/admin/questions','POST',data);return {success:true,message:'Soal berhasil disimpan.'}; },
     async getAdminAkunList() { const r=await api('api/admin/users');return r.data; },

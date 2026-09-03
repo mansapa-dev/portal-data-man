@@ -66,6 +66,7 @@ function initDashboardPengelola(nama, role) {
 const tabTitles = {
   'tabAdminOverview': 'Ringkasan Sistem',
   'tabAdminUjian': 'Kelola Ujian & Arsip',
+  'tabAdminUjianLanjutan': 'Ujian Susulan & Remedial',
   'tabAdminSoal': 'Kelola Bank Soal',
   'tabAdminSiswa': 'Kontrol & Siswa',
   'tabAdminLogPelanggaran': 'Log Pelanggaran Siswa',
@@ -91,6 +92,7 @@ function switchDashTab(tabId, btnEl) {
   
   if(tabId === 'tabAdminOverview') loadDataAdminDash();
   if(tabId === 'tabAdminUjian') loadDataAdminUjian();
+  if(tabId === 'tabAdminUjianLanjutan') loadDataFollowUpExams();
   if(tabId === 'tabAdminSoal') loadDataAdminSoal();
   if(tabId === 'tabAdminSiswa') loadDataAdminSiswa();
   if(tabId === 'tabAdminLogPelanggaran') loadDataAdminLogPelanggaran();

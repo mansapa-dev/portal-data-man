@@ -17,6 +17,19 @@ final class AdminService
   $subject=$this->repo->subject((int)($d['subject_id']??0));if(!$subject)throw new DomainException('Mata pelajaran harus dipilih dari katalog mapel.',422);$yearId=trim((string)($d['portal_academic_year_id']??''));$semesterId=trim((string)($d['portal_semester_id']??''));$period=$this->repo->period($yearId,$semesterId);if(!$period)throw new DomainException('Tahun ajaran dan semester harus dipilih dari Portal Data.',422);$data=$d+['tahun_ajaran'=>$period['academic_year'],'semester'=>$period['semester']];$data['tahun_ajaran']=$period['academic_year'];$data['semester']=$period['semester'];$utc=new \DateTimeZone('UTC');$data['starts_at']=$start->setTimezone($utc)->format('Y-m-d H:i:s');$data['ends_at']=$end->setTimezone($utc)->format('Y-m-d H:i:s');$data['status']=filter_var($d['status_aktif']??false,FILTER_VALIDATE_BOOL)?'ACTIVE':'INACTIVE';
   try{$this->db->transaction(fn()=>$this->repo->saveExam($data,$actor));}catch(\UnexpectedValueException$e){throw new DomainException($e->getMessage(),422);}
  }
+ public function scheduleFollowUpExam(array$d,int$actor):array
+ {
+  $sourceId=(int)($d['source_exam_id']??0);$studentIds=array_values(array_unique(array_filter(array_map('intval',(array)($d['student_ids']??[])))));
+  if(!$sourceId||!$studentIds)throw new DomainException('Pilih ujian asal dan minimal satu siswa.',422);
+  $type=strtoupper((string)($d['type']??'SUSULAN'));if(!in_array($type,['SUSULAN','REMEDIAL'],true))throw new DomainException('Jenis ujian lanjutan tidak valid.',422);
+  $source=$this->repo->examForFollowUp($sourceId)??throw new DomainException('Ujian asal tidak ditemukan atau belum memiliki soal.',404);
+  $timezone=new \DateTimeZone('Asia/Jakarta');
+  try{$start=new \DateTimeImmutable(trim((string)$d['starts_at']),$timezone);$end=new \DateTimeImmutable(trim((string)$d['ends_at']),$timezone);}catch(\Throwable){throw new DomainException('Tanggal dan waktu jadwal tidak valid.',422);}
+  if($end<=$start)throw new DomainException('Waktu selesai harus setelah waktu mulai.',422);
+  $name=trim((string)($d['name']??''));if($name==='')$name=$type==='REMEDIAL'?'Remedial - '.$source['name']:'Susulan - '.$source['name'];
+  $utc=new \DateTimeZone('UTC');
+  return $this->db->transaction(fn()=>$this->repo->cloneFollowUpExam($source,$studentIds,$name,$type,$start->setTimezone($utc)->format('Y-m-d H:i:s'),$end->setTimezone($utc)->format('Y-m-d H:i:s'),$actor,filter_var($d['active']??true,FILTER_VALIDATE_BOOL)));
+ }
  public function questions(?int$id):array{return$this->repo->questions($id);}
  public function saveQuestion(array$d):void{foreach(['ujian_id','pertanyaan','opsi_a','opsi_b','opsi_c','opsi_d','jawaban_benar']as$key)if(trim((string)($d[$key]??''))==='')throw new DomainException('Data soal belum lengkap.',422);$answer=strtoupper((string)$d['jawaban_benar']);if(!in_array($answer,['A','B','C','D','E'],true)||((float)($d['poin']??0))<=0)throw new DomainException('Jawaban benar atau poin tidak valid.',422);$d['jawaban_benar']=$answer;$this->repo->saveQuestion($d+['opsi_e'=>'','poin'=>1]);}
  public function users():array{return$this->repo->users();}

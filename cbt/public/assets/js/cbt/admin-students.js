@@ -1,5 +1,4 @@
 // Administrator student controls backed by Portal Data synchronization, Alphabet Pills, and Batch PIN generation.
-let cacheSiswaGlobal = [];
 let activeSiswaAbjadFilter = 'ALL';
 
 function loadDataAdminSiswa() {
