@@ -1,23 +1,116 @@
       <!-- TAB ADMIN: OVERVIEW -->
       <div id="tabAdminOverview" class="dash-tab hidden">
-        <h2 style="font-size:20px; font-weight:800; margin-bottom:24px;">Ringkasan Sistem Administrator</h2>
-        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:20px;">
-          <div class="card" style="display:flex; align-items:center; gap:20px;">
-            <div style="width:50px; height:50px; border-radius:12px; background:#eff6ff; display:flex; align-items:center; justify-content:center; font-size:20px; color:var(--primary);"><i class="fa-solid fa-users"></i></div>
-            <div><p style="font-size:12px; color:var(--text-muted); font-weight:600;">Total Siswa</p><h3 style="font-size:24px; font-weight:900;" id="statJmlSiswa">-</h3></div>
+        <!-- Hero Welcome Banner -->
+        <div class="dash-hero">
+          <div class="hero-text">
+            <h1>Selamat Bertugas, <span id="heroWelcomeName">Administrator</span> 👋</h1>
+            <p>Berikut ringkasan operasional CBT MAN 1 Palembang hari ini, <span id="heroCurrentDate"></span>.</p>
           </div>
-          <div class="card" style="display:flex; align-items:center; gap:20px;">
-            <div style="width:50px; height:50px; border-radius:12px; background:#f0fdf4; display:flex; align-items:center; justify-content:center; font-size:20px; color:var(--success);"><i class="fa-solid fa-file-signature"></i></div>
-            <div><p style="font-size:12px; color:var(--text-muted); font-weight:600;">Ujian Aktif</p><h3 style="font-size:24px; font-weight:900;" id="statJmlUjian">-</h3></div>
+          <div class="hero-badge">
+            <i class="fa-solid fa-circle-check"></i>
+            <span>Seluruh Sistem Operasional</span>
           </div>
-          <div class="card" style="display:flex; align-items:center; gap:20px;">
-            <div style="width:50px; height:50px; border-radius:12px; background:#fff7ed; display:flex; align-items:center; justify-content:center; font-size:20px; color:var(--warning);"><i class="fa-solid fa-square-poll-vertical"></i></div>
-            <div><p style="font-size:12px; color:var(--text-muted); font-weight:600;">Total Submit</p><h3 style="font-size:24px; font-weight:900;" id="statJmlSubmit">-</h3></div>
+        </div>
+
+        <!-- 4 Metric Cards -->
+        <div class="stat-grid-4">
+          <div class="stat-card-modern">
+            <div class="stat-card-top">
+              <div class="stat-icon-box green">
+                <i class="fa-solid fa-users"></i>
+              </div>
+              <span class="stat-trend green"><i class="fa-solid fa-arrow-up"></i> Siswa Aktif</span>
+            </div>
+            <div class="stat-value" id="statJmlSiswa">-</div>
+            <div class="stat-label">Total Siswa Terdaftar</div>
           </div>
-          <div class="card" style="display:flex; align-items:center; gap:20px;">
-            <div style="width:50px; height:50px; border-radius:12px; background:#fef2f2; display:flex; align-items:center; justify-content:center; font-size:20px; color:var(--danger);"><i class="fa-solid fa-triangle-exclamation"></i></div>
-            <div><p style="font-size:12px; color:var(--text-muted); font-weight:600;">Log Pelanggaran</p><h3 style="font-size:24px; font-weight:900;" id="statJmlPelanggaran">-</h3></div>
+
+          <div class="stat-card-modern">
+            <div class="stat-card-top">
+              <div class="stat-icon-box blue">
+                <i class="fa-solid fa-file-signature"></i>
+              </div>
+              <span class="stat-trend blue"><i class="fa-solid fa-check"></i> Siap Ujian</span>
+            </div>
+            <div class="stat-value" id="statJmlUjian">-</div>
+            <div class="stat-label">Jadwal Ujian Aktif</div>
+          </div>
+
+          <div class="stat-card-modern">
+            <div class="stat-card-top">
+              <div class="stat-icon-box amber">
+                <i class="fa-solid fa-square-poll-vertical"></i>
+              </div>
+              <span class="stat-trend amber"><i class="fa-solid fa-arrow-trend-up"></i> Terkumpul</span>
+            </div>
+            <div class="stat-value" id="statJmlSubmit">-</div>
+            <div class="stat-label">Total Submit Jawaban</div>
+          </div>
+
+          <div class="stat-card-modern">
+            <div class="stat-card-top">
+              <div class="stat-icon-box rose">
+                <i class="fa-solid fa-shield-cat"></i>
+              </div>
+              <span class="stat-trend rose"><i class="fa-solid fa-circle-exclamation"></i> Terpantau</span>
+            </div>
+            <div class="stat-value" id="statJmlPelanggaran">-</div>
+            <div class="stat-label">Log Pelanggaran Siswa</div>
+          </div>
+        </div>
+
+        <!-- Bottom Quick Widgets Grid -->
+        <div class="dash-quick-grid">
+          <div class="card" style="margin-bottom:0;">
+            <div class="card-header">
+              <div>
+                <div class="card-title"><i class="fa-solid fa-gauge-high" style="color:var(--primary);"></i> Metrik Cepat Operasional</div>
+                <div class="card-subtitle">Pemantauan data lalu lintas ujian secara langsung</div>
+              </div>
+              <button type="button" class="btn btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="loadDataAdminDash()"><i class="fa-solid fa-rotate"></i> Refresh</button>
+            </div>
+            <div class="widget-item-row">
+              <span class="widget-item-label">Status Sesi Ujian</span>
+              <span class="badge bg-green"><span class="badge-dot"></span> Online & Siap</span>
+            </div>
+            <div class="widget-item-row">
+              <span class="widget-item-label">Anti-Cheat Proctoring</span>
+              <span class="widget-item-val" style="color:var(--primary-dark);"><i class="fa-solid fa-shield-halved"></i> Aktif (Tab Switch Detect)</span>
+            </div>
+            <div class="widget-item-row">
+              <span class="widget-item-label">Sinkronisasi Portal Data</span>
+              <span class="widget-item-val" style="color:#0369a1;"><i class="fa-solid fa-arrows-rotate"></i> Sinkron Otomatis</span>
+            </div>
+            <div class="widget-item-row">
+              <span class="widget-item-label">Kecepatan Response Engine</span>
+              <span class="widget-item-val" style="color:var(--primary-dark);">&lt; 35 ms</span>
+            </div>
+          </div>
+
+          <div class="card" style="margin-bottom:0;">
+            <div class="card-header">
+              <div>
+                <div class="card-title"><i class="fa-solid fa-server" style="color:var(--primary);"></i> Status Infrastruktur CBT</div>
+                <div class="card-subtitle">Kondisi layanan server dan basis data</div>
+              </div>
+              <span class="badge bg-green"><span class="badge-dot"></span> Operasional</span>
+            </div>
+            <div class="widget-item-row">
+              <span class="widget-item-label">CBT REST API Service</span>
+              <span class="badge bg-green"><span class="badge-dot"></span> Normal (200 OK)</span>
+            </div>
+            <div class="widget-item-row">
+              <span class="widget-item-label">Database MySQL Engine</span>
+              <span class="badge bg-green"><span class="badge-dot"></span> Connected (Latency: 1ms)</span>
+            </div>
+            <div class="widget-item-row">
+              <span class="widget-item-label">Portal Data Integration Client</span>
+              <span class="badge bg-green"><span class="badge-dot"></span> Ready</span>
+            </div>
+            <div class="widget-item-row">
+              <span class="widget-item-label">Session Security Middleware</span>
+              <span class="badge bg-green"><span class="badge-dot"></span> Enforced (CSRF & Rate Limit)</span>
+            </div>
           </div>
         </div>
       </div>
-

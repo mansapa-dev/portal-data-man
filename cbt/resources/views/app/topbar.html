@@ -1,15 +1,36 @@
   <header class="topbar">
-    <div class="brand">
-      <div class="brand-logo"><i class="fa-solid fa-graduation-cap"></i></div>
-      <div class="brand-text">
-        <h1>CBT MAN 1 PALEMBANG</h1>
-        <p>Computer Based Test System</p>
+    <div class="topbar-left">
+      <div class="brand">
+        <div class="brand-logo"><i class="fa-solid fa-graduation-cap"></i></div>
+        <div class="brand-text">
+          <h1>CBT MAN 1 PALEMBANG</h1>
+          <p>Computer Based Test System</p>
+        </div>
+      </div>
+      <div class="topbar-breadcrumbs hidden" id="topbarBreadcrumbs">
+        <span class="sep">/</span>
+        <strong id="topbarCurrentTab">Dashboard</strong>
       </div>
     </div>
-    <div style="display:flex; gap:16px; align-items:center;">
-      <span style="font-size:12px; font-weight:600; color:var(--text-muted);"><i class="fa-solid fa-circle" style="color:var(--success); font-size:8px; margin-right:6px;"></i>Sistem Online</span>
-      <a href="guru" style="font-size:12px; font-weight:700; color:var(--primary); text-decoration:none;"><i class="fa-solid fa-chalkboard-user"></i> Portal Guru</a>
-      <button aria-label="Login administrator" onclick="document.getElementById('modalLoginPengelola').classList.add('show')" style="background:none; border:none; color:var(--border); cursor:pointer;"><i class="fa-solid fa-lock"></i></button>
+    
+    <div class="topbar-right">
+      <div class="topbar-search">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input type="text" id="topbarQuickSearch" placeholder="Cari ujian, siswa, jadwal..." onkeyup="if(typeof handleGlobalSearch==='function')handleGlobalSearch(this.value)">
+      </div>
+      
+      <span class="topbar-pill">
+        <span class="dot"></span>
+        <span>Sistem Online</span>
+      </span>
+
+      <a href="guru" class="btn btn-secondary" style="padding:6px 12px; font-size:12px;">
+        <i class="fa-solid fa-chalkboard-user"></i> Portal Guru
+      </a>
+
+      <button type="button" aria-label="Akses Pengelola" class="topbar-user-chip" onclick="if(stPengelola && stPengelola.id){switchView('viewDashboardPengelola')}else{document.getElementById('modalLoginPengelola').classList.add('show')}">
+        <div class="user-avatar-sm" id="topbarAvatarInitial"><i class="fa-solid fa-user-shield" style="font-size:11px;"></i></div>
+        <span id="topbarUserLabel">Pengelola</span>
+      </button>
     </div>
   </header>
-

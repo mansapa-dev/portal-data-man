@@ -21,9 +21,38 @@ document.getElementById('formLoginPengelola').addEventListener('submit', functio
 
 function initDashboardPengelola(nama, role) {
   const cleanRole = String(role || 'guru').toLowerCase().trim();
-  document.getElementById('lblRolePengelola').textContent = cleanRole === 'admin' ? 'ADMINISTRATOR' : 'GURU MATA PELAJARAN';
-  document.getElementById('lblNamaPengelola').textContent = nama;
-  document.getElementById('lblIdentitasPengelola').textContent = `User: @${stPengelola.username}`;
+  const roleTitle = cleanRole === 'admin' ? 'ADMINISTRATOR' : 'GURU MAPEL';
+  const initial = (nama || 'A').trim().charAt(0).toUpperCase();
+
+  const elRole = document.getElementById('lblRolePengelola');
+  if (elRole) elRole.textContent = roleTitle;
+  const elNama = document.getElementById('lblNamaPengelola');
+  if (elNama) elNama.textContent = nama;
+  const elIdentitas = document.getElementById('lblIdentitasPengelola');
+  if (elIdentitas) elIdentitas.textContent = `@${stPengelola.username || 'user'}`;
+
+  // Avatar and Topbar
+  const elAvatarSide = document.getElementById('sidebarAvatarInitial');
+  if (elAvatarSide) elAvatarSide.textContent = initial;
+  const elAvatarTop = document.getElementById('topbarAvatarInitial');
+  if (elAvatarTop) elAvatarTop.textContent = initial;
+  const elUserTop = document.getElementById('topbarUserLabel');
+  if (elUserTop) elUserTop.textContent = nama.split(' ')[0] || 'Admin';
+
+  // Hero Welcome
+  const elHeroName = document.getElementById('heroWelcomeName');
+  if (elHeroName) elHeroName.textContent = nama;
+  const elHeroDate = document.getElementById('heroCurrentDate');
+  if (elHeroDate) {
+    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    elHeroDate.textContent = new Date().toLocaleDateString('id-ID', options);
+  }
+
+  // Breadcrumbs
+  const elBreadcrumbs = document.getElementById('topbarBreadcrumbs');
+  if (elBreadcrumbs) elBreadcrumbs.classList.remove('hidden');
+  const elCurrentTab = document.getElementById('topbarCurrentTab');
+  if (elCurrentTab) elCurrentTab.textContent = cleanRole === 'admin' ? 'Ringkasan Sistem' : 'Ujian Diampu';
   
   document.getElementById('menuAdmin').classList.add('hidden');
   document.getElementById('menuGuru').classList.add('hidden');
@@ -41,11 +70,30 @@ function initDashboardPengelola(nama, role) {
   switchView('viewDashboardPengelola');
 }
 
+const tabTitles = {
+  'tabAdminOverview': 'Ringkasan Sistem',
+  'tabAdminUjian': 'Kelola Ujian & Arsip',
+  'tabAdminSoal': 'Kelola Bank Soal',
+  'tabAdminSiswa': 'Kontrol & Siswa',
+  'tabAdminLogPelanggaran': 'Log Pelanggaran Siswa',
+  'tabAdminHasil': 'Rekap & Laporan Hasil',
+  'tabAdminKartu': 'Cetak Kartu Ujian',
+  'tabAdminGuruUjian': 'Penugasan Guru Mapel',
+  'tabAdminAkun': 'Kelola Akun Staff',
+  'tabGuruMonitor': 'Ujian & Mapel Diampu'
+};
+
 function switchDashTab(tabId, btnEl) {
   document.querySelectorAll('.dash-tab').forEach(t => t.classList.add('hidden'));
-  document.getElementById(tabId).classList.remove('hidden');
+  const targetTab = document.getElementById(tabId);
+  if (targetTab) targetTab.classList.remove('hidden');
   document.querySelectorAll('.sb-item').forEach(b => b.classList.remove('active'));
   if (btnEl) btnEl.classList.add('active');
+
+  const elCurrentTab = document.getElementById('topbarCurrentTab');
+  if (elCurrentTab && tabTitles[tabId]) {
+    elCurrentTab.textContent = tabTitles[tabId];
+  }
   
   if(tabId === 'tabAdminOverview') loadDataAdminDash();
   if(tabId === 'tabAdminUjian') loadDataAdminUjian();
@@ -59,14 +107,24 @@ function switchDashTab(tabId, btnEl) {
   if(tabId === 'tabGuruMonitor') loadDataGuru();
 }
 
+function handleGlobalSearch(query) {
+  const activeTab = document.querySelector('.dash-tab:not(.hidden)');
+  if (!activeTab) return;
+  const input = activeTab.querySelector('.search-box input');
+  if (input) {
+    input.value = query;
+    input.dispatchEvent(new Event('keyup'));
+  }
+}
+
 function loadDataAdminDash() {
   cbtApi
     .withSuccessHandler(res => {
       if(res && res.success){
-        document.getElementById('statJmlSiswa').textContent = res.totalSiswa;
-        document.getElementById('statJmlUjian').textContent = res.totalUjianAktif;
-        document.getElementById('statJmlSubmit').textContent = res.totalSubmit;
-        document.getElementById('statJmlPelanggaran').textContent = res.totalPelanggaran || 0;
+        document.getElementById('statJmlSiswa').textContent = (res.totalSiswa || 0).toLocaleString('id-ID');
+        document.getElementById('statJmlUjian').textContent = (res.totalUjianAktif || 0).toLocaleString('id-ID');
+        document.getElementById('statJmlSubmit').textContent = (res.totalSubmit || 0).toLocaleString('id-ID');
+        document.getElementById('statJmlPelanggaran').textContent = (res.totalPelanggaran || 0).toLocaleString('id-ID');
       }
     })
     .getAdminDashboardStats(stPengelola);

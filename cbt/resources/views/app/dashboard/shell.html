@@ -1,31 +1,97 @@
   <!-- AREA PENGELOLA -->
   <div class="dashboard-layout hidden" id="viewDashboardPengelola">
     <aside class="sidebar">
-      <div style="padding:0 12px; margin-bottom:12px;">
-        <p style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px;" id="lblRolePengelola">ROLE</p>
-        <h3 style="font-size:14px; font-weight:800; color:var(--primary); margin-top:4px;" id="lblNamaPengelola">Nama User</h3>
-        <p style="font-size:11px; color:var(--text-muted); margin-top:2px;" id="lblIdentitasPengelola">-</p>
+      <div class="sb-brand">
+        <div class="sb-brand-logo"><i class="fa-solid fa-graduation-cap"></i></div>
+        <div>
+          <div class="sb-brand-title">CBT MAN 1</div>
+          <div class="sb-brand-sub" id="lblRolePengelola">ADMINISTRATOR</div>
+        </div>
       </div>
+
+      <div class="sb-section-label">Menu Utama</div>
       
       <div id="menuAdmin" class="hidden" style="display:flex; flex-direction:column; gap:4px;">
-        <button class="sb-item active" onclick="switchDashTab('tabAdminOverview', this)"><i class="fa-solid fa-chart-pie"></i> Ringkasan Sistem</button>
-        <button class="sb-item" onclick="switchDashTab('tabAdminUjian', this)"><i class="fa-solid fa-file-lines"></i> Kelola Ujian & Arsip Soal</button>
-        <button class="sb-item" onclick="switchDashTab('tabAdminSoal', this)"><i class="fa-solid fa-clipboard-question"></i> Kelola Bank Soal</button>
-        <button class="sb-item" onclick="switchDashTab('tabAdminSiswa', this)"><i class="fa-solid fa-users-gear"></i> Kontrol & Siswa</button>
-        <button class="sb-item" onclick="switchDashTab('tabAdminLogPelanggaran', this)"><i class="fa-solid fa-shield-cat"></i> Log Pelanggaran</button>
-        <button class="sb-item" onclick="switchDashTab('tabAdminHasil', this)"><i class="fa-solid fa-square-poll-vertical"></i> Rekap & Laporan Hasil</button>
-        <button class="sb-item" onclick="switchDashTab('tabAdminKartu', this)"><i class="fa-solid fa-id-card"></i> Cetak Kartu Ujian</button>
-        <button class="sb-item" onclick="switchDashTab('tabAdminGuruUjian', this)"><i class="fa-solid fa-chalkboard-user"></i> Penugasan Guru Mapel</button>
-        <button class="sb-item" onclick="switchDashTab('tabAdminAkun', this)"><i class="fa-solid fa-user-shield"></i> Kelola Akun Pengelola</button>
+        <button class="sb-item active" onclick="switchDashTab('tabAdminOverview', this)">
+          <i class="fa-solid fa-chart-pie sb-icon"></i>
+          <span class="sb-label">Ringkasan Sistem</span>
+          <i class="fa-solid fa-chevron-right sb-arrow"></i>
+        </button>
+        <button class="sb-item" onclick="switchDashTab('tabAdminUjian', this)">
+          <i class="fa-solid fa-file-lines sb-icon"></i>
+          <span class="sb-label">Kelola Ujian & Arsip</span>
+          <i class="fa-solid fa-chevron-right sb-arrow"></i>
+        </button>
+        <button class="sb-item" onclick="switchDashTab('tabAdminSoal', this)">
+          <i class="fa-solid fa-clipboard-question sb-icon"></i>
+          <span class="sb-label">Kelola Bank Soal</span>
+          <i class="fa-solid fa-chevron-right sb-arrow"></i>
+        </button>
+        <button class="sb-item" onclick="switchDashTab('tabAdminSiswa', this)">
+          <i class="fa-solid fa-users-gear sb-icon"></i>
+          <span class="sb-label">Kontrol & Siswa</span>
+          <i class="fa-solid fa-chevron-right sb-arrow"></i>
+        </button>
+        <button class="sb-item" onclick="switchDashTab('tabAdminLogPelanggaran', this)">
+          <i class="fa-solid fa-shield-cat sb-icon"></i>
+          <span class="sb-label">Log Pelanggaran</span>
+          <i class="fa-solid fa-chevron-right sb-arrow"></i>
+        </button>
+        <button class="sb-item" onclick="switchDashTab('tabAdminHasil', this)">
+          <i class="fa-solid fa-square-poll-vertical sb-icon"></i>
+          <span class="sb-label">Rekap & Laporan</span>
+          <i class="fa-solid fa-chevron-right sb-arrow"></i>
+        </button>
+        <button class="sb-item" onclick="switchDashTab('tabAdminKartu', this)">
+          <i class="fa-solid fa-id-card sb-icon"></i>
+          <span class="sb-label">Cetak Kartu Ujian</span>
+          <i class="fa-solid fa-chevron-right sb-arrow"></i>
+        </button>
+        <button class="sb-item" onclick="switchDashTab('tabAdminGuruUjian', this)">
+          <i class="fa-solid fa-chalkboard-user sb-icon"></i>
+          <span class="sb-label">Penugasan Guru</span>
+          <i class="fa-solid fa-chevron-right sb-arrow"></i>
+        </button>
+        <button class="sb-item" onclick="switchDashTab('tabAdminAkun', this)">
+          <i class="fa-solid fa-user-shield sb-icon"></i>
+          <span class="sb-label">Kelola Akun Staff</span>
+          <i class="fa-solid fa-chevron-right sb-arrow"></i>
+        </button>
       </div>
 
       <div id="menuGuru" class="hidden" style="display:flex; flex-direction:column; gap:4px;">
-        <button class="sb-item active" onclick="switchDashTab('tabGuruMonitor', this)"><i class="fa-solid fa-display"></i> Ujian & Mapel Diampu</button>
-        <button class="sb-item" onclick="bukaModalProfilGuru()"><i class="fa-solid fa-key"></i> Ubah Password</button>
+        <button class="sb-item active" onclick="switchDashTab('tabGuruMonitor', this)">
+          <i class="fa-solid fa-display sb-icon"></i>
+          <span class="sb-label">Ujian & Mapel Diampu</span>
+          <i class="fa-solid fa-chevron-right sb-arrow"></i>
+        </button>
+        <button class="sb-item" onclick="bukaModalProfilGuru()">
+          <i class="fa-solid fa-key sb-icon"></i>
+          <span class="sb-label">Ubah Password</span>
+          <i class="fa-solid fa-chevron-right sb-arrow"></i>
+        </button>
       </div>
 
-      <div style="flex:1;"></div>
-      <button class="sb-item" style="color:var(--danger);" onclick="appResetLogout()"><i class="fa-solid fa-arrow-right-from-bracket"></i> Keluar Sistem</button>
+      <!-- Need Help Widget -->
+      <div class="sidebar-help-box">
+        <h5>Butuh Bantuan?</h5>
+        <p>Hubungi tim proktor atau admin jika terdapat kendala ujian.</p>
+        <button type="button" class="btn-help" onclick="showCustomAlert('Bantuan CBT', 'Hubungi proktor ruang ujian atau admin sistem untuk kendala sesi login, token, atau sinkronisasi data.')">Bantuan Proktor</button>
+      </div>
+
+      <!-- Sidebar User Footer -->
+      <div class="sidebar-user-footer">
+        <div class="user-profile-card">
+          <div class="user-profile-avatar" id="sidebarAvatarInitial">P</div>
+          <div class="user-profile-info">
+            <div class="user-profile-name" id="lblNamaPengelola">Nama Pengelola</div>
+            <div class="user-profile-role" id="lblIdentitasPengelola">Administrator</div>
+          </div>
+        </div>
+        <button type="button" class="sb-logout-btn" onclick="appResetLogout()">
+          <i class="fa-solid fa-arrow-right-from-bracket"></i> Keluar Sistem
+        </button>
+      </div>
     </aside>
 
     <main class="dash-content">
