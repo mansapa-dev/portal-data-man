@@ -32,10 +32,7 @@ function initDashboardPengelola(nama, role) {
   if (elIdentitas) elIdentitas.textContent = `@${stPengelola.username || 'user'}`;
 
   // Topbar Controls
-  const btnTopLogout = document.getElementById('btnTopLogoutPengelola');
-  if (btnTopLogout) btnTopLogout.classList.remove('hidden');
-  const btnIconLock = document.getElementById('btnIconLockPengelola');
-  if (btnIconLock) btnIconLock.classList.add('hidden');
+  updateTopbarAuthUI(true);
 
   // Sidebar Avatar
   const elAvatarSide = document.getElementById('sidebarAvatarInitial');
@@ -137,13 +134,17 @@ window.addEventListener('DOMContentLoaded', async () => {
   try {
     const response = await fetch('api/auth/me', { credentials: 'same-origin', cache: 'no-store' });
     const payload = await response.json();
-    if (!response.ok || !payload.success) return;
+    if (!response.ok || !payload.success) {
+      updateTopbarAuthUI(false);
+      return;
+    }
     const staff = payload.data.staff;
     const student = payload.data.student;
     if (staff?.role === 'TEACHER') { window.location.replace('guru/dashboard'); return; }
     if (staff?.role === 'ADMIN') {
       stPengelola = { userId: staff.id, id: staff.id, role: 'admin', nama: staff.nama, username: staff.username };
-      initDashboardPengelola(staff.nama, 'admin');return;
+      initDashboardPengelola(staff.nama, 'admin');
+      return;
     }
     if (student) {
       stSiswa = { id: student.id, nama: student.nama, kelas: student.kelas, no: student.nisn };
@@ -155,8 +156,12 @@ window.addEventListener('DOMContentLoaded', async () => {
         const active = result.jadwal.find(exam => exam.status_pengerjaan === 'berlangsung');
         if (active) persiapkanUjian(active);
       }).withFailureHandler(() => switchView('viewPortalSiswa')).getStudentExamsAPI();
+      return;
     }
-  } catch (_) { /* Guest atau server belum siap: pertahankan layar login. */ }
+    updateTopbarAuthUI(false);
+  } catch (_) {
+    updateTopbarAuthUI(false);
+  }
 });
 
 function populateExamPortalOptions(data = null) {
