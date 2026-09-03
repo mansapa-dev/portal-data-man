@@ -1,8 +1,9 @@
   <header class="topbar">
-    <div class="brand">
+    <div class="brand" style="display:flex; align-items:center; gap:10px;">
+      <img src="assets/img/logo-man1.png" alt="Logo MAN 1 Palembang" style="height:38px; width:auto; object-fit:contain;" onerror="this.src='assets/img/logo.png'">
       <div class="brand-text">
-        <!-- <h1>CBT MAN 1 PALEMBANG</h1>
-        <p>Computer Based Test System</p> -->
+        <h1 style="font-size:14px; font-weight:800; color:var(--text-main); line-height:1.2;">CBT MAN 1 PALEMBANG</h1>
+        <p style="font-size:10.5px; color:var(--text-muted); font-weight:500;">Computer Based Test System</p>
       </div>
     </div>
     
@@ -17,7 +18,7 @@
       </a>
 
       <!-- Tombol Logout Pengelola (Hanya Tampil Saat Login) -->
-      <button id="btnTopLogoutPengelola" type="button" class="btn btn-danger hidden" style="padding:6px 12px; font-size:12px;" onclick="appResetLogout()">
+      <button id="btnTopLogoutPengelola" type="button" class="btn btn-danger hidden" style="padding:6px 12px; font-size:12px;" onclick="appResetLogout()" title="Keluar dari sesi pengelola">
         <i class="fa-solid fa-arrow-right-from-bracket"></i> Keluar
       </button>
 

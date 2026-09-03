@@ -55,24 +55,24 @@ function switchView(viewId) {
   document.getElementById(viewId).classList.remove('hidden');
 }
 
-function appResetLogout() {
-  if (typeof window.cbtServerLogout === 'function') window.cbtServerLogout();
-  stSiswa = { id: null }; stUjian = { id: null }; stSoal = []; stJawab = {}; stRagu = {}; stIdx = 0;
-  isUjianJalan = false; isSubmitting = false; clearInterval(tmrUjian);
-  stPengelola = { userId: null, id: null, role: null, nama: '', username: '' };
-  
-  document.querySelectorAll('.modal').forEach(m => m.classList.remove('show'));
-  document.getElementById('formLoginSiswa').reset();
-  document.getElementById('formLoginPengelola').reset();
-  document.getElementById('alertLoginSiswa').className = 'alert';
-  document.getElementById('alertLoginPengelola').className = 'alert';
-  
-  const btnTopLogout = document.getElementById('btnTopLogoutPengelola');
-  if (btnTopLogout) btnTopLogout.classList.add('hidden');
-  const btnIconLock = document.getElementById('btnIconLockPengelola');
-  if (btnIconLock) btnIconLock.classList.remove('hidden');
-  
-  switchView('viewLoginSiswa');
+async function appResetLogout() {
+  try {
+    showLoading('Keluar dari sistem...');
+    if (typeof window.cbtServerLogout === 'function') {
+      await window.cbtServerLogout();
+    } else {
+      await fetch('api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+    }
+  } catch (_) {
+    // abaikan jika terjadi kendala jaringan
+  } finally {
+    stSiswa = { id: null }; stUjian = { id: null }; stSoal = []; stJawab = {}; stRagu = {}; stIdx = 0;
+    isUjianJalan = false; isSubmitting = false; clearInterval(tmrUjian);
+    stPengelola = { userId: null, id: null, role: null, nama: '', username: '' };
+    
+    // Realtime auto-refresh ke halaman awal
+    window.location.replace(window.location.pathname);
+  }
 }
 
 function filterTable(tableId, query) {
