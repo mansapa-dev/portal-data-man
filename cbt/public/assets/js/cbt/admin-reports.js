@@ -1,15 +1,22 @@
 // Violation logs, result filtering, reports, and participant card printing.
+let cachePelanggaranRaw=[];
 function loadDataAdminLogPelanggaran() {
   const tb = document.getElementById('tblAdminLogPelanggaran'); tb.innerHTML = `<tr><td colspan="7" align="center">Memuat...</td></tr>`;
   cbtApi
     .withSuccessHandler(res => {
       if(!res.success || !res.data || res.data.length === 0) {
         tb.innerHTML = `<tr><td colspan="7" align="center">Tidak ada catatan pelanggaran.</td></tr>`;
-        window.cachePelanggaranExcel = [];
+        cachePelanggaranRaw=[];window.cachePelanggaranExcel = [];
         return;
       }
-      window.cachePelanggaranExcel = res.data.map(p => [p.nomor_ujian, p.nama_siswa, p.kelas, p.nama_ujian, p.jumlah_pelanggaran, p.keterangan, p.waktu]);
-      tb.innerHTML = res.data.map(p => `
+      cachePelanggaranRaw=res.data;populatePelanggaranFilters();applyFilterPelanggaran();
+    })
+    .getAdminLogPelanggaran(stPengelola);
+}
+
+function populatePelanggaranFilters(){const option=(id,label,values)=>{const el=document.getElementById(id),current=el.value,items=[...new Set(values.filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'id',{numeric:true}));el.innerHTML=`<option value="ALL">${label} (${items.length})</option>`+items.map(x=>`<option value="${x}">${x}</option>`).join('');el.value=items.includes(current)?current:'ALL';};option('fltPelanggaranTingkat','Semua Tingkat',cachePelanggaranRaw.map(p=>p.tingkat));option('fltPelanggaranKelas','Semua Kelas',cachePelanggaranRaw.map(p=>p.kelas));option('fltPelanggaranUjian','Semua Ujian / Mapel',cachePelanggaranRaw.map(p=>p.nama_ujian));option('fltPelanggaranJenis','Semua Jenis Pelanggaran',cachePelanggaranRaw.map(p=>p.keterangan));}
+
+function applyFilterPelanggaran(){const date=document.getElementById('fltPelanggaranTanggal').value,grade=document.getElementById('fltPelanggaranTingkat').value,kelas=document.getElementById('fltPelanggaranKelas').value,ujian=document.getElementById('fltPelanggaranUjian').value,jenis=document.getElementById('fltPelanggaranJenis').value,query=document.getElementById('searchPelanggaran').value.trim().toLowerCase();const rows=cachePelanggaranRaw.filter(p=>(!date||String(p.waktu||'').slice(0,10)===date)&&(grade==='ALL'||String(p.tingkat)===grade)&&(kelas==='ALL'||p.kelas===kelas)&&(ujian==='ALL'||p.nama_ujian===ujian)&&(jenis==='ALL'||p.keterangan===jenis)&&(!query||`${p.nomor_ujian||''} ${p.nama_siswa||''} ${p.kelas||''} ${p.nama_ujian||''} ${p.keterangan||''}`.toLowerCase().includes(query)));window.cachePelanggaranExcel=rows.map(p=>[p.nomor_ujian,p.nama_siswa,p.kelas,p.nama_ujian,p.jumlah_pelanggaran,p.keterangan,p.waktu]);const tb=document.getElementById('tblAdminLogPelanggaran');tb.innerHTML=rows.length?rows.map(p=>`
         <tr>
           <td><small>${p.waktu}</small></td>
           <td><b>${p.nomor_ujian}</b></td>
@@ -19,10 +26,7 @@ function loadDataAdminLogPelanggaran() {
           <td><span class="badge bg-red">${p.jumlah_pelanggaran} Kali</span></td>
           <td>${p.keterangan}</td>
         </tr>
-      `).join('');
-    })
-    .getAdminLogPelanggaran(stPengelola);
-}
+      `).join(''):`<tr><td colspan="7" align="center">Tidak ada data sesuai filter.</td></tr>`;}
 
 function loadDataAdminHasil() {
   showLoading('Memuat rekap hasil...');

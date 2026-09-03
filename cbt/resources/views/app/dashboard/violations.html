@@ -8,9 +8,13 @@
               <button class="btn btn-secondary" onclick="loadDataAdminLogPelanggaran()"><i class="fa-solid fa-rotate-right"></i> Refresh</button>
             </div>
           </div>
-          <div class="search-box">
-            <i class="fa-solid fa-search"></i>
-            <input type="text" id="searchPelanggaran" placeholder="Cari pelanggaran..." onkeyup="filterTable('tblAdminLogPelanggaran', this.value)">
+          <div class="filter-bar-grid" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(155px,1fr)); gap:10px; margin-bottom:14px; padding:13px; border:1px solid var(--border); border-radius:10px; background:var(--surface-subtle);">
+            <input id="fltPelanggaranTanggal" type="date" class="form-control" onchange="applyFilterPelanggaran()" title="Filter tanggal">
+            <select id="fltPelanggaranTingkat" class="form-control" onchange="applyFilterPelanggaran()"><option value="ALL">Semua Tingkat</option></select>
+            <select id="fltPelanggaranKelas" class="form-control" onchange="applyFilterPelanggaran()"><option value="ALL">Semua Kelas</option></select>
+            <select id="fltPelanggaranUjian" class="form-control" onchange="applyFilterPelanggaran()"><option value="ALL">Semua Ujian / Mapel</option></select>
+            <select id="fltPelanggaranJenis" class="form-control" onchange="applyFilterPelanggaran()"><option value="ALL">Semua Jenis Pelanggaran</option></select>
+            <div class="search-box" style="margin:0;"><i class="fa-solid fa-search"></i><input type="text" id="searchPelanggaran" placeholder="Cari siswa / NISN..." onkeyup="applyFilterPelanggaran()"></div>
           </div>
           <div class="table-responsive">
             <table>
