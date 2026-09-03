@@ -11,7 +11,8 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Dashboard Guru - CBT MAN 1 Palembang</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="../assets/css/teacher.css?v=20260903-2">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <link rel="stylesheet" href="../assets/css/teacher.css?v=20260903-3">
 </head>
 <body class="dashboard-page">
   <aside class="sidebar">
@@ -28,6 +29,11 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
       <button class="nav-item" data-section="results"><i class="fa-solid fa-square-poll-vertical"></i> Hasil Siswa</button>
       <button class="nav-item" data-section="violations"><i class="fa-solid fa-shield-halved"></i> Pelanggaran</button>
     </nav>
+    <div class="teacher-help-box">
+      <h5>Butuh Bantuan?</h5>
+      <p>Hubungi tim proktor atau admin jika terdapat kendala ujian.</p>
+      <button type="button" id="teacherHelpButton">Bantuan Proktor</button>
+    </div>
   </aside>
 
   <main class="main">
@@ -60,7 +66,7 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
     <section id="content" class="content-grid"></section>
   </main>
 
-  <script src="../assets/js/teacher/live-sessions.js"></script><script src="../assets/js/teacher/dashboard.js?v=20260903-2"></script>
+  <script src="../assets/js/teacher/live-sessions.js?v=20260903-3"></script><script src="../assets/js/teacher/dashboard.js?v=20260903-3"></script>
 </body>
 </html>
 <?php return ob_get_clean();

@@ -94,9 +94,9 @@
       const box = panel('Hasil Siswa', 'Rekapitulasi nilai dan status pengerjaan peserta pada ujian yang Anda ampu.');
       box.classList.add('teacher-results-panel');
       const printHeader = el('header', undefined, 'teacher-print-header');
-      printHeader.innerHTML = '<img src="../assets/img/logo-man1-palembang.png" alt="Lambang MAN 1 Palembang"><div><strong>MAN 1 PALEMBANG</strong><span>REKAP HASIL UJIAN CBT</span></div>';
+      printHeader.innerHTML = '<img src="../assets/img/logo-man1-palembang.png" alt="Lambang MAN 1 Palembang"><div><h4>KEMENTERIAN AGAMA REPUBLIK INDONESIA</h4><h3>KANTOR KEMENTERIAN AGAMA KOTA PALEMBANG</h3><h2>MADRASAH ALIYAH NEGERI 1 PALEMBANG</h2><p>Jln. Gub. H. Bastari (Jln. Pendidikan), Jakabaring, Palembang, Sumatera Selatan</p></div>';
       const controls = el('div', undefined, 'teacher-result-controls');
-      const grade = el('select'), studentClass = el('select'), print = el('button', undefined, 'teacher-print-button');
+      const grade = el('select'), studentClass = el('select'), print = el('button', undefined, 'teacher-print-button'), excel = el('button', undefined, 'teacher-excel-button');
       grade.setAttribute('aria-label', 'Filter tingkatan');
       studentClass.setAttribute('aria-label', 'Filter kelas');
       const grades = [...new Set(data.hasilList.map(x => String(x.tingkat || '').trim()).filter(Boolean))].sort();
@@ -104,12 +104,17 @@
       grade.append(new Option('Semua Tingkatan', 'ALL'), ...grades.map(x => new Option(`Tingkat ${x}`, x)));
       studentClass.append(new Option('Semua Kelas', 'ALL'), ...classes.map(x => new Option(x, x)));
       print.type = 'button'; print.innerHTML = '<i class="fa-solid fa-print"></i> Cetak Hasil';
+      excel.type = 'button'; excel.innerHTML = '<i class="fa-solid fa-file-excel"></i> Export Excel';
+      const gradeField = el('label', undefined, 'teacher-filter-field'), classField = el('label', undefined, 'teacher-filter-field');
+      gradeField.append(el('span', 'Tingkatan'), grade);
+      classField.append(el('span', 'Kelas'), studentClass);
       const resultTable = el('div', undefined, 'teacher-result-table');
+      let filteredResults = [];
       const updateResults = () => {
-        const rows = data.hasilList.filter(x => (grade.value === 'ALL' || String(x.tingkat) === grade.value) && (studentClass.value === 'ALL' || String(x.kelas) === studentClass.value));
+        filteredResults = data.hasilList.filter(x => (grade.value === 'ALL' || String(x.tingkat) === grade.value) && (studentClass.value === 'ALL' || String(x.kelas) === studentClass.value));
         resultTable.replaceChildren(table(
           ['NISN', 'Nama Siswa', 'Kelas', 'Tingkat', 'Ujian', 'Nilai', 'Status'],
-          rows.map((x) => [
+          filteredResults.map((x) => [
             x.nomor_ujian,
             x.nama_siswa,
             x.kelas,
@@ -123,7 +128,15 @@
       grade.addEventListener('change', updateResults);
       studentClass.addEventListener('change', updateResults);
       print.addEventListener('click', () => window.print());
-      controls.append(grade, studentClass, print);
+      excel.addEventListener('click', () => {
+        if (!window.XLSX) { notice.textContent = 'Fitur Excel belum termuat. Periksa koneksi internet lalu muat ulang halaman.'; return; }
+        const rows = filteredResults.map(x => ({NISN:x.nomor_ujian,'Nama Siswa':x.nama_siswa,Kelas:x.kelas,Tingkat:x.tingkat||'-',Ujian:x.nama_ujian,Nilai:x.nilai??0,Status:String(x.status||'selesai').toUpperCase()}));
+        const sheet = XLSX.utils.json_to_sheet(rows, {header:['NISN','Nama Siswa','Kelas','Tingkat','Ujian','Nilai','Status']});
+        sheet['!cols'] = [{wch:18},{wch:30},{wch:18},{wch:12},{wch:35},{wch:12},{wch:16}];
+        const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, sheet, 'Hasil Ujian');
+        XLSX.writeFile(workbook, `hasil_ujian_guru_${new Date().toISOString().slice(0,10)}.xlsx`);
+      });
+      controls.append(gradeField, classField, excel, print);
       box.prepend(printHeader);
       box.append(controls, resultTable);
       updateResults();
@@ -189,4 +202,6 @@
 
   const btnLogoutTop = document.getElementById('topbarLogoutGuru');
   if (btnLogoutTop) btnLogoutTop.addEventListener('click', handleLogout);
+  const helpButton = document.getElementById('teacherHelpButton');
+  if (helpButton) helpButton.addEventListener('click', () => alert('Hubungi proktor ruang ujian atau administrator sistem jika terdapat kendala sesi, ujian, atau data peserta.'));
 })();

@@ -58,6 +58,7 @@ $router->get('/api/student/exams/{id}/review',[$student,'review'],[$studentAuth]
 $router->post('/api/admin/portal-data/sync/{type}',[$sync,'run'],[$adminAuth,$csrf,$audit('PORTAL_DATA_SYNC','PortalData')]);
 $router->get('/api/admin/portal-data/sync/status',[$sync,'status'],[$adminAuth]);
 $router->get('/api/admin/dashboard',[$admin,'dashboard'],[$adminAuth]);
+$router->get('/api/admin/live-sessions',[$admin,'liveSessions'],[$adminAuth]);
 $router->get('/api/admin/portal-data/references',[$admin,'references'],[$adminAuth]);
 $router->get('/api/admin/students',[$adminStudents,'index'],[$adminAuth]);
 $router->post('/api/admin/students/pin',[$adminStudents,'setPin'],[$adminAuth,$csrf,$audit('STUDENT_PIN_CHANGED','Student')]);

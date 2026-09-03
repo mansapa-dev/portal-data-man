@@ -65,6 +65,7 @@ function initDashboardPengelola(nama, role) {
 
 const tabTitles = {
   'tabAdminOverview': 'Ringkasan Sistem',
+  'tabAdminLiveSessions': 'Live Sessions',
   'tabAdminUjian': 'Kelola Ujian & Arsip',
   'tabAdminUjianLanjutan': 'Ujian Khusus',
   'tabAdminSoal': 'Kelola Bank Soal',
@@ -78,6 +79,7 @@ const tabTitles = {
 };
 
 function switchDashTab(tabId, btnEl) {
+  if (window.CbtLiveSessions) window.CbtLiveSessions.stop();
   document.querySelectorAll('.dash-tab').forEach(t => t.classList.add('hidden'));
   const targetTab = document.getElementById(tabId);
   if (targetTab) targetTab.classList.remove('hidden');
@@ -91,6 +93,7 @@ function switchDashTab(tabId, btnEl) {
   }
   
   if(tabId === 'tabAdminOverview') loadDataAdminDash();
+  if(tabId === 'tabAdminLiveSessions') loadDataAdminLiveSessions();
   if(tabId === 'tabAdminUjian') loadDataAdminUjian();
   if(tabId === 'tabAdminUjianLanjutan') loadDataFollowUpExams();
   if(tabId === 'tabAdminSoal') loadDataAdminSoal();
@@ -101,6 +104,23 @@ function switchDashTab(tabId, btnEl) {
   if(tabId === 'tabAdminGuruUjian') loadDataAdminGuruUjian();
   if(tabId === 'tabAdminAkun') loadDataAdminAkun();
   if(tabId === 'tabGuruMonitor') loadDataGuru();
+}
+
+function loadDataAdminLiveSessions() {
+  const root = document.getElementById('adminLiveSessionsContent');
+  const notice = document.getElementById('adminLiveSessionsNotice');
+  if (!root || !notice || !window.CbtLiveSessions) return;
+  const api = async () => {
+    const response = await fetch('api/admin/live-sessions', {credentials:'same-origin'});
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || 'Permintaan gagal.');
+    return payload;
+  };
+  window.CbtLiveSessions.mount(root, api, notice, {
+    title: 'Live Sessions Seluruh Ujian',
+    description: 'Pantau progres peserta dari seluruh ujian secara otomatis setiap 10 detik.',
+    enableFilters: true
+  });
 }
 
 function handleGlobalSearch(query) {

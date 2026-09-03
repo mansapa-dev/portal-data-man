@@ -15,6 +15,12 @@
           <span class="sb-label">Ringkasan Sistem</span>
           <i class="fa-solid fa-chevron-right sb-arrow"></i>
         </button>
+        <button class="sb-item" onclick="switchDashTab('tabAdminLiveSessions', this)">
+          <i class="fa-solid fa-signal sb-icon"></i>
+          <span class="sb-label">Live Sessions</span>
+          <span class="live-dot" aria-hidden="true"></span>
+          <i class="fa-solid fa-chevron-right sb-arrow"></i>
+        </button>
         <button class="sb-item" onclick="switchDashTab('tabAdminUjian', this)">
           <i class="fa-solid fa-file-lines sb-icon"></i>
           <span class="sb-label">Kelola Ujian & Arsip</span>
@@ -73,13 +79,6 @@
           <span class="sb-label">Ubah Password</span>
           <i class="fa-solid fa-chevron-right sb-arrow"></i>
         </button>
-      </div>
-
-      <!-- Need Help Widget -->
-      <div class="sidebar-help-box">
-        <h5>Butuh Bantuan?</h5>
-        <p>Hubungi tim proktor atau admin jika terdapat kendala ujian.</p>
-        <button type="button" class="btn-help" onclick="showCustomAlert('Bantuan CBT', 'Hubungi proktor ruang ujian atau admin sistem untuk kendala sesi login, token, atau sinkronisasi data.')">Bantuan Proktor</button>
       </div>
 
       <!-- Sidebar User Footer -->
