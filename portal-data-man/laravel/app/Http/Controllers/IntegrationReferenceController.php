@@ -43,9 +43,36 @@ class IntegrationReferenceController extends Controller
             ? Semester::query()->where('publicId', $semesterId)->firstOrFail()
             : Semester::query()->where('isActive', true)->firstOrFail();
         abort_unless($semester->academicYearId === $schoolClass->academicYearId, 422, 'Semester tidak sesuai dengan tahun ajaran kelas.');
-        $rows = $schoolClass->enrollments()->with('student')
-            ->where('semesterId', $semester->id)->where('status', 'ACTIVE')->orderBy('attendanceNumber')->get()
-            ->map(fn ($row) => ['publicId' => $row->student->publicId, 'nisn' => $row->student->nisn, 'fullName' => $row->student->fullName, 'attendanceNumber' => $row->attendanceNumber, 'status' => $row->student->status]);
+        $enrollments = $schoolClass->enrollments()->with('student')
+            ->where('semesterId', $semester->id)
+            ->where('status', 'ACTIVE')
+            ->whereHas('student', fn ($query) => $query->where('status', 'ACTIVE'))
+            ->orderBy('attendanceNumber')
+            ->get();
+
+        // Keanggotaan kelas hasil impor lama tidak selalu dibuat ulang ketika
+        // semester berganti. Jika semester yang dipilih belum memiliki roster,
+        // gunakan roster aktif terakhir pada kelas dan tahun ajaran yang sama.
+        if ($enrollments->isEmpty()) {
+            $enrollments = $schoolClass->enrollments()->with('student')
+                ->where('academicYearId', $schoolClass->academicYearId)
+                ->where('status', 'ACTIVE')
+                ->whereHas('student', fn ($query) => $query->where('status', 'ACTIVE'))
+                ->orderByDesc('semesterId')
+                ->orderBy('attendanceNumber')
+                ->get()
+                ->unique('studentId')
+                ->sortBy(fn ($row) => [$row->attendanceNumber ?? PHP_INT_MAX, $row->student->fullName])
+                ->values();
+        }
+
+        $rows = $enrollments->map(fn ($row) => [
+            'publicId' => $row->student->publicId,
+            'nisn' => $row->student->nisn,
+            'fullName' => $row->student->fullName,
+            'attendanceNumber' => $row->attendanceNumber,
+            'status' => $row->student->status,
+        ]);
 
         return ApiResponse::success(['class' => ['publicId' => $schoolClass->publicId, 'code' => $schoolClass->code, 'name' => $schoolClass->name], 'academicYear' => ['publicId' => $schoolClass->academicYear->publicId, 'name' => $schoolClass->academicYear->name], 'semester' => ['publicId' => $semester->publicId, 'type' => $semester->type], 'students' => $rows], 'Anggota kelas aktif berhasil diambil.');
     }
