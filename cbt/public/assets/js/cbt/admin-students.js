@@ -81,8 +81,20 @@ function applyFilterSiswa() {
       return false;
     }
     // Filter Kelas
-    if (kelas !== 'ALL' && String(s.kelas || '').trim().toLowerCase() !== kelas.trim().toLowerCase()) {
-      return false;
+    if (kelas !== 'ALL') {
+      const studentClass = String(s.kelas || '').trim().toLowerCase();
+      const targetClass = kelas.trim().toLowerCase();
+      const matchedRef = portalReferences.classes?.find(c => c.name?.toLowerCase() === targetClass || c.code?.toLowerCase() === targetClass || c.portal_class_id?.toLowerCase() === targetClass);
+      const refName = matchedRef?.name?.toLowerCase() || '';
+      const refCode = matchedRef?.code?.toLowerCase() || '';
+      const refId = matchedRef?.portal_class_id?.toLowerCase() || '';
+
+      const match = studentClass === targetClass ||
+                    (refName && studentClass === refName) ||
+                    (refCode && studentClass === refCode) ||
+                    (refId && studentClass === refId) ||
+                    studentClass.includes(targetClass);
+      if (!match) return false;
     }
     // Filter Status Ujian
     if (status !== 'ALL') {

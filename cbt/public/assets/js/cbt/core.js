@@ -146,11 +146,15 @@ function updateTopbarAuthUI(isLoggedIn) {
   }
 }
 
-function toggleMobileSidebar() {
+function toggleSidebarMenu() {
   const sb = document.querySelector('.sidebar') || document.getElementById('mainSidebar');
   const backdrop = document.getElementById('sidebarBackdrop');
   const btn = document.getElementById('btnMobileSidebarToggle');
-  if (sb) {
+  const isMobile = window.innerWidth <= 900;
+
+  if (!sb) return;
+
+  if (isMobile) {
     const willOpen = !sb.classList.contains('open');
     if (willOpen) {
       sb.classList.add('open');
@@ -167,14 +171,30 @@ function toggleMobileSidebar() {
       }
       if (btn) btn.innerHTML = '<i class="fa-solid fa-bars"></i>';
     }
+  } else {
+    // Desktop: collapse to hide sidebar and give 100% width to content
+    const isCollapsed = sb.classList.toggle('collapsed');
+    if (btn) {
+      btn.innerHTML = isCollapsed ? '<i class="fa-solid fa-bars"></i>' : '<i class="fa-solid fa-bars-staggered"></i>';
+      btn.title = isCollapsed ? 'Buka Menu Sidebar' : 'Tutup Menu Sidebar';
+    }
   }
+}
+
+function toggleMobileSidebar() {
+  toggleSidebarMenu();
 }
 
 function closeMobileSidebar() {
   const sb = document.querySelector('.sidebar') || document.getElementById('mainSidebar');
   const backdrop = document.getElementById('sidebarBackdrop');
   const btn = document.getElementById('btnMobileSidebarToggle');
-  if (sb) sb.classList.remove('open');
+  if (sb) {
+    sb.classList.remove('open');
+    if (window.innerWidth > 900) {
+      sb.classList.add('collapsed');
+    }
+  }
   if (backdrop) {
     backdrop.classList.add('hidden');
     backdrop.style.display = 'none';

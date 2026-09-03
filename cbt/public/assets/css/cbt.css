@@ -540,12 +540,41 @@ body {
   color: white;
 }
 
+.btn-sidebar-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text-main);
+  font-size: 15px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  z-index: 10000;
+  flex-shrink: 0;
+}
+
+.btn-sidebar-toggle:hover {
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  border-color: var(--primary-light);
+}
+
+.btn-sidebar-toggle.hidden {
+  display: none !important;
+}
+
 /* DASHBOARD LAYOUT & SIDEBAR */
 .dashboard-layout {
   display: flex;
   flex: 1;
   height: calc(100vh - 56px);
   overflow: hidden;
+  position: relative;
 }
 
 .sidebar {
@@ -558,6 +587,16 @@ body {
   gap: 5px;
   overflow-y: auto;
   flex-shrink: 0;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar.collapsed {
+  margin-left: -260px !important;
+  width: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
 }
 
 .sb-brand {

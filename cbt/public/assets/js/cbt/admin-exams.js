@@ -116,11 +116,17 @@ function applyFilterUjian() {
       const targetStr = String(u.kelas_target || '').trim();
       const targetNames = String(u.nama_kelas_target || '').trim();
       if (targetStr && targetStr.toLowerCase() !== 'semua') {
-        const ids = targetStr.split(',').map(s => s.trim());
-        const names = targetNames.split(',').map(s => s.trim());
-        const selectedClassObj = portalReferences.classes?.find(c => c.portal_class_id === kelas);
-        const selectedClassName = selectedClassObj?.name || selectedClassObj?.code || '';
-        const match = ids.includes(kelas) || (selectedClassName && (names.includes(selectedClassName) || ids.includes(selectedClassName)));
+        const ids = targetStr.split(',').map(s => s.trim().toLowerCase());
+        const names = targetNames.split(',').map(s => s.trim().toLowerCase());
+        const selectedClassObj = portalReferences.classes?.find(c => c.portal_class_id === kelas || c.name === kelas || c.code === kelas);
+        const selId = String(kelas).toLowerCase();
+        const selName = String(selectedClassObj?.name || '').toLowerCase();
+        const selCode = String(selectedClassObj?.code || '').toLowerCase();
+
+        const match = ids.includes(selId) || 
+                      names.includes(selId) || 
+                      (selName && (names.includes(selName) || ids.includes(selName))) ||
+                      (selCode && (names.includes(selCode) || ids.includes(selCode)));
         if (!match) return false;
       }
     }
