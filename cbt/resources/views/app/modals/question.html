@@ -1,24 +1,91 @@
   <div class="modal" id="modalSoal">
-    <div class="modal-content" style="width:min(550px, 92%);">
+    <div class="modal-content" style="width:min(580px, 94%); max-height:90vh; overflow-y:auto;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
         <h3 style="font-size:16px; font-weight:800;" id="titleModalSoal">Form Soal Pilihan Ganda</h3>
-        <button style="background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted);" onclick="document.getElementById('modalSoal').classList.remove('show')">&times;</button>
+        <button type="button" style="background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted);" onclick="document.getElementById('modalSoal').classList.remove('show')">&times;</button>
       </div>
       <form id="formSoal">
         <input type="hidden" id="editSoalId">
-        <div class="input-group"><label>Pilih Ujian</label><div class="input-wrapper"><select id="inSoalUjianId" required></select></div></div>
-        <div class="input-group"><label>Pertanyaan</label><div class="input-wrapper"><textarea id="inPertanyaan" rows="3" required style="padding-left:40px; padding-top:12px;" placeholder="Tulis teks pertanyaan..."></textarea></div></div>
-        <div class="input-group"><label>Opsi A</label><div class="input-wrapper"><input type="text" id="inOpsiA" required placeholder="Jawaban A"></div></div>
-        <div class="input-group"><label>Opsi B</label><div class="input-wrapper"><input type="text" id="inOpsiB" required placeholder="Jawaban B"></div></div>
-        <div class="input-group"><label>Opsi C</label><div class="input-wrapper"><input type="text" id="inOpsiC" required placeholder="Jawaban C"></div></div>
-        <div class="input-group"><label>Opsi D</label><div class="input-wrapper"><input type="text" id="inOpsiD" required placeholder="Jawaban D"></div></div>
-        <div class="input-group"><label>Opsi E (Opsional)</label><div class="input-wrapper"><input type="text" id="inOpsiE" placeholder="Jawaban E"></div></div>
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
-          <div class="input-group"><label>Kunci Jawaban</label><div class="input-wrapper"><select id="inJawabanBenar"><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option><option value="E">E</option></select></div></div>
-          <div class="input-group"><label>Poin Soal</label><div class="input-wrapper"><input type="number" id="inPoinSoal" value="1" required></div></div>
+        
+        <div class="input-group">
+          <label>Pilih Jadwal Ujian / Mapel</label>
+          <div class="input-wrapper"><select id="inSoalUjianId" required></select></div>
         </div>
+
+        <div class="input-group">
+          <label>Teks Pertanyaan</label>
+          <div class="input-wrapper">
+            <textarea id="inPertanyaan" rows="3" required style="padding:10px 12px; font-size:13px;" placeholder="Tulis teks pertanyaan di sini..."></textarea>
+          </div>
+        </div>
+
+        <!-- LAMPIRAN GAMBAR SOAL -->
+        <div class="input-group" style="background:var(--surface-subtle); border:1.5px dashed var(--border); padding:12px; border-radius:10px; margin-bottom:14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <label style="font-size:12px; font-weight:700; color:var(--text-main); margin:0;">
+              <i class="fa-solid fa-image" style="color:var(--primary); margin-right:4px;"></i> Lampirkan Gambar Soal (Opsional)
+            </label>
+            <button type="button" class="btn btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="document.getElementById('inGambarSoalFile').click()">
+              <i class="fa-solid fa-upload"></i> Upload File Gambar
+            </button>
+            <input type="file" id="inGambarSoalFile" accept="image/*" style="display:none" onchange="handleGambarSoalFile(this)">
+          </div>
+
+          <div style="display:flex; gap:8px;">
+            <input type="text" id="inGambarSoalUrl" placeholder="Atau tempelkan URL Gambar (https://...)" oninput="handleGambarSoalUrlInput(this.value)" style="width:100%; padding:7px 10px; border-radius:6px; border:1px solid var(--border); font-size:12px; background:var(--surface);">
+          </div>
+
+          <div id="previewGambarContainer" class="hidden" style="margin-top:10px; display:flex; align-items:center; gap:12px; padding:8px; background:var(--surface); border:1px solid var(--border); border-radius:8px;">
+            <img id="imgPreviewElement" src="" alt="Preview Gambar Soal" style="max-height:90px; max-width:130px; object-fit:contain; border-radius:6px; border:1px solid var(--border);">
+            <div style="flex:1;">
+              <div style="font-size:11.5px; font-weight:700; color:var(--text-main);">Gambar Terlampir</div>
+              <small style="color:var(--text-muted); font-size:10.5px;">Gambar ini akan disematkan pada soal</small>
+            </div>
+            <button type="button" class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="hapusGambarSoalModal()">
+              <i class="fa-solid fa-trash"></i> Hapus
+            </button>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+          <div class="input-group">
+            <label>Opsi A</label>
+            <div class="input-wrapper"><input type="text" id="inOpsiA" required placeholder="Jawaban A" style="padding-left:12px;"></div>
+          </div>
+          <div class="input-group">
+            <label>Opsi B</label>
+            <div class="input-wrapper"><input type="text" id="inOpsiB" required placeholder="Jawaban B" style="padding-left:12px;"></div>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+          <div class="input-group">
+            <label>Opsi C</label>
+            <div class="input-wrapper"><input type="text" id="inOpsiC" required placeholder="Jawaban C" style="padding-left:12px;"></div>
+          </div>
+          <div class="input-group">
+            <label>Opsi D</label>
+            <div class="input-wrapper"><input type="text" id="inOpsiD" required placeholder="Jawaban D" style="padding-left:12px;"></div>
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label>Opsi E (Opsional)</label>
+          <div class="input-wrapper"><input type="text" id="inOpsiE" placeholder="Jawaban E" style="padding-left:12px;"></div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+          <div class="input-group">
+            <label>Kunci Jawaban</label>
+            <div class="input-wrapper"><select id="inJawabanBenar"><option value="A">Opsi A</option><option value="B">Opsi B</option><option value="C">Opsi C</option><option value="D">Opsi D</option><option value="E">Opsi E</option></select></div>
+          </div>
+          <div class="input-group">
+            <label>Poin Soal</label>
+            <div class="input-wrapper"><input type="number" id="inPoinSoal" value="1" required style="padding-left:12px;"></div>
+          </div>
+        </div>
+
         <button type="submit" class="btn btn-primary" style="width:100%; margin-top:8px;">Simpan Soal</button>
       </form>
     </div>
   </div>
-

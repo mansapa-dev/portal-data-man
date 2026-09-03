@@ -18,8 +18,11 @@ function downloadTemplateSiswa() {
 }
 
 function downloadTemplateSoal() {
-  let headers = ['nama_ujian', 'pertanyaan', 'opsi_a', 'opsi_b', 'opsi_c', 'opsi_d', 'opsi_e', 'jawaban_benar', 'poin'];
-  let sampleData = [['Kimia Kelas XII', 'Berapakah hasil dari 2 + 2?', '2', '3', '4', '5', '6', 'C', 1]];
+  let headers = ['nama_ujian', 'pertanyaan', 'url_gambar', 'opsi_a', 'opsi_b', 'opsi_c', 'opsi_d', 'opsi_e', 'jawaban_benar', 'poin'];
+  let sampleData = [
+    ['Kimia Kelas XII', 'Perhatikan gambar berikut. Apakah nama struktur senyawa di atas?', 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Ethanol_flat_structure.png/220px-Ethanol_flat_structure.png', 'Etanol', 'Metanol', 'Propanol', 'Butanol', 'Pentanol', 'A', 1],
+    ['Biologi Kelas X', 'Organel sel yang berfungsi untuk respirasi seluler dan menghasilkan ATP adalah...', '', 'Mitokondria', 'Ribosom', 'Lisosom', 'Badan Golgi', 'Kloroplas', 'A', 1]
+  ];
   exportToExcel('template_soal.xlsx', 'Template Soal', headers, sampleData);
 }
 

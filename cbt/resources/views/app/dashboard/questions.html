@@ -2,25 +2,62 @@
       <div id="tabAdminSoal" class="dash-tab hidden">
         <div class="card">
           <div class="card-header">
-            <div class="card-title">Manajemen Bank Soal Ujian (Upload Berulang Per Mapel/Excel)</div>
+            <div>
+              <div class="card-title"><i class="fa-solid fa-clipboard-question" style="color:var(--primary);"></i> Manajemen Bank Soal Ujian (Panel Per Mapel)</div>
+              <div class="card-subtitle">Kelola butir soal pilihan ganda, lampiran gambar soal, dan import Excel terstruktur per mata pelajaran</div>
+            </div>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
-              <button class="btn btn-secondary" onclick="exportToExcel('tabel_soal.xlsx', 'Soal', ['ID', 'Ujian ID', 'Pertanyaan', 'Opsi A', 'Opsi B', 'Opsi C', 'Opsi D', 'Opsi E', 'Jawaban Benar', 'Poin'], window.cacheSoalExcel || [])"><i class="fa-solid fa-file-excel"></i> Download Excel</button>
-              <button class="btn btn-warning" onclick="downloadTemplateSoal()"><i class="fa-solid fa-download"></i> Template Soal</button>
+              <button class="btn btn-secondary" onclick="exportToExcel('bank_soal.xlsx', 'Soal', ['ID', 'Ujian ID', 'Nama Mapel', 'Tingkat', 'Pertanyaan', 'Opsi A', 'Opsi B', 'Opsi C', 'Opsi D', 'Opsi E', 'Jawaban Benar', 'Poin'], window.cacheSoalExcel || [])"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
+              <button class="btn btn-warning" onclick="downloadTemplateSoal()"><i class="fa-solid fa-download"></i> Template Excel (Ada Gambar)</button>
               <button class="btn btn-success" onclick="document.getElementById('fileImportSoal').click()"><i class="fa-solid fa-file-arrow-up"></i> Upload Excel Soal</button>
               <input type="file" id="fileImportSoal" accept=".xlsx, .xls" style="display:none" onchange="handleImportSoal(this)">
               <button class="btn btn-primary" onclick="bukaModalSoal()"><i class="fa-solid fa-plus"></i> Tambah Soal</button>
             </div>
           </div>
-          <div class="search-box">
-            <i class="fa-solid fa-search"></i>
-            <input type="text" id="searchSoal" placeholder="Cari soal..." onkeyup="filterTable('tblAdminSoal', this.value)">
+
+          <!-- FILTER BAR SOAL: Tingkat, Mata Pelajaran, Kelas, Search -->
+          <div class="filter-bar-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:12px; margin-bottom:16px; background:var(--surface-subtle); padding:14px; border-radius:10px; border:1px solid var(--border);">
+            <div>
+              <label style="font-size:11px; font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px;">Tingkatan:</label>
+              <select id="fltSoalTingkat" onchange="if(typeof populateAdminSoalFilters==='function')populateAdminSoalFilters(); applyFilterSoal();" style="width:100%; padding:8px 10px; border-radius:8px; border:1.5px solid var(--border); font-size:12.5px; background:var(--surface);">
+                <option value="ALL">Semua Tingkat</option>
+                <option value="X">Tingkat X</option>
+                <option value="XI">Tingkat XI</option>
+                <option value="XII">Tingkat XII</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px; font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px;">Mata Pelajaran:</label>
+              <select id="fltSoalMapel" onchange="applyFilterSoal()" style="width:100%; padding:8px 10px; border-radius:8px; border:1.5px solid var(--border); font-size:12.5px; background:var(--surface);">
+                <option value="ALL">Semua Mata Pelajaran</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px; font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px;">Rombel / Kelas:</label>
+              <select id="fltSoalKelas" onchange="applyFilterSoal()" style="width:100%; padding:8px 10px; border-radius:8px; border:1.5px solid var(--border); font-size:12.5px; background:var(--surface);">
+                <option value="ALL">Semua Kelas</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px; font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px;">Pencarian Butir Soal:</label>
+              <div style="position:relative;">
+                <i class="fa-solid fa-search" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:12px; color:var(--text-muted);"></i>
+                <input type="text" id="searchSoal" placeholder="Cari teks pertanyaan / opsi..." onkeyup="applyFilterSoal()" style="width:100%; padding:8px 10px 8px 30px; border-radius:8px; border:1.5px solid var(--border); font-size:12.5px; background:var(--surface);">
+              </div>
+            </div>
           </div>
-          <div class="table-responsive">
-            <table>
-              <thead><tr><th>ID</th><th>ID Ujian</th><th>Pertanyaan</th><th>Kunci</th><th>Poin</th><th>Aksi</th></tr></thead>
-              <tbody id="tblAdminSoal"><tr><td colspan="6" align="center">Memuat...</td></tr></tbody>
-            </table>
+
+          <!-- MAPEL NAV PILLS RIBBON -->
+          <div id="soalMapelPillsContainer" style="display:flex; gap:8px; overflow-x:auto; padding-bottom:10px; margin-bottom:16px; -webkit-overflow-scrolling:touch;">
+            <!-- Rendered dynamically -->
+          </div>
+
+          <!-- CONTAINER PANEL PER MATA PELAJARAN -->
+          <div id="containerPanelsSoal" style="display:flex; flex-direction:column; gap:16px;">
+            <div style="text-align:center; padding:30px; color:var(--text-muted); font-size:13px;">
+              <i class="fa-solid fa-spinner fa-spin" style="font-size:20px; color:var(--primary); margin-bottom:8px; display:block;"></i>
+              Memuat bank soal per mata pelajaran...
+            </div>
           </div>
         </div>
       </div>
-
