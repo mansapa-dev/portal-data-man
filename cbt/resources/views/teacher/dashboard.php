@@ -32,11 +32,16 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
     <header class="topbar">
       <button id="menu" class="menu">☰</button>
       <div style="margin-left:0; text-align:left;">
-        <span style="font-size:12px; font-weight:700; color:var(--green-dark);"><i class="fa-solid fa-graduation-cap"></i> CBT MAN 1 Palembang</span>
+        <span style="font-size:13px; font-weight:700; color:var(--green-dark);"><i class="fa-solid fa-graduation-cap"></i> CBT MAN 1 Palembang</span>
       </div>
-      <div>
-        <small>Portal Guru</small>
-        <strong id="teacherName"><?=htmlspecialchars($nip, ENT_QUOTES, 'UTF-8')?></strong>
+      <div style="display:flex; align-items:center; gap:14px;">
+        <div style="text-align:right;">
+          <small>Portal Guru</small>
+          <strong id="teacherName"><?=htmlspecialchars($nip, ENT_QUOTES, 'UTF-8')?></strong>
+        </div>
+        <button id="topbarLogoutGuru" type="button" class="btn btn-danger" style="padding:6px 12px; font-size:12px;" title="Keluar dari Portal Guru">
+          <i class="fa-solid fa-arrow-right-from-bracket"></i> Keluar
+        </button>
       </div>
     </header>
 

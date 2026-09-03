@@ -67,6 +67,11 @@ function appResetLogout() {
   document.getElementById('alertLoginSiswa').className = 'alert';
   document.getElementById('alertLoginPengelola').className = 'alert';
   
+  const btnTopLogout = document.getElementById('btnTopLogoutPengelola');
+  if (btnTopLogout) btnTopLogout.classList.add('hidden');
+  const btnIconLock = document.getElementById('btnIconLockPengelola');
+  if (btnIconLock) btnIconLock.classList.remove('hidden');
+  
   switchView('viewLoginSiswa');
 }
 

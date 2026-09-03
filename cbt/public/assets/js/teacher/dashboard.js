@@ -184,11 +184,16 @@
 
   document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', () => render(button.dataset.section)));
   document.getElementById('menu').addEventListener('click', () => document.querySelector('.sidebar').classList.toggle('open'));
-  document.getElementById('logout').addEventListener('click', async () => {
+  const handleLogout = async () => {
     try {
       await api('api/auth/logout', 'POST', {});
     } finally {
       location.href = '../guru';
     }
-  });
+  };
+
+  const btnLogoutSide = document.getElementById('logout');
+  if (btnLogoutSide) btnLogoutSide.addEventListener('click', handleLogout);
+  const btnLogoutTop = document.getElementById('topbarLogoutGuru');
+  if (btnLogoutTop) btnLogoutTop.addEventListener('click', handleLogout);
 })();

@@ -31,13 +31,15 @@ function initDashboardPengelola(nama, role) {
   const elIdentitas = document.getElementById('lblIdentitasPengelola');
   if (elIdentitas) elIdentitas.textContent = `@${stPengelola.username || 'user'}`;
 
-  // Avatar and Topbar
+  // Topbar Controls
+  const btnTopLogout = document.getElementById('btnTopLogoutPengelola');
+  if (btnTopLogout) btnTopLogout.classList.remove('hidden');
+  const btnIconLock = document.getElementById('btnIconLockPengelola');
+  if (btnIconLock) btnIconLock.classList.add('hidden');
+
+  // Sidebar Avatar
   const elAvatarSide = document.getElementById('sidebarAvatarInitial');
   if (elAvatarSide) elAvatarSide.textContent = initial;
-  const elAvatarTop = document.getElementById('topbarAvatarInitial');
-  if (elAvatarTop) elAvatarTop.textContent = initial;
-  const elUserTop = document.getElementById('topbarUserLabel');
-  if (elUserTop) elUserTop.textContent = nama.split(' ')[0] || 'Admin';
 
   // Hero Welcome
   const elHeroName = document.getElementById('heroWelcomeName');
@@ -47,12 +49,6 @@ function initDashboardPengelola(nama, role) {
     const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
     elHeroDate.textContent = new Date().toLocaleDateString('id-ID', options);
   }
-
-  // Breadcrumbs
-  const elBreadcrumbs = document.getElementById('topbarBreadcrumbs');
-  if (elBreadcrumbs) elBreadcrumbs.classList.remove('hidden');
-  const elCurrentTab = document.getElementById('topbarCurrentTab');
-  if (elCurrentTab) elCurrentTab.textContent = cleanRole === 'admin' ? 'Ringkasan Sistem' : 'Ujian Diampu';
   
   document.getElementById('menuAdmin').classList.add('hidden');
   document.getElementById('menuGuru').classList.add('hidden');
