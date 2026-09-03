@@ -1,161 +1,359 @@
-// Administrator student controls backed by Portal Data synchronization.
+// Administrator student controls backed by Portal Data synchronization, Alphabet Pills, and Batch PIN generation.
+let cacheSiswaGlobal = [];
+let activeSiswaAbjadFilter = 'ALL';
+
 function loadDataAdminSiswa() {
-  const tb = document.getElementById('tblAdminSiswa'); tb.innerHTML = `<tr><td colspan="7" align="center">Memuat data siswa...</td></tr>`;
+  loadPortalReferences(() => {
+    populateAdminSiswaFilters();
+    applyFilterSiswa();
+  });
+
+  const tb = document.getElementById('tblAdminSiswa');
+  if (tb) tb.innerHTML = `<tr><td colspan="8" align="center" style="padding:24px;">Memuat data peserta ujian...</td></tr>`;
+
   cbtApi
     .withSuccessHandler(rows => {
-      if(!rows || rows.length===0) { tb.innerHTML=`<tr><td colspan="7" align="center">Tidak ada data siswa.</td></tr>`; return; }
-      cacheSiswaGlobal = rows;
-      window.cacheSiswaExcel = rows.map(s => [s.nomor_ujian, s.nama, s.kelas, s.tingkat, s.pin, s.tahun_ajaran || '', s.status_aktif]);
-      tb.innerHTML = rows.map(s => {
-        let bSt = s.ujian_status==='dihentikan'?'bg-red':'bg-gray';
-        let actBtn = s.ujian_status==='dihentikan' ? `<button class="btn btn-success" style="padding:4px 8px; font-size:11px;" onclick="bukaBlokirAdmin(${s.id})"><i class="fa-solid fa-unlock"></i> Buka</button>` : `<span style="color:var(--text-muted); font-size:11px;">Normal</span>`;
-        return `<tr>
-          <td><b>${s.nomor_ujian}</b></td>
-          <td>${s.nama}</td>
-          <td>${s.kelas}</td>
-          <td><span class="badge bg-gray">${s.tingkat}</span></td>
-          <td><code style="background:var(--secondary-bg); padding:2px 6px; border-radius:4px; font-weight:700;">${s.pin}</code></td>
-          <td><span class="badge ${bSt}">${(s.ujian_status||'belum').toUpperCase()}</span></td>
-          <td style="display:flex; gap:6px;">
-            ${actBtn}
-            <button class="btn btn-primary" style="padding:4px 8px; font-size:11px;" onclick="generatePinAdmin(${s.id})"><i class="fa-solid fa-key"></i> Generate PIN</button>
-          </td>
-        </tr>`;
-      }).join('');
+      cacheSiswaGlobal = rows || [];
+      populateAdminSiswaFilters();
+      applyFilterSiswa();
+    })
+    .withFailureHandler(err => {
+      showCustomAlert('Gagal Memuat Data', `Terjadi kesalahan saat mengambil data siswa: ${err.message}`, 'error');
+      if (tb) tb.innerHTML = `<tr><td colspan="8" align="center" style="padding:24px; color:var(--danger);">Gagal memuat data siswa.</td></tr>`;
     })
     .getAdminSiswaList(stPengelola);
 }
 
+function populateAdminSiswaFilters() {
+  const tingVal = document.getElementById('fltSiswaTingkat')?.value || 'ALL';
+  const fltKelas = document.getElementById('fltSiswaKelas');
+
+  if (fltKelas && portalReferences && portalReferences.classes) {
+    const currentVal = fltKelas.value;
+    const availableClasses = portalReferences.classes.filter(c => tingVal === 'ALL' || c.grade === tingVal);
+    const sortedClasses = [...availableClasses].sort((a, b) => (a.name || a.code || '').localeCompare(b.name || b.code || '', undefined, { numeric: true }));
+    fltKelas.innerHTML = `<option value="ALL">Semua Kelas</option>` + sortedClasses.map(c => `
+      <option value="${c.name || c.code}">${c.name || c.code}</option>
+    `).join('');
+    if (currentVal && sortedClasses.some(c => (c.name || c.code) === currentVal)) {
+      fltKelas.value = currentVal;
+    } else {
+      fltKelas.value = 'ALL';
+    }
+  }
+}
+
+function selectSiswaAbjadPill(letter) {
+  activeSiswaAbjadFilter = letter;
+  applyFilterSiswa();
+}
+
+function applyFilterSiswa() {
+  const ting = document.getElementById('fltSiswaTingkat')?.value || 'ALL';
+  const kelas = document.getElementById('fltSiswaKelas')?.value || 'ALL';
+  const status = document.getElementById('fltSiswaStatus')?.value || 'ALL';
+  const sort = document.getElementById('fltSiswaSort')?.value || 'nama_asc';
+  const query = (document.getElementById('searchSiswa')?.value || '').toLowerCase().trim();
+
+  // 1. Filter base list
+  let filtered = cacheSiswaGlobal.filter(s => {
+    // Filter Tingkat
+    if (ting !== 'ALL' && String(s.tingkat || '').toUpperCase() !== ting.toUpperCase()) {
+      return false;
+    }
+    // Filter Kelas
+    if (kelas !== 'ALL' && String(s.kelas || '').trim().toLowerCase() !== kelas.trim().toLowerCase()) {
+      return false;
+    }
+    // Filter Status Ujian
+    if (status !== 'ALL') {
+      const st = String(s.ujian_status || 'belum').toLowerCase();
+      if (st !== status.toLowerCase()) return false;
+    }
+    // Filter Abjad Huruf Pertama Nama
+    if (activeSiswaAbjadFilter !== 'ALL') {
+      const firstChar = String(s.nama || '').trim().charAt(0).toUpperCase();
+      if (firstChar !== activeSiswaAbjadFilter) return false;
+    }
+    // Search Query (NISN / Nama)
+    if (query !== '') {
+      const qText = `${s.nomor_ujian || ''} ${s.nisn || ''} ${s.nama || ''} ${s.kelas || ''} ${s.pin || ''}`.toLowerCase();
+      if (!qText.includes(query)) return false;
+    }
+    return true;
+  });
+
+  // 2. Sort
+  filtered.sort((a, b) => {
+    if (sort === 'nama_asc') return (a.nama || '').localeCompare(b.nama || '');
+    if (sort === 'nama_desc') return (b.nama || '').localeCompare(a.nama || '');
+    if (sort === 'nisn_asc') return String(a.nomor_ujian || '').localeCompare(String(b.nomor_ujian || ''));
+    if (sort === 'kelas_asc') return (a.kelas || '').localeCompare(b.kelas || '', undefined, { numeric: true });
+    return 0;
+  });
+
+  // 3. Update Excel Cache
+  window.cacheSiswaExcel = filtered.map(s => [
+    s.nomor_ujian || s.nisn,
+    s.nama,
+    s.kelas,
+    s.tingkat,
+    s.pin,
+    s.tahun_ajaran || '2025/2026',
+    (s.ujian_status || 'belum').toUpperCase()
+  ]);
+
+  // 4. Update count label
+  const lblCount = document.getElementById('lblTotalSiswaTerfilter');
+  if (lblCount) lblCount.textContent = `${filtered.length} Siswa Ditemukan`;
+
+  // 5. Render alphabet pills & table
+  renderSiswaAbjadPills(cacheSiswaGlobal);
+  renderTabelSiswa(filtered);
+}
+
+function renderSiswaAbjadPills(allRows) {
+  const container = document.getElementById('siswaAbjadPillsContainer');
+  if (!container) return;
+
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  
+  // Count students starting with each letter
+  const counts = { 'ALL': allRows.length };
+  allRows.forEach(s => {
+    const char = String(s.nama || '').trim().charAt(0).toUpperCase();
+    if (char && char >= 'A' && char <= 'Z') {
+      counts[char] = (counts[char] || 0) + 1;
+    }
+  });
+
+  const pills = ['ALL', ...alphabet];
+
+  container.innerHTML = pills.map(p => {
+    const isActive = activeSiswaAbjadFilter === p;
+    const count = counts[p] || 0;
+    const isZero = p !== 'ALL' && count === 0;
+
+    return `
+      <button type="button" 
+              onclick="selectSiswaAbjadPill('${p}')" 
+              class="btn ${isActive ? 'btn-primary' : 'btn-secondary'}" 
+              style="padding:3px 8px; font-size:11px; min-width:32px; border-radius:6px; opacity:${isZero ? '0.45' : '1'}; flex-shrink:0; text-align:center;">
+        <b>${p === 'ALL' ? 'Semua' : p}</b>
+        ${count > 0 && p !== 'ALL' ? `<span style="font-size:9.5px; opacity:0.85; margin-left:2px;">(${count})</span>` : ''}
+      </button>
+    `;
+  }).join('');
+}
+
+function renderTabelSiswa(rows) {
+  const tb = document.getElementById('tblAdminSiswa');
+  if (!tb) return;
+
+  if (rows.length === 0) {
+    tb.innerHTML = `
+      <tr>
+        <td colspan="8" align="center" style="padding:32px; color:var(--text-muted);">
+          <i class="fa-solid fa-users-slash" style="font-size:32px; color:var(--text-muted); margin-bottom:10px; display:block;"></i>
+          <div style="font-weight:700; font-size:14px; color:var(--text-main);">Tidak Ada Data Siswa yang Sesuai</div>
+          <p style="font-size:12px; margin-top:4px;">Silakan sesuaikan filter tingkat, kelas, atau huruf abjad yang dipilih.</p>
+        </td>
+      </tr>`;
+    return;
+  }
+
+  tb.innerHTML = rows.map((s, idx) => {
+    let statusBadge = '<span class="badge bg-gray">BELUM UJIAN</span>';
+    let actBtn = '';
+
+    if (s.ujian_status === 'dihentikan') {
+      statusBadge = '<span class="badge bg-red"><i class="fa-solid fa-lock"></i> DIHENTIKAN</span>';
+      actBtn = `<button class="btn btn-success" style="padding:4px 8px; font-size:11px;" onclick="bukaBlokirAdmin(${s.id})" title="Buka Blokir"><i class="fa-solid fa-unlock"></i> Buka</button>`;
+    } else if (s.ujian_status === 'berlangsung') {
+      statusBadge = '<span class="badge bg-blue"><i class="fa-solid fa-spinner fa-spin"></i> SEDANG UJIAN</span>';
+    }
+
+    const pinDisplay = s.pin && s.pin !== 'BELUM DISET' 
+      ? `<code style="background:var(--primary-soft); color:var(--primary-dark); font-weight:800; padding:3px 8px; border-radius:5px; font-size:12.5px; letter-spacing:1px; border:1px solid var(--primary-soft-border);">${s.pin}</code>`
+      : `<span style="color:var(--danger); font-size:11px; font-weight:700;">Belum Diset</span>`;
+
+    return `
+      <tr>
+        <td style="font-weight:700; color:var(--text-muted); text-align:center;">${idx + 1}</td>
+        <td>
+          <div style="font-weight:800; color:var(--text-main); font-size:13px; font-family:monospace;">${s.nomor_ujian || s.nisn}</div>
+        </td>
+        <td>
+          <div style="font-weight:700; color:var(--text-main); font-size:13px;">${s.nama}</div>
+          <small style="color:var(--text-muted); font-size:11px;">Tahun Ajaran: ${s.tahun_ajaran || '2025/2026'}</small>
+        </td>
+        <td><strong style="color:var(--primary-dark);">${s.kelas}</strong></td>
+        <td><span class="badge bg-gray">Tingkat ${s.tingkat}</span></td>
+        <td>${pinDisplay}</td>
+        <td>${statusBadge}</td>
+        <td>
+          <div style="display:flex; gap:6px; justify-content:center; align-items:center;">
+            ${actBtn}
+            <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="generatePinAdmin(${s.id})" title="Generate / Ganti PIN">
+              <i class="fa-solid fa-key"></i> PIN
+            </button>
+            <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick='editSiswaSatuan(${JSON.stringify(s)})' title="Edit PIN">
+              <i class="fa-solid fa-pen"></i>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// SINGLE STUDENT PIN GENERATION
 function generatePinAdmin(id) {
-  showLoading('Membuat PIN siswa...');
-  cbtApi.withSuccessHandler(res => { hideLoading(); loadDataAdminSiswa(); showCustomAlert('PIN berhasil dibuat', `PIN siswa: ${res.pin}`); })
-    .withFailureHandler(err => { hideLoading(); showCustomAlert('Gagal', err.message); })
+  showLoading('Membuat PIN baru...');
+  cbtApi
+    .withSuccessHandler(res => {
+      hideLoading();
+      loadDataAdminSiswa();
+      showCustomAlert('PIN Berhasil Dibuat', `PIN ujian siswa berhasil digenerate: <b>${res.pin}</b>`, 'success');
+    })
+    .withFailureHandler(err => {
+      hideLoading();
+      showCustomAlert('Gagal Membuat PIN', `Terjadi kesalahan saat membuat PIN: ${err.message}`, 'error');
+    })
     .simpanSiswaSatuanAdmin(stPengelola, { id, pin: '' });
+}
+
+// MODAL GENERATE PIN MASSAL OTOMATIS
+function bukaModalGeneratePinOtomatis() {
+  updateScopeInfoGeneratePin();
+  document.getElementById('modalGeneratePinMassal').classList.add('show');
+}
+
+function updateScopeInfoGeneratePin() {
+  const scope = document.getElementById('selScopeGeneratePin')?.value;
+  const boxInfo = document.getElementById('boxTargetInfoGeneratePin');
+  if (!boxInfo) return;
+
+  const ting = document.getElementById('fltSiswaTingkat')?.value || 'ALL';
+  const kelas = document.getElementById('fltSiswaKelas')?.value || 'ALL';
+
+  if (scope === 'CURRENT_FILTER') {
+    boxInfo.innerHTML = `Target: <b>Siswa yang difilter saat ini</b> (Tingkat: ${ting}, Kelas: ${kelas}).`;
+  } else if (scope === 'ALL') {
+    boxInfo.innerHTML = `Target: <b>Seluruh Siswa Aktif</b> (Tingkat X, XI, dan XII).`;
+  } else if (scope === 'GRADE_X') {
+    boxInfo.innerHTML = `Target: <b>Seluruh Siswa Tingkat X</b>.`;
+  } else if (scope === 'GRADE_XI') {
+    boxInfo.innerHTML = `Target: <b>Seluruh Siswa Tingkat XI</b>.`;
+  } else if (scope === 'GRADE_XII') {
+    boxInfo.innerHTML = `Target: <b>Seluruh Siswa Tingkat XII</b>.`;
+  }
+}
+
+function eksekusiGeneratePinMassal(e) {
+  e.preventDefault();
+  const scope = document.getElementById('selScopeGeneratePin').value;
+  let targetGrade = null;
+  let targetClass = null;
+
+  if (scope === 'CURRENT_FILTER') {
+    targetGrade = document.getElementById('fltSiswaTingkat')?.value;
+    targetClass = document.getElementById('fltSiswaKelas')?.value;
+  } else if (scope === 'GRADE_X') {
+    targetGrade = 'X';
+  } else if (scope === 'GRADE_XI') {
+    targetGrade = 'XI';
+  } else if (scope === 'GRADE_XII') {
+    targetGrade = 'XII';
+  }
+
+  document.getElementById('modalGeneratePinMassal').classList.remove('show');
+
+  showLoading('Meng-generate PIN otomatis untuk seluruh target siswa...');
+
+  cbtApi
+    .withSuccessHandler(res => {
+      hideLoading();
+      loadDataAdminSiswa();
+      showCustomAlert(
+        'Generate PIN Berhasil',
+        `Berhasil membuat PIN otomatis baru untuk <b>${res.updated} siswa</b>.`,
+        'success'
+      );
+    })
+    .withFailureHandler(err => {
+      hideLoading();
+      showCustomAlert(
+        'Generate PIN Gagal',
+        `Gagal memproses pembuatan PIN: ${err.message}`,
+        'error'
+      );
+    })
+    .generatePinsBatchAdmin(stPengelola, {
+      tingkat: targetGrade,
+      kelas: targetClass
+    });
 }
 
 function bukaModalSiswaSatuan(data = null) {
   document.getElementById('formSiswaSatuan').reset();
-  if(data) {
-    document.getElementById('titleModalSiswa').textContent = "Edit Data Siswa";
+  if (data) {
+    document.getElementById('titleModalSiswa').textContent = "Edit PIN Siswa";
     document.getElementById('editSiswaId').value = data.id;
-    document.getElementById('inSiswaNo').value = data.nomor_ujian;
+    document.getElementById('inSiswaNo').value = data.nomor_ujian || data.nisn;
     document.getElementById('inSiswaNama').value = data.nama;
     document.getElementById('inSiswaKelas').value = data.kelas;
-    document.getElementById('inSiswaTingkat').value = data.tingkat;
-    document.getElementById('inSiswaPin').value = data.pin;
-    document.getElementById('inSiswaThn').value = data.tahun_ajaran || '2025/2026';
-  } else {
-    document.getElementById('titleModalSiswa').textContent = "Tambah Siswa / Manual";
-    document.getElementById('editSiswaId').value = "";
+    document.getElementById('inSiswaPin').value = (data.pin && data.pin !== 'BELUM DISET') ? data.pin : '';
   }
   document.getElementById('modalSiswaSatuan').classList.add('show');
 }
-function editSiswaSatuan(s) { bukaModalSiswaSatuan(s); }
 
-document.getElementById('formSiswaSatuan').addEventListener('submit', function(e){
+function editSiswaSatuan(s) {
+  bukaModalSiswaSatuan(s);
+}
+
+document.getElementById('formSiswaSatuan').addEventListener('submit', function (e) {
   e.preventDefault();
   const payload = {
-    id: document.getElementById('editSiswaId').value || null,
-    nomor_ujian: document.getElementById('inSiswaNo').value,
-    nama: document.getElementById('inSiswaNama').value,
-    kelas: document.getElementById('inSiswaKelas').value,
-    tingkat: document.getElementById('inSiswaTingkat').value,
-    pin: document.getElementById('inSiswaPin').value,
-    tahun_ajaran: document.getElementById('inSiswaThn').value
+    id: document.getElementById('editSiswaId').value,
+    pin: document.getElementById('inSiswaPin').value.trim()
   };
-  showLoading('Menyimpan siswa...');
+  showLoading('Menyimpan PIN siswa...');
   cbtApi
-    .withSuccessHandler(res => { 
-      hideLoading(); 
-      if(res.success){ 
-        document.getElementById('modalSiswaSatuan').classList.remove('show'); 
-        loadDataAdminSiswa(); 
+    .withSuccessHandler(res => {
+      hideLoading();
+      if (res.success) {
+        document.getElementById('modalSiswaSatuan').classList.remove('show');
+        loadDataAdminSiswa();
+        showCustomAlert('PIN Berhasil Disimpan', `PIN siswa berhasil diperbarui: <b>${res.pin}</b>`, 'success');
       } else {
-        showCustomAlert('Gagal', res.message);
+        showCustomAlert('Gagal Menyimpan', res.message, 'error');
       }
     })
-    .withFailureHandler(err => { hideLoading(); showCustomAlert('Error', err.message); })
+    .withFailureHandler(err => {
+      hideLoading();
+      showCustomAlert('Error', err.message, 'error');
+    })
     .simpanSiswaSatuanAdmin(stPengelola, payload);
 });
 
-function hapusSiswaAdmin(id) {
-  showCustomConfirm("Konfirmasi Hapus Siswa", "Yakin ingin menghapus siswa ini dari sistem?", () => {
-    showLoading('Menghapus siswa...');
+function bukaBlokirAdmin(id) {
+  showCustomConfirm("Buka Akses Siswa", "Buka blokir dan reset status ujian siswa ini agar dapat login kembali?", () => {
+    showLoading('Membuka akses siswa...');
     cbtApi
-      .withSuccessHandler(res => { 
-        hideLoading(); 
-        if(res.success) loadDataAdminSiswa(); 
-        else showCustomAlert('Gagal', res.message);
-      })
-      .withFailureHandler(err => { hideLoading(); showCustomAlert('Error', err.message); })
-      .hapusSiswaAdmin(stPengelola, id);
-  });
-}
-
-function handleImportSiswa(input) {
-  handleExcelUpload(input, function(rows) {
-    if (rows.length === 0) { showCustomAlert('Peringatan', 'File Excel siswa kosong.'); return; }
-    showLoading(`Mengimport ${rows.length} siswa ke server...`);
-    cbtApi
-      .withSuccessHandler(res => { hideLoading(); showCustomAlert('Informasi', res.message); loadDataAdminSiswa(); input.value = ''; })
-      .withFailureHandler(err => { hideLoading(); showCustomAlert('Import Gagal', err.message); input.value = ''; })
-      .importSiswaBulk(stPengelola, rows);
-  });
-}
-
-function prosesKenaikanKelas() {
-  showCustomConfirm("Kenaikan Kelas & Arsip Siswa XII", "Proses ini akan menaikkan kelas seluruh siswa (X ➔ XI, XI ➔ XII). Data siswa kelas XII akan didownload dulu ke Excel sebagai arsip, lalu dibersihkan dari sistem. Lanjutkan?", () => {
-    showLoading('Memproses kenaikan kelas & mengunduh arsip kelas XII...');
-    cbtApi
-      .withSuccessHandler(res => { 
-        hideLoading(); 
-        if(res.success) {
-          if (res.dataXII && res.dataXII.length > 0) {
-            let headers = ['Nomor Ujian', 'Nama Siswa', 'Kelas', 'Tingkat', 'PIN', 'Tahun Ajaran'];
-            let rows = res.dataXII.map(s => [s.nomor_ujian, s.nama, s.kelas, s.tingkat, s.pin, s.tahun_ajaran]);
-            exportToExcel('arsip_kelulusan_kelas_XII.xlsx', 'Arsip Kelas XII', headers, rows);
-          }
-          showCustomAlert('Sukses', res.message);
-          loadDataAdminSiswa(); 
+      .withSuccessHandler(res => {
+        hideLoading();
+        if (res.success) {
+          loadDataAdminSiswa();
+          showCustomAlert('Akses Dibuka', 'Status ujian siswa berhasil direset dan dapat login kembali.', 'success');
         } else {
-          showCustomAlert('Gagal', res.message);
+          showCustomAlert('Gagal', res.message, 'error');
         }
       })
-      .withFailureHandler(err => { hideLoading(); showCustomAlert('Error', err.message); })
-      .prosesKenaikanKelasAdmin(stPengelola);
-  });
-}
-
-function bukaModalHapusPertingkat() {
-  document.getElementById('modalHapusPertingkat').classList.add('show');
-}
-
-function eksekusiHapusPertingkat() {
-  const t = document.getElementById('selectTingkatHapus').value;
-  document.getElementById('modalHapusPertingkat').classList.remove('show');
-  showCustomConfirm("Hapus Per Tingkat", `Yakin ingin menghapus seluruh siswa tingkat ${t}?`, () => {
-    showLoading(`Menghapus siswa tingkat ${t}...`);
-    cbtApi
-      .withSuccessHandler(res => { 
-        hideLoading(); 
-        if(res.success) loadDataAdminSiswa(); 
-        else showCustomAlert('Gagal', res.message);
+      .withFailureHandler(err => {
+        hideLoading();
+        showCustomAlert('Error', err.message, 'error');
       })
-      .withFailureHandler(err => { hideLoading(); showCustomAlert('Error', err.message); })
-      .hapusSiswaPertingkatAdmin(stPengelola, t);
-  });
-}
-
-function bukaBlokirAdmin(id) {
-  showCustomConfirm("Buka Blokir", "Buka blokir dan reset status ujian siswa ini?", () => {
-    showLoading('Membuka akses...');
-    cbtApi
-      .withSuccessHandler(res => { 
-        hideLoading(); 
-        if(res.success) loadDataAdminSiswa(); 
-        else showCustomAlert('Gagal', res.message);
-      })
-      .withFailureHandler(err => { hideLoading(); showCustomAlert('Error', err.message); })
       .adminBukaBlokirSiswa(stPengelola, id);
   });
 }

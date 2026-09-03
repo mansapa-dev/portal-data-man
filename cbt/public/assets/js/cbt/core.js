@@ -23,10 +23,58 @@ function hideLoading() {
   document.getElementById('loaderGlobal').classList.remove('show');
 }
 
-function showCustomAlert(title, message) {
-  document.getElementById('alertTitle').textContent = title;
-  document.getElementById('alertMessage').textContent = message;
-  document.getElementById('modalCustomAlert').classList.add('show');
+function showCustomAlert(title, message, type = 'auto') {
+  const elTitle = document.getElementById('alertTitle');
+  const elMessage = document.getElementById('alertMessage');
+  const elIcon = document.getElementById('alertIcon');
+  const elContainer = document.getElementById('alertIconContainer');
+  const elCategory = document.getElementById('alertBadgeCategory');
+
+  if (elTitle) elTitle.textContent = title;
+  if (elMessage) elMessage.textContent = message;
+
+  const tLow = String(title || '').toLowerCase();
+  const mLow = String(message || '').toLowerCase();
+
+  let resolvedType = type;
+  if (resolvedType === 'auto') {
+    if (tLow.includes('sukses') || tLow.includes('berhasil') || mLow.includes('berhasil')) {
+      resolvedType = 'success';
+    } else if (tLow.includes('gagal') || tLow.includes('error') || tLow.includes('kesalahan') || mLow.includes('gagal') || mLow.includes('error')) {
+      resolvedType = 'error';
+    } else if (tLow.includes('peringatan') || tLow.includes('perhatian')) {
+      resolvedType = 'warning';
+    } else {
+      resolvedType = 'info';
+    }
+  }
+
+  if (elContainer && elIcon) {
+    if (resolvedType === 'success') {
+      elContainer.style.background = '#ecfdf5';
+      elContainer.style.color = '#10b981';
+      elIcon.className = 'fa-solid fa-circle-check';
+      if (elCategory) { elCategory.textContent = 'BERHASIL'; elCategory.style.color = '#10b981'; }
+    } else if (resolvedType === 'error') {
+      elContainer.style.background = '#fef2f2';
+      elContainer.style.color = '#ef4444';
+      elIcon.className = 'fa-solid fa-circle-xmark';
+      if (elCategory) { elCategory.textContent = 'TERJADI KESALAHAN'; elCategory.style.color = '#ef4444'; }
+    } else if (resolvedType === 'warning') {
+      elContainer.style.background = '#fffbeb';
+      elContainer.style.color = '#f59e0b';
+      elIcon.className = 'fa-solid fa-triangle-exclamation';
+      if (elCategory) { elCategory.textContent = 'PERINGATAN'; elCategory.style.color = '#f59e0b'; }
+    } else {
+      elContainer.style.background = '#eff6ff';
+      elContainer.style.color = '#3b82f6';
+      elIcon.className = 'fa-solid fa-circle-info';
+      if (elCategory) { elCategory.textContent = 'INFORMASI'; elCategory.style.color = '#3b82f6'; }
+    }
+  }
+
+  const modal = document.getElementById('modalCustomAlert');
+  if (modal) modal.classList.add('show');
 }
 
 function showCustomConfirm(title, message, onYes) {

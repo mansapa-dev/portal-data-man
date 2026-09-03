@@ -61,6 +61,7 @@ $router->get('/api/admin/dashboard',[$admin,'dashboard'],[$adminAuth]);
 $router->get('/api/admin/portal-data/references',[$admin,'references'],[$adminAuth]);
 $router->get('/api/admin/students',[$adminStudents,'index'],[$adminAuth]);
 $router->post('/api/admin/students/pin',[$adminStudents,'setPin'],[$adminAuth,$csrf,$audit('STUDENT_PIN_CHANGED','Student')]);
+$router->post('/api/admin/students/generate-pins',[$adminStudents,'generateBatch'],[$adminAuth,$csrf,$audit('STUDENT_PINS_GENERATED','Student')]);
 $router->post('/api/admin/students/{id}/reset',[$adminStudents,'reset'],[$adminAuth,$csrf,$audit('STUDENT_ATTEMPT_RESET','Student')]);
 $router->get('/api/admin/exams',[$admin,'exams'],[$adminAuth]);
 $router->post('/api/admin/exams',[$admin,'saveExam'],[$adminAuth,$csrf,$audit('EXAM_SAVED','Exam')]);
