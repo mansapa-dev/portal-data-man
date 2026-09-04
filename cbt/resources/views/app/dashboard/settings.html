@@ -1,16 +1,40 @@
 <!-- TAB ADMIN: PENGATURAN SISTEM -->
-<div id="tabAdminPengaturan" class="dash-tab hidden">
-  <section class="settings-page">
-    <header class="settings-hero"><div class="settings-hero-icon"><i class="fa-solid fa-sliders"></i></div><div><span class="settings-eyebrow">KONFIGURASI CBT</span><h2>Pengaturan Sistem</h2><p>Kelola kebijakan nilai ujian ulang secara terpusat untuk setiap tingkatan.</p></div></header>
-    <div class="settings-card">
-      <div class="settings-card-heading"><div class="settings-section-icon"><i class="fa-solid fa-shield-halved"></i></div><div><h3>Nilai Maksimum Ujian Ulang</h3><p>Nilai siswa berstatus remedial tidak dapat melebihi batas yang ditentukan.</p></div><span class="settings-status"><i class="fa-solid fa-circle-check"></i> Aktif</span></div>
-      <div class="settings-grade-list">
-        <div class="settings-grade-row"><div class="settings-grade-label"><span>X</span><div><b>Tingkat X</b><small>Kelas 10</small></div></div><input class="settings-range" type="range" id="sliderCapX" min="0" max="100" step="1" value="75" oninput="document.getElementById('inputCapX').value=this.value"><div class="settings-stepper"><button type="button" onclick="ubahNilaiCap('X',-1)" aria-label="Kurangi nilai tingkat X">−</button><label class="settings-number"><input type="number" id="inputCapX" min="0" max="100" value="75" oninput="document.getElementById('sliderCapX').value=this.value"><span>/100</span></label><button type="button" onclick="ubahNilaiCap('X',1)" aria-label="Naikkan nilai tingkat X">+</button></div></div>
-        <div class="settings-grade-row"><div class="settings-grade-label"><span>XI</span><div><b>Tingkat XI</b><small>Kelas 11</small></div></div><input class="settings-range" type="range" id="sliderCapXI" min="0" max="100" step="1" value="75" oninput="document.getElementById('inputCapXI').value=this.value"><div class="settings-stepper"><button type="button" onclick="ubahNilaiCap('XI',-1)" aria-label="Kurangi nilai tingkat XI">−</button><label class="settings-number"><input type="number" id="inputCapXI" min="0" max="100" value="75" oninput="document.getElementById('sliderCapXI').value=this.value"><span>/100</span></label><button type="button" onclick="ubahNilaiCap('XI',1)" aria-label="Naikkan nilai tingkat XI">+</button></div></div>
-        <div class="settings-grade-row"><div class="settings-grade-label"><span>XII</span><div><b>Tingkat XII</b><small>Kelas 12</small></div></div><input class="settings-range" type="range" id="sliderCapXII" min="0" max="100" step="1" value="75" oninput="document.getElementById('inputCapXII').value=this.value"><div class="settings-stepper"><button type="button" onclick="ubahNilaiCap('XII',-1)" aria-label="Kurangi nilai tingkat XII">−</button><label class="settings-number"><input type="number" id="inputCapXII" min="0" max="100" value="75" oninput="document.getElementById('sliderCapXII').value=this.value"><span>/100</span></label><button type="button" onclick="ubahNilaiCap('XII',1)" aria-label="Naikkan nilai tingkat XII">+</button></div></div>
+<div id="tabAdminPengaturan" class="dash-tab hidden settings-tab">
+  <section class="settings-workspace">
+    <header class="settings-page-header">
+      <div class="settings-page-heading">
+        <div class="settings-page-icon"><i class="fa-solid fa-sliders"></i></div>
+        <div><span class="settings-eyebrow">KONFIGURASI CBT</span><h2>Pengaturan Sistem</h2><p>Kelola batas nilai ujian ulang untuk setiap tingkatan.</p></div>
       </div>
-      <div class="settings-note"><i class="fa-solid fa-circle-info"></i><div><b>Cara kerja pembatasan nilai</b><span>Nilai di bawah batas tidak berubah. Nilai yang melampaui batas akan dikunci pada nilai maksimum, sementara riwayat pelanggaran tetap tersimpan.</span></div></div>
-      <footer class="settings-actions"><button class="btn btn-secondary" onclick="loadDataAdminPengaturan()"><i class="fa-solid fa-rotate"></i> Muat Ulang</button><button class="btn btn-primary" onclick="simpanPengaturanSistem()"><i class="fa-solid fa-floppy-disk"></i> Simpan Pengaturan</button></footer>
+      <span class="settings-status"><i class="fa-solid fa-circle-check"></i> Sistem aktif</span>
+    </header>
+
+    <div class="settings-content-card">
+      <div class="settings-section-heading"><div><h3>Nilai Maksimum Ujian Ulang</h3><p>Nilai remedial yang melampaui batas akan dikunci pada nilai maksimum yang ditentukan.</p></div><button type="button" class="btn btn-secondary" onclick="loadDataAdminPengaturan()"><i class="fa-solid fa-rotate"></i> Muat Ulang</button></div>
+
+      <div class="settings-grade-grid">
+        <article class="settings-grade-card">
+          <div class="settings-grade-title"><span>X</span><div><b>Tingkat X</b><small>Kelas 10</small></div></div>
+          <div class="settings-value"><strong id="displayCapX">75</strong><small>dari 100</small></div>
+          <input class="settings-range" type="range" id="sliderCapX" min="0" max="100" step="1" value="75" oninput="sinkronNilaiCap('X',this.value)">
+          <div class="settings-stepper"><button type="button" onclick="ubahNilaiCap('X',-1)" aria-label="Kurangi nilai tingkat X">−</button><label><input type="number" id="inputCapX" min="0" max="100" value="75" oninput="sinkronNilaiCap('X',this.value)"><span>/100</span></label><button type="button" onclick="ubahNilaiCap('X',1)" aria-label="Naikkan nilai tingkat X">+</button></div>
+        </article>
+        <article class="settings-grade-card">
+          <div class="settings-grade-title"><span>XI</span><div><b>Tingkat XI</b><small>Kelas 11</small></div></div>
+          <div class="settings-value"><strong id="displayCapXI">75</strong><small>dari 100</small></div>
+          <input class="settings-range" type="range" id="sliderCapXI" min="0" max="100" step="1" value="75" oninput="sinkronNilaiCap('XI',this.value)">
+          <div class="settings-stepper"><button type="button" onclick="ubahNilaiCap('XI',-1)" aria-label="Kurangi nilai tingkat XI">−</button><label><input type="number" id="inputCapXI" min="0" max="100" value="75" oninput="sinkronNilaiCap('XI',this.value)"><span>/100</span></label><button type="button" onclick="ubahNilaiCap('XI',1)" aria-label="Naikkan nilai tingkat XI">+</button></div>
+        </article>
+        <article class="settings-grade-card">
+          <div class="settings-grade-title"><span>XII</span><div><b>Tingkat XII</b><small>Kelas 12</small></div></div>
+          <div class="settings-value"><strong id="displayCapXII">75</strong><small>dari 100</small></div>
+          <input class="settings-range" type="range" id="sliderCapXII" min="0" max="100" step="1" value="75" oninput="sinkronNilaiCap('XII',this.value)">
+          <div class="settings-stepper"><button type="button" onclick="ubahNilaiCap('XII',-1)" aria-label="Kurangi nilai tingkat XII">−</button><label><input type="number" id="inputCapXII" min="0" max="100" value="75" oninput="sinkronNilaiCap('XII',this.value)"><span>/100</span></label><button type="button" onclick="ubahNilaiCap('XII',1)" aria-label="Naikkan nilai tingkat XII">+</button></div>
+        </article>
+      </div>
+
+      <div class="settings-note"><i class="fa-solid fa-circle-info"></i><div><b>Informasi pembatasan nilai</b><span>Nilai yang berada di bawah batas tetap menggunakan nilai asli. Riwayat pelanggaran siswa tetap tersimpan dan dapat diperiksa melalui Log Pelanggaran.</span></div></div>
+      <footer class="settings-actions"><span><i class="fa-solid fa-database"></i> Pengaturan disimpan ke database CBT.</span><button class="btn btn-primary" onclick="simpanPengaturanSistem()"><i class="fa-solid fa-floppy-disk"></i> Simpan Pengaturan</button></footer>
     </div>
   </section>
 </div>

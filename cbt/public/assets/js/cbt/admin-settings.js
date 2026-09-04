@@ -1,13 +1,22 @@
 // admin-settings.js — Pengaturan Sistem CBT (nilai cap ujian ulang per tingkatan)
 'use strict';
 
+function sinkronNilaiCap(grade, rawValue) {
+  const value = Math.max(0, Math.min(100, parseFloat(rawValue) || 0));
+  const input = document.getElementById(`inputCap${grade}`);
+  const slider = document.getElementById(`sliderCap${grade}`);
+  const display = document.getElementById(`displayCap${grade}`);
+  if (input) input.value = value;
+  if (slider) slider.value = value;
+  if (display) display.textContent = Number.isInteger(value) ? value : value.toFixed(1);
+}
+
 function ubahNilaiCap(grade, delta) {
   const input = document.getElementById(`inputCap${grade}`);
   const slider = document.getElementById(`sliderCap${grade}`);
   if (!input || !slider) return;
   const next = Math.max(0, Math.min(100, (parseFloat(input.value) || 0) + delta));
-  input.value = next;
-  slider.value = next;
+  sinkronNilaiCap(grade, next);
   input.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
@@ -26,8 +35,7 @@ function loadDataAdminPengaturan() {
         const val = d[key] ? parseFloat(d[key].value) : 75;
         const slider = document.getElementById(`sliderCap${g}`);
         const input  = document.getElementById(`inputCap${g}`);
-        if (slider) slider.value = val;
-        if (input)  input.value  = val;
+        if (slider && input) sinkronNilaiCap(g, val);
       });
     })
     .withFailureHandler(err => {
