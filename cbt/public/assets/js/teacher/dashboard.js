@@ -544,12 +544,13 @@
   });
   if (sidebarBackdrop) sidebarBackdrop.addEventListener('click', closeMobileSidebar);
 
-  // Sinkronkan laporan aktif secara berkala tanpa perlu memuat ulang halaman.
+  // Sinkronkan seluruh menu guru secara berkala tanpa perlu memuat ulang halaman.
   setInterval(async () => {
-    if (!['results', 'violations'].includes(activeSection) || document.hidden) return;
+    if (document.hidden || document.querySelector('.modal.show')) return;
     try {
       const fresh = (await api('api/teacher/dashboard')).data;
-      const changed = JSON.stringify(fresh.hasilList) !== JSON.stringify(data.hasilList)
+      const changed = JSON.stringify(fresh.ujianList) !== JSON.stringify(data.ujianList)
+        || JSON.stringify(fresh.hasilList) !== JSON.stringify(data.hasilList)
         || JSON.stringify(fresh.pelanggaranList) !== JSON.stringify(data.pelanggaranList);
       data = fresh;
       if (changed) render(activeSection);
@@ -557,6 +558,15 @@
       // Pertahankan data terakhir ketika sinkronisasi latar belakang gagal.
     }
   }, 15000);
+
+  window.addEventListener('cbt:data-updated', async () => {
+    try {
+      data = (await api('api/teacher/dashboard')).data;
+      render(activeSection);
+    } catch (_) {
+      // Refresh berkala akan mencoba kembali.
+    }
+  });
 
   const handleLogout = async () => {
     try {

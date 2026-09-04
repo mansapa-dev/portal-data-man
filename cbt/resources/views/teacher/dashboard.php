@@ -64,7 +64,7 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
     <section id="content" class="content-grid"></section>
   </main>
 
-  <script src="../assets/js/teacher/dashboard.js?v=20260904-2"></script>
+  <script src="../assets/js/teacher/dashboard.js?v=20260904-14"></script>
   <script src="../assets/js/table-pagination.js?v=20260904-10"></script>
 </body>
 </html>

@@ -109,6 +109,44 @@ function switchDashTab(tabId, btnEl) {
   if(tabId === 'tabGuruMonitor') loadDataGuru();
 }
 
+function refreshActiveDashboardTab() {
+  if (document.hidden || document.querySelector('.modal.show')) return false;
+  const focused = document.activeElement;
+  if (focused && ['INPUT', 'SELECT', 'TEXTAREA'].includes(focused.tagName)) return false;
+  const active = document.querySelector('.dash-tab:not(.hidden)');
+  if (!active) return false;
+  const loaders = {
+    tabAdminOverview: loadDataAdminDash,
+    tabAdminLiveSessions: loadDataAdminLiveSessions,
+    tabAdminUjian: loadDataAdminUjian,
+    tabAdminUjianLanjutan: loadDataFollowUpExams,
+    tabAdminSoal: loadDataAdminSoal,
+    tabAdminSiswa: loadDataAdminSiswa,
+    tabAdminLogPelanggaran: loadDataAdminLogPelanggaran,
+    tabAdminHasil: loadDataAdminHasil,
+    tabAdminKartu: loadDataAdminKartu,
+    tabAdminGuruUjian: loadDataAdminGuruUjian,
+    tabAdminAkun: loadDataAdminAkun,
+    tabAdminPengaturan: loadDataAdminPengaturan,
+    tabGuruMonitor: loadDataGuru
+  };
+  const loader = loaders[active.id];
+  if (typeof loader !== 'function') return false;
+  loader();
+  return true;
+}
+
+let dashboardRefreshTimer = null;
+function scheduleDashboardRefresh(delay = 500) {
+  clearTimeout(dashboardRefreshTimer);
+  dashboardRefreshTimer = setTimeout(() => {
+    if (!refreshActiveDashboardTab()) scheduleDashboardRefresh(1500);
+  }, delay);
+}
+
+window.addEventListener('cbt:data-updated', () => scheduleDashboardRefresh());
+setInterval(() => refreshActiveDashboardTab(), 20000);
+
 function loadDataAdminLiveSessions() {
   const root = document.getElementById('adminLiveSessionsContent');
   const notice = document.getElementById('adminLiveSessionsNotice');

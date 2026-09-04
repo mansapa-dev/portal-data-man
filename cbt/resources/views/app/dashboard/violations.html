@@ -3,18 +3,18 @@
         <div class="card">
           <div class="card-header">
             <div class="card-title">Log Monitoring Kecurangan & Pelanggaran Siswa</div>
-            <div style="display:flex; gap:8px;">
+            <div class="violation-header-actions">
               <button class="btn btn-secondary" onclick="exportToExcel('log_pelanggaran_cbt.xlsx', 'Pelanggaran', ['Nomor Ujian', 'Nama Siswa', 'Kelas', 'Nama Ujian', 'Jumlah', 'Keterangan', 'Waktu'], window.cachePelanggaranExcel || [])"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
               <button class="btn btn-secondary" onclick="loadDataAdminLogPelanggaran()"><i class="fa-solid fa-rotate-right"></i> Refresh</button>
             </div>
           </div>
-          <div class="filter-bar-grid" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(155px,1fr)); gap:10px; margin-bottom:14px; padding:13px; border:1px solid var(--border); border-radius:10px; background:var(--surface-subtle);">
-            <input id="fltPelanggaranTanggal" type="date" class="form-control" onchange="applyFilterPelanggaran()" title="Filter tanggal">
-            <select id="fltPelanggaranTingkat" class="form-control" onchange="applyFilterPelanggaran()"><option value="ALL">Semua Tingkat</option></select>
-            <select id="fltPelanggaranKelas" class="form-control" onchange="applyFilterPelanggaran()"><option value="ALL">Semua Kelas</option></select>
-            <select id="fltPelanggaranUjian" class="form-control" onchange="applyFilterPelanggaran()"><option value="ALL">Semua Ujian / Mapel</option></select>
-            <select id="fltPelanggaranJenis" class="form-control" onchange="applyFilterPelanggaran()"><option value="ALL">Semua Jenis Pelanggaran</option></select>
-            <div class="search-box" style="margin:0;"><i class="fa-solid fa-search"></i><input type="text" id="searchPelanggaran" placeholder="Cari siswa / NISN..." onkeyup="applyFilterPelanggaran()"></div>
+          <div class="violation-filter-grid">
+            <label><span>Tanggal</span><input id="fltPelanggaranTanggal" type="date" class="form-control" onchange="applyFilterPelanggaran()"></label>
+            <label><span>Tingkatan</span><select id="fltPelanggaranTingkat" class="form-control" onchange="applyFilterPelanggaran()"><option value="ALL">Semua Tingkat</option></select></label>
+            <label><span>Kelas</span><select id="fltPelanggaranKelas" class="form-control" onchange="applyFilterPelanggaran()"><option value="ALL">Semua Kelas</option></select></label>
+            <label><span>Ujian / Mapel</span><select id="fltPelanggaranUjian" class="form-control" onchange="applyFilterPelanggaran()"><option value="ALL">Semua Ujian / Mapel</option></select></label>
+            <label><span>Jenis Pelanggaran</span><select id="fltPelanggaranJenis" class="form-control" onchange="applyFilterPelanggaran()"><option value="ALL">Semua Jenis Pelanggaran</option></select></label>
+            <label class="violation-search"><span>Cari Siswa</span><div class="search-box"><i class="fa-solid fa-search"></i><input type="search" id="searchPelanggaran" placeholder="Nama atau NISN..." oninput="applyFilterPelanggaran()"></div></label>
           </div>
           <div class="table-responsive">
             <table>

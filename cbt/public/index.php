@@ -16,7 +16,7 @@ $request=Request::capture();
 if($request->path==='/'||$request->path==='/index.php'){
  $html=file_get_contents(dirname(__DIR__).'/index.html')?:'';
  $html=(new ViewRenderer(dirname(__DIR__).'/resources/views/app'))->render($html);
- $html=str_replace('</body>','<script src="assets/js/native-api-adapter.js?v=20260904-12"></script></body>',$html);
+ $html=str_replace('</body>','<script src="assets/js/native-api-adapter.js?v=20260904-14"></script></body>',$html);
  Response::html($html)->send();
 }
 if($request->path==='/guru')Response::html((string)include dirname(__DIR__).'/resources/views/teacher/login.php')->send();

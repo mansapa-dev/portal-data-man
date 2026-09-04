@@ -8,6 +8,7 @@
     const response = await fetch(path.replace(/^\//, ''), { method, credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf }, body: body === undefined ? undefined : JSON.stringify(body) });
     const payload = await response.json().catch(() => ({ success: false, message: 'Respons server tidak valid.' }));
     if (!response.ok) throw new Error(payload.message || 'Permintaan gagal.');
+    if (method !== 'GET') window.dispatchEvent(new CustomEvent('cbt:data-updated', { detail: { path, method } }));
     return payload;
   }
   const calls = {
