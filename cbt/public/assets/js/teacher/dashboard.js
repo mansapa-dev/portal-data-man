@@ -495,8 +495,10 @@
     document.getElementById('teacherName').textContent = teacherLabel;
     const sidebarName = document.getElementById('teacherSidebarName');
     const avatar = document.getElementById('teacherAvatar');
+    const welcomeName = document.getElementById('teacherWelcomeName');
     if (sidebarName) sidebarName.textContent = teacherLabel;
     if (avatar) avatar.textContent = teacherLabel.trim().charAt(0).toUpperCase() || 'G';
+    if (welcomeName) welcomeName.textContent = teacherLabel;
     data = (await api('api/teacher/dashboard')).data;
     render('overview');
   } catch (error) {
@@ -505,7 +507,6 @@
 
   const sidebar = document.getElementById('teacherSidebar');
   const menuButton = document.getElementById('menu');
-  const sidebarMenuButton = document.getElementById('sidebarMenu');
   const sidebarBackdrop = document.getElementById('teacherSidebarBackdrop');
   const mobileLayout = window.matchMedia('(max-width: 800px)');
 
@@ -537,10 +538,6 @@
     const className = laptopLayout ? 'expanded' : 'collapsed';
     const active = sidebar.classList.toggle(className);
     menuButton.setAttribute('aria-expanded', String(laptopLayout ? active : !active));
-  });
-  if (sidebarMenuButton) sidebarMenuButton.addEventListener('click', () => {
-    if (mobileLayout.matches) closeMobileSidebar();
-    else menuButton.click();
   });
   if (sidebarBackdrop) sidebarBackdrop.addEventListener('click', closeMobileSidebar);
 

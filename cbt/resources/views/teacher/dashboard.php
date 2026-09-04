@@ -12,7 +12,7 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
   <title>Dashboard Guru - CBT MAN 1 Palembang</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <link rel="stylesheet" href="../assets/css/teacher.css?v=20260904-10">
+  <link rel="stylesheet" href="../assets/css/teacher.css?v=20260904-16">
 </head>
 <body class="dashboard-page">
   <div class="teacher-sidebar-backdrop" id="teacherSidebarBackdrop"></div>
@@ -20,7 +20,6 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
     <div class="brand">
       <span class="brand-mark"><img src="../assets/img/logo-man1-palembang.png" alt="Lambang MAN 1 Palembang"></span>
       <div><strong>MANSAPA ARENA</strong><small>Area Evaluasi dan Asesmen</small></div>
-      <button id="sidebarMenu" class="sidebar-menu" type="button" aria-label="Perkecil menu navigasi"><i class="fa-solid fa-bars"></i></button>
     </div>
     <nav>
       <span class="nav-label">UTAMA</span>
@@ -51,7 +50,7 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
     <section class="welcome">
       <div>
         <span class="eyebrow">DASHBOARD GURU CBT</span>
-        <h1>Selamat bertugas, Guru</h1>
+        <h1>Selamat bertugas, <span id="teacherWelcomeName">Guru</span></h1>
         <p>Pantau ujian yang diampu, hasil siswa, serta pelanggaran ujian dari satu tempat.</p>
       </div>
       <div class="nip-card">
@@ -64,7 +63,7 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
     <section id="content" class="content-grid"></section>
   </main>
 
-  <script src="../assets/js/teacher/dashboard.js?v=20260904-14"></script>
+  <script src="../assets/js/teacher/dashboard.js?v=20260904-17"></script>
   <script src="../assets/js/table-pagination.js?v=20260904-10"></script>
 </body>
 </html>
