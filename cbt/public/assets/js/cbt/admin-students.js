@@ -257,22 +257,27 @@ function eksekusiGeneratePinMassal(e) {
     targetGrade = 'XII';
   }
 
-  const labels = { CURRENT_FILTER: 'siswa yang sedang difilter', ALL: 'seluruh siswa aktif', GRADE_X: 'seluruh siswa tingkat X', GRADE_XI: 'seluruh siswa tingkat XI', GRADE_XII: 'seluruh siswa tingkat XII' };
-  showCustomConfirm(
-    'Yakin Generate PIN Otomatis?',
-    `Anda akan mengganti PIN lama untuk ${labels[scope] || 'target yang dipilih'} dengan PIN acak 4 digit. Tindakan ini tidak dapat dibatalkan. Lanjutkan generate PIN?`,
-    () => jalankanGeneratePinMassal(targetGrade, targetClass)
-  );
+  jalankanGeneratePinMassal(targetGrade, targetClass);
 }
 
 function jalankanGeneratePinMassal(targetGrade, targetClass) {
-  document.getElementById('modalGeneratePinMassal').classList.remove('show');
+  const submitButton = document.getElementById('btnGeneratePinMassal');
+  if (submitButton?.disabled) return;
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Memproses...';
+  }
 
   showLoading('Meng-generate PIN otomatis untuk seluruh target siswa...');
 
   cbtApi
     .withSuccessHandler(res => {
       hideLoading();
+      document.getElementById('modalGeneratePinMassal').classList.remove('show');
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.innerHTML = '<i class="fa-solid fa-bolt"></i> Mulai Generate PIN';
+      }
       loadDataAdminSiswa();
       showCustomAlert(
         'Generate PIN Berhasil',
@@ -282,6 +287,10 @@ function jalankanGeneratePinMassal(targetGrade, targetClass) {
     })
     .withFailureHandler(err => {
       hideLoading();
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.innerHTML = '<i class="fa-solid fa-bolt"></i> Mulai Generate PIN';
+      }
       showCustomAlert(
         'Generate PIN Gagal',
         `Gagal memproses pembuatan PIN: ${err.message}`,
