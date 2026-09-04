@@ -4,6 +4,7 @@
   const notice = document.getElementById('notice');
   let csrf = '';
   let data = { ujianList: [], hasilList: [], pelanggaranList: [] };
+  let activeSection = 'overview';
 
   const el = (tag, text, className) => {
     const node = document.createElement(tag);
@@ -122,6 +123,7 @@
   }
 
   function render(section) {
+    activeSection = section;
     content.replaceChildren();
     document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.section === section));
     const titles = { overview: 'Dashboard', exams: 'Ujian Diampu', results: 'Hasil Siswa', violations: 'Pelanggaran Ujian' };
@@ -489,22 +491,34 @@
       return;
     }
     csrf = me.data.csrf_token;
-    document.getElementById('teacherName').textContent = me.data.staff.nip || me.data.staff.username || 'Guru';
+    const teacherLabel = me.data.staff.nama || me.data.staff.name || me.data.staff.nama_lengkap || me.data.staff.nip || me.data.staff.username || 'Guru';
+    document.getElementById('teacherName').textContent = teacherLabel;
+    const sidebarName = document.getElementById('teacherSidebarName');
+    const avatar = document.getElementById('teacherAvatar');
+    if (sidebarName) sidebarName.textContent = teacherLabel;
+    if (avatar) avatar.textContent = teacherLabel.trim().charAt(0).toUpperCase() || 'G';
     data = (await api('api/teacher/dashboard')).data;
     render('overview');
   } catch (error) {
     notice.textContent = error.message;
   }
 
-  const sidebar = document.querySelector('.sidebar');
+  const sidebar = document.getElementById('teacherSidebar');
   const menuButton = document.getElementById('menu');
+  const sidebarMenuButton = document.getElementById('sidebarMenu');
+  const sidebarBackdrop = document.getElementById('teacherSidebarBackdrop');
   const mobileLayout = window.matchMedia('(max-width: 800px)');
+
+  const closeMobileSidebar = () => {
+    sidebar.classList.remove('open');
+    sidebarBackdrop.classList.remove('show');
+    menuButton.setAttribute('aria-expanded', 'false');
+  };
 
   document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', () => {
     openSection(button.dataset.section);
     if (mobileLayout.matches) {
-      sidebar.classList.remove('open');
-      menuButton.setAttribute('aria-expanded', 'false');
+      closeMobileSidebar();
     }
   }));
   content.addEventListener('click', (e) => {
@@ -514,6 +528,7 @@
   menuButton.addEventListener('click', () => {
     if (mobileLayout.matches) {
       const isOpen = sidebar.classList.toggle('open');
+      sidebarBackdrop.classList.toggle('show', isOpen);
       menuButton.setAttribute('aria-expanded', String(isOpen));
       return;
     }
@@ -523,6 +538,25 @@
     const active = sidebar.classList.toggle(className);
     menuButton.setAttribute('aria-expanded', String(laptopLayout ? active : !active));
   });
+  if (sidebarMenuButton) sidebarMenuButton.addEventListener('click', () => {
+    if (mobileLayout.matches) closeMobileSidebar();
+    else menuButton.click();
+  });
+  if (sidebarBackdrop) sidebarBackdrop.addEventListener('click', closeMobileSidebar);
+
+  // Sinkronkan laporan aktif secara berkala tanpa perlu memuat ulang halaman.
+  setInterval(async () => {
+    if (!['results', 'violations'].includes(activeSection) || document.hidden) return;
+    try {
+      const fresh = (await api('api/teacher/dashboard')).data;
+      const changed = JSON.stringify(fresh.hasilList) !== JSON.stringify(data.hasilList)
+        || JSON.stringify(fresh.pelanggaranList) !== JSON.stringify(data.pelanggaranList);
+      data = fresh;
+      if (changed) render(activeSection);
+    } catch (_) {
+      // Pertahankan data terakhir ketika sinkronisasi latar belakang gagal.
+    }
+  }, 15000);
 
   const handleLogout = async () => {
     try {

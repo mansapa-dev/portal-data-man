@@ -83,6 +83,9 @@ function switchDashTab(tabId, btnEl) {
   document.querySelectorAll('.dash-tab').forEach(t => t.classList.add('hidden'));
   const targetTab = document.getElementById(tabId);
   if (targetTab) targetTab.classList.remove('hidden');
+  const dashboardContent = document.querySelector('.dash-content');
+  if (dashboardContent) dashboardContent.scrollTo({top: 0, left: 0, behavior: 'auto'});
+  window.scrollTo({top: 0, left: 0, behavior: 'auto'});
   document.querySelectorAll('.sb-item').forEach(b => b.classList.remove('active'));
   if (btnEl) btnEl.classList.add('active');
   if (window.innerWidth <= 900) closeMobileSidebar();

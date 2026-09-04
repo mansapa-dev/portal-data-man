@@ -1,6 +1,16 @@
 // admin-settings.js — Pengaturan Sistem CBT (nilai cap ujian ulang per tingkatan)
 'use strict';
 
+function ubahNilaiCap(grade, delta) {
+  const input = document.getElementById(`inputCap${grade}`);
+  const slider = document.getElementById(`sliderCap${grade}`);
+  if (!input || !slider) return;
+  const next = Math.max(0, Math.min(100, (parseFloat(input.value) || 0) + delta));
+  input.value = next;
+  slider.value = next;
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
 function loadDataAdminPengaturan() {
   const tabEl = document.getElementById('tabAdminPengaturan');
   if (!tabEl || tabEl.classList.contains('hidden')) return;
