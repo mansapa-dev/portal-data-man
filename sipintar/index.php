@@ -333,7 +333,7 @@
         </div>
     </div>
 
-    <!-- MODAL EDIT / TAMBAH PETUGAS -->
+    <!-- MODAL EDIT / TAMBAH PETUGAS (DITAMBAHKAN INPUT ROLE) -->
     <div id="modal-petugas" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900 bg-opacity-50 p-4">
         <div class="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden">
             <div class="bg-emerald-800 text-white px-5 py-3 flex justify-between items-center">
@@ -349,6 +349,14 @@
                 <div>
                     <label class="block text-xs font-semibold text-slate-600 mb-1">Username</label>
                     <input type="text" id="petugas-username" required class="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Username login">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Role / Peran</label>
+                    <select id="petugas-role" required class="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
+                        <option value="pegawai">Petugas / Pegawai</option>
+                        <option value="admin">Administrator</option>
+                        <option value="pemantau">Pemantau</option>
+                    </select>
                 </div>
                 <div>
                     <label class="block text-xs font-semibold text-slate-600 mb-1">Password</label>
@@ -378,7 +386,6 @@
             const role = sessionStorage.getItem('sipintar_role');
 
             if (isLoggedIn) {
-                // REDIRECT JIKA MEMILIKI ROLE PEMANTAU
                 if (role === 'pemantau') {
                     window.location.href = 'pemantau.php';
                     return;
@@ -407,7 +414,6 @@
                     sessionStorage.setItem('sipintar_username', result.username);
                     sessionStorage.setItem('sipintar_role', result.role || 'pegawai');
                     
-                    // PENGECEKAN REDIRECT ROLE PEMANTAU
                     if (result.role === 'pemantau') {
                         window.location.href = 'pemantau.php';
                     } else {
@@ -920,6 +926,7 @@
                                 <th class="p-3">No</th>
                                 <th class="p-3">Nama Lengkap</th>
                                 <th class="p-3">Username</th>
+                                <th class="p-3">Role</th>
                                 <th class="p-3 w-32 text-center">Aksi</th>
                             </tr>
                         </thead>
@@ -938,8 +945,9 @@
                     <td class="p-3 font-semibold">${index + 1}</td>
                     <td class="p-3 font-medium text-slate-800">${p.nama_lengkap}</td>
                     <td class="p-3"><code class="bg-slate-100 px-2 py-0.5 rounded border">${p.username}</code></td>
+                    <td class="p-3"><span class="capitalize px-2 py-0.5 rounded text-[11px] font-semibold ${p.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-emerald-100 text-emerald-700'}">${p.role || 'pegawai'}</span></td>
                     <td class="p-3 text-center flex justify-center gap-2">
-                        <button onclick="editPetugas(${p.id}, '${p.nama_lengkap}', '${p.username}')" class="text-blue-600 hover:text-blue-800 p-1" title="Edit">
+                        <button onclick="editPetugas(${p.id}, '${p.nama_lengkap}', '${p.username}', '${p.role || 'pegawai'}')" class="text-blue-600 hover:text-blue-800 p-1" title="Edit">
                             <i data-lucide="edit" class="w-4 h-4"></i>
                         </button>
                         <button onclick="hapusPetugas(${p.id})" class="text-rose-600 hover:text-rose-800 p-1" title="Hapus">
@@ -993,6 +1001,7 @@
             document.getElementById('petugas-id').value = "";
             document.getElementById('petugas-nama').value = "";
             document.getElementById('petugas-username').value = "";
+            document.getElementById('petugas-role').value = "pegawai";
             document.getElementById('petugas-password').value = "";
             document.getElementById('petugas-password').required = true;
             document.getElementById('password-hint').classList.add('hidden');
@@ -1003,11 +1012,12 @@
             document.getElementById('modal-petugas').classList.add('hidden');
         }
 
-        function editPetugas(id, nama, username) {
+        function editPetugas(id, nama, username, role) {
             document.getElementById('modal-title').innerText = "Edit Akun Petugas";
             document.getElementById('petugas-id').value = id;
             document.getElementById('petugas-nama').value = nama;
             document.getElementById('petugas-username').value = username;
+            document.getElementById('petugas-role').value = role || 'pegawai';
             document.getElementById('petugas-password').value = "";
             document.getElementById('petugas-password').required = false;
             document.getElementById('password-hint').classList.remove('hidden');
@@ -1019,6 +1029,7 @@
             const id = document.getElementById('petugas-id').value;
             const nama = document.getElementById('petugas-nama').value;
             const username = document.getElementById('petugas-username').value;
+            const role = document.getElementById('petugas-role').value;
             const password = document.getElementById('petugas-password').value;
 
             try {
@@ -1029,6 +1040,7 @@
                         id, 
                         nama_lengkap: nama, 
                         username, 
+                        role,
                         password,
                         current_user_id: sessionStorage.getItem('sipintar_user_id'),
                         current_user_role: sessionStorage.getItem('sipintar_role')
