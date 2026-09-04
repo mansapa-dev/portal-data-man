@@ -29,5 +29,5 @@ final class AdminController
  public function importQuestions(Request$r):Response{$summary=$this->admin->importQuestions((array)$r->input('rows',[]));return Response::json($summary,"Import selesai: {$summary['inserted']} berhasil, {$summary['failed']} gagal.");}
  public function importUsers(Request$r):Response{$summary=$this->admin->importUsers((array)$r->input('rows',[]));return Response::json($summary,"Import selesai: {$summary['inserted']} berhasil, {$summary['failed']} gagal.");}
  public function settings(Request$r):Response{return Response::json($this->admin->settings());}
- public function saveSettings(Request$r):Response{$this->admin->saveSettings($r->json());return Response::json(null,'Pengaturan berhasil disimpan.');}
+ public function saveSettings(Request$r):Response{$saved=$this->admin->saveSettings($r->json());return Response::json($saved,'Pengaturan berhasil disimpan dan diverifikasi.');}
 }

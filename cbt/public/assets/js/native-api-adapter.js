@@ -57,7 +57,7 @@
     async importSoalBulk(session,rows) { const r=await api('api/admin/questions/import','POST',{rows});return {success:true,message:r.message,summary:r.data}; },
     async importAkunBulk(session,rows) { const r=await api('api/admin/users/import','POST',{rows});return {success:true,message:r.message,summary:r.data}; },
     async getAdminSettings() { const r=await api('api/admin/settings');return {success:true,data:r.data}; },
-    async saveAdminSettings(session,data) { await api('api/admin/settings','POST',data);return {success:true,message:'Pengaturan berhasil disimpan.'}; }
+    async saveAdminSettings(session,data) { const r=await api('api/admin/settings','POST',data);return {success:true,data:r.data,message:r.message}; }
   };
   window.cbtServerLogout = async function () { try { await api('api/auth/logout','POST',{}); } finally { csrfPromise=refreshCsrf(); } };
   window.cbtApi = { run: new Proxy({}, { get(_, name) { const state={success:null,failure:null}; if(name==='withSuccessHandler')return fn=>(state.success=fn,chain(state)); if(name==='withFailureHandler')return fn=>(state.failure=fn,chain(state)); return (...args)=>invoke(name,args,state); function chain(s){return new Proxy({}, {get(_x,n){if(n==='withSuccessHandler')return fn=>(s.success=fn,chain(s));if(n==='withFailureHandler')return fn=>(s.failure=fn,chain(s));return(...a)=>invoke(n,a,s);}});} } }) };
