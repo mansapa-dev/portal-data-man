@@ -172,11 +172,17 @@ function toggleSidebarMenu() {
       if (btn) btn.innerHTML = '<i class="fa-solid fa-bars"></i>';
     }
   } else {
-    // Desktop: collapse to hide sidebar and give 100% width to content
+    // Desktop: pertahankan sidebar mini agar menu utama tetap mudah dijangkau.
     const isCollapsed = sb.classList.toggle('collapsed');
+    sb.querySelectorAll('.sb-item').forEach(item => {
+      const label = item.querySelector('.sb-label')?.textContent?.trim();
+      if (label) item.title = isCollapsed ? label : '';
+    });
+    try { localStorage.setItem('cbt_admin_sidebar_collapsed', isCollapsed ? '1' : '0'); } catch (_) {}
     if (btn) {
       btn.innerHTML = isCollapsed ? '<i class="fa-solid fa-bars"></i>' : '<i class="fa-solid fa-bars-staggered"></i>';
-      btn.title = isCollapsed ? 'Buka Menu Sidebar' : 'Tutup Menu Sidebar';
+      btn.title = isCollapsed ? 'Perluas Menu Sidebar' : 'Ciutkan Menu Sidebar';
+      btn.setAttribute('aria-expanded', String(!isCollapsed));
     }
   }
 }

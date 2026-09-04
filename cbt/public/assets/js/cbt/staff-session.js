@@ -34,6 +34,26 @@ function initDashboardPengelola(nama, role) {
   // Topbar Controls
   updateTopbarAuthUI(true);
 
+  // Pertahankan pilihan sidebar desktop pengguna setelah halaman dimuat ulang.
+  const sidebar = document.getElementById('mainSidebar');
+  const sidebarToggle = document.getElementById('btnMobileSidebarToggle');
+  if (sidebar && window.innerWidth > 900) {
+    let sidebarCollapsed = false;
+    try { sidebarCollapsed = localStorage.getItem('cbt_admin_sidebar_collapsed') === '1'; } catch (_) {}
+    sidebar.classList.toggle('collapsed', sidebarCollapsed);
+    sidebar.querySelectorAll('.sb-item').forEach(item => {
+      const label = item.querySelector('.sb-label')?.textContent?.trim();
+      if (label) item.title = sidebarCollapsed ? label : '';
+    });
+    if (sidebarToggle) {
+      sidebarToggle.innerHTML = sidebarCollapsed
+        ? '<i class="fa-solid fa-bars"></i>'
+        : '<i class="fa-solid fa-bars-staggered"></i>';
+      sidebarToggle.title = sidebarCollapsed ? 'Perluas Menu Sidebar' : 'Ciutkan Menu Sidebar';
+      sidebarToggle.setAttribute('aria-expanded', String(!sidebarCollapsed));
+    }
+  }
+
   // Sidebar Avatar
   const elAvatarSide = document.getElementById('sidebarAvatarInitial');
   if (elAvatarSide) elAvatarSide.textContent = initial;
