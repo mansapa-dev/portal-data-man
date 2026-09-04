@@ -140,7 +140,7 @@ function updateViolationDots(jumlah) {
     if (!dot) continue;
     const isActive = i <= jumlah;
     dot.style.background = isActive ? colors.active : colors.inactive;
-    dot.style.borderColor = isActive ? borders.active : borders.borders;
+    dot.style.borderColor = isActive ? borders.active : borders.inactive;
     dot.style.transform = isActive ? 'scale(1.25)' : 'scale(1)';
   }
 }
@@ -170,10 +170,10 @@ function showViolationModal(jumlah, terminated, onDismiss = null) {
     // ── Terminate state ──
     title.textContent = 'Ujian Dihentikan!';
     title.style.color = '#dc2626';
-    icon.className = 'fa-solid fa-ban';
+    icon.className = 'fa-solid fa-triangle-exclamation';
     iconWrap.style.background = '#fecaca';
     iconWrap.style.border = '2px solid #dc2626';
-    txt.textContent = 'Anda telah melakukan 3 kali pelanggaran. Ujian otomatis dihentikan dan nilai Anda telah dihitung oleh sistem.';
+    txt.textContent = 'Anda telah melakukan 3 kali pelanggaran. Ujian otomatis dihentikan dan nilai dikunci oleh sistem. Temui admin dan guru mata pelajaran untuk melakukan ujian ulang.';
     btn.textContent = 'Memuat hasil...';
     btn.disabled = true;
     cdWrap.style.display = 'block';
@@ -278,6 +278,8 @@ function tampilHasilUjian(hasil, isTerminate = false) {
   const lblStatus = document.getElementById('lblStatusUjian');
   const badgeCap = document.getElementById('badgeRemedialCap');
   const btnReview = document.getElementById('btnReviewHasil');
+  const statusIcon = document.getElementById('hasilStatusIcon');
+  const statusIconWrap = document.getElementById('hasilStatusIconWrap');
 
   if (lblNilai) lblNilai.textContent = hasil.nilai !== undefined ? Number(hasil.nilai).toFixed(1) : '-';
 
@@ -286,9 +288,16 @@ function tampilHasilUjian(hasil, isTerminate = false) {
     lblStatus.style.color = isTerminate ? '#dc2626' : 'var(--text-main)';
   }
 
+  if (statusIcon && statusIconWrap) {
+    statusIcon.className = isTerminate ? 'fa-solid fa-triangle-exclamation' : 'fa-solid fa-check-double';
+    statusIcon.style.color = isTerminate ? '#b91c1c' : 'var(--primary-dark)';
+    statusIconWrap.style.background = isTerminate ? '#fee2e2' : 'var(--primary-soft)';
+    statusIconWrap.style.boxShadow = isTerminate ? '0 4px 14px rgba(220,38,38,.18)' : '0 4px 14px rgba(76,175,80,.2)';
+  }
+
   if (lblKet) {
     if (isTerminate) {
-      lblKet.textContent = 'Ujian Anda dihentikan oleh sistem karena 3 kali pelanggaran terdeteksi. Nilai dihitung secara otomatis.';
+      lblKet.textContent = 'Peringatan: ujian dihentikan karena 3 kali pelanggaran dan nilai yang tampil telah dikunci oleh sistem. Temui admin dan guru mata pelajaran untuk melakukan ujian ulang.';
       lblKet.style.color = '#dc2626';
     } else if (hasil.is_remedial && hasil.score_cap !== null) {
       lblKet.textContent = `Ini adalah ujian ulang (remedial). Nilai maksimum yang dapat diraih adalah ${hasil.score_cap}.`;

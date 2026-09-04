@@ -12,7 +12,7 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
   <title>Dashboard Guru - CBT MAN 1 Palembang</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <link rel="stylesheet" href="../assets/css/teacher.css?v=20260903-4">
+  <link rel="stylesheet" href="../assets/css/teacher.css?v=20260904-1">
 </head>
 <body class="dashboard-page">
   <aside class="sidebar">
@@ -22,11 +22,11 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
     </div>
     <nav>
       <span class="nav-label">UTAMA</span>
-      <button class="nav-item active" data-section="overview"><i class="fa-solid fa-house"></i> Dashboard</button>
+      <button class="nav-item active" data-section="overview"><i class="fa-solid fa-house"></i><span>Dashboard</span></button>
       <span class="nav-label">MONITORING</span>
-      <button class="nav-item" data-section="exams"><i class="fa-solid fa-calendar-days"></i> Ujian Diampu</button>
-      <button class="nav-item" data-section="results"><i class="fa-solid fa-square-poll-vertical"></i> Hasil Siswa</button>
-      <button class="nav-item" data-section="violations"><i class="fa-solid fa-shield-halved"></i> Pelanggaran</button>
+      <button class="nav-item" data-section="exams"><i class="fa-solid fa-calendar-days"></i><span>Ujian Diampu</span></button>
+      <button class="nav-item" data-section="results"><i class="fa-solid fa-square-poll-vertical"></i><span>Hasil Siswa</span></button>
+      <button class="nav-item" data-section="violations"><i class="fa-solid fa-shield-halved"></i><span>Pelanggaran</span></button>
     </nav>
     <div class="teacher-help-box">
       <h5>Butuh Bantuan?</h5>
@@ -37,7 +37,7 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
 
   <main class="main">
     <header class="topbar">
-      <button id="menu" class="menu" aria-label="Buka menu navigasi"><i class="fa-solid fa-bars"></i></button>
+      <button id="menu" class="menu" aria-label="Perkecil menu navigasi" aria-expanded="true"><i class="fa-solid fa-bars"></i></button>
       <h1 id="teacherPageTitle">Dashboard</h1>
       <div style="display:flex; align-items:center; gap:14px;">
         <button class="notification-button" type="button" aria-label="Notifikasi"><i class="fa-regular fa-bell"></i></button>
@@ -65,7 +65,7 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
     <section id="content" class="content-grid"></section>
   </main>
 
-  <script src="../assets/js/teacher/dashboard.js?v=20260903-5"></script>
+  <script src="../assets/js/teacher/dashboard.js?v=20260904-1"></script>
 </body>
 </html>
 <?php return ob_get_clean();

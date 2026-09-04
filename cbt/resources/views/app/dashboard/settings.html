@@ -1,88 +1,16 @@
-      <!-- TAB ADMIN: PENGATURAN SISTEM -->
-      <div id="tabAdminPengaturan" class="dash-tab hidden">
-        <div class="card" style="max-width:680px; margin:0 auto;">
-          <div class="card-header">
-            <div>
-              <div class="card-title"><i class="fa-solid fa-sliders" style="color:var(--primary);"></i> Pengaturan Sistem</div>
-              <div class="card-subtitle">Konfigurasi kebijakan ujian ulang (REMEDIAL) dan sistem penilaian.</div>
-            </div>
-          </div>
-
-          <!-- Section: Nilai Cap REMEDIAL -->
-          <div style="padding:8px 0;">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
-              <div style="width:36px;height:36px;border-radius:10px;background:var(--primary-soft);display:flex;align-items:center;justify-content:center;color:var(--primary-dark);font-size:16px;flex-shrink:0;">
-                <i class="fa-solid fa-shield-halved"></i>
-              </div>
-              <div>
-                <div style="font-size:14px;font-weight:800;color:var(--text-main);">Nilai Maksimum Ujian Ulang (REMEDIAL)</div>
-                <div style="font-size:12px;color:var(--text-muted);">Siswa yang mengerjakan ujian ulang tidak dapat memperoleh nilai melebihi batas ini.</div>
-              </div>
-            </div>
-
-            <div style="background:var(--surface-subtle);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin:14px 0;">
-              <div style="display:grid;gap:14px;">
-
-                <!-- Tingkat X -->
-                <div style="display:grid;grid-template-columns:1fr 2fr 80px;align-items:center;gap:12px;">
-                  <label style="font-size:12.5px;font-weight:700;color:var(--text-main);">Tingkat <span style="color:var(--primary);">X</span></label>
-                  <div style="position:relative;">
-                    <input type="range" id="sliderCapX" min="0" max="100" step="1" value="75"
-                      oninput="document.getElementById('inputCapX').value=this.value"
-                      style="width:100%;accent-color:var(--primary);">
-                  </div>
-                  <div style="display:flex;align-items:center;gap:4px;">
-                    <input type="number" id="inputCapX" min="0" max="100" value="75"
-                      oninput="document.getElementById('sliderCapX').value=this.value"
-                      style="width:56px;padding:6px 8px;border-radius:8px;border:1.5px solid var(--border);font-size:13px;font-weight:700;text-align:center;">
-                    <span style="font-size:12px;color:var(--text-muted);">/100</span>
-                  </div>
-                </div>
-
-                <!-- Tingkat XI -->
-                <div style="display:grid;grid-template-columns:1fr 2fr 80px;align-items:center;gap:12px;">
-                  <label style="font-size:12.5px;font-weight:700;color:var(--text-main);">Tingkat <span style="color:var(--primary);">XI</span></label>
-                  <div style="position:relative;">
-                    <input type="range" id="sliderCapXI" min="0" max="100" step="1" value="75"
-                      oninput="document.getElementById('inputCapXI').value=this.value"
-                      style="width:100%;accent-color:var(--primary);">
-                  </div>
-                  <div style="display:flex;align-items:center;gap:4px;">
-                    <input type="number" id="inputCapXI" min="0" max="100" value="75"
-                      oninput="document.getElementById('sliderCapXI').value=this.value"
-                      style="width:56px;padding:6px 8px;border-radius:8px;border:1.5px solid var(--border);font-size:13px;font-weight:700;text-align:center;">
-                    <span style="font-size:12px;color:var(--text-muted);">/100</span>
-                  </div>
-                </div>
-
-                <!-- Tingkat XII -->
-                <div style="display:grid;grid-template-columns:1fr 2fr 80px;align-items:center;gap:12px;">
-                  <label style="font-size:12.5px;font-weight:700;color:var(--text-main);">Tingkat <span style="color:var(--primary);">XII</span></label>
-                  <div style="position:relative;">
-                    <input type="range" id="sliderCapXII" min="0" max="100" step="1" value="75"
-                      oninput="document.getElementById('inputCapXII').value=this.value"
-                      style="width:100%;accent-color:var(--primary);">
-                  </div>
-                  <div style="display:flex;align-items:center;gap:4px;">
-                    <input type="number" id="inputCapXII" min="0" max="100" value="75"
-                      oninput="document.getElementById('sliderCapXII').value=this.value"
-                      style="width:56px;padding:6px 8px;border-radius:8px;border:1.5px solid var(--border);font-size:13px;font-weight:700;text-align:center;">
-                    <span style="font-size:12px;color:var(--text-muted);">/100</span>
-                  </div>
-                </div>
-
-              </div>
-            </div>
-
-            <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-bottom:18px;font-size:12px;color:#1e40af;display:flex;gap:8px;align-items:flex-start;">
-              <i class="fa-solid fa-circle-info" style="margin-top:1px;flex-shrink:0;"></i>
-              <span>Nilai aktual siswa yang lebih rendah dari batas tidak akan berubah. Batas ini hanya memotong nilai yang melebihi cap. Riwayat pelanggaran tetap tersimpan di log.</span>
-            </div>
-
-            <div style="display:flex;gap:10px;justify-content:flex-end;">
-              <button class="btn btn-secondary" onclick="loadDataAdminPengaturan()"><i class="fa-solid fa-rotate"></i> Reset</button>
-              <button class="btn btn-primary" onclick="simpanPengaturanSistem()"><i class="fa-solid fa-floppy-disk"></i> Simpan Pengaturan</button>
-            </div>
-          </div>
-        </div>
+<!-- TAB ADMIN: PENGATURAN SISTEM -->
+<div id="tabAdminPengaturan" class="dash-tab hidden">
+  <section class="settings-page">
+    <header class="settings-hero"><div class="settings-hero-icon"><i class="fa-solid fa-sliders"></i></div><div><span class="settings-eyebrow">KONFIGURASI CBT</span><h2>Pengaturan Sistem</h2><p>Kelola kebijakan nilai ujian ulang secara terpusat untuk setiap tingkatan.</p></div></header>
+    <div class="settings-card">
+      <div class="settings-card-heading"><div class="settings-section-icon"><i class="fa-solid fa-shield-halved"></i></div><div><h3>Nilai Maksimum Ujian Ulang</h3><p>Nilai siswa berstatus remedial tidak dapat melebihi batas yang ditentukan.</p></div><span class="settings-status"><i class="fa-solid fa-circle-check"></i> Aktif</span></div>
+      <div class="settings-grade-list">
+        <div class="settings-grade-row"><div class="settings-grade-label"><span>X</span><div><b>Tingkat X</b><small>Kelas 10</small></div></div><input class="settings-range" type="range" id="sliderCapX" min="0" max="100" step="1" value="75" oninput="document.getElementById('inputCapX').value=this.value"><label class="settings-number"><input type="number" id="inputCapX" min="0" max="100" value="75" oninput="document.getElementById('sliderCapX').value=this.value"><span>/100</span></label></div>
+        <div class="settings-grade-row"><div class="settings-grade-label"><span>XI</span><div><b>Tingkat XI</b><small>Kelas 11</small></div></div><input class="settings-range" type="range" id="sliderCapXI" min="0" max="100" step="1" value="75" oninput="document.getElementById('inputCapXI').value=this.value"><label class="settings-number"><input type="number" id="inputCapXI" min="0" max="100" value="75" oninput="document.getElementById('sliderCapXI').value=this.value"><span>/100</span></label></div>
+        <div class="settings-grade-row"><div class="settings-grade-label"><span>XII</span><div><b>Tingkat XII</b><small>Kelas 12</small></div></div><input class="settings-range" type="range" id="sliderCapXII" min="0" max="100" step="1" value="75" oninput="document.getElementById('inputCapXII').value=this.value"><label class="settings-number"><input type="number" id="inputCapXII" min="0" max="100" value="75" oninput="document.getElementById('sliderCapXII').value=this.value"><span>/100</span></label></div>
       </div>
+      <div class="settings-note"><i class="fa-solid fa-circle-info"></i><div><b>Cara kerja pembatasan nilai</b><span>Nilai di bawah batas tidak berubah. Nilai yang melampaui batas akan dikunci pada nilai maksimum, sementara riwayat pelanggaran tetap tersimpan.</span></div></div>
+      <footer class="settings-actions"><button class="btn btn-secondary" onclick="loadDataAdminPengaturan()"><i class="fa-solid fa-rotate"></i> Muat Ulang</button><button class="btn btn-primary" onclick="simpanPengaturanSistem()"><i class="fa-solid fa-floppy-disk"></i> Simpan Pengaturan</button></footer>
+    </div>
+  </section>
+</div>

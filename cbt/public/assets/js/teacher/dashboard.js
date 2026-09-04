@@ -496,12 +496,33 @@
     notice.textContent = error.message;
   }
 
-  document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', () => openSection(button.dataset.section)));
+  const sidebar = document.querySelector('.sidebar');
+  const menuButton = document.getElementById('menu');
+  const mobileLayout = window.matchMedia('(max-width: 800px)');
+
+  document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', () => {
+    openSection(button.dataset.section);
+    if (mobileLayout.matches) {
+      sidebar.classList.remove('open');
+      menuButton.setAttribute('aria-expanded', 'false');
+    }
+  }));
   content.addEventListener('click', (e) => {
     const button = e.target.closest('[data-target]');
     if (button) openSection(button.dataset.target);
   });
-  document.getElementById('menu').addEventListener('click', () => document.querySelector('.sidebar').classList.toggle('open'));
+  menuButton.addEventListener('click', () => {
+    if (mobileLayout.matches) {
+      const isOpen = sidebar.classList.toggle('open');
+      menuButton.setAttribute('aria-expanded', String(isOpen));
+      return;
+    }
+
+    const laptopLayout = window.matchMedia('(max-width: 1180px)').matches;
+    const className = laptopLayout ? 'expanded' : 'collapsed';
+    const active = sidebar.classList.toggle(className);
+    menuButton.setAttribute('aria-expanded', String(laptopLayout ? active : !active));
+  });
 
   const handleLogout = async () => {
     try {

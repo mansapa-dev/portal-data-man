@@ -304,7 +304,15 @@ input {
 }
 
 .menu {
-  display: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--green-soft);
+  color: var(--green-dark);
+  cursor: pointer;
 }
 
 .welcome {
@@ -428,6 +436,30 @@ tr:hover td {
 
 .teacher-help-box{margin-top:auto;padding:14px;border:1px solid rgba(255,255,255,.16);border-radius:12px;background:rgba(255,255,255,.08)}.teacher-help-box h5{margin:0 0 5px;color:#fff;font-size:14px}.teacher-help-box p{margin:0 0 10px;color:rgba(255,255,255,.78);font-size:11px;line-height:1.4}.teacher-help-box button{width:100%;padding:8px 10px;border:0;border-radius:8px;background:#fff;color:var(--green-dark);font-size:11px;font-weight:800;cursor:pointer}.teacher-help-box button:hover{background:var(--green-soft)}
 
+/* Sidebar ringkas untuk desktop dan layar laptop. */
+.sidebar,.main,.brand div,.nav-item span,.nav-label,.teacher-help-box{transition:all .22s ease}
+.sidebar.collapsed{width:76px;padding-inline:10px}
+.sidebar.collapsed .brand{justify-content:center;margin-inline:0}
+.sidebar.collapsed .brand div,.sidebar.collapsed .nav-item span,.sidebar.collapsed .nav-label,.sidebar.collapsed .teacher-help-box{display:none}
+.sidebar.collapsed .nav-item{justify-content:center;padding:12px}
+.sidebar.collapsed .nav-item i{width:auto;font-size:17px}
+.sidebar.collapsed + .main{margin-left:76px}
+
+@media (min-width:801px) and (max-width:1180px){
+  .sidebar{width:76px;padding-inline:10px}
+  .sidebar .brand{justify-content:center;margin-inline:0}
+  .sidebar .brand div,.sidebar .nav-item span,.sidebar .nav-label,.sidebar .teacher-help-box{display:none}
+  .sidebar .nav-item{justify-content:center;padding:12px}
+  .sidebar .nav-item i{width:auto;font-size:17px}
+  .main{margin-left:76px}
+  .sidebar.expanded{width:232px;padding-inline:12px}
+  .sidebar.expanded .brand{justify-content:flex-start;margin-inline:8px}
+  .sidebar.expanded .brand div,.sidebar.expanded .nav-item span,.sidebar.expanded .nav-label{display:initial}
+  .sidebar.expanded .teacher-help-box{display:block}
+  .sidebar.expanded .nav-item{justify-content:flex-start;padding:11px 12px}
+  .sidebar.expanded + .main{margin-left:232px}
+}
+
 @media (max-width: 800px) {
   .auth-card {
     grid-template-columns: 1fr;
@@ -445,7 +477,10 @@ tr:hover td {
   .teacher-metrics{grid-template-columns:1fr}.teacher-result-controls{grid-template-columns:1fr}.main{padding:0 14px 20px}.topbar{margin:0 -14px 16px;padding:0 14px}.topbar h1{font-size:18px}.notification-button{display:none}.topbar-logout span{display:none}
   .sidebar.open {
     transform: none;
+    width:232px;
   }
+  .sidebar.open .brand div,.sidebar.open .nav-item span,.sidebar.open .nav-label{display:initial}
+  .sidebar.open .teacher-help-box{display:block}
   .main {
     margin-left: 0;
     padding: 16px;
