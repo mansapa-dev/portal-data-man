@@ -268,10 +268,11 @@ function jalankanGeneratePinMassal(targetGrade, targetClass) {
     submitButton.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Memproses...';
   }
 
-  showLoading('Meng-generate PIN otomatis untuk seluruh target siswa...');
+  let totalUpdated = 0;
+  let cursor = 0;
+  showLoading('Menyiapkan generate PIN otomatis...');
 
-  cbtApi
-    .withSuccessHandler(res => {
+  const finish = () => {
       hideLoading();
       document.getElementById('modalGeneratePinMassal').classList.remove('show');
       if (submitButton) {
@@ -281,11 +282,12 @@ function jalankanGeneratePinMassal(targetGrade, targetClass) {
       loadDataAdminSiswa();
       showCustomAlert(
         'Generate PIN Berhasil',
-        `Berhasil membuat PIN otomatis baru untuk <b>${res.updated} siswa</b>.`,
+        `Berhasil membuat PIN otomatis baru untuk ${totalUpdated} siswa.`,
         'success'
       );
-    })
-    .withFailureHandler(err => {
+  };
+
+  const fail = err => {
       hideLoading();
       if (submitButton) {
         submitButton.disabled = false;
@@ -293,14 +295,31 @@ function jalankanGeneratePinMassal(targetGrade, targetClass) {
       }
       showCustomAlert(
         'Generate PIN Gagal',
-        `Gagal memproses pembuatan PIN: ${err.message}`,
+        `Proses berhenti setelah ${totalUpdated} siswa. ${err.message}`,
         'error'
       );
-    })
-    .generatePinsBatchAdmin(stPengelola, {
-      tingkat: targetGrade,
-      kelas: targetClass
-    });
+  };
+
+  const processNextBatch = () => {
+    cbtApi
+      .withSuccessHandler(res => {
+        totalUpdated += Number(res.updated) || 0;
+        cursor = Number(res.next_cursor) || cursor;
+        const total = Number(res.total) || totalUpdated;
+        showLoading(`Membuat PIN otomatis: ${Math.min(totalUpdated, total)} dari ${total} siswa...`);
+        if (res.done) finish();
+        else setTimeout(processNextBatch, 50);
+      })
+      .withFailureHandler(fail)
+      .generatePinsBatchAdmin(stPengelola, {
+        tingkat: targetGrade,
+        kelas: targetClass,
+        cursor,
+        limit: 50
+      });
+  };
+
+  processNextBatch();
 }
 
 function editSiswaSatuanById(id) {
