@@ -181,57 +181,52 @@ function cetakLaporanResmiPDF() {
   document.body.className = "";
 }
 
-function loadDataAdminKartu() {
+function renderDataAdminKartu(rows) {
   const container = document.getElementById('printAreaCards');
+  container.className = '';
   const printContainer = document.getElementById('printAreaKartuContainer');
-  container.innerHTML = `<div class="alert info">Memuat kartu peserta...</div>`;
-  
+  const summary = document.getElementById('cardPrintSummary');
+  const printButton = document.getElementById('btnCetakKartu');
   const fTingkat = document.getElementById('filterKartuTingkat').value;
   const fKelas = document.getElementById('filterKartuKelas').value.toLowerCase().trim();
-
-  cbtApi
-    .withSuccessHandler(rows => {
-      if(!rows || rows.length === 0) { 
-        container.innerHTML = `<div class="alert error">Tidak ada data siswa.</div>`; 
-        printContainer.innerHTML = '';
-        return; 
-      }
-      
-      const filtered = rows.filter(s => {
-        let matchT = fTingkat === 'ALL' || String(s.tingkat).toUpperCase() === fTingkat;
-        let matchK = !fKelas || String(s.kelas).toLowerCase().includes(fKelas);
-        return matchT && matchK;
-      });
-
-      if(filtered.length === 0) {
-        container.innerHTML = `<div class="alert error">Tidak ada siswa yang cocok dengan filter tingkat/kelas tersebut.</div>`;
-        printContainer.innerHTML = '';
-        return;
-      }
-
-      const cardsHtml = filtered.map(s => `
+  const eligible=(Array.isArray(rows)?rows:[]).filter(s=>(fTingkat==='ALL'||String(s.tingkat).toUpperCase()===fTingkat)&&(!fKelas||String(s.kelas).toLowerCase()===fKelas));
+  const ready=eligible.filter(s=>s.pin&&!['BELUM DISET','PERLU DIGANTI'].includes(s.pin));
+  const skipped=eligible.length-ready.length;
+  if(!eligible.length){container.innerHTML=`<div class="alert error">Tidak ada siswa yang cocok dengan filter tingkat/kelas tersebut.</div>`;printContainer.innerHTML='';summary.textContent='0 kartu siap dicetak.';printButton.disabled=true;return;}
+  const safe=value=>String(value??'').replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+  const cardsHtml=ready.map(s => `
         <div class="card-ujian-print" style="border: 2px solid var(--border); padding: 14px; border-radius: 10px; background: white; margin-bottom: 12px;">
           <div class="card-print-letterhead" style="display:flex; align-items:center; gap:8px; border-bottom:2px solid var(--primary); padding-bottom:6px; margin-bottom:10px;">
             <img src="assets/img/logo-man1-palembang.png" alt="Lambang MAN 1 Palembang" style="width:34px; height:34px; object-fit:contain;">
             <div style="flex:1;"><b style="display:block; font-size:12px; color:var(--primary);">KARTU PESERTA UJIAN</b><span style="font-size:10px; font-weight:700;">MADRASAH ALIYAH NEGERI 1 PALEMBANG</span></div>
           </div>
           <table style="font-size:11px; width:100%;">
-            <tr><td style="padding:3px; width:35%;">No Peserta</td><td style="padding:3px;">: <b>${s.nomor_ujian}</b></td></tr>
-            <tr><td style="padding:3px;">Nama Siswa</td><td style="padding:3px;">: <b>${s.nama}</b></td></tr>
-            <tr><td style="padding:3px;">Kelas / Tingkat</td><td style="padding:3px;">: ${s.kelas} / ${s.tingkat}</td></tr>
-            <tr><td style="padding:3px;">PIN Ujian</td><td style="padding:3px;"><span class="badge bg-gray" style="font-size:12px; font-weight:800;">Tidak dapat ditampilkan ulang</span></td></tr>
+            <tr><td style="padding:3px; width:35%;">No Peserta</td><td style="padding:3px;">: <b>${safe(s.nomor_ujian)}</b></td></tr>
+            <tr><td style="padding:3px;">Nama Siswa</td><td style="padding:3px;">: <b>${safe(s.nama)}</b></td></tr>
+            <tr><td style="padding:3px;">Kelas / Tingkat</td><td style="padding:3px;">: ${safe(s.kelas)} / ${safe(s.tingkat)}</td></tr>
+            <tr><td style="padding:3px;">PIN Ujian</td><td style="padding:3px;"><span class="badge bg-gray" style="font-size:12px; font-weight:900; letter-spacing:1px;">${safe(s.pin)}</span></td></tr>
           </table>
         </div>
       `).join('');
+  container.innerHTML=cardsHtml||`<div class="alert error">Tidak ada kartu dengan PIN yang siap dicetak.</div>`;
+  printContainer.innerHTML=cardsHtml;
+  summary.textContent=`${ready.length} kartu siap dicetak${skipped?`; ${skipped} siswa dilewati karena PIN belum tersedia`:''}. Data tersinkron dengan Seluruh Data Siswa.`;
+  printButton.disabled=ready.length===0;
+}
 
-      container.innerHTML = cardsHtml;
-      printContainer.innerHTML = cardsHtml;
-    })
-    .getAdminSiswaList(stPengelola);
+function loadDataAdminKartu(force=false) {
+  const container=document.getElementById('printAreaCards');
+  if(!force&&Array.isArray(cacheSiswaGlobal)&&cacheSiswaGlobal.length){renderDataAdminKartu(cacheSiswaGlobal);return;}
+  container.innerHTML=`<div class="alert info">Menyinkronkan data kartu dengan Seluruh Data Siswa...</div>`;
+  document.getElementById('btnCetakKartu').disabled=true;
+  cbtApi.withSuccessHandler(rows=>{cacheSiswaGlobal=Array.isArray(rows)?rows:[];renderDataAdminKartu(cacheSiswaGlobal);}).withFailureHandler(()=>{container.textContent='Gagal menyinkronkan data kartu siswa.';container.className='alert error';document.getElementById('printAreaKartuContainer').innerHTML='';}).getAdminSiswaList(stPengelola);
 }
 
 function cetakKartuPesertaUjian() {
-  document.body.className = "mode-cetak-kartu";
+  if(!document.getElementById('printAreaKartuContainer').children.length)return showCustomAlert('Kartu Belum Siap','Sinkronkan data dan pastikan siswa sudah memiliki PIN.','warning');
+  document.body.classList.add('mode-cetak-kartu');
   window.print();
-  document.body.className = "";
+  document.body.classList.remove('mode-cetak-kartu');
 }
+
+window.addEventListener('cbt:data-updated',event=>{if(String(event.detail?.path||'').includes('/students'))cacheSiswaGlobal=[];});

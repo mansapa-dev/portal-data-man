@@ -105,7 +105,7 @@ function applyFilterSiswa() {
     }
     // Search Query (NISN / Nama)
     if (query !== '') {
-      const qText = `${s.nomor_ujian || ''} ${s.nisn || ''} ${s.nama || ''} ${s.kelas || ''}`.toLowerCase();
+      const qText = `${s.nomor_ujian || ''} ${s.nisn || ''} ${s.nama || ''} ${s.kelas || ''} ${s.pin || ''}`.toLowerCase();
       if (!qText.includes(query)) return false;
     }
     return true;
@@ -125,7 +125,7 @@ function applyFilterSiswa() {
     s.nama,
     s.kelas,
     s.tingkat,
-    s.pin_is_set ? 'SUDAH DISET' : 'BELUM DISET',
+    s.pin,
     s.tahun_ajaran || '2025/2026',
     (s.ujian_status || 'belum').toUpperCase()
   ]);
@@ -163,8 +163,10 @@ function renderTabelSiswa(rows) {
       statusBadge = '<span class="badge bg-green"><i class="fa-solid fa-circle-check"></i> SELESAI</span>';
     }
 
-    const pinDisplay = s.pin_is_set
-      ? `<span class="badge bg-green"><i class="fa-solid fa-check"></i> Sudah Diset</span>`
+    const pinDisplay = s.pin === 'PERLU DIGANTI'
+      ? `<span class="badge bg-red"><i class="fa-solid fa-triangle-exclamation"></i> Perlu Ganti PIN</span>`
+      : s.pin && s.pin !== 'BELUM DISET'
+      ? `<code style="background:var(--primary-soft); color:var(--primary-dark); font-weight:800; padding:3px 8px; border-radius:5px; font-size:12.5px; letter-spacing:1px; border:1px solid var(--primary-soft-border);">${s.pin}</code>`
       : `<span style="color:var(--danger); font-size:11px; font-weight:700;">Belum Diset</span>`;
 
     return `
@@ -354,8 +356,7 @@ function bukaModalSiswaSatuan(data = null) {
     document.getElementById('inSiswaNo').value = data.nomor_ujian || data.nisn;
     document.getElementById('inSiswaNama').value = data.nama;
     document.getElementById('inSiswaKelas').value = data.kelas;
-    document.getElementById('inSiswaPin').value = '';
-    document.getElementById('inSiswaPin').placeholder = data.pin_is_set ? 'Isi untuk mengganti PIN' : 'Isi PIN baru';
+    document.getElementById('inSiswaPin').value = (data.pin && !['BELUM DISET','PERLU DIGANTI'].includes(data.pin)) ? data.pin : '';
   }
   document.getElementById('modalSiswaSatuan').classList.add('show');
 }

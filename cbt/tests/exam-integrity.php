@@ -72,7 +72,7 @@ try {
  $assert($accepted===8,'login bucket blocks the ninth request for the same account');
  $limited($r2,function()use(&$accepted){$accepted++;return \Cbt\Core\Response::json(null);});
  $assert($accepted===9,'another student on the same IP can still log in');
- $reject(fn()=>(new \Cbt\Services\AdminStudentService($db,new \Cbt\Repositories\AdminStudentRepository($pdo)))->reset(1),409,'legacy global reset is rejected without changing results');
+ $reject(fn()=>(new \Cbt\Services\AdminStudentService($db,new \Cbt\Repositories\AdminStudentRepository($pdo),new \Cbt\Support\SecretCipher()))->reset(1),409,'legacy global reset is rejected without changing results');
  $pdo->exec("UPDATE students SET cbt_status='BLOCKED' WHERE id=1");$_SESSION['student']=['student_id'=>1];$allowed=false;
  (new \Cbt\Middleware\AuthMiddleware('student',null,$pdo))($r1,function()use(&$allowed){$allowed=true;return \Cbt\Core\Response::json(null);});
  $assert(!$allowed&&!isset($_SESSION['student']),'revoked student session is rejected on protected requests');
