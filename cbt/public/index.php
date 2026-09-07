@@ -16,7 +16,7 @@ $request=Request::capture();
 if($request->path==='/'||$request->path==='/index.php'){
  $html=file_get_contents(dirname(__DIR__).'/index.html')?:'';
  $html=(new ViewRenderer(dirname(__DIR__).'/resources/views/app'))->render($html);
- $html=str_replace('</body>','<script src="assets/js/native-api-adapter.js?v=20260907-2"></script></body>',$html);
+ $html=str_replace('</body>','<script src="assets/js/native-api-adapter.js?v=20260907-3"></script></body>',$html);
  Response::html($html)->send();
 }
 if($request->path==='/guru')Response::html((string)include dirname(__DIR__).'/resources/views/teacher/login.php')->send();
@@ -68,7 +68,6 @@ $router->post('/api/admin/students/pin',[$adminStudents,'setPin'],[$adminAuth,$c
 $router->post('/api/admin/students/generate-pins',[$adminStudents,'generateBatch'],[$adminAuth,$csrf,$audit('STUDENT_PINS_GENERATED','Student')]);
 $router->post('/api/admin/students/{id}/reset',[$adminStudents,'reset'],[$adminAuth,$csrf,$audit('STUDENT_ATTEMPT_RESET','Student')]);
 $router->get('/api/admin/exams',[$admin,'exams'],[$adminAuth]);
-$router->post('/api/admin/exams/{id}/review-publication',[$admin,'publishReview'],[$adminAuth,$csrf,$audit('REVIEW_PUBLICATION_CHANGED','Exam')]);
 $router->post('/api/admin/exams',[$admin,'saveExam'],[$adminAuth,$csrf,$audit('EXAM_SAVED','Exam')]);
 $router->post('/api/admin/follow-up-exams',[$admin,'scheduleFollowUpExam'],[$adminAuth,$csrf,$audit('FOLLOW_UP_EXAM_SCHEDULED','Exam')]);
 $router->get('/api/admin/follow-up-exams/candidates',[$admin,'followUpCandidates'],[$adminAuth]);

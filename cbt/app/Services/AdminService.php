@@ -10,15 +10,6 @@ final class AdminService
  public function dashboard():array{return$this->repo->dashboard();}
  public function adminLiveSessions():array{return$this->liveSessionPayload($this->repo->allExamIds());}
  public function teacherLiveSessions(int $teacherId):array{return $this->liveSessionPayload($this->repo->teacherExamIds($teacherId));}
- public function publishReview(int $examId, bool $published):void
- {
-  $this->db->transaction(function()use($examId,$published){
-   $s=$this->db->pdo()->prepare('SELECT ends_at FROM exams WHERE id=:id FOR UPDATE');$s->execute(['id'=>$examId]);$exam=$s->fetch();
-   if(!$exam)throw new DomainException('Ujian tidak ditemukan.',404);
-   if($published && strtotime($exam['ends_at'].' UTC')>time())throw new DomainException('Pembahasan hanya dapat diterbitkan setelah jadwal ujian berakhir.',409);
-   $s=$this->db->pdo()->prepare('INSERT INTO cbt_settings(key_name,value) VALUES(:key,:value) ON DUPLICATE KEY UPDATE value=VALUES(value)');$s->execute(['key'=>'review_published_'.$examId,'value'=>$published?'1':'0']);
-  });
- }
  public function references():array{return$this->repo->references();}
  public function exams():array{return$this->repo->exams();}
  public function saveExam(array$d,int$actor):void

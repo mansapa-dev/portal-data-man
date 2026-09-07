@@ -53,12 +53,10 @@ try {
  $result=$scoring->submit(1,1);$assert((float)$result['nilai']===100.0,'score uses latest accepted answer');
  $scoring->submit(1,1);$assert((int)$pdo->query('SELECT COUNT(*) FROM exam_results')->fetchColumn()===1,'repeated submit produces exactly one result');
  $assert($scoring->recover(1,1)['completed']===true,'refresh recovers committed result');
- $reject(fn()=>$scoring->review(1,1),403,'review remains closed until publication');
+ $review=$scoring->review(1,1);
+ $assert($review['soal'][0]['jawaban_benar']==='B'&&count($review['soal'][0]['opsi'])===4,'completed student receives review automatically before the exam schedule ends');
  $pdo->exec("UPDATE exams SET ends_at=UTC_TIMESTAMP()-INTERVAL 1 SECOND");
  $assert(count($sessions->list(1,'0000000001'))===1,'result remains available after schedule closes');
- $pdo->exec("INSERT INTO cbt_settings(key_name,value) VALUES('review_published_1','1')");
- $review=$scoring->review(1,1);
- $assert($review['soal'][0]['jawaban_benar']==='B'&&count($review['soal'][0]['opsi'])===4,'published review uses original key and returns options');
  $pdo->exec('DELETE FROM attempt_questions WHERE attempt_id=1');
  $legacyReview=$scoring->review(1,1);
  $assert(count($legacyReview['soal'])===1&&$legacyReview['soal'][0]['jawaban_benar']==='A','legacy review repairs a missing question snapshot from the current bank');
