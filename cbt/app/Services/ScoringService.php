@@ -8,6 +8,30 @@ final class ScoringService
 {
  public function __construct(private Database$db,private AttemptRepository$attempts){}
 
+ public function recover(int $studentId, int $examId): ?array
+ {
+  $attempt = $this->attempts->find($studentId, $examId);
+  if (!$attempt) return null;
+  $result = $this->attempts->result((int)$attempt['id']);
+  if ($result) return ['completed' => true, 'terminated' => $attempt['status'] === 'TERMINATED', 'hasil' => $this->format($result)];
+  if ($attempt['status'] === 'TERMINATED' || ($attempt['status'] === 'IN_PROGRESS' && strtotime($attempt['expires_at'].' UTC') <= time())) {
+   return ['completed' => true, 'terminated' => $attempt['status'] === 'TERMINATED', 'hasil' => $this->submit($studentId, $examId)];
+  }
+  return null;
+ }
+
+ public function finalizeDue(int $limit = 200): array
+ {
+  $limit = max(1, min(1000, $limit));
+  $rows = $this->db->pdo()->query("SELECT a.student_id,a.exam_id FROM exam_attempts a LEFT JOIN exam_results r ON r.attempt_id=a.id WHERE r.attempt_id IS NULL AND (a.status='TERMINATED' OR (a.status='IN_PROGRESS' AND a.expires_at<=UTC_TIMESTAMP(3))) ORDER BY a.expires_at LIMIT ".$limit)->fetchAll();
+  $done = 0; $failed = 0;
+  foreach ($rows as $row) {
+   try { $this->submit((int)$row['student_id'], (int)$row['exam_id']); $done++; }
+   catch (\Throwable $error) { $failed++; error_log('CBT finalization exam '.$row['exam_id'].': '.$error->getMessage()); }
+  }
+  return ['completed' => $done, 'failed' => $failed];
+ }
+
  public function submit(int$studentId,int$examId):array
  {
   return$this->db->transaction(function()use($studentId,$examId){
@@ -16,9 +40,9 @@ final class ScoringService
    if($existing)return$this->format($existing);
    if(!in_array($attempt['status'],['IN_PROGRESS','TERMINATED'],true))throw new DomainException('Ujian tidak dapat disubmit.',409);
 
-   $sql='SELECT q.id,q.correct_answer,q.points,a.answer FROM questions q LEFT JOIN student_answers a ON a.question_id=q.id AND a.attempt_id=:attempt WHERE q.exam_id=:exam AND q.status=\'ACTIVE\'';
+   $sql='SELECT q.question_id id,q.correct_answer,q.points,a.answer FROM attempt_questions q LEFT JOIN student_answers a ON a.question_id=q.question_id AND a.attempt_id=q.attempt_id WHERE q.attempt_id=:attempt';
    $statement=$this->db->pdo()->prepare($sql);
-   $statement->execute(['attempt'=>$attempt['id'],'exam'=>$examId]);
+   $statement->execute(['attempt'=>$attempt['id']]);
    $rows=$statement->fetchAll();
    if(!$rows)throw new DomainException('Soal ujian tidak ditemukan.',409);
 
@@ -85,9 +109,12 @@ final class ScoringService
  public function review(int$studentId,int$examId):array
  {
   $attempt=$this->attempts->find($studentId,$examId)??throw new DomainException('Sesi ujian tidak ditemukan.',404);
-  if(!in_array($attempt['status'],['COMPLETED','TERMINATED'],true))throw new DomainException('Review hanya tersedia setelah ujian selesai.',403);
-  $sql='SELECT q.id,q.question_text,q.correct_answer,a.answer FROM questions q LEFT JOIN student_answers a ON a.question_id=q.id AND a.attempt_id=:attempt WHERE q.exam_id=:exam AND q.status=\'ACTIVE\'';
-  $s=$this->db->pdo()->prepare($sql);$s->execute(['attempt'=>$attempt['id'],'exam'=>$examId]);$rows=$s->fetchAll();
-  return['soal'=>array_map(fn($r)=>['id'=>(int)$r['id'],'pertanyaan'=>$r['question_text'],'jawaban_benar'=>$r['correct_answer']],$rows),'jawaban'=>array_map(fn($r)=>['soal_id'=>(int)$r['id'],'jawaban'=>$r['answer']],$rows)];
+  if($attempt['status']!=='COMPLETED')throw new DomainException('Review hanya tersedia untuk ujian yang diselesaikan.',403);
+  $release=$this->db->pdo()->prepare('SELECT s.value FROM cbt_settings s JOIN exams e ON e.id=:exam WHERE s.key_name=:key AND e.ends_at<=UTC_TIMESTAMP(3) LIMIT 1');
+  $release->execute(['key'=>'review_published_'.$examId,'exam'=>$examId]);
+  if($release->fetchColumn()!=='1')throw new DomainException('Pembahasan belum diterbitkan oleh administrator.',403);
+  $sql='SELECT q.question_id id,q.question_text,q.correct_answer,a.answer FROM attempt_questions q LEFT JOIN student_answers a ON a.question_id=q.question_id AND a.attempt_id=q.attempt_id WHERE q.attempt_id=:attempt';
+  $s=$this->db->pdo()->prepare($sql);$s->execute(['attempt'=>$attempt['id']]);$rows=$s->fetchAll();
+  return['soal'=>array_map(fn($r)=>['id'=>(int)$r['id'],'pertanyaan'=>\Cbt\Support\QuestionHtml::clean($r['question_text']),'jawaban_benar'=>$r['correct_answer']],$rows),'jawaban'=>array_map(fn($r)=>['soal_id'=>(int)$r['id'],'jawaban'=>$r['answer']],$rows)];
  }
 }

@@ -156,7 +156,7 @@ function renderTabelSiswa(rows) {
 
     if (s.ujian_status === 'dihentikan') {
       statusBadge = '<span class="badge bg-red"><i class="fa-solid fa-lock"></i> DIHENTIKAN</span>';
-      actBtn = `<button class="btn btn-success" style="padding:4px 8px; font-size:11px;" onclick="bukaBlokirAdmin(${s.id})" title="Buka Blokir"><i class="fa-solid fa-unlock"></i> Buka</button>`;
+      actBtn = `<button class="btn btn-success" style="padding:4px 8px; font-size:11px;" onclick="bukaBlokirAdmin(${s.id})" title="Jadwalkan ujian ulang"><i class="fa-solid fa-unlock"></i> Tindak Lanjut</button>`;
     } else if (s.ujian_status === 'berlangsung') {
       statusBadge = '<span class="badge bg-blue"><i class="fa-solid fa-spinner fa-spin"></i> SEDANG UJIAN</span>';
     } else if (s.ujian_status === 'selesai') {
@@ -370,22 +370,6 @@ document.getElementById('formSiswaSatuan').addEventListener('submit', function (
 });
 
 function bukaBlokirAdmin(id) {
-  showCustomConfirm("Buka Akses Siswa", "Buka blokir dan reset status ujian siswa ini agar dapat login kembali?", () => {
-    showLoading('Membuka akses siswa...');
-    cbtApi
-      .withSuccessHandler(res => {
-        hideLoading();
-        if (res.success) {
-          loadDataAdminSiswa();
-          showCustomAlert('Akses Dibuka', 'Status ujian siswa berhasil direset dan dapat login kembali.', 'success');
-        } else {
-          showCustomAlert('Gagal', res.message, 'error');
-        }
-      })
-      .withFailureHandler(err => {
-        hideLoading();
-        showCustomAlert('Error', err.message, 'error');
-      })
-      .adminBukaBlokirSiswa(stPengelola, id);
-  });
+  switchDashTab('tabAdminUjianLanjutan');
+  showCustomAlert('Tindak lanjut ujian', 'Pilih tab Ujian Ulang, tinjau siswa dan ujian asal, lalu setujui kandidat dan jadwalkan. Blokir hanya berlaku untuk ujian asal; siswa tetap dapat mengikuti ujian lain.');
 }

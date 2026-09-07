@@ -10,6 +10,7 @@ final class AdminController
  public function liveSessions(Request$r):Response{return Response::json($this->admin->adminLiveSessions());}
  public function references(Request$r):Response{return Response::json($this->admin->references());}
  public function exams(Request$r):Response{return Response::json($this->admin->exams());}
+ public function publishReview(Request$r):Response{$this->admin->publishReview((int)$r->attributes['id'],filter_var($r->input('published',false),FILTER_VALIDATE_BOOL));return Response::json(null,'Status pembahasan diperbarui.');}
  public function saveExam(Request$r):Response{$this->admin->saveExam($r->json(),(int)$_SESSION['auth']['user_id']);return Response::json(null,'Ujian berhasil disimpan.');}
  public function scheduleFollowUpExam(Request$r):Response{$exam=$this->admin->scheduleFollowUpExam($r->json(),(int)$_SESSION['auth']['user_id']);return Response::json($exam,'Jadwal ujian susulan/remedial berhasil dibuat.');}
  public function followUpCandidates(Request$r):Response{return Response::json($this->admin->followUpCandidates());}

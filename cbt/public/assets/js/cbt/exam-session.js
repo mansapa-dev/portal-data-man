@@ -1,5 +1,14 @@
 // Exam lifecycle: deterministic questions, answers, timer, anti-cheat, and submission.
 let stTerminated = false;
+let stDeadline = 0, stClockOffset = 0, submitRetryTimer = null;
+function updateSaveStatus(state) {
+  const element = document.getElementById('cbtSaveStatus');
+  if (!element) return;
+  element.textContent = state.pending
+    ? `${state.pending} perubahan belum dikonfirmasi server${state.error ? ': ' + state.error : (state.saving ? ' — mengirim...' : ' — tersimpan di perangkat')}`
+    : 'Semua jawaban tersimpan di server';
+}
+window.addEventListener('cbt:answer-status', event => updateSaveStatus(event.detail));
 
 function rngSeed(str) {
   let h = 2166136261 >>> 0;
@@ -20,11 +29,14 @@ function persiapkanUjian(uData) {
   showLoading('Mempersiapkan Lembar Soal...');
   stUjian = uData;
   stTerminated = false;
+  isSubmitting = false;
+  clearTimeout(submitRetryTimer);
 
   cbtApi
     .withSuccessHandler(res => {
       hideLoading();
       if(!res.success) { showCustomAlert('Gagal', res.message); return; }
+      if (res.completed) { tampilHasilUjian(res.hasil, res.terminated); return; }
 
       const soalRaw = res.soal;
       const jawRaw = res.jawaban;
@@ -59,6 +71,7 @@ function persiapkanUjian(uData) {
       const clockOffset = Number.isFinite(serverNow) ? serverNow - Date.now() : 0;
       mulaiTimerCBT(res.expiresAt ? Date.parse(res.expiresAt) : Date.now() + (uData.durasi_menit * 60000), clockOffset);
       aktifkanAntiCheat();
+      updateSaveStatus(window.cbtAnswerState());
     })
     .withFailureHandler(err => { hideLoading(); showCustomAlert('Error Koneksi', err.message); })
     .getServerSoal(uData.id, stSiswa.id);
@@ -80,16 +93,20 @@ function navigasiSoal(dir) {
 }
 
 function toggleRagu() {
+  if (!isUjianJalan || isSubmitting) return;
   let sId = stSoal[stIdx].id;
+  const previous = !!stRagu[sId];
   stRagu[sId] = !stRagu[sId];
   renderSoal(); renderGridNav();
-  cbtApi.simpanJawabanServer({ siswaId: stSiswa.id, ujianId: stUjian.id, soalId: sId, jawaban: stJawab[sId] || null, ragu: stRagu[sId] });
+  cbtApi.withFailureHandler(error => { stRagu[sId] = previous; renderSoal(); renderGridNav(); showCustomAlert('Belum tersimpan', error.message); })
+    .simpanJawabanServer({ siswaId: stSiswa.id, ujianId: stUjian.id, soalId: sId, jawaban: stJawab[sId] || null, ragu: stRagu[sId] });
 }
 
 function renderSoal() {
   const s = stSoal[stIdx];
   document.getElementById('cbtSoalNum').textContent = `Soal ${stIdx + 1}`;
-  document.getElementById('cbtSoalText').textContent = s.q;
+  // The API sanitizes question markup using a server-side allowlist.
+  document.getElementById('cbtSoalText').innerHTML = s.q;
 
   const btnR = document.getElementById('btnRagu');
   if(stRagu[s.id]) { btnR.className = 'btn btn-warning'; btnR.innerHTML = '<i class="fa-solid fa-flag"></i> Ragu (✔)'; }
@@ -106,17 +123,20 @@ function renderSoal() {
 }
 
 function simpanJawaban(soalId, originalKey, nomorSoal) {
+  if (!isUjianJalan || isSubmitting) return;
+  const previous = stJawab[soalId];
   stJawab[soalId] = originalKey;
   renderSoal(); renderGridNav();
   document.getElementById('cbtSaveStatus').textContent = 'Menyimpan...';
 
   cbtApi
-    .withSuccessHandler(res => { document.getElementById('cbtSaveStatus').textContent = res.success ? 'Tersimpan' : 'Gagal simpan'; })
-    .withFailureHandler(() => { document.getElementById('cbtSaveStatus').textContent = 'Tersimpan Lokal'; })
+    .withSuccessHandler(() => updateSaveStatus(window.cbtAnswerState()))
+    .withFailureHandler(error => { if(stJawab[soalId] === originalKey) { if(previous) stJawab[soalId] = previous; else delete stJawab[soalId]; } renderSoal(); renderGridNav(); showCustomAlert('Jawaban belum tersimpan', error.message); })
     .simpanJawabanServer({ siswaId: stSiswa.id, ujianId: stUjian.id, soalId: soalId, jawaban: originalKey, ragu: !!stRagu[soalId], nomorUjian: stSiswa.no, namaSiswa: stSiswa.nama, kelas: stSiswa.kelas, nomorSoal: nomorSoal });
 }
 
 function mulaiTimerCBT(endTimeMs, clockOffset = 0) {
+  stDeadline = endTimeMs; stClockOffset = clockOffset;
   clearInterval(tmrUjian);
   const tb = document.getElementById('cbtTimerBox'), tt = document.getElementById('cbtTimer');
   tmrUjian = setInterval(() => {
@@ -273,6 +293,8 @@ function aktifkanAntiCheat() {
  * @param {boolean} isTerminate — apakah karena pelanggaran
  */
 function tampilHasilUjian(hasil, isTerminate = false) {
+  isUjianJalan = false; isSubmitting = false;
+  clearInterval(tmrUjian); clearTimeout(submitRetryTimer);
   const lblNilai = document.getElementById('lblNilaiAkhir');
   const lblKet = document.getElementById('lblKeteranganHasil');
   const lblStatus = document.getElementById('lblStatusUjian');
@@ -331,24 +353,39 @@ function bukaModalSubmit() {
   document.getElementById('modalSubmitUjian').classList.add('show');
 }
 
-function prosesKumpulFinal() { submitUjianKeServer(); }
+function prosesKumpulFinal() { submitUjianKeServer(true); }
 
-function submitUjianKeServer() {
+function submitUjianKeServer(finalizeOnly = false) {
+  if (isSubmitting) return;
+  finalizeOnly = finalizeOnly || stTerminated || Date.now() + stClockOffset >= stDeadline;
   document.getElementById('modalSubmitUjian').classList.remove('show');
-  isSubmitting = true; isUjianJalan = false; clearInterval(tmrUjian);
-  showLoading('Menghitung nilai...');
+  isSubmitting = true;
+  showLoading(finalizeOnly ? 'Mengambil hasil jawaban yang diterima server...' : 'Mengirim jawaban sebelum menghitung nilai...');
+  const failed = error => {
+    hideLoading(); isSubmitting = false;
+    const expired = finalizeOnly || Date.now() + stClockOffset >= stDeadline;
+    isUjianJalan = !expired;
+    if (expired) {
+      clearInterval(tmrUjian);
+      document.getElementById('cbtSaveStatus').textContent = 'Hasil belum terkonfirmasi. Sistem akan mencoba lagi.';
+      clearTimeout(submitRetryTimer);
+      submitRetryTimer = setTimeout(() => submitUjianKeServer(true), 10000);
+    }
+    showCustomAlert('Pengiriman belum berhasil', error.message + (expired ? ' Hanya jawaban yang diterima server sebelum batas waktu yang dinilai.' : ' Jawaban lokal tetap disimpan. Periksa koneksi lalu coba kumpulkan lagi.'));
+  };
 
   cbtApi
     .withSuccessHandler(res => {
       hideLoading();
       if (res.success) {
         tampilHasilUjian(res.hasil, stTerminated);
+        if (res.unsent) showCustomAlert('Ada jawaban yang belum terkirim', `${res.unsent} perubahan tidak dikonfirmasi server. Nilai hanya memakai jawaban yang diterima server; antrean perangkat dipertahankan untuk pemeriksaan pengawas.`);
       } else {
-        showCustomAlert('Gagal Submit', res.message);
+        failed(new Error(res.message));
       }
     })
-    .withFailureHandler(err => { hideLoading(); showCustomAlert('Error', err.message); })
-    .submitUjian({ siswa_id: stSiswa.id, ujian_id: stUjian.id });
+    .withFailureHandler(failed)
+    .submitUjian({ siswa_id: stSiswa.id, ujian_id: stUjian.id, finalize_only: finalizeOnly });
 }
 
 /**

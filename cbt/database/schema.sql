@@ -299,3 +299,31 @@ INSERT INTO cbt_settings (key_name,value,description) VALUES
  ('remedial_score_cap_XI','75','Nilai maksimum ujian ulang siswa tingkat XI (0-100)'),
  ('remedial_score_cap_XII','75','Nilai maksimum ujian ulang siswa tingkat XII (0-100)')
 ON DUPLICATE KEY UPDATE key_name=VALUES(key_name);
+
+CREATE TABLE IF NOT EXISTS answer_write_versions (
+ attempt_id BIGINT UNSIGNED NOT NULL,
+ question_id BIGINT UNSIGNED NOT NULL,
+ revision BIGINT UNSIGNED NOT NULL,
+ mutation_id VARCHAR(100) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ PRIMARY KEY (attempt_id,question_id),
+ CONSTRAINT fk_answer_version_attempt FOREIGN KEY (attempt_id) REFERENCES exam_attempts(id) ON DELETE CASCADE,
+ CONSTRAINT fk_answer_version_question FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS attempt_questions (
+ attempt_id BIGINT UNSIGNED NOT NULL,
+ question_id BIGINT UNSIGNED NOT NULL,
+ question_text TEXT NOT NULL,
+ option_a TEXT NOT NULL, option_b TEXT NOT NULL, option_c TEXT NOT NULL, option_d TEXT NOT NULL, option_e TEXT NULL,
+ correct_answer CHAR(1) NOT NULL,
+ points DECIMAL(8,2) NOT NULL,
+ PRIMARY KEY (attempt_id,question_id),
+ CONSTRAINT fk_attempt_questions_attempt FOREIGN KEY (attempt_id) REFERENCES exam_attempts(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+CREATE TABLE IF NOT EXISTS attempt_connections (
+ attempt_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+ last_seen_at DATETIME(3) NOT NULL,
+ CONSTRAINT fk_attempt_connection FOREIGN KEY (attempt_id) REFERENCES exam_attempts(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -1,5 +1,7 @@
 # CBT MAN 1 Palembang
 
+Perubahan kesiapan ujian massal, panduan upgrade database dan cron finalisasi tersedia di [docs/mass-exam-readiness.md](docs/mass-exam-readiness.md). Upgrade database harus diterapkan sebelum frontend antrean jawaban digunakan.
+
 CBT berjalan dengan PHP Native 8.2+, PDO, dan MySQL/MariaDB. `index.html` dipertahankan sebagai spesifikasi visual; `public/assets/js/native-api-adapter.js` menghubungkan UI ke HTTP API PHP.
 
 Frontend utama dipisahkan berdasarkan domain di `public/assets/js/cbt/`. `core.js` harus dimuat pertama karena menyediakan state dan utilitas bersama, dilanjutkan modul siswa/ujian, modul pengelola, lalu fitur admin dan guru. Markup halaman berada di partial `resources/views/app/` dan dirakit dari directive `{{> nama-file.html}}` pada `index.html`. Tidak diperlukan build step Node.js untuk deployment shared hosting.

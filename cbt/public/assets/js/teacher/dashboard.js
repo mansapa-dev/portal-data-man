@@ -123,12 +123,19 @@
   }
 
   function render(section) {
+    window.CbtLiveSessions?.stop();
     activeSection = section;
+    content.classList.toggle('teacher-live',section === 'live');
     content.replaceChildren();
     document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.section === section));
     const titles = { overview: 'Dashboard', exams: 'Ujian Diampu', results: 'Hasil Siswa', violations: 'Pelanggaran Ujian' };
     const pageTitle = document.getElementById('teacherPageTitle');
     if (pageTitle) pageTitle.textContent = titles[section] || 'Dashboard';
+    if (section === 'live') {
+      if (pageTitle) pageTitle.textContent = 'Sesi Berlangsung';
+      window.CbtLiveSessions.mount(content, api, notice);
+      return;
+    }
 
     if (section === 'overview') {
       const metrics = el('section', undefined, 'teacher-metrics');

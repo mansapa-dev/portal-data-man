@@ -18,6 +18,7 @@
     const meta = element('div', undefined, 'session-meta'), remaining = element('strong', duration(session.remainingSeconds), 'remaining-time');
     remaining.dataset.remaining = String(session.remainingSeconds);
     const time = element('span', '⏱ Sisa '); time.append(remaining);
+    meta.append(element('span', session.connectionState === 'ONLINE' ? 'Terhubung' : 'Koneksi belum terpantau'));
     meta.append(time, element('span', `⚑ Ragu ${session.flaggedQuestions}`), element('span', `⚠ Pelanggaran ${session.violationCount}`));
     card.append(head, element('p', `${session.subjectName ? session.subjectName + ' · ' : ''}${session.examName}`, 'session-exam'), progressHead, progress, meta); return card;
   }

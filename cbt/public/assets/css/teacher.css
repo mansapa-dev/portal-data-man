@@ -1,5 +1,27 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
+.teacher-live { display: grid; grid-template-columns: 1fr; gap: 16px; }
+.teacher-live .live-heading, .teacher-live .live-actions, .teacher-live .session-card > header, .teacher-live .progress-copy { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.teacher-live .live-heading h2 { margin: 0 0 6px; }
+.teacher-live .live-heading p, .teacher-live .live-actions { color: var(--muted); font-size: 12px; }
+.teacher-live .live-summary { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; }
+.teacher-live .live-metric, .teacher-live .session-card { padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); min-width: 0; }
+.teacher-live .live-metric { display: grid; gap: 6px; }
+.teacher-live .live-metric strong { font-size: 26px; }
+.teacher-live .live-metric span, .teacher-live .session-card > header div > span { color: var(--muted); font-size: 12px; }
+.teacher-live .session-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+.teacher-live .session-card > header div { display: grid; gap: 4px; }
+.teacher-live .session-status { padding: 5px 8px; border-radius: 20px; background: var(--green-soft); color: var(--green-dark); font-size: 11px; }
+.teacher-live .status-terminated { background: #fee2e2; color: #991b1b; }
+.teacher-live .status-expired { background: #f1f5f9; color: var(--muted); }
+.teacher-live .session-exam { font-size: 13px; margin: 16px 0; }
+.teacher-live .progress-track { height: 7px; border-radius: 8px; overflow: hidden; background: var(--line); margin-top: 7px; }
+.teacher-live .progress-track span { display: block; height: 100%; background: var(--green); }
+.teacher-live .session-meta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 11px; color: var(--muted); }
+.teacher-live .refresh-live { padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--green-dark); cursor: pointer; }
+.teacher-live .live-empty, .teacher-live .live-loading { grid-column: 1 / -1; padding: 32px; border: 1px dashed var(--line); border-radius: 12px; text-align: center; }
+@media(max-width: 800px) { .teacher-live .live-summary { grid-template-columns: repeat(2,minmax(0,1fr)); } .teacher-live .session-grid { grid-template-columns: 1fr; } .teacher-live .live-heading { align-items: flex-start; flex-direction: column; } }
+
 :root {
   --ui-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
   --green: #4CAF50;

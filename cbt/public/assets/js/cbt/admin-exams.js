@@ -1,5 +1,11 @@
 // Administrator exam schedule management.
 let cacheAdminUjianRows = [];
+function aturPembahasan(id, published) {
+  if (published && !window.confirm('Terbitkan kunci jawaban untuk peserta ujian ini? Pastikan seluruh sesi, susulan, dan ujian ulang yang memakai soal sama sudah selesai.')) return;
+  cbtApi.withSuccessHandler(() => showCustomAlert('Pembahasan', published ? 'Pembahasan diterbitkan.' : 'Pembahasan ditutup.'))
+    .withFailureHandler(error => showCustomAlert('Pembahasan belum diperbarui', error.message))
+    .publishExamReview(id,published);
+}
 
 function formatTargetKelas(targetStr, targetNamesStr) {
   if (targetNamesStr && targetNamesStr.trim() !== '' && !targetNamesStr.startsWith('01M1')) {
@@ -195,6 +201,8 @@ function applyFilterUjian() {
           <button class="btn btn-secondary" style="padding:5px 10px; font-size:11.5px;" onclick="editUjianById(${u.id})">
             <i class="fa-solid fa-pen"></i> Edit
           </button>
+          <button class="btn btn-secondary" style="padding:5px 10px; font-size:11.5px;" onclick="aturPembahasan(${u.id},true)">Terbitkan Pembahasan</button>
+          <button class="btn btn-secondary" style="padding:5px 10px; font-size:11.5px;" onclick="aturPembahasan(${u.id},false)">Tutup Pembahasan</button>
         </td>
       </tr>
     `;

@@ -12,7 +12,7 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
   <title>Dashboard Guru - CBT MAN 1 Palembang</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <link rel="stylesheet" href="../assets/css/teacher.css?v=20260904-16">
+  <link rel="stylesheet" href="../assets/css/teacher.css?v=20260907-1">
 </head>
 <body class="dashboard-page">
   <div class="teacher-sidebar-backdrop" id="teacherSidebarBackdrop"></div>
@@ -25,6 +25,7 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
       <span class="nav-label">UTAMA</span>
       <button class="nav-item active" data-section="overview"><i class="fa-solid fa-house"></i><span>Dashboard</span></button>
       <span class="nav-label">MONITORING</span>
+      <button class="nav-item" data-section="live"><i class="fa-solid fa-signal"></i><span>Sesi Berlangsung</span></button>
       <button class="nav-item" data-section="exams"><i class="fa-solid fa-calendar-days"></i><span>Ujian Diampu</span></button>
       <button class="nav-item" data-section="results"><i class="fa-solid fa-square-poll-vertical"></i><span>Hasil Siswa</span></button>
       <button class="nav-item" data-section="violations"><i class="fa-solid fa-shield-halved"></i><span>Pelanggaran</span></button>
@@ -63,7 +64,8 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
     <section id="content" class="content-grid"></section>
   </main>
 
-  <script src="../assets/js/teacher/dashboard.js?v=20260904-17"></script>
+  <script src="../assets/js/teacher/live-sessions.js?v=20260907-1"></script>
+  <script src="../assets/js/teacher/dashboard.js?v=20260907-1"></script>
   <script src="../assets/js/table-pagination.js?v=20260904-10"></script>
 </body>
 </html>
