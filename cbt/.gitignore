@@ -3,6 +3,8 @@
 /storage/logs/*.log
 /storage/cache/*
 /storage/imports/*
+/public/assets/uploads/questions/*
 !/storage/logs/.gitkeep
 !/storage/cache/.gitkeep
 !/storage/imports/.gitkeep
+!/public/assets/uploads/questions/.gitkeep

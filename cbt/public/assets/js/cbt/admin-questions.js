@@ -398,6 +398,12 @@ function handleGambarSoalFile(input) {
   const file = input.files[0];
   if (!file) return;
 
+  if (!['image/png','image/jpeg','image/gif','image/webp'].includes(file.type)) {
+    showCustomAlert('Format Tidak Didukung', 'Gunakan gambar PNG, JPG, GIF, atau WebP.');
+    input.value = '';
+    return;
+  }
+
   if (file.size > 2 * 1024 * 1024) {
     showCustomAlert('File Terlalu Besar', 'Maksimal ukuran file gambar adalah 2MB.');
     input.value = '';
@@ -552,7 +558,8 @@ function handleImportSoal(input) {
     cbtApi
       .withSuccessHandler(res => {
         hideLoading();
-        showCustomAlert('Informasi', res.message);
+        const details = (res.summary?.errors || []).slice(0, 5).map(error => `Baris ${error.row}: ${error.reason}`).join('\n');
+        showCustomAlert('Informasi', res.message + (details ? `\n${details}` : ''));
         loadDataAdminSoal();
         input.value = '';
       })

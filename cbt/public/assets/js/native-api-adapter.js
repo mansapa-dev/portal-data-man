@@ -128,7 +128,24 @@
     async prosesKenaikanKelasAdmin() { await api('api/admin/portal-data/sync/students','POST',{});return {success:true,dataXII:[],message:'Kelas diperbarui melalui sinkronisasi Portal Data.'}; },
     async importSiswaBulk() { return {success:false,message:'Excel bukan source of truth. Gunakan Sinkronisasi Portal Data.'}; },
     async updatePasswordGuru(session,oldPass,newPass) { await api('api/auth/password','POST',{old_password:oldPass,new_password:newPass});return {success:true,message:'Password berhasil diperbarui.'}; },
-    async importSoalBulk(session,rows) { const r=await api('api/admin/questions/import','POST',{rows});return {success:true,message:r.message,summary:r.data}; },
+    async importSoalBulk(session,rows) {
+      const batches=[];let batch=[],bytes=0;
+      for(const row of rows){
+        const rowBytes=new TextEncoder().encode(JSON.stringify(row)).length;
+        if(rowBytes>3500000)throw new Error('Salah satu gambar terlalu besar untuk dikirim. Maksimal ukuran file gambar adalah 2 MB.');
+        if(batch.length&&bytes+rowBytes>3500000){batches.push(batch);batch=[];bytes=0;}
+        batch.push(row);bytes+=rowBytes;
+      }
+      if(batch.length)batches.push(batch);
+      const summary={total:0,inserted:0,failed:0,errors:[]};let offset=0;
+      for(const rowsBatch of batches){
+        const r=await api('api/admin/questions/import','POST',{rows:rowsBatch});
+        summary.total+=Number(r.data.total||0);summary.inserted+=Number(r.data.inserted||0);summary.failed+=Number(r.data.failed||0);
+        for(const error of r.data.errors||[])summary.errors.push({...error,row:Number(error.row||2)+offset});
+        offset+=rowsBatch.length;
+      }
+      return {success:true,message:`Import selesai: ${summary.inserted} berhasil, ${summary.failed} gagal.`,summary};
+    },
     async importAkunBulk(session,rows) { const r=await api('api/admin/users/import','POST',{rows});return {success:true,message:r.message,summary:r.data}; },
     async getAdminSettings() { const r=await api('api/admin/settings');return {success:true,data:r.data}; },
     async saveAdminSettings(session,data) { const r=await api('api/admin/settings','POST',data);return {success:true,data:r.data,message:r.message}; }
