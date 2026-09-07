@@ -21,15 +21,33 @@ final class AuthController
     }
     public function logout(Request $request): Response
     {
-        $url=$this->auth->logoutUrl(bin2hex(random_bytes(16))); $this->sessions->revoke($_SESSION['auth_session_public_id']??null); $_SESSION=[]; if(ini_get('session.use_cookies')){$p=session_get_cookie_params();setcookie(session_name(),'',time()-42000,$p['path'],$p['domain'],$p['secure'],$p['httponly']);} session_destroy(); return Response::redirect($url);
+        // Logout lokal harus tetap berhasil walaupun Portal Data sedang tidak
+        // bisa dihubungi. Tanpa fallback, exception discovery berubah menjadi
+        // JSON 500 di browser desktop dan sesi Agen masih tertinggal.
+        $url='/login';
+        try {
+            $url=$this->auth->logoutUrl(bin2hex(random_bytes(16)));
+        } catch (Throwable $error) {
+            error_log('Logout SSO Agen fallback lokal: '.$error->getMessage());
+        }
+        try {
+            $this->sessions->revoke($_SESSION['auth_session_public_id']??null);
+        } catch (Throwable $error) {
+            error_log('Revokasi session Agen gagal saat logout: '.$error->getMessage());
+        }
+        $_SESSION=[];
+        if(ini_get('session.use_cookies')){$p=session_get_cookie_params();setcookie(session_name(),'',time()-42000,$p['path'],$p['domain'],$p['secure'],$p['httponly']);}
+        session_destroy();
+        return Response::redirect($url);
     }
     private function synchronizeUser(array $claims): array
     {
-        $portalId=(string)($claims['portal_teacher_id']??''); if(!preg_match('/^[0-9A-HJKMNP-TV-Z]{26}$/',$portalId)) throw new \RuntimeException('Public ID guru Portal Data tidak valid.');
+        $portalId=strtoupper(trim((string)($claims['portal_teacher_id']??''))); if(!preg_match('/^[0-9A-HJKMNP-TV-Z]{26}$/',$portalId)) throw new \RuntimeException('Public ID guru Portal Data tidak valid.');
         $role=(string)($claims['portal_role']??'');if(!in_array($role,['TEACHER','ADMIN','AUDITOR'],true))throw new \RuntimeException('Role aplikasi tidak valid.');
         $pdo=$this->database->pdo(); $find=$pdo->prepare('SELECT public_id FROM users WHERE portal_teacher_public_id = :portal_id LIMIT 1'); $find->execute(['portal_id'=>$portalId]); $publicId=$find->fetchColumn()?:Ulid::generate();
         $pdo->prepare("INSERT INTO users(public_id,portal_teacher_public_id,name_snapshot,email_snapshot,role,status,last_login_at) VALUES(:public_id,:portal_id,:name,:email,:role,'ACTIVE',NOW(3)) ON DUPLICATE KEY UPDATE name_snapshot=VALUES(name_snapshot),email_snapshot=VALUES(email_snapshot),role=VALUES(role),status='ACTIVE',last_login_at=NOW(3)")->execute(['public_id'=>$publicId,'portal_id'=>$portalId,'name'=>(string)$claims['name'],'email'=>$claims['email']??null,'role'=>$role]);
         $identity=$pdo->prepare('SELECT id,public_id FROM users WHERE portal_teacher_public_id=:portal_id LIMIT 1'); $identity->execute(['portal_id'=>$portalId]); $local=$identity->fetch();
-        return ['id'=>(int)$local['id'],'public_id'=>$local['public_id'],'portal_teacher_public_id'=>$portalId,'name'=>(string)$claims['name'],'email'=>$claims['email']??null,'username'=>(string)($claims['preferred_username']??''),'role'=>$role];
+        $username=trim((string)($claims['preferred_username']??''));
+        return ['id'=>(int)$local['id'],'public_id'=>$local['public_id'],'portal_teacher_public_id'=>$portalId,'name'=>(string)$claims['name'],'email'=>$claims['email']??null,'username'=>$username,'role'=>$role];
     }
 }

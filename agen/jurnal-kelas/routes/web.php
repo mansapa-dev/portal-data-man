@@ -13,6 +13,7 @@ $router->get('/', [HomeController::class, 'landing']);
 $router->get('/login', [AuthController::class, 'login']);
 $router->get('/auth/sso/redirect', [AuthController::class, 'redirect']);
 $router->get('/auth/sso/callback', [AuthController::class, 'callback']);
+$router->get('/logout', [AuthController::class, 'logout']);
 $router->post('/logout', [AuthController::class, 'logout']);
 $router->get('/dashboard', [HomeController::class, 'index'], [AuthenticateMiddleware::class]);
 $router->get('/attendance/create', [AttendancePageController::class, 'create'], [AuthenticateMiddleware::class]);

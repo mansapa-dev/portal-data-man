@@ -199,11 +199,9 @@
   content.addEventListener('click',e=>{const button=e.target.closest('[data-target]');if(button)render(button.dataset.target);});
   document.getElementById('menu').addEventListener('click', () => document.querySelector('.sidebar').classList.toggle('open'));
   const handleLogout = async () => {
-    try {
-      await api('api/auth/logout', 'POST', {});
-    } finally {
-      location.href = '../guru';
-    }
+    // Tutup sesi lokal sekaligus sesi Portal Data. Endpoint SSO melakukan
+    // redirect kembali ke halaman login CBT setelah logout selesai.
+    location.href = '../auth/sso/logout';
   };
 
   const btnLogoutSide = document.getElementById('logout');

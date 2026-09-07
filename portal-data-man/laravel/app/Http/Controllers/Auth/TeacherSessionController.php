@@ -16,11 +16,21 @@ class TeacherSessionController extends Controller
     public function store(Request $request): JsonResponse
     {
         $credentials = $request->validate(['username' => ['required', 'string'], 'password' => ['required', 'string']]);
-        $input = trim($credentials['username']);
+        $input = trim((string) $credentials['username']);
+        $normalized = mb_strtolower($input, 'UTF-8');
+        $compact = preg_replace('/\s+/u', '', $input) ?: $input;
         $account = TeacherAccount::query()->with('teacher')
-            ->where('username', strtolower($input))
-            ->orWhere('username', $input)
-            ->orWhereHas('teacher', fn ($q) => $q->where('nip', $input)->orWhere('email', strtolower($input)))
+            ->where(function ($query) use ($normalized, $input, $compact): void {
+                $query->whereRaw('LOWER(username) = ?', [$normalized])
+                    ->orWhereRaw('LOWER(email) = ?', [$normalized])
+                    ->orWhereHas('teacher', function ($teacher) use ($normalized, $input, $compact): void {
+                        $teacher->where(function ($identifier) use ($input, $compact): void {
+                            $identifier->whereIn('nip', array_values(array_unique([$input, $compact])))
+                                ->orWhereIn('nuptk', array_values(array_unique([$input, $compact])))
+                                ->orWhereIn('employeeNumber', array_values(array_unique([$input, $compact])));
+                        })->orWhereRaw('LOWER(email) = ?', [$normalized]);
+                    });
+            })
             ->first();
 
         if ($account?->status === 'LOCKED' && $account->lockedUntil?->isPast()) {

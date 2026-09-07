@@ -150,4 +150,29 @@ class TeacherAccountLifecycleTest extends TestCase
         $invalid = UploadedFile::fake()->createWithContent('fake.jpg', 'not an image');
         $this->post('/api/v1/teacher/profile/photo', ['file' => $invalid], ['Accept' => 'application/json'])->assertUnprocessable();
     }
+
+    public function test_teacher_can_login_with_case_insensitive_username_or_teacher_identifier(): void
+    {
+        $teacher = Teacher::query()->create([
+            'nuptk' => '1234567890123456',
+            'fullName' => 'Guru Identifier',
+            'status' => 'ACTIVE',
+        ]);
+        $teacher->account()->create([
+            'username' => 'guru.identifier',
+            'passwordHash' => password_hash('PasswordGuru123', PASSWORD_ARGON2ID),
+            'status' => 'ACTIVE',
+        ]);
+
+        $this->postJson('/api/v1/auth/teacher/login', [
+            'username' => '  GURU.IDENTIFIER  ',
+            'password' => 'PasswordGuru123',
+        ])->assertOk();
+        $this->postJson('/api/v1/auth/teacher/logout')->assertOk();
+
+        $this->postJson('/api/v1/auth/teacher/login', [
+            'username' => '1234567890123456',
+            'password' => 'PasswordGuru123',
+        ])->assertOk();
+    }
 }
