@@ -19,7 +19,19 @@ final class TeacherSsoController
     public function logout(Request $request): Response { Session::destroy();header('Location: /guru');exit; }
     private function oidc(): array
     {
-        if($this->discovery!==null)return$this->discovery;$configured=$this->required('PORTAL_DATA_OIDC_ISSUER');$candidates=[$configured.'/.well-known/openid-configuration',rtrim($configured,'/').'/oidc/.well-known/openid-configuration'];foreach(array_unique($candidates)as$url){$data=$this->userinfo($url,'');if(isset($data['issuer'],$data['authorization_endpoint'],$data['token_endpoint'],$data['jwks_uri']))return$this->discovery=['issuer'=>rtrim((string)$data['issuer'],'/'),'authorization_endpoint'=>(string)$data['authorization_endpoint'],'token_endpoint'=>(string)$data['token_endpoint'],'userinfo_endpoint'=>(string)($data['userinfo_endpoint']??''),'jwks_uri'=>(string)$data['jwks_uri']];}Response::error('Konfigurasi endpoint SSO Portal Data tidak dapat dibaca.',503)->send();return[];
+        if($this->discovery!==null)return$this->discovery;
+        $configured=$this->required('PORTAL_DATA_OIDC_ISSUER');$this->https($configured);
+        $candidates=[$configured.'/.well-known/openid-configuration',rtrim($configured,'/').'/oidc/.well-known/openid-configuration'];
+        foreach(array_unique($candidates)as$url){
+            $data=$this->userinfo($url,'');
+            if(!isset($data['issuer'],$data['authorization_endpoint'],$data['token_endpoint'],$data['jwks_uri']))continue;
+            $endpoints=[(string)$data['issuer'],(string)$data['authorization_endpoint'],(string)$data['token_endpoint'],(string)$data['jwks_uri']];
+            if(!empty($data['userinfo_endpoint']))$endpoints[]=(string)$data['userinfo_endpoint'];
+            foreach($endpoints as$endpoint)$this->https($endpoint);
+            if(rtrim((string)$data['issuer'],'/')!==rtrim($configured,'/'))continue;
+            return$this->discovery=['issuer'=>rtrim((string)$data['issuer'],'/'),'authorization_endpoint'=>(string)$data['authorization_endpoint'],'token_endpoint'=>(string)$data['token_endpoint'],'userinfo_endpoint'=>(string)($data['userinfo_endpoint']??''),'jwks_uri'=>(string)$data['jwks_uri']];
+        }
+        Response::error('Konfigurasi endpoint SSO Portal Data tidak dapat dibaca.',503)->send();return[];
     }
     private function verify(string $jwt, string $nonce, array $oidc): ?array
     {
@@ -30,11 +42,13 @@ final class TeacherSsoController
         $header  = json_decode((string)base64_decode(strtr($headerB64, '-_', '+/'), true), true);
         $payload = json_decode((string)base64_decode(strtr($payloadB64, '-_', '+/'), true), true);
         if (!is_array($header) || !is_array($payload)) { error_log('CBT SSO verify: header/payload JWT tidak bisa di-decode.'); return null; }
+        if(!hash_equals('RS256',(string)($header['alg']??''))) { error_log('CBT SSO verify: algoritma token bukan RS256.'); return null; }
         $kid  = (string)($header['kid'] ?? '');
+        if($kid==='') { error_log('CBT SSO verify: kid token kosong.'); return null; }
         $jwks = $this->userinfo($oidc['jwks_uri'], '');
         $jwkFound = null;
         foreach ($jwks['keys'] ?? [] as $k) {
-            if ($kid === '' || (string)($k['kid'] ?? '') === $kid) { $jwkFound = $k; break; }
+            if ((string)($k['kid'] ?? '') === $kid && (string)($k['kty'] ?? '') === 'RSA' && in_array((string)($k['use'] ?? 'sig'),['','sig'],true)) { $jwkFound = $k; break; }
         }
         if (!$jwkFound) { error_log('CBT SSO verify: kid "'.$kid.'" tidak ada di JWKS.'); return null; }
         $publicKey = $this->jwkToPublicKey((string)($jwkFound['n'] ?? ''), (string)($jwkFound['e'] ?? ''));
@@ -47,12 +61,13 @@ final class TeacherSsoController
         $client = $this->required('PORTAL_DATA_OIDC_CLIENT_ID');
         $aud    = $payload['aud'] ?? null;
         $audOk  = is_string($aud) ? hash_equals($client, $aud) : (is_array($aud) && in_array($client, $aud, true));
+        $azpOk  = !is_array($aud)||count($aud)<=1||(isset($payload['azp'])&&hash_equals($client,(string)$payload['azp']));
         $issOk  = rtrim((string)($payload['iss'] ?? ''), '/') === $oidc['issuer'];
         $expOk  = isset($payload['exp']) && (int)$payload['exp'] > $now;
         $nbfOk  = !isset($payload['nbf']) || (int)$payload['nbf'] <= $now;
         $claimN = (string)($payload['nonce'] ?? '');
         $nonceOk = $claimN !== '' && hash_equals($nonce, $claimN);
-        if (!$audOk || !$issOk || !$expOk || !$nbfOk || !$nonceOk) {
+        if (!$audOk || !$azpOk || !$issOk || !$expOk || !$nbfOk || !$nonceOk) {
             error_log(sprintf('CBT SSO verify: claim mismatch — aud=%s iss=%s exp=%s nbf=%s nonce=%s | iss_got="%s" iss_want="%s"',
                 $audOk?'ok':'FAIL', $issOk?'ok':'FAIL', $expOk?'ok':'FAIL',
                 $nbfOk?'ok':'FAIL', $nonceOk?'ok':'FAIL',

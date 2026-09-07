@@ -105,7 +105,7 @@ function applyFilterSiswa() {
     }
     // Search Query (NISN / Nama)
     if (query !== '') {
-      const qText = `${s.nomor_ujian || ''} ${s.nisn || ''} ${s.nama || ''} ${s.kelas || ''} ${s.pin || ''}`.toLowerCase();
+      const qText = `${s.nomor_ujian || ''} ${s.nisn || ''} ${s.nama || ''} ${s.kelas || ''}`.toLowerCase();
       if (!qText.includes(query)) return false;
     }
     return true;
@@ -125,7 +125,7 @@ function applyFilterSiswa() {
     s.nama,
     s.kelas,
     s.tingkat,
-    s.pin,
+    s.pin_is_set ? 'SUDAH DISET' : 'BELUM DISET',
     s.tahun_ajaran || '2025/2026',
     (s.ujian_status || 'belum').toUpperCase()
   ]);
@@ -163,8 +163,8 @@ function renderTabelSiswa(rows) {
       statusBadge = '<span class="badge bg-green"><i class="fa-solid fa-circle-check"></i> SELESAI</span>';
     }
 
-    const pinDisplay = s.pin && s.pin !== 'BELUM DISET' 
-      ? `<code style="background:var(--primary-soft); color:var(--primary-dark); font-weight:800; padding:3px 8px; border-radius:5px; font-size:12.5px; letter-spacing:1px; border:1px solid var(--primary-soft-border);">${s.pin}</code>`
+    const pinDisplay = s.pin_is_set
+      ? `<span class="badge bg-green"><i class="fa-solid fa-check"></i> Sudah Diset</span>`
       : `<span style="color:var(--danger); font-size:11px; font-weight:700;">Belum Diset</span>`;
 
     return `
@@ -269,6 +269,7 @@ function jalankanGeneratePinMassal(targetGrade, targetClass) {
   }
 
   let totalUpdated = 0;
+  const generatedCredentials = [];
   let cursor = 0;
   showLoading('Menyiapkan generate PIN otomatis...');
 
@@ -279,10 +280,11 @@ function jalankanGeneratePinMassal(targetGrade, targetClass) {
         submitButton.disabled = false;
         submitButton.innerHTML = '<i class="fa-solid fa-bolt"></i> Mulai Generate PIN';
       }
+      downloadGeneratedPinCsv(generatedCredentials);
       loadDataAdminSiswa();
       showCustomAlert(
         'Generate PIN Berhasil',
-        `Berhasil membuat PIN otomatis baru untuk ${totalUpdated} siswa.`,
+        `Berhasil membuat PIN otomatis baru untuk ${totalUpdated} siswa. CSV kredensial telah diunduh satu kali; simpan dengan aman karena PIN tidak dapat ditampilkan kembali.`,
         'success'
       );
   };
@@ -304,6 +306,7 @@ function jalankanGeneratePinMassal(targetGrade, targetClass) {
     cbtApi
       .withSuccessHandler(res => {
         totalUpdated += Number(res.updated) || 0;
+        if (Array.isArray(res.credentials)) generatedCredentials.push(...res.credentials);
         cursor = Number(res.next_cursor) || cursor;
         const total = Number(res.total) || totalUpdated;
         showLoading(`Membuat PIN otomatis: ${Math.min(totalUpdated, total)} dari ${total} siswa...`);
@@ -322,6 +325,22 @@ function jalankanGeneratePinMassal(targetGrade, targetClass) {
   processNextBatch();
 }
 
+function downloadGeneratedPinCsv(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return;
+  const escape = value => {
+    let safe = String(value ?? '');
+    if (/^[=+\-@]/.test(safe)) safe = `'${safe}`;
+    return `"${safe.replace(/"/g, '""')}"`;
+  };
+  const csv = ['NISN,Nama,Kelas,PIN', ...rows.map(row => [row.nisn, row.nama, row.kelas, row.pin].map(escape).join(','))].join('\r\n');
+  const url = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `pin-cbt-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 function editSiswaSatuanById(id) {
   const s = (cacheSiswaGlobal || []).find(x => String(x.id) === String(id));
   if (s) bukaModalSiswaSatuan(s);
@@ -335,7 +354,8 @@ function bukaModalSiswaSatuan(data = null) {
     document.getElementById('inSiswaNo').value = data.nomor_ujian || data.nisn;
     document.getElementById('inSiswaNama').value = data.nama;
     document.getElementById('inSiswaKelas').value = data.kelas;
-    document.getElementById('inSiswaPin').value = (data.pin && data.pin !== 'BELUM DISET') ? data.pin : '';
+    document.getElementById('inSiswaPin').value = '';
+    document.getElementById('inSiswaPin').placeholder = data.pin_is_set ? 'Isi untuk mengganti PIN' : 'Isi PIN baru';
   }
   document.getElementById('modalSiswaSatuan').classList.add('show');
 }

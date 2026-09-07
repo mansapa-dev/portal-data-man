@@ -9,7 +9,6 @@ use Cbt\Services\{AnswerService,AuthService,ExamSessionService,ScoringService,Vi
 use Cbt\Services\PortalDataSyncService;
 use Cbt\Services\AdminService;
 use Cbt\Services\AdminStudentService;
-use Cbt\Support\SecretCipher;
 use Cbt\Integrations\PortalData\HttpPortalDataClient;
 
 $request=Request::capture();
@@ -35,7 +34,7 @@ $student=new StudentExamController(new ExamSessionService($database,$students,$e
 $sync=new SyncController(new PortalDataSyncService($database,new HttpPortalDataClient()));
 $setup=new SetupController($database);
 $adminService=new AdminService($database,new AdminRepository($pdo));$admin=new AdminController($adminService);$teacher=new TeacherController($adminService);$teacherSso=new TeacherSsoController($pdo);
-$adminStudents=new AdminStudentController(new AdminStudentService($database,new AdminStudentRepository($pdo),new SecretCipher()));
+$adminStudents=new AdminStudentController(new AdminStudentService($database,new AdminStudentRepository($pdo)));
 $csrf=new CsrfMiddleware();$studentAuth=new AuthMiddleware('student',null,$pdo);
 $adminAuth=new AuthMiddleware('auth','ADMIN',$pdo);
 $staffAuth=new AuthMiddleware('auth',null,$pdo);

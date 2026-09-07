@@ -219,7 +219,7 @@ function loadDataAdminKartu() {
             <tr><td style="padding:3px; width:35%;">No Peserta</td><td style="padding:3px;">: <b>${s.nomor_ujian}</b></td></tr>
             <tr><td style="padding:3px;">Nama Siswa</td><td style="padding:3px;">: <b>${s.nama}</b></td></tr>
             <tr><td style="padding:3px;">Kelas / Tingkat</td><td style="padding:3px;">: ${s.kelas} / ${s.tingkat}</td></tr>
-            <tr><td style="padding:3px;">PIN Ujian</td><td style="padding:3px;"><span class="badge bg-gray" style="font-size:12px; font-weight:900; letter-spacing:1px;">${s.pin}</span></td></tr>
+            <tr><td style="padding:3px;">PIN Ujian</td><td style="padding:3px;"><span class="badge bg-gray" style="font-size:12px; font-weight:800;">Tidak dapat ditampilkan ulang</span></td></tr>
           </table>
         </div>
       `).join('');

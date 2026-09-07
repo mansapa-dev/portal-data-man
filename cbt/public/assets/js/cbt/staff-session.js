@@ -180,7 +180,8 @@ function loadDataAdminLiveSessions() {
   window.CbtLiveSessions.mount(root, api, notice, {
     title: 'Live Sessions Seluruh Ujian',
     description: 'Pantau progres peserta dari seluruh ujian secara otomatis setiap 10 detik.',
-    enableFilters: true
+    enableFilters: true,
+    groupByExam: true
   });
 }
 

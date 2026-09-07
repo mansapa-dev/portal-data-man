@@ -8,9 +8,11 @@ final class Session
   if(session_status()===PHP_SESSION_ACTIVE)return;
   $lifetime=max(900,(int)Config::get('SESSION_LIFETIME',7200));
   $https=(!empty($_SERVER['HTTPS'])&&strtolower((string)$_SERVER['HTTPS'])!=='off')||((string)($_SERVER['HTTP_X_FORWARDED_PROTO']??'')==='https');
+  $production=strtolower((string)Config::get('APP_ENV','production'))==='production';
+  $secureCookie=Config::bool('SESSION_SECURE_COOKIE',true)&&($production||$https);
   $sameSite=(string)Config::get('SESSION_SAME_SITE','Lax');if(!in_array($sameSite,['Lax','Strict','None'],true))$sameSite='Lax';
   ini_set('session.gc_maxlifetime',(string)$lifetime);ini_set('session.use_strict_mode','1');ini_set('session.use_only_cookies','1');
-  session_name('cbt_session');session_set_cookie_params(['lifetime'=>$lifetime,'path'=>'/','secure'=>Config::bool('SESSION_SECURE_COOKIE',true)&&$https,'httponly'=>true,'samesite'=>$sameSite]);
+  session_name('cbt_session');session_set_cookie_params(['lifetime'=>$lifetime,'path'=>'/','secure'=>$secureCookie,'httponly'=>true,'samesite'=>$sameSite]);
   session_start();if(!isset($_SESSION['csrf']))$_SESSION['csrf']=bin2hex(random_bytes(32));
  }
  public static function regenerate():void{session_regenerate_id(true);}

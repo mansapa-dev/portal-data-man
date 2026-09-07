@@ -33,6 +33,11 @@
   --shadow-primary: 0 4px 14px 0 rgba(76, 175, 80, 0.28);
 }
 
+/* Group live participants by exam/session on the administrator monitor. */
+.live-session-group{display:grid;gap:12px;padding:15px;border:1px solid var(--border);border-radius:16px;background:var(--surface-subtle)}
+.live-session-group>header h3{margin:0;color:var(--text-main);font-size:15px}
+.live-session-group>header p{margin:4px 0 0;color:var(--text-muted);font-size:11px}
+
 * {
   box-sizing: border-box;
   margin: 0;
