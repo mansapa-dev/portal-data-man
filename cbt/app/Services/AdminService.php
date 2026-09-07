@@ -29,8 +29,10 @@ final class AdminService
   $timezone=new \DateTimeZone('Asia/Jakarta');
   try{$start=new \DateTimeImmutable(trim((string)$d['starts_at']),$timezone);$end=new \DateTimeImmutable(trim((string)$d['ends_at']),$timezone);}catch(\Throwable){throw new DomainException('Tanggal dan waktu jadwal tidak valid.',422);}
   if($end<=$start)throw new DomainException('Waktu selesai harus setelah waktu mulai.',422);
-  $name=trim((string)($d['name']??''));if($name==='')$name=$type==='REMEDIAL'?'Remedial - '.$source['name']:'Susulan - '.$source['name'];
   $utc=new \DateTimeZone('UTC');
+  $sourceEnds=new \DateTimeImmutable((string)$source['ends_at'],$utc);
+  if($start->setTimezone($utc)<$sourceEnds)throw new DomainException('Jadwal ujian lanjutan harus dimulai setelah ujian asal selesai.',422);
+  $name=trim((string)($d['name']??''));if($name==='')$name=$type==='REMEDIAL'?'Remedial - '.$source['name']:'Susulan - '.$source['name'];
   return $this->db->transaction(function()use($source,$sourceId,$studentIds,$name,$type,$start,$end,$utc,$actor,$d){$result=$this->repo->cloneFollowUpExam($source,$studentIds,$name,$type,$start->setTimezone($utc)->format('Y-m-d H:i:s'),$end->setTimezone($utc)->format('Y-m-d H:i:s'),$actor,filter_var($d['active']??true,FILTER_VALIDATE_BOOL),trim((string)($d['room']??'')),trim((string)($d['notes']??'')));$this->repo->copyTeacherAssignments($sourceId,(int)$result['id'],$actor);return$result;});
  }
  public function makeUpCandidates():array{return$this->repo->makeUpCandidates();}
