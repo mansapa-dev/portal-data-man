@@ -54,12 +54,12 @@ try {
  $scoring->submit(1,1);$assert((int)$pdo->query('SELECT COUNT(*) FROM exam_results')->fetchColumn()===1,'repeated submit produces exactly one result');
  $assert($scoring->recover(1,1)['completed']===true,'refresh recovers committed result');
  $review=$scoring->review(1,1);
- $assert($review['soal'][0]['jawaban_benar']==='B'&&count($review['soal'][0]['opsi'])===4,'completed student receives review automatically before the exam schedule ends');
+ $assert($review['soal'][0]['status']==='BENAR'&&!isset($review['soal'][0]['jawaban_benar'],$review['soal'][0]['opsi'],$review['jawaban']),'completed student receives correctness without answer key before the exam schedule ends');
  $pdo->exec("UPDATE exams SET ends_at=UTC_TIMESTAMP()-INTERVAL 1 SECOND");
  $assert(count($sessions->list(1,'0000000001'))===1,'result remains available after schedule closes');
  $pdo->exec('DELETE FROM attempt_questions WHERE attempt_id=1');
  $legacyReview=$scoring->review(1,1);
- $assert(count($legacyReview['soal'])===1&&$legacyReview['soal'][0]['jawaban_benar']==='A','legacy review repairs a missing question snapshot from the current bank');
+ $assert(count($legacyReview['soal'])===1&&$legacyReview['soal'][0]['status']==='SALAH'&&!isset($legacyReview['soal'][0]['jawaban_benar']),'legacy review repairs a missing question snapshot without exposing its answer key');
  $unsafe='<b onclick="bad()">Safe</b><script>bad()</script><img src="javascript:bad()" onerror="bad()"><img src="assets/question.png" onerror="bad()">';
  $safe=\Cbt\Support\QuestionHtml::clean($unsafe);
  $assert(str_contains($safe,'<b>Safe</b>')&&!str_contains($safe,'bad()')&&str_contains($safe,'assets/question.png'),'question sanitizer strips executable markup and retains local images');

@@ -113,22 +113,17 @@ final class ScoringService
   $attempt=$this->attempts->find($studentId,$examId)??throw new DomainException('Sesi ujian tidak ditemukan.',404);
   if($attempt['status']!=='COMPLETED')throw new DomainException('Review hanya tersedia untuk ujian yang diselesaikan.',403);
   $this->ensureAttemptQuestions($attempt);
-  $sql='SELECT q.question_id id,q.question_text,q.option_a,q.option_b,q.option_c,q.option_d,q.option_e,q.correct_answer,a.answer FROM attempt_questions q LEFT JOIN student_answers a ON a.question_id=q.question_id AND a.attempt_id=q.attempt_id WHERE q.attempt_id=:attempt';
+  $sql='SELECT q.question_id id,q.question_text,q.correct_answer,a.answer FROM attempt_questions q LEFT JOIN student_answers a ON a.question_id=q.question_id AND a.attempt_id=q.attempt_id WHERE q.attempt_id=:attempt';
   $s=$this->db->pdo()->prepare($sql);$s->execute(['attempt'=>$attempt['id']]);$rows=$s->fetchAll();
   if(!$rows)throw new DomainException('Data soal untuk review tidak tersedia. Jalankan upgrade database atau pulihkan bank soal ujian ini.',409);
   $byId=[];foreach($rows as$row)$byId[(int)$row['id']]=$row;$ordered=[];
   foreach(json_decode($attempt['question_order'],true,512,JSON_THROW_ON_ERROR)as$id)if(isset($byId[(int)$id]))$ordered[]=$byId[(int)$id];
-   $questions=[];$answers=[];
+   $questions=[];
    foreach($ordered as$row){
-    $options=[];
-    foreach(['A','B','C','D','E']as$key){
-     $value=$row['option_'.strtolower($key)]??null;
-     if($value!==null&&$value!=='')$options[]=['key'=>$key,'text'=>\Cbt\Support\QuestionHtml::clean($value)];
-    }
-    $questions[]=['id'=>(int)$row['id'],'pertanyaan'=>\Cbt\Support\QuestionHtml::clean($row['question_text']),'opsi'=>$options,'jawaban_benar'=>$row['correct_answer']];
-    $answers[]=['soal_id'=>(int)$row['id'],'jawaban'=>$row['answer']];
+    $status=$row['answer']===null?'KOSONG':(hash_equals((string)$row['correct_answer'],(string)$row['answer'])?'BENAR':'SALAH');
+    $questions[]=['id'=>(int)$row['id'],'pertanyaan'=>\Cbt\Support\QuestionHtml::clean($row['question_text']),'status'=>$status];
    }
-   return['soal'=>$questions,'jawaban'=>$answers];
+   return['soal'=>$questions];
  }
 
  private function ensureAttemptQuestions(array $attempt):void

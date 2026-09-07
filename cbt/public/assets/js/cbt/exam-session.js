@@ -417,25 +417,19 @@ function bukaModalReview() {
     .withSuccessHandler(res => {
       hideLoading();
       if (!res.success) { showCustomAlert('Gagal', res.message); return; }
-      const jawMap = {}; (res.jawaban||[]).forEach(j => { jawMap[j.soal_id] = String(j.jawaban).trim().toUpperCase(); });
-
       if (!Array.isArray(res.soal) || res.soal.length === 0) {
         showCustomAlert('Review belum tersedia', 'Data soal review kosong. Hubungi administrator untuk menjalankan upgrade database CBT.');
         return;
       }
 
       document.getElementById('listReviewContainer').innerHTML = res.soal.map((s, idx) => {
-        const jSiswa = jawMap[s.id] || '';
-        const kBenar = String(s.jawaban_benar || '').trim().toUpperCase();
-        let st = '<span style="color:var(--danger); font-weight:700;">[TIDAK DIJAWAB]</span>';
-        if (jSiswa) {
-          st = jSiswa === kBenar
-            ? '<span style="color:var(--success); font-weight:700;"><i class="fa-solid fa-check"></i> [BENAR]</span>'
-            : '<span style="color:var(--danger); font-weight:700;"><i class="fa-solid fa-xmark"></i> [SALAH]</span>';
-        }
-        const answerText = (s.opsi || []).find(option => option.key === jSiswa)?.text || 'Tidak dijawab';
-        const correctText = (s.opsi || []).find(option => option.key === kBenar)?.text || '-';
-        return `<div style="background:var(--secondary-bg); border:1px solid var(--border); border-radius:8px; padding:14px; font-size:12px;"><div style="display:flex; justify-content:space-between; margin-bottom:6px;"><b style="color:var(--primary);">Soal No. ${idx + 1}</b><div>${st}</div></div><div>${s.pertanyaan}</div><div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);"><b>Jawaban Anda (${jSiswa || '-'})</b>: ${answerText}<br><b>Kunci (${kBenar})</b>: ${correctText}</div></div>`;
+        const status = String(s.status || 'KOSONG').toUpperCase();
+        const st = status === 'BENAR'
+          ? '<span style="color:var(--success); font-weight:700;"><i class="fa-solid fa-check"></i> [BENAR]</span>'
+          : status === 'SALAH'
+            ? '<span style="color:var(--danger); font-weight:700;"><i class="fa-solid fa-xmark"></i> [SALAH]</span>'
+            : '<span style="color:var(--danger); font-weight:700;">[TIDAK DIJAWAB]</span>';
+        return `<div style="background:var(--secondary-bg); border:1px solid var(--border); border-radius:8px; padding:14px; font-size:12px;"><div style="display:flex; justify-content:space-between; margin-bottom:6px;"><b style="color:var(--primary);">Soal No. ${idx + 1}</b><div>${st}</div></div><div>${s.pertanyaan}</div></div>`;
       }).join('');
       document.getElementById('modalReview').classList.add('show');
     })
