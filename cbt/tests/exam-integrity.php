@@ -57,7 +57,11 @@ try {
  $pdo->exec("UPDATE exams SET ends_at=UTC_TIMESTAMP()-INTERVAL 1 SECOND");
  $assert(count($sessions->list(1,'0000000001'))===1,'result remains available after schedule closes');
  $pdo->exec("INSERT INTO cbt_settings(key_name,value) VALUES('review_published_1','1')");
- $assert($scoring->review(1,1)['soal'][0]['jawaban_benar']==='B','published review uses original key rather than edited key');
+ $review=$scoring->review(1,1);
+ $assert($review['soal'][0]['jawaban_benar']==='B'&&count($review['soal'][0]['opsi'])===4,'published review uses original key and returns options');
+ $pdo->exec('DELETE FROM attempt_questions WHERE attempt_id=1');
+ $legacyReview=$scoring->review(1,1);
+ $assert(count($legacyReview['soal'])===1&&$legacyReview['soal'][0]['jawaban_benar']==='A','legacy review repairs a missing question snapshot from the current bank');
  $unsafe='<b onclick="bad()">Safe</b><script>bad()</script><img src="javascript:bad()" onerror="bad()"><img src="assets/question.png" onerror="bad()">';
  $safe=\Cbt\Support\QuestionHtml::clean($unsafe);
  $assert(str_contains($safe,'<b>Safe</b>')&&!str_contains($safe,'bad()')&&str_contains($safe,'assets/question.png'),'question sanitizer strips executable markup and retains local images');

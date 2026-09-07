@@ -40,6 +40,8 @@ final class ScoringService
    if($existing)return$this->format($existing);
    if(!in_array($attempt['status'],['IN_PROGRESS','TERMINATED'],true))throw new DomainException('Ujian tidak dapat disubmit.',409);
 
+   $this->ensureAttemptQuestions($attempt);
+
    $sql='SELECT q.question_id id,q.correct_answer,q.points,a.answer FROM attempt_questions q LEFT JOIN student_answers a ON a.question_id=q.question_id AND a.attempt_id=q.attempt_id WHERE q.attempt_id=:attempt';
    $statement=$this->db->pdo()->prepare($sql);
    $statement->execute(['attempt'=>$attempt['id']]);
@@ -113,8 +115,33 @@ final class ScoringService
   $release=$this->db->pdo()->prepare('SELECT s.value FROM cbt_settings s JOIN exams e ON e.id=:exam WHERE s.key_name=:key AND e.ends_at<=UTC_TIMESTAMP(3) LIMIT 1');
   $release->execute(['key'=>'review_published_'.$examId,'exam'=>$examId]);
   if($release->fetchColumn()!=='1')throw new DomainException('Pembahasan belum diterbitkan oleh administrator.',403);
-  $sql='SELECT q.question_id id,q.question_text,q.correct_answer,a.answer FROM attempt_questions q LEFT JOIN student_answers a ON a.question_id=q.question_id AND a.attempt_id=q.attempt_id WHERE q.attempt_id=:attempt';
+  $this->ensureAttemptQuestions($attempt);
+  $sql='SELECT q.question_id id,q.question_text,q.option_a,q.option_b,q.option_c,q.option_d,q.option_e,q.correct_answer,a.answer FROM attempt_questions q LEFT JOIN student_answers a ON a.question_id=q.question_id AND a.attempt_id=q.attempt_id WHERE q.attempt_id=:attempt';
   $s=$this->db->pdo()->prepare($sql);$s->execute(['attempt'=>$attempt['id']]);$rows=$s->fetchAll();
-  return['soal'=>array_map(fn($r)=>['id'=>(int)$r['id'],'pertanyaan'=>\Cbt\Support\QuestionHtml::clean($r['question_text']),'jawaban_benar'=>$r['correct_answer']],$rows),'jawaban'=>array_map(fn($r)=>['soal_id'=>(int)$r['id'],'jawaban'=>$r['answer']],$rows)];
+  if(!$rows)throw new DomainException('Data soal untuk review tidak tersedia. Jalankan upgrade database atau pulihkan bank soal ujian ini.',409);
+  $byId=[];foreach($rows as$row)$byId[(int)$row['id']]=$row;$ordered=[];
+  foreach(json_decode($attempt['question_order'],true,512,JSON_THROW_ON_ERROR)as$id)if(isset($byId[(int)$id]))$ordered[]=$byId[(int)$id];
+   $questions=[];$answers=[];
+   foreach($ordered as$row){
+    $options=[];
+    foreach(['A','B','C','D','E']as$key){
+     $value=$row['option_'.strtolower($key)]??null;
+     if($value!==null&&$value!=='')$options[]=['key'=>$key,'text'=>\Cbt\Support\QuestionHtml::clean($value)];
+    }
+    $questions[]=['id'=>(int)$row['id'],'pertanyaan'=>\Cbt\Support\QuestionHtml::clean($row['question_text']),'opsi'=>$options,'jawaban_benar'=>$row['correct_answer']];
+    $answers[]=['soal_id'=>(int)$row['id'],'jawaban'=>$row['answer']];
+   }
+   return['soal'=>$questions,'jawaban'=>$answers];
+ }
+
+ private function ensureAttemptQuestions(array $attempt):void
+ {
+  $count=$this->db->pdo()->prepare('SELECT COUNT(*) FROM attempt_questions WHERE attempt_id=:attempt');
+  $count->execute(['attempt'=>$attempt['id']]);
+  if((int)$count->fetchColumn()>0)return;
+  // Compatibility for attempts created before question snapshots existed. Current
+  // bank contents are the only recoverable source for these legacy attempts.
+  $insert=$this->db->pdo()->prepare("INSERT IGNORE INTO attempt_questions(attempt_id,question_id,question_text,option_a,option_b,option_c,option_d,option_e,correct_answer,points) SELECT :attempt,q.id,q.question_text,q.option_a,q.option_b,q.option_c,q.option_d,q.option_e,q.correct_answer,q.points FROM questions q WHERE q.exam_id=:exam AND JSON_CONTAINS(:question_order,CAST(q.id AS CHAR))");
+  $insert->execute(['attempt'=>$attempt['id'],'exam'=>$attempt['exam_id'],'question_order'=>$attempt['question_order']]);
  }
 }
