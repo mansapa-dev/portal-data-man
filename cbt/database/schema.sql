@@ -263,6 +263,22 @@ CREATE TABLE IF NOT EXISTS teacher_exam_assignments (
  CONSTRAINT fk_assignment_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS support_tickets (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, public_id CHAR(26) NOT NULL,
+ student_id BIGINT UNSIGNED NOT NULL, exam_id BIGINT UNSIGNED NULL, attempt_id BIGINT UNSIGNED NULL,
+ category ENUM('ACCOUNT_ACCESS','EXAM_LOCKED','PIN','CONNECTION','TECHNICAL','OTHER') NOT NULL,
+ message VARCHAR(1000) NOT NULL, status ENUM('OPEN','IN_PROGRESS','RESOLVED','CLOSED') NOT NULL DEFAULT 'OPEN',
+ handled_by BIGINT UNSIGNED NULL, staff_note VARCHAR(1000) NULL, resolution_type ENUM('ASSISTED','CBT_RESET') NULL,
+ resolved_at DATETIME(3) NULL, created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+ updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+ UNIQUE KEY uq_support_tickets_public (public_id), KEY idx_support_status_updated (status,updated_at),
+ KEY idx_support_student_updated (student_id,updated_at), KEY idx_support_exam_status (exam_id,status),
+ CONSTRAINT fk_support_student FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE RESTRICT,
+ CONSTRAINT fk_support_exam FOREIGN KEY (exam_id) REFERENCES exams(id) ON DELETE SET NULL,
+ CONSTRAINT fk_support_attempt FOREIGN KEY (attempt_id) REFERENCES exam_attempts(id) ON DELETE SET NULL,
+ CONSTRAINT fk_support_handler FOREIGN KEY (handled_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS portal_sync_logs (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, sync_type ENUM('STUDENTS','TEACHERS','CLASSES','ACADEMIC_YEARS','SEMESTERS','ALL') NOT NULL,
  started_at DATETIME(3) NOT NULL, finished_at DATETIME(3) NULL, status ENUM('RUNNING','SUCCESS','FAILED','PARTIAL') NOT NULL,

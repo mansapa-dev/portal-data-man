@@ -25,6 +25,7 @@
         </div>
         <button type="submit" class="btn btn-primary" style="width:100%; margin-top:12px; padding:12px;">Masuk Ujian <i class="fa-solid fa-arrow-right"></i></button>
       </form>
+      <button type="button" class="support-link-button" onclick="openSupportTicket('ACCOUNT_ACCESS')"><i class="fa-solid fa-headset"></i> Tidak bisa masuk? Kirim tiket bantuan</button>
     </div>
   </main>
 
@@ -45,7 +46,7 @@
       
       <h3 style="font-size:14px; font-weight:700; margin-bottom:12px; color:var(--text-main);">Daftar Ujian Aktif:</h3>
       <div id="listJadwalUjian" style="display:flex; flex-direction:column; gap:12px;"></div>
-      
+      <button type="button" class="support-link-button" onclick="openSupportTicket('OTHER')"><i class="fa-solid fa-headset"></i> Ada kendala? Hubungi petugas dari sini</button>
       <button class="btn btn-secondary" style="width:100%; margin-top:24px;" onclick="appResetLogout()"><i class="fa-solid fa-arrow-right-from-bracket"></i> Keluar</button>
     </div>
   </main>
@@ -62,6 +63,7 @@
         <span class="id-label" style="color:inherit;">SISA WAKTU</span>
         <span class="timer-time" id="cbtTimer">--:--</span>
       </div>
+      <button type="button" class="cbt-help-button" onclick="openSupportTicket('TECHNICAL', stUjian.id)" title="Laporkan kendala"><i class="fa-solid fa-headset"></i><span>Bantuan</span></button>
     </div>
 
     <div class="cbt-grid">
@@ -104,6 +106,7 @@
       </div>
 
       <div style="display:flex; flex-direction:column; gap:8px;">
+        <button id="btnSupportHasil" class="btn btn-danger hidden" onclick="openSupportTicket('EXAM_LOCKED', stUjian.id)"><i class="fa-solid fa-headset"></i> Minta Bantuan Petugas</button>
         <button id="btnReviewHasil" class="btn btn-secondary" onclick="bukaModalReview()"><i class="fa-solid fa-magnifying-glass"></i> Review Status (Benar/Salah)</button>
         <button class="btn btn-primary" onclick="kembaliKeDashboardSiswa()"><i class="fa-solid fa-house"></i> Kembali ke Dashboard Ujian</button>
       </div>

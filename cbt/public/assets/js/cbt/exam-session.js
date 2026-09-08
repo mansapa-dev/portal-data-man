@@ -182,18 +182,20 @@ function showViolationModal(jumlah, terminated, onDismiss = null) {
   const cdWrap = document.getElementById('pelanggaranCountdownWrap');
   const cdBar = document.getElementById('pelanggaranCountdownBar');
   const cdText = document.getElementById('pelanggaranCountdownText');
+  const ticketButton = document.getElementById('btnTiketPelanggaran');
 
   updateViolationDots(jumlah);
   counter.textContent = `PELANGGARAN ${jumlah} / 3`;
 
   if (terminated) {
+    if(ticketButton)ticketButton.classList.remove('hidden');
     // ── Terminate state ──
     title.textContent = 'Ujian Dihentikan!';
     title.style.color = '#dc2626';
     icon.className = 'fa-solid fa-triangle-exclamation';
     iconWrap.style.background = '#fecaca';
     iconWrap.style.border = '2px solid #dc2626';
-    txt.textContent = 'Anda telah melakukan 3 kali pelanggaran. Ujian otomatis dihentikan dan nilai dikunci oleh sistem. Hubungi admin untuk reset CBT agar dapat melanjutkan ujian dengan jawaban sebelumnya.';
+    txt.textContent = 'Anda telah melakukan 3 kali pelanggaran. Ujian otomatis dihentikan dan nilai dikunci. Kirim tiket dari tombol di bawah agar petugas dapat menanganinya tanpa Anda meninggalkan ruangan ujian.';
     btn.textContent = 'Memuat hasil...';
     btn.disabled = true;
     cdWrap.style.display = 'block';
@@ -213,6 +215,7 @@ function showViolationModal(jumlah, terminated, onDismiss = null) {
       }
     }, 1000);
   } else {
+    if(ticketButton)ticketButton.classList.add('hidden');
     // ── Warning state ──
     const isLastWarn = jumlah === 2;
     title.textContent = isLastWarn ? 'Peringatan Terakhir!' : 'Peringatan Sistem!';
@@ -299,6 +302,8 @@ function tampilHasilUjian(hasil, isTerminate = false) {
   const lblKet = document.getElementById('lblKeteranganHasil');
   const lblStatus = document.getElementById('lblStatusUjian');
   const badgeCap = document.getElementById('badgeRemedialCap');
+  const supportButton = document.getElementById('btnSupportHasil');
+  if(supportButton)supportButton.classList.toggle('hidden',!isTerminate);
   const btnReview = document.getElementById('btnReviewHasil');
   const statusIcon = document.getElementById('hasilStatusIcon');
   const statusIconWrap = document.getElementById('hasilStatusIconWrap');
@@ -319,7 +324,7 @@ function tampilHasilUjian(hasil, isTerminate = false) {
 
   if (lblKet) {
     if (isTerminate) {
-      lblKet.textContent = 'Peringatan: ujian dihentikan karena 3 kali pelanggaran dan nilai yang tampil telah dikunci oleh sistem. Hubungi admin untuk reset CBT agar dapat melanjutkan ujian dengan jawaban sebelumnya.';
+      lblKet.textContent = 'Ujian dihentikan karena 3 kali pelanggaran. Kirim tiket bantuan; setelah admin mereset CBT, Anda dapat melanjutkan dengan jawaban sebelumnya.';
       lblKet.style.color = '#dc2626';
     } else if (hasil.is_remedial && hasil.score_cap !== null) {
       lblKet.textContent = `Ini adalah ujian ulang (remedial). Nilai maksimum yang dapat diraih adalah ${hasil.score_cap}.`;

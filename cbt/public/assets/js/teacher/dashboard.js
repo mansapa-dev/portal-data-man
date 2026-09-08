@@ -124,11 +124,12 @@
 
   function render(section) {
     window.CbtLiveSessions?.stop();
+    window.CbtSupportTickets?.stopStaff();
     activeSection = section;
     content.classList.toggle('teacher-live',section === 'live');
     content.replaceChildren();
     document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.section === section));
-    const titles = { overview: 'Dashboard', exams: 'Ujian Diampu', results: 'Hasil Siswa', violations: 'Pelanggaran Ujian' };
+    const titles = { overview: 'Dashboard', exams: 'Ujian Diampu', results: 'Hasil Siswa', violations: 'Pelanggaran Ujian', support: 'Tiket Bantuan' };
     const pageTitle = document.getElementById('teacherPageTitle');
     if (pageTitle) pageTitle.textContent = titles[section] || 'Dashboard';
     if (section === 'live') {
@@ -143,6 +144,13 @@
         filterOptions: { grade: assignedGrades, className: assignedClasses },
         groupByExam: true
       });
+      return;
+    }
+    if(section==='support'){
+      const heading=panel('Tiket Bantuan Siswa','Hanya tiket dari ujian yang ditugaskan kepada Anda yang tampil di sini. Reset CBT tetap dilakukan administrator.');
+      const list=el('div',undefined,'teacher-support-list');heading.append(list);content.append(heading);
+      const client={list:async status=>(await api(`api/staff/support-tickets?status=${encodeURIComponent(status)}`)).data,update:async(id,status,note)=>(await api(`api/staff/support-tickets/${id}/status`,'POST',{status,note})).data};
+      window.CbtSupportTickets.mountStaff(list,client,false,notice);
       return;
     }
 
@@ -596,5 +604,5 @@
   const btnLogoutTop = document.getElementById('topbarLogoutGuru');
   if (btnLogoutTop) btnLogoutTop.addEventListener('click', handleLogout);
   const helpButton = document.getElementById('teacherHelpButton');
-  if (helpButton) helpButton.addEventListener('click', () => alert('Hubungi proktor ruang ujian atau administrator sistem jika terdapat kendala sesi, ujian, atau data peserta.'));
+  if (helpButton) helpButton.addEventListener('click', () => openSection('support'));
 })();
