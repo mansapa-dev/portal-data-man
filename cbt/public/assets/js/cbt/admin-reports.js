@@ -24,7 +24,7 @@ function applyFilterPelanggaran(){const date=document.getElementById('fltPelangg
           <td>${p.kelas}</td>
           <td>${p.nama_ujian}</td>
           <td><span class="badge bg-red">${p.jumlah_pelanggaran} Kali</span></td>
-          <td>${p.keterangan}${p.attempt_status === 'TERMINATED' && Number(p.jumlah_pelanggaran) >= 3 && stPengelola?.role === 'ADMIN' ? `<br><button class="btn btn-warning" onclick="resetCbtAttempt(${Number(p.student_id)},${Number(p.exam_id)})">Reset CBT</button>` : ''}</td>
+          <td>${p.keterangan}${p.attempt_status === 'TERMINATED' && Number(p.jumlah_pelanggaran) >= 3 ? `<br><button class="btn btn-warning" onclick="resetCbtAttempt(${Number(p.student_id)},${Number(p.exam_id)})"><i class="fa-solid fa-unlock"></i> Reset CBT</button>` : ''}</td>
         </tr>
       `).join(''):`<tr><td colspan="7" align="center">Tidak ada data sesuai filter.</td></tr>`;}
 
@@ -237,6 +237,7 @@ function resetCbtAttempt(studentId, examId) {
   showLoading('Membuka kembali CBT...');
   cbtApi.withSuccessHandler(() => {
     hideLoading(); loadDataAdminLogPelanggaran();
+    if (typeof loadDataAdminSiswa === 'function') loadDataAdminSiswa();
     showCustomAlert('CBT Dibuka', 'Siswa dapat kembali ke dashboard dan melanjutkan ujian. Jawaban sebelumnya tetap tersimpan.', 'success');
   }).withFailureHandler(error => { hideLoading(); showCustomAlert('Reset Gagal', error.message, 'error'); })
     .adminBukaBlokirSiswa(stPengelola, studentId, examId, reason.trim());

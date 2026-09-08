@@ -154,9 +154,11 @@ function renderTabelSiswa(rows) {
     let statusBadge = '<span class="badge bg-gray">BELUM UJIAN</span>';
     let actBtn = '';
 
-    if (s.ujian_status === 'dihentikan') {
+    if (s.reset_exam_id) {
       statusBadge = '<span class="badge bg-red"><i class="fa-solid fa-lock"></i> DIHENTIKAN</span>';
-      actBtn = `<button class="btn btn-success" style="padding:4px 8px; font-size:11px;" onclick="bukaBlokirAdmin(${s.id})" title="Reset CBT melalui Log Pelanggaran"><i class="fa-solid fa-unlock"></i> Reset CBT</button>`;
+      actBtn = `<button class="btn btn-warning" style="padding:4px 8px; font-size:11px;" onclick="resetCbtAttempt(${Number(s.id)},${Number(s.reset_exam_id)})" title="Reset ${String(s.reset_exam_name || 'ujian CBT').replace(/&/g,'&amp;').replace(/"/g,'&quot;')}"><i class="fa-solid fa-unlock"></i> Reset CBT</button>`;
+    } else if (s.ujian_status === 'dihentikan') {
+      statusBadge = '<span class="badge bg-red"><i class="fa-solid fa-lock"></i> DIHENTIKAN — JADWAL BERAKHIR</span>';
     } else if (s.ujian_status === 'berlangsung') {
       statusBadge = '<span class="badge bg-blue"><i class="fa-solid fa-spinner fa-spin"></i> SEDANG UJIAN</span>';
     } else if (s.ujian_status === 'selesai') {

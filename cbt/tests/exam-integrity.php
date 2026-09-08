@@ -53,6 +53,8 @@ try {
  $assert($violations->record(1,1,'violation:one','TAB_HIDDEN',null,'127.0.0.1','test')['duplicate'],'violation retry is counted only once');
  $violations->record(1,1,'violation:two','TAB_HIDDEN',null,'127.0.0.1','test');
  $assert($violations->record(1,1,'violation:three','TAB_HIDDEN',null,'127.0.0.1','test')['terminated'],'third violation terminates only this attempt');
+ $resettableStudent=(new \Cbt\Repositories\AdminStudentRepository($pdo))->all()[0];
+ $assert((int)$resettableStudent['reset_exam_id']===1&&$resettableStudent['reset_exam_name']==='Test Exam','admin student list exposes the resettable exam directly');
  $scoring->submit(1,1,true);
  $pdo->exec("INSERT INTO users(username,password_hash,name,role) VALUES('teacher','unused','Teacher','TEACHER')");
  $reject(fn()=>$reset->reset(1,1,2,'Not allowed'),403,'teacher cannot reset a terminated exam');

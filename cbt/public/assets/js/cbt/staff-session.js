@@ -11,7 +11,7 @@ document.getElementById('formLoginPengelola').addEventListener('submit', functio
       hideLoading();
       if(res && res.success) {
         document.getElementById('modalLoginPengelola').classList.remove('show');
-        stPengelola = { userId: res.userId || res.id, id: res.userId || res.id, role: res.role, nama: res.nama, username: u };
+        stPengelola = { userId: res.userId || res.id, id: res.userId || res.id, role: String(res.role || '').toUpperCase(), nama: res.nama, username: u };
         initDashboardPengelola(res.nama, res.role);
       } else { alert.className = 'alert error'; alert.textContent = res?.message || 'Gagal login.'; }
     })
@@ -229,7 +229,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     const student = payload.data.student;
     if (staff?.role === 'TEACHER') { window.location.replace('guru/dashboard'); return; }
     if (staff?.role === 'ADMIN') {
-      stPengelola = { userId: staff.id, id: staff.id, role: 'admin', nama: staff.nama, username: staff.username };
+      stPengelola = { userId: staff.id, id: staff.id, role: 'ADMIN', nama: staff.nama, username: staff.username };
       initDashboardPengelola(staff.nama, 'admin');
       return;
     }
