@@ -74,3 +74,5 @@ composer test
 ```
 
 Status test hanya boleh ditulis PASS setelah perintah benar-benar dijalankan. PHP 8.1 lokal dapat dipakai untuk lint awal, tetapi target deployment tetap PHP 8.2/8.3 sesuai `composer.json`.
+
+Pembaruan reset CBT khusus admin, sinkronisasi Portal otomatis, dan uji 1.300 peserta: [panduan penerapan](docs/reset-sync-capacity.md).

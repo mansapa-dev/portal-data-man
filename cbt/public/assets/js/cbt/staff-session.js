@@ -130,6 +130,7 @@ function switchDashTab(tabId, btnEl) {
 }
 
 function refreshActiveDashboardTab() {
+  if (!stPengelola || document.getElementById('viewDashboardPengelola')?.classList.contains('hidden')) return false;
   if (document.hidden || document.querySelector('.modal.show')) return false;
   const focused = document.activeElement;
   if (focused && ['INPUT', 'SELECT', 'TEXTAREA'].includes(focused.tagName)) return false;

@@ -13,6 +13,36 @@ use Illuminate\Http\Request;
 
 class CbtIntegrationController extends Controller
 {
+    public function revisions(): JsonResponse
+    {
+        // One background CBT worker polls this endpoint; no participant requests.
+        // Hash actual reference fields so bulk imports, deletes and same-second
+        // edits are detected even when Eloquent events are bypassed.
+        $tables = [
+            'Student' => ['id', 'publicId', 'nisn', 'fullName', 'status', 'deletedAt'],
+            'Teacher' => ['id', 'publicId', 'nip', 'nuptk', 'fullName', 'status', 'deletedAt'],
+            'ClassEnrollment' => ['id', 'studentId', 'schoolClassId', 'academicYearId', 'semesterId', 'status', 'enrolledAt'],
+            'SchoolClass' => ['id', 'publicId', 'code', 'name', 'gradeLevel', 'academicYearId', 'status', 'deletedAt'],
+            'AcademicYear' => ['id', 'publicId', 'name', 'isActive', 'startDate'],
+            'Semester' => ['id', 'publicId', 'academicYearId', 'type', 'isActive', 'startDate'],
+        ];
+        $hashes = [];
+        foreach ($tables as $table => $columns) {
+            $hash = hash_init('sha256');
+            foreach (\Illuminate\Support\Facades\DB::table($table)->select($columns)->orderBy('id')->cursor() as $row) {
+                hash_update($hash, json_encode($row, JSON_THROW_ON_ERROR)."\n");
+            }
+            $hashes[$table] = hash_final($hash);
+        }
+        return ApiResponse::success([
+            'STUDENTS' => hash('sha256', implode('', array_intersect_key($hashes, array_flip(['Student', 'ClassEnrollment', 'SchoolClass', 'AcademicYear', 'Semester'])))),
+            'TEACHERS' => $hashes['Teacher'],
+            'CLASSES' => hash('sha256', $hashes['SchoolClass'].$hashes['AcademicYear']),
+            'ACADEMIC_YEARS' => $hashes['AcademicYear'],
+            'SEMESTERS' => hash('sha256', $hashes['Semester'].$hashes['AcademicYear']),
+        ], 'Versi referensi CBT.');
+    }
+
     public function academicYears(): JsonResponse
     {
         return ApiResponse::success(AcademicYear::query()->orderByDesc('startDate')->get()->map(fn (AcademicYear $year): array => [
@@ -37,7 +67,7 @@ class CbtIntegrationController extends Controller
     {
         $limit = min(max((int) $request->query('per_page', 100), 1), 200);
         $page = Student::query()->where('status', 'ACTIVE')->with(['enrollments' => fn ($query) => $query
-            ->where('status', 'ACTIVE')->with(['schoolClass', 'academicYear', 'semester'])->latest('enrolledAt')])->orderBy('id')->paginate($limit);
+            ->where('status', 'ACTIVE')->with(['schoolClass', 'academicYear', 'semester'])->latest('enrolledAt')->orderByDesc('id')])->orderBy('id')->paginate($limit);
         $page->getCollection()->transform(function (Student $student): array {
             $enrollment = $student->enrollments->first();
 

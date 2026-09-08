@@ -9,8 +9,15 @@ final class PortalDataSyncService
  public function sync(string$type,?int$actor):array
  {
   $type=strtoupper($type);if(!in_array($type,['STUDENTS','TEACHERS','CLASSES','ACADEMIC_YEARS','SEMESTERS'],true))throw new \InvalidArgumentException('Jenis sinkronisasi tidak valid.');
+  $lockName='cbt:sync:'.$type;
+  $lock=$this->db->pdo()->prepare('SELECT GET_LOCK(?,0)');$lock->execute([$lockName]);
+  if((int)$lock->fetchColumn()!==1)throw new \RuntimeException('Sinkronisasi jenis ini sedang berjalan.');
+  try{return $this->runSync($type,$actor);}finally{$release=$this->db->pdo()->prepare('SELECT RELEASE_LOCK(?)');$release->execute([$lockName]);}
+ }
+ private function runSync(string$type,?int$actor):array
+ {
   $statement=$this->db->pdo()->prepare("INSERT INTO portal_sync_logs(sync_type,started_at,status,initiated_by) VALUES(:type,UTC_TIMESTAMP(3),'RUNNING',:actor)");$statement->execute(['type'=>$type,'actor'=>$actor]);$log=(int)$this->db->pdo()->lastInsertId();$summary=['total'=>0,'inserted'=>0,'updated'=>0,'unchanged'=>0,'failed'=>0];
-  try{$firstErr=null;for($page=1;;$page++){$result=match($type){'STUDENTS'=>$this->portal->students($page,100),'TEACHERS'=>$this->portal->teachers($page,100),'CLASSES'=>$this->portal->classes($page,100),'ACADEMIC_YEARS'=>$this->portal->academicYears(),'SEMESTERS'=>$this->portal->semesters()};foreach($result['items']as$item){$summary['total']++;try{$changed=$this->upsert($type,$item);$summary[$changed]++;}catch(\Throwable$itemErr){$summary['failed']++;if($firstErr===null)$firstErr=$itemErr->getMessage();}}if(!$result['has_more'])break;}$status=$summary['failed']?'PARTIAL':'SUCCESS';if($status==='SUCCESS')$summary['deactivated']=$this->deactivateStale($type,$log);$this->finish($log,$status,$summary,$firstErr);if($status==='PARTIAL'&&$firstErr!==null)throw new \UnexpectedValueException("Sinkronisasi {$type} parsial ({$summary['failed']} gagal dari {$summary['total']}): {$firstErr}");return$summary+['status'=>$status];}catch(\Throwable$e){$this->finish($log,'FAILED',$summary,$e->getMessage());throw$e;}
+  try{$revision=$this->revision($type);$firstErr=null;for($page=1;;$page++){$result=match($type){'STUDENTS'=>$this->portal->students($page,200),'TEACHERS'=>$this->portal->teachers($page,200),'CLASSES'=>$this->portal->classes($page,100),'ACADEMIC_YEARS'=>$this->portal->academicYears(),'SEMESTERS'=>$this->portal->semesters()};foreach($result['items']as$item){$summary['total']++;try{$changed=$this->upsert($type,$item);$summary[$changed]++;}catch(\Throwable$itemErr){$summary['failed']++;if($firstErr===null)$firstErr=$itemErr->getMessage();}}if(!$result['has_more'])break;}$status=$summary['failed']?'PARTIAL':'SUCCESS';if($status==='SUCCESS'){if($revision!==null&&$this->revision($type)!==$revision)throw new \UnexpectedValueException('Data Portal berubah saat sinkronisasi. Rekonsiliasi ditunda hingga percobaan berikutnya.');$summary['deactivated']=$this->deactivateStale($type,$log);}$this->finish($log,$status,$summary,$firstErr);if($status==='PARTIAL'&&$firstErr!==null)throw new \UnexpectedValueException("Sinkronisasi {$type} parsial ({$summary['failed']} gagal dari {$summary['total']}): {$firstErr}");return$summary+['status'=>$status];}catch(\Throwable$e){$this->finish($log,'FAILED',$summary,$e->getMessage());throw$e;}
  }
  public function status(int$limit=20):array
  {
@@ -18,11 +25,24 @@ final class PortalDataSyncService
   $statement=$this->db->pdo()->prepare('SELECT id,sync_type,started_at,finished_at,status,total,inserted_count inserted,updated_count updated,unchanged_count unchanged,failed_count failed,error_summary FROM portal_sync_logs ORDER BY id DESC LIMIT :limit');
   $statement->bindValue('limit',$limit,\PDO::PARAM_INT);$statement->execute();return$statement->fetchAll();
  }
+ private function revision(string$type):?string
+ {
+  if(!method_exists($this->portal,'revisions'))return null;
+  $revisions=$this->portal->revisions();$value=$revisions[$type]??null;
+  if(!is_string($value)||!preg_match('/^[a-f0-9]{64}$/',$value))throw new \UnexpectedValueException('Revisi Portal Data tidak valid.');
+  return $value;
+ }
  private function upsert(string$type,array$d):string{return match($type){'STUDENTS'=>$this->student($d),'TEACHERS'=>$this->teacher($d),'CLASSES'=>$this->schoolClass($d),'ACADEMIC_YEARS'=>$this->academicYear($d),'SEMESTERS'=>$this->semester($d)};}
  private function student(array$d):string
  {
+  $active=filter_var($d['is_active']??(strtoupper((string)($d['status']??'ACTIVE'))==='ACTIVE'),FILTER_VALIDATE_BOOL);
+  if(!$active){
+   $existing=$this->row('students','portal_student_id',(string)($d['id']??$d['student_id']??''));
+   if($existing){$this->db->pdo()->prepare('UPDATE students SET is_active=0,last_synced_at=UTC_TIMESTAMP(3) WHERE id=?')->execute([$existing['id']]);return 'updated';}
+   return 'unchanged';
+  }
   $portal=(string)($d['id']??$d['student_id']??'');$nisn=trim((string)($d['nisn']??''));$name=trim((string)($d['name']??$d['nama']??''));if($portal===''||!preg_match('/^\d{8,20}$/',$nisn)||$name==='')throw new \UnexpectedValueException('Data siswa invalid.');
-  $existing=$this->row('students','portal_student_id',$portal);$values=['portal'=>$portal,'portal_class'=>$d['class']['id']??$d['class_id']??null,'nisn'=>$nisn,'name'=>$name,'class'=>$d['class']['name']??$d['kelas']??$d['rombel']??null,'grade'=>$this->normalizeGrade($d['grade']??$d['tingkat']??null),'year'=>$d['academic_year']??$d['tahun_ajaran']??null,'active'=>(int)($d['is_active']??strtoupper((string)($d['status']??'ACTIVE'))==='ACTIVE')];
+  $existing=$this->row('students','portal_student_id',$portal);$values=['portal'=>$portal,'portal_class'=>$d['class']['id']??$d['class_id']??null,'nisn'=>$nisn,'name'=>$name,'class'=>$d['class']['name']??$d['kelas']??$d['rombel']??null,'grade'=>$this->normalizeGrade($d['grade']??$d['tingkat']??null),'year'=>$d['academic_year']??$d['tahun_ajaran']??null,'active'=>(int)$active];
   if($existing&&$this->same($existing,['portal_class_id'=>$values['portal_class'],'nisn'=>$values['nisn'],'name_snapshot'=>$values['name'],'class_snapshot'=>$values['class'],'grade_snapshot'=>$values['grade'],'academic_year_snapshot'=>$values['year'],'is_active'=>$values['active']])){$this->touch('students',(int)$existing['id']);return'unchanged';}
   // Gunakan INSERT terpisah lalu UPDATE untuk menghindari ON DUPLICATE KEY yang menimpa record siswa berbeda saat NISN collision.
   if(!$existing){
@@ -48,7 +68,7 @@ final class PortalDataSyncService
  private function teacher(array$d):string{
   $portal=(string)($d['id']??$d['teacher_id']??'');$name=trim((string)($d['name']??$d['nama']??''));if($portal===''||$name==='')throw new \UnexpectedValueException('Data guru invalid.');
   $existing=$this->row('teachers','portal_teacher_id',$portal);
-  $v=['portal'=>$portal,'nip'=>$d['nip']??null,'nuptk'=>$d['nuptk']??null,'name'=>$name,'status'=>(($d['is_active']??true)?'ACTIVE':'INACTIVE')];
+  $v=['portal'=>$portal,'nip'=>$d['nip']??null,'nuptk'=>$d['nuptk']??null,'name'=>$name,'status'=>(filter_var($d['is_active']??(strtoupper((string)($d['status']??'ACTIVE'))==='ACTIVE'),FILTER_VALIDATE_BOOL)?'ACTIVE':'INACTIVE')];
   if($existing&&$this->same($existing,['nip'=>$v['nip'],'nuptk'=>$v['nuptk'],'name_snapshot'=>$v['name'],'status'=>$v['status']])){$this->touch('teachers',(int)$existing['id']);return'unchanged';}
   // Gunakan INSERT terpisah lalu UPDATE untuk menghindari ON DUPLICATE KEY yang menimpa guru lain saat NIP/NUPTK collision.
   if(!$existing){

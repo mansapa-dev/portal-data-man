@@ -20,8 +20,13 @@ final class AttemptRepository
         $statement = $this->db->prepare($sql);
         $statement->execute(['public_id'=>Id::ulid(),'student_id'=>$student['id'],'exam_id'=>$exam['id'],'expires_at'=>gmdate('Y-m-d H:i:s',$expires),'seed'=>$seed,'question_order'=>json_encode($questionOrder,JSON_THROW_ON_ERROR),'option_mapping'=>json_encode($optionMapping,JSON_THROW_ON_ERROR),'nisn'=>$student['nisn'],'name'=>$student['name_snapshot'],'class_name'=>$student['class_snapshot'],'grade'=>$student['grade_snapshot'],'academic_year'=>$student['academic_year_snapshot']]);
         $attempt = $this->find((int)$student['id'], (int)$exam['id'], true) ?? throw new \RuntimeException('Attempt gagal dibuat.');
-        $snapshot = $this->db->prepare('INSERT INTO attempt_questions(attempt_id,question_id,question_text,option_a,option_b,option_c,option_d,option_e,correct_answer,points) VALUES(:attempt,:question,:text,:a,:b,:c,:d,:e,:correct,:points)');
-        foreach ($questions as $question) $snapshot->execute(['attempt'=>$attempt['id'],'question'=>$question['id'],'text'=>$question['question_text'],'a'=>$question['option_a'],'b'=>$question['option_b'],'c'=>$question['option_c'],'d'=>$question['option_d'],'e'=>$question['option_e'],'correct'=>$question['correct_answer'],'points'=>$question['points']]);
+        // Batch snapshots to avoid one database round trip per question at mass start.
+        foreach (array_chunk($questions, 100) as $batch) {
+            $values = [];
+            foreach ($batch as $q) array_push($values, $attempt['id'], $q['id'], $q['question_text'], $q['option_a'], $q['option_b'], $q['option_c'], $q['option_d'], $q['option_e'], $q['correct_answer'], $q['points']);
+            $sql = 'INSERT INTO attempt_questions(attempt_id,question_id,question_text,option_a,option_b,option_c,option_d,option_e,correct_answer,points) VALUES '.implode(',', array_fill(0, count($batch), '(?,?,?,?,?,?,?,?,?,?)'));
+            $this->db->prepare($sql)->execute($values);
+        }
         return $attempt;
     }
     public function questions(int $attemptId): array

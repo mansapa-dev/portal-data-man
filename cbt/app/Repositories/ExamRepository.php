@@ -26,11 +26,13 @@ final class ExamRepository
         $studentTarget=$hasTargets?'student_target.student_id IS NOT NULL':'0=1';
         $regularTarget=$hasTargets?"({$studentTarget} OR (NOT EXISTS(SELECT 1 FROM exam_target_students ts0 WHERE ts0.exam_id=e.id) AND (NOT EXISTS(SELECT 1 FROM exam_target_classes x WHERE x.exam_id=e.id) OR class_target.exam_id IS NOT NULL)))":"(NOT EXISTS(SELECT 1 FROM exam_target_classes x WHERE x.exam_id=e.id) OR class_target.exam_id IS NOT NULL)";
         $specialEligible=$hasTargets?$studentTarget:'0=1';
-        $sql="SELECT e.*,m.type follow_up_type,
-              CASE WHEN e.status='ACTIVE' AND UTC_TIMESTAMP(3) BETWEEN e.starts_at AND e.ends_at
+        $sql="SELECT e.*,m.type follow_up_type,COALESCE(visible_attempt.status,'NOT_STARTED') attempt_status,
+              CASE WHEN (visible_attempt.id IS NULL OR (visible_attempt.status='IN_PROGRESS' AND visible_attempt.expires_at>UTC_TIMESTAMP(3))) AND e.status='ACTIVE' AND UTC_TIMESTAMP(3) BETWEEN e.starts_at AND e.ends_at
                 AND (CASE WHEN m.exam_id IS NULL THEN {$regularTarget} ELSE {$specialEligible} END)
               THEN 1 ELSE 0 END can_start,
               CASE
+                WHEN visible_attempt.status IN ('COMPLETED','TERMINATED','EXPIRED') THEN visible_attempt.status
+                WHEN visible_attempt.status='IN_PROGRESS' AND visible_attempt.expires_at<=UTC_TIMESTAMP(3) THEN 'EXPIRED'
                 WHEN m.exam_id IS NOT NULL AND NOT ({$specialEligible}) THEN 'NOT_SCHEDULED'
                 WHEN e.status<>'ACTIVE' THEN 'INACTIVE'
                 WHEN UTC_TIMESTAMP(3)<e.starts_at THEN 'UPCOMING'
@@ -44,7 +46,7 @@ final class ExamRepository
               LEFT JOIN exam_target_classes class_target ON class_target.exam_id=e.id AND class_target.portal_class_id=:class_id
               ".($hasTargets?'LEFT JOIN exam_target_students student_target ON student_target.exam_id=e.id AND student_target.student_id=:student_id':'')."
               WHERE e.grade=:grade
-                AND (visible_attempt.id IS NOT NULL OR m.exam_id IS NOT NULL OR (e.status='ACTIVE' AND UTC_TIMESTAMP(3) BETWEEN e.starts_at AND e.ends_at AND {$regularTarget}))
+                AND (visible_attempt.id IS NOT NULL OR m.exam_id IS NOT NULL OR {$regularTarget})
               ORDER BY (m.exam_id IS NOT NULL) DESC,e.starts_at DESC";
         $statement=$this->db->prepare($sql);
         $params=['grade'=>$student['grade_snapshot'],'class_id'=>$student['portal_class_id'],'attempt_student'=>$student['id']];

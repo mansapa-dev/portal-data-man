@@ -59,7 +59,9 @@
   async function api(path, method = 'GET', body) {
     try { await csrfPromise; } catch (_) { csrfPromise = refreshCsrf(); await csrfPromise; }
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    // Login/start can queue during a mass arrival; accepted answers keep a short retry window.
+    const timeoutMs = /auth\/student\/login|student\/exams\/\d+\/start/.test(path) ? 120000 : /student\/exams\/\d+\/submit/.test(path) ? 60000 : 15000;
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     let response, payload;
     try {
     response = await fetch(path.replace(/^\//, ''), { method, signal: controller.signal, credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -89,7 +91,7 @@
         if (data.finalize_only) await answerQueue.stop();
         else { await answerQueue.flush(); if(answerQueue.state().pending) throw new Error('Masih ada jawaban yang belum terkirim. Coba kumpulkan kembali.'); }
       }
-      const r=await api(`api/student/exams/${data.ujian_id}/submit`,'POST',{});
+      const r=await api(`api/student/exams/${data.ujian_id}/submit`,'POST',{finalize_only:!!data.finalize_only});
       // Keep unaccepted answers for recovery; never claim that they were scored.
       const pending = answerQueue?.state().pending || 0;
       if (answerQueue && !pending) answerQueue.complete();
@@ -121,7 +123,7 @@
     async getAdminSiswaList() { const r=await api('api/admin/students');return r.data; },
     async simpanSiswaSatuanAdmin(session,data) { const r=await api('api/admin/students/pin','POST',data);return {success:true,pin:r.data?.pin,message:r.message||'PIN CBT siswa berhasil disimpan.'}; },
     async generatePinsBatchAdmin(session,data) { const r=await api('api/admin/students/generate-pins','POST',data);return {success:true,...r.data,message:r.message}; },
-    async adminBukaBlokirSiswa(session,id) { await api(`api/admin/students/${id}/reset`,'POST',{});return {success:true,message:'Siswa berhasil dibuka/reset.'}; },
+    async adminBukaBlokirSiswa(session,id,examId,reason) { await api(`api/admin/students/${id}/reset`,'POST',{exam_id:examId,reason});return {success:true,message:'Siswa berhasil dibuka/reset.'}; },
     async hapusSiswaAdmin() { return {success:false,message:'Identitas siswa dikelola Portal Data dan tidak dapat dihapus dari CBT.'}; },
     async hapusSiswaPertingkatAdmin() { return {success:false,message:'Data siswa dikelola Portal Data. Nonaktifkan di Portal lalu jalankan sinkronisasi.'}; },
     async prosesKenaikanKelasAdmin() { await api('api/admin/portal-data/sync/students','POST',{});return {success:true,dataXII:[],message:'Kelas diperbarui melalui sinkronisasi Portal Data.'}; },

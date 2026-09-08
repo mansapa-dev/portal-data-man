@@ -16,7 +16,7 @@ $request=Request::capture();
 if($request->path==='/'||$request->path==='/index.php'){
  $html=file_get_contents(dirname(__DIR__).'/index.html')?:'';
  $html=(new ViewRenderer(dirname(__DIR__).'/resources/views/app'))->render($html);
- $html=str_replace('</body>','<script src="assets/js/native-api-adapter.js?v=20260907-3"></script></body>',$html);
+ $html=str_replace('</body>','<script src="assets/js/native-api-adapter.js?v=20260908-reset-sync"></script></body>',$html);
  Response::html($html)->send();
 }
 if($request->path==='/guru')Response::html((string)include dirname(__DIR__).'/resources/views/teacher/login.php')->send();
@@ -35,7 +35,7 @@ $student=new StudentExamController(new ExamSessionService($database,$students,$e
 $sync=new SyncController(new PortalDataSyncService($database,new HttpPortalDataClient()));
 $setup=new SetupController($database);
 $adminService=new AdminService($database,new AdminRepository($pdo));$admin=new AdminController($adminService);$teacher=new TeacherController($adminService);$teacherSso=new TeacherSsoController($pdo);
-$adminStudents=new AdminStudentController(new AdminStudentService($database,new AdminStudentRepository($pdo),new SecretCipher()));
+$adminStudents=new AdminStudentController(new AdminStudentService($database,new AdminStudentRepository($pdo),new SecretCipher()),new \Cbt\Services\AttemptResetService($database));
 $csrf=new CsrfMiddleware();$studentAuth=new AuthMiddleware('student',null,$pdo);
 $adminAuth=new AuthMiddleware('auth','ADMIN',$pdo);
 $staffAuth=new AuthMiddleware('auth',null,$pdo);

@@ -46,17 +46,60 @@ try {
  $pdo->exec((string)file_get_contents(dirname(__DIR__).'/database/migrations/20260907_attempt_questions.sql'));
  $resumed=$sessions->start(1,'0000000001',1);
  $assert($resumed['soal'][0]['pertanyaan']==='Question'&&(float)$resumed['soal'][0]['poin']===1.0,'resume retains original question content and points');
+
+ $violations=new \Cbt\Services\ViolationService($db,$attempts);
+ $reset=new \Cbt\Services\AttemptResetService($db);
+ $violations->record(1,1,'violation:one','TAB_HIDDEN',null,'127.0.0.1','test');
+ $assert($violations->record(1,1,'violation:one','TAB_HIDDEN',null,'127.0.0.1','test')['duplicate'],'violation retry is counted only once');
+ $violations->record(1,1,'violation:two','TAB_HIDDEN',null,'127.0.0.1','test');
+ $assert($violations->record(1,1,'violation:three','TAB_HIDDEN',null,'127.0.0.1','test')['terminated'],'third violation terminates only this attempt');
+ $scoring->submit(1,1,true);
+ $pdo->exec("INSERT INTO users(username,password_hash,name,role) VALUES('teacher','unused','Teacher','TEACHER')");
+ $reject(fn()=>$reset->reset(1,1,2,'Not allowed'),403,'teacher cannot reset a terminated exam');
+ $_SESSION['auth']=['user_id'=>2,'role'=>'TEACHER'];$allowed=false;
+ $protected=new \Cbt\Middleware\AuthMiddleware('auth','ADMIN',$pdo);
+ $response=$protected(new Request('POST','/',[],[],[]),function()use(&$allowed){$allowed=true;return \Cbt\Core\Response::json(null);});
+ $assert(!$allowed,'admin middleware rejects teacher reset route');
+ $reject(fn()=>$reset->reset(1,1,1,''),422,'reset requires an audit reason');
+ $opened=$reset->reset(1,1,1,'Pengawas memverifikasi gangguan perangkat');
+ $assert($opened['attempt_id']===$attempt,'reset retains the same attempt identity');
+ $reject(fn()=>$reset->reset(1,1,1,'duplicate'),409,'duplicate reset cannot grant extra time');
+ $reject(fn()=>$scoring->submit(1,1,true),409,'stale automatic submit cannot close a reset attempt');
+ $assert($scoring->recover(1,1)===null,'reset removes locked result from active recovery');
+ $resumeAfterReset=$sessions->start(1,'0000000001',1);
+ $assert($resumeAfterReset['soal']===$resumed['soal']&&$resumeAfterReset['jawaban']===$resumed['jawaban'],'reset preserves question order, options, accepted answers, flags and revisions');
+ $assert((int)$pdo->query('SELECT violation_count FROM exam_attempts WHERE id=1')->fetchColumn()===0,'reset restarts violation allowance');
+ $assert((int)$pdo->query('SELECT COUNT(*) FROM violations')->fetchColumn()===3,'reset retains historical violation events');
+ $audit=json_decode($pdo->query("SELECT before_data FROM audit_logs WHERE action='CBT_ATTEMPT_RESUMED'")->fetchColumn(),true);
+ $assert((float)$audit['result']['score']===100.0,'previous locked score is archived atomically');
+
+ $assert(strtotime($opened['expires_at'])<=strtotime($pdo->query('SELECT ends_at FROM exams WHERE id=1')->fetchColumn().' UTC'),'reset never extends past the exam schedule');
+ $assert(!$violations->record(1,1,'reset-cycle:one','TAB_HIDDEN',null,'127.0.0.1','test')['terminated'],'first violation after reset starts a new allowance');
+ $assert(!$violations->record(1,1,'reset-cycle:two','TAB_HIDDEN',null,'127.0.0.1','test')['terminated'],'second violation after reset remains a warning');
+ $violations->record(1,1,'reset-cycle:three','TAB_HIDDEN',null,'127.0.0.1','test');
+ $pdo->exec("UPDATE exams SET status='INACTIVE' WHERE id=1");
+ $reject(fn()=>$reset->reset(1,1,1,'closed schedule'),409,'reset rejects inactive exam schedules');
+ $pdo->exec("UPDATE exams SET status='ACTIVE',ends_at=UTC_TIMESTAMP()-INTERVAL 1 SECOND WHERE id=1");
+ $reject(fn()=>$reset->reset(1,1,1,'ended schedule'),409,'reset rejects schedules that have ended');
+ $pdo->exec("UPDATE exams SET ends_at=UTC_TIMESTAMP()+INTERVAL 1 HOUR WHERE id=1");
+ $reset->reset(1,1,1,'Second authorized reset');
+ $pdo->exec("INSERT INTO exams(public_id,name,grade,duration_minutes,starts_at,ends_at,academic_year,semester,status,created_by) VALUES('upcoming','Upcoming','X',60,UTC_TIMESTAMP()+INTERVAL 1 DAY,UTC_TIMESTAMP()+INTERVAL 2 DAY,'2026','ODD','ACTIVE',1)");
+ $visible=$sessions->list(1,'0000000001');
+ $future=array_values(array_filter($visible,fn($e)=>$e['id']===2))[0];
+ $assert(!$future['can_start']&&$future['availability_reason']==='UPCOMING','dashboard includes future exams but blocks starting early');
+ $reject(fn()=>$sessions->start(1,'0000000001',2),403,'server rejects early starts even with direct request');
  $pdo->exec("UPDATE exam_attempts SET expires_at=UTC_TIMESTAMP()-INTERVAL 1 SECOND");
  $reject(fn()=>$answers->save(1,1,1,'A',false,$attempt,2,str_repeat('d',32)),409,'late answer rejected');
  $assert($answers->save(1,1,1,'B',true,$attempt,1,str_repeat('b',32))['duplicate'],'previously saved write acknowledged after deadline');
  $summary=$scoring->finalizeDue();$assert($summary['completed']===1&&$summary['failed']===0,'server finalizes expired attempt without browser');
  $result=$scoring->submit(1,1);$assert((float)$result['nilai']===100.0,'score uses latest accepted answer');
+ $reject(fn()=>$reset->reset(1,1,1,'completed'),409,'completed exams cannot be reset for another attempt');
  $scoring->submit(1,1);$assert((int)$pdo->query('SELECT COUNT(*) FROM exam_results')->fetchColumn()===1,'repeated submit produces exactly one result');
  $assert($scoring->recover(1,1)['completed']===true,'refresh recovers committed result');
  $review=$scoring->review(1,1);
  $assert($review['soal'][0]['status']==='BENAR'&&!isset($review['soal'][0]['jawaban_benar'],$review['soal'][0]['opsi'],$review['jawaban']),'completed student receives correctness without answer key before the exam schedule ends');
- $pdo->exec("UPDATE exams SET ends_at=UTC_TIMESTAMP()-INTERVAL 1 SECOND");
- $assert(count($sessions->list(1,'0000000001'))===1,'result remains available after schedule closes');
+ $pdo->exec("UPDATE exams SET ends_at=UTC_TIMESTAMP()-INTERVAL 1 SECOND WHERE id=1");
+ $closed=array_values(array_filter($sessions->list(1,'0000000001'),fn($e)=>$e['id']===1));$assert(count($closed)===1&&!$closed[0]['can_start'],'result remains available after schedule closes');
  $pdo->exec('DELETE FROM attempt_questions WHERE attempt_id=1');
  $legacyReview=$scoring->review(1,1);
  $assert(count($legacyReview['soal'])===1&&$legacyReview['soal'][0]['status']==='SALAH'&&!isset($legacyReview['soal'][0]['jawaban_benar']),'legacy review repairs a missing question snapshot without exposing its answer key');
@@ -76,5 +119,59 @@ try {
  $pdo->exec("UPDATE students SET cbt_status='BLOCKED' WHERE id=1");$_SESSION['student']=['student_id'=>1];$allowed=false;
  (new \Cbt\Middleware\AuthMiddleware('student',null,$pdo))($r1,function()use(&$allowed){$allowed=true;return \Cbt\Core\Response::json(null);});
  $assert(!$allowed&&!isset($_SESSION['student']),'revoked student session is rejected on protected requests');
+
+ $window=\Cbt\Support\ExamWindow::class;
+ $window::assertSameDay($window::parse('2026-09-09 08:00'),$window::parse('2026-09-09 16:00'));
+ $assert(true,'follow-up exam accepts one local calendar day');
+ $window::assertSameDay(new DateTimeImmutable('2026-09-08 18:00 UTC'),new DateTimeImmutable('2026-09-09 10:00 UTC'));
+ $assert(true,'same WIB day may span two UTC dates');
+ $reject(fn()=>$window::assertSameDay($window::parse('2026-09-09 23:00'),$window::parse('2026-09-10 01:00')),422,'follow-up exam rejects crossing WIB midnight');
+ $reject(fn()=>$window::parse('2026-02-30 08:00'),422,'follow-up schedule rejects impossible dates');
+ $reject(fn()=>$window::parse(''),422,'follow-up schedule rejects empty dates');
+ $pdo->exec("INSERT INTO students(portal_student_id,nisn,name_snapshot,grade_snapshot) VALUES('stale-student','0000000002','Stale','X')");
+
+ $adminService=new \Cbt\Services\AdminService($db,new \Cbt\Repositories\AdminRepository($pdo));
+ $day=gmdate('Y-m-d',time()+86400);$later=gmdate('Y-m-d',time()+172800);
+ $schedule=['type'=>'SUSULAN','source_exam_id'=>1,'student_ids'=>[2],'starts_at'=>$day.' 08:00','ends_at'=>$day.' 09:00','active'=>true];
+ $firstSchedule=$adminService->scheduleFollowUpExam($schedule,1);
+ $secondSchedule=$adminService->scheduleFollowUpExam(array_replace($schedule,['name'=>'Second subject','starts_at'=>$day.' 10:00','ends_at'=>$day.' 11:00']),1);
+ $assert($firstSchedule['id']!==$secondSchedule['id'],'multiple follow-up schedules share one day');
+ $different=array_replace($schedule,['starts_at'=>$later.' 08:00','ends_at'=>$later.' 09:00']);
+ $reject(fn()=>$adminService->scheduleFollowUpExam($different,1),422,'different active follow-up dates in one period are rejected');
+ $draft=$adminService->scheduleFollowUpExam(array_replace($different,['active'=>false]),1);
+ $reject(fn()=>$adminService->setFollowUpStatus((int)$draft['id'],true),422,'activating a draft cannot bypass the common follow-up day');
+ $assert($pdo->query('SELECT status FROM exams WHERE id='.(int)$draft['id'])->fetchColumn()==='INACTIVE','failed activation leaves draft inactive');
+ $portal=new class implements \Cbt\Integrations\PortalData\PortalDataClientInterface {
+  public bool $changing=false;
+  private int $revisionCalls=0;
+  public function revisions():array{$value=hash('sha256',$this->changing?(string)++$this->revisionCalls:'stable');return array_fill_keys(['STUDENTS','TEACHERS','CLASSES','ACADEMIC_YEARS','SEMESTERS'],$value);}
+  public array $rows=[['id'=>'test-student','nisn'=>'0000000001','name'=>'Updated Student','grade'=>'10','is_active'=>true],['id'=>'inactive-remote','nisn'=>'0000000003','name'=>'Inactive','is_active'=>false]];
+  public function students(int $page,int $limit):array{return ['items'=>$this->rows,'has_more'=>false];}
+  public function teachers(int $page,int $limit):array{return ['items'=>[],'has_more'=>false];}
+  public function classes(int $page,int $limit):array{return ['items'=>[],'has_more'=>false];}
+  public function academicYears():array{return ['items'=>[],'has_more'=>false];}
+  public function semesters(?string $academicYearId=null):array{return ['items'=>[],'has_more'=>false];}
+ };
+ $sync=new \Cbt\Services\PortalDataSyncService($db,$portal);
+ $synced=$sync->sync('STUDENTS',1);
+ $assert($synced['status']==='SUCCESS'&&$synced['deactivated']===1,'successful sync deactivates students absent from active Portal list');
+ $assert((int)$pdo->query("SELECT COUNT(*) FROM students WHERE portal_student_id='inactive-remote'")->fetchColumn()===0,'inactive remote students are never imported');
+ $assert($pdo->query('SELECT name_snapshot FROM students WHERE id=1')->fetchColumn()==='Updated Student','sync updates existing student identity');
+ $assert(count((new \Cbt\Repositories\AdminStudentRepository($pdo))->all())===1,'admin list excludes inactive students');
+ $portal->rows=[['id'=>'invalid','nisn'=>'bad','name'=>'Invalid']];
+ try{$sync->sync('STUDENTS',1);throw new RuntimeException('Expected failed sync');}catch(UnexpectedValueException){}
+ $assert((int)$pdo->query('SELECT is_active FROM students WHERE id=1')->fetchColumn()===1,'partial sync never deactivates untouched students');
+
+ $portal->rows=[['id'=>'test-student','nisn'=>'0000000001','name'=>'Updated Student','grade'=>'10','is_active'=>true]];$portal->changing=true;
+ $pdo->exec('UPDATE students SET is_active=1,last_synced_at=NULL WHERE id=2');
+ try{$sync->sync('STUDENTS',1);throw new RuntimeException('Expected unstable snapshot rejection');}catch(UnexpectedValueException){}
+ $assert((int)$pdo->query('SELECT is_active FROM students WHERE id=2')->fetchColumn()===1,'changing paginated Portal snapshot cannot accidentally deactivate students');
+ $portal->changing=false;
+ $pdo->exec("INSERT INTO teachers(portal_teacher_id,name_snapshot,status) VALUES('inactive-teacher','Teacher','ACTIVE')");
+ $pdo->exec('UPDATE users SET teacher_id=1 WHERE id=2');
+ $sync->sync('TEACHERS',1);
+ $_SESSION['auth']=['user_id'=>2,'role'=>'TEACHER'];$allowed=false;
+ (new \Cbt\Middleware\AuthMiddleware('auth','TEACHER',$pdo))($r1,function()use(&$allowed){$allowed=true;return \Cbt\Core\Response::json(null);});
+ $assert(!$allowed,'deactivated Portal teacher loses access on next protected request');
  echo "{$passed} integration checks passed.\n";
 } finally { $connection->exec('DROP DATABASE `'.$name.'`'); }

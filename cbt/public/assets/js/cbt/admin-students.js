@@ -156,7 +156,7 @@ function renderTabelSiswa(rows) {
 
     if (s.ujian_status === 'dihentikan') {
       statusBadge = '<span class="badge bg-red"><i class="fa-solid fa-lock"></i> DIHENTIKAN</span>';
-      actBtn = `<button class="btn btn-success" style="padding:4px 8px; font-size:11px;" onclick="bukaBlokirAdmin(${s.id})" title="Jadwalkan ujian ulang"><i class="fa-solid fa-unlock"></i> Tindak Lanjut</button>`;
+      actBtn = `<button class="btn btn-success" style="padding:4px 8px; font-size:11px;" onclick="bukaBlokirAdmin(${s.id})" title="Reset CBT melalui Log Pelanggaran"><i class="fa-solid fa-unlock"></i> Reset CBT</button>`;
     } else if (s.ujian_status === 'berlangsung') {
       statusBadge = '<span class="badge bg-blue"><i class="fa-solid fa-spinner fa-spin"></i> SEDANG UJIAN</span>';
     } else if (s.ujian_status === 'selesai') {
@@ -391,6 +391,6 @@ document.getElementById('formSiswaSatuan').addEventListener('submit', function (
 });
 
 function bukaBlokirAdmin(id) {
-  switchDashTab('tabAdminUjianLanjutan');
-  showCustomAlert('Tindak lanjut ujian', 'Pilih tab Ujian Ulang, tinjau siswa dan ujian asal, lalu setujui kandidat dan jadwalkan. Blokir hanya berlaku untuk ujian asal; siswa tetap dapat mengikuti ujian lain.');
+  switchDashTab('tabAdminLogPelanggaran');
+  showCustomAlert('Reset CBT', 'Buka Log Pelanggaran, lalu klik Reset CBT pada ujian siswa yang dihentikan. Jawaban sebelumnya tetap tersimpan.');
 }

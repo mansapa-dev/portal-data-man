@@ -1,0 +1,20 @@
+[Unit]
+Description=CBT Portal Data reference sync
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Adjust these paths and account to the deployed installation.
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/cbt
+ExecStart=/usr/bin/php /var/www/cbt/scripts/sync-portal.php
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

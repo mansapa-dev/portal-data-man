@@ -18,7 +18,7 @@ final class AdminStudentRepository
                  (s.pin_hash IS NOT NULL) pin_is_set,
                  (SELECT COUNT(*) FROM exam_attempts active_attempt WHERE active_attempt.student_id=s.id AND active_attempt.status='IN_PROGRESS' AND active_attempt.expires_at>UTC_TIMESTAMP(3)) active_attempts,
                  (SELECT latest.status FROM exam_attempts latest WHERE latest.student_id=s.id ORDER BY latest.updated_at DESC,latest.id DESC LIMIT 1) latest_attempt_status
-          FROM students s
+          FROM students s WHERE s.is_active=1
         ) listed
         ORDER BY listed.id DESC";
   return$this->db->query($sql)->fetchAll();

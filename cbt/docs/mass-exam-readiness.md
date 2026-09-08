@@ -1,5 +1,7 @@
 # Perbaikan ujian massal — 7 September 2026
 
+Pembaruan 8 September: lihat [reset CBT, sinkronisasi otomatis, dan uji 1.300 peserta](reset-sync-capacity.md). Ketentuan reset di bawah adalah catatan versi sebelumnya.
+
 ## Perubahan
 
 - Jawaban dan tanda ragu masuk antrean localStorage per public ID attempt, sebelum UI menganggapnya tersimpan di perangkat. Pengiriman berurutan, retry otomatis, dan status membedakan antrean perangkat dari konfirmasi server. Web Locks membatasi satu tab pengedit pada browser yang sama. Gunakan browser modern melalui HTTPS (localhost dapat dipakai untuk pengujian).

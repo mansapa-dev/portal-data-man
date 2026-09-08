@@ -15,7 +15,11 @@ final class AuthMiddleware
    $s=$this->db->prepare($student?"SELECT id FROM students WHERE id=:id AND is_active=1 AND cbt_status='ACTIVE'":"SELECT id FROM users WHERE id=:id AND status='ACTIVE' AND role=:role");
    $params=['id'=>$auth[$student?'student_id':'user_id']??0];if(!$student)$params['role']=$auth['role']??'';
    $s->execute($params);
-   if(!$s->fetchColumn()){unset($_SESSION[$this->type]);return Response::error('Akun sudah tidak aktif. Silakan hubungi pengawas.',401);}
+   $valid=(bool)$s->fetchColumn();
+   if($valid&&!$student&&($auth['role']??'')==='TEACHER'){
+    $teacher=$this->db->prepare("SELECT t.id FROM teachers t JOIN users u ON u.teacher_id=t.id WHERE u.id=? AND t.status='ACTIVE'");$teacher->execute([$auth['user_id']]);$valid=(bool)$teacher->fetchColumn();
+   }
+   if(!$valid){unset($_SESSION[$this->type]);return Response::error('Akun sudah tidak aktif. Silakan hubungi pengawas.',401);}
   }
   return $next($r);
  }

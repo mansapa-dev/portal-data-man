@@ -15,7 +15,7 @@ final class ScoringService
   $result = $this->attempts->result((int)$attempt['id']);
   if ($result) return ['completed' => true, 'terminated' => $attempt['status'] === 'TERMINATED', 'hasil' => $this->format($result)];
   if ($attempt['status'] === 'TERMINATED' || ($attempt['status'] === 'IN_PROGRESS' && strtotime($attempt['expires_at'].' UTC') <= time())) {
-   return ['completed' => true, 'terminated' => $attempt['status'] === 'TERMINATED', 'hasil' => $this->submit($studentId, $examId)];
+   return ['completed' => true, 'terminated' => $attempt['status'] === 'TERMINATED', 'hasil' => $this->submit($studentId, $examId, true)];
   }
   return null;
  }
@@ -26,18 +26,20 @@ final class ScoringService
   $rows = $this->db->pdo()->query("SELECT a.student_id,a.exam_id FROM exam_attempts a LEFT JOIN exam_results r ON r.attempt_id=a.id WHERE r.attempt_id IS NULL AND (a.status='TERMINATED' OR (a.status='IN_PROGRESS' AND a.expires_at<=UTC_TIMESTAMP(3))) ORDER BY a.expires_at LIMIT ".$limit)->fetchAll();
   $done = 0; $failed = 0;
   foreach ($rows as $row) {
-   try { $this->submit((int)$row['student_id'], (int)$row['exam_id']); $done++; }
+   try { $this->submit((int)$row['student_id'], (int)$row['exam_id'], true); $done++; }
+   catch (DomainException $error) { if($error->status!==409){$failed++;error_log($error->getMessage());} }
    catch (\Throwable $error) { $failed++; error_log('CBT finalization exam '.$row['exam_id'].': '.$error->getMessage()); }
   }
   return ['completed' => $done, 'failed' => $failed];
  }
 
- public function submit(int$studentId,int$examId):array
+ public function submit(int$studentId,int$examId,bool$onlyDue=false):array
  {
-  return$this->db->transaction(function()use($studentId,$examId){
+  return$this->db->transaction(function()use($studentId,$examId,$onlyDue){
    $attempt=$this->attempts->find($studentId,$examId,true)??throw new DomainException('Sesi ujian tidak ditemukan.',404);
    $existing=$this->attempts->result((int)$attempt['id']);
    if($existing)return$this->format($existing);
+   if($onlyDue && $attempt['status']==='IN_PROGRESS' && strtotime($attempt['expires_at'].' UTC')>time())throw new DomainException('Ujian telah dibuka kembali oleh admin. Muat ulang dashboard untuk melanjutkan.',409);
    if(!in_array($attempt['status'],['IN_PROGRESS','TERMINATED'],true))throw new DomainException('Ujian tidak dapat disubmit.',409);
 
    $this->ensureAttemptQuestions($attempt);

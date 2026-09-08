@@ -193,7 +193,7 @@ function showViolationModal(jumlah, terminated, onDismiss = null) {
     icon.className = 'fa-solid fa-triangle-exclamation';
     iconWrap.style.background = '#fecaca';
     iconWrap.style.border = '2px solid #dc2626';
-    txt.textContent = 'Anda telah melakukan 3 kali pelanggaran. Ujian otomatis dihentikan dan nilai dikunci oleh sistem. Temui admin dan guru mata pelajaran untuk melakukan ujian ulang.';
+    txt.textContent = 'Anda telah melakukan 3 kali pelanggaran. Ujian otomatis dihentikan dan nilai dikunci oleh sistem. Hubungi admin untuk reset CBT agar dapat melanjutkan ujian dengan jawaban sebelumnya.';
     btn.textContent = 'Memuat hasil...';
     btn.disabled = true;
     cdWrap.style.display = 'block';
@@ -319,7 +319,7 @@ function tampilHasilUjian(hasil, isTerminate = false) {
 
   if (lblKet) {
     if (isTerminate) {
-      lblKet.textContent = 'Peringatan: ujian dihentikan karena 3 kali pelanggaran dan nilai yang tampil telah dikunci oleh sistem. Temui admin dan guru mata pelajaran untuk melakukan ujian ulang.';
+      lblKet.textContent = 'Peringatan: ujian dihentikan karena 3 kali pelanggaran dan nilai yang tampil telah dikunci oleh sistem. Hubungi admin untuk reset CBT agar dapat melanjutkan ujian dengan jawaban sebelumnya.';
       lblKet.style.color = '#dc2626';
     } else if (hasil.is_remedial && hasil.score_cap !== null) {
       lblKet.textContent = `Ini adalah ujian ulang (remedial). Nilai maksimum yang dapat diraih adalah ${hasil.score_cap}.`;

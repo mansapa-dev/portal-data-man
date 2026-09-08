@@ -48,6 +48,7 @@ Route::prefix('api/v1/integration')->middleware('throttle:120,1')->group(functio
 });
 
 Route::prefix('api/v1/integration/cbt')->middleware(['throttle:120,1', 'cbt.integration'])->group(function (): void {
+    Route::get('revisions', [CbtIntegrationController::class, 'revisions']);
     Route::get('academic-years', [CbtIntegrationController::class, 'academicYears']);
     Route::get('semesters', [CbtIntegrationController::class, 'semesters']);
     Route::get('students', [CbtIntegrationController::class, 'students']);
