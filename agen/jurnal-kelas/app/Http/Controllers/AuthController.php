@@ -21,7 +21,35 @@ final class AuthController
     }
     public function logout(Request $request): Response
     {
-        $url=$this->auth->logoutUrl(bin2hex(random_bytes(16))); $this->sessions->revoke($_SESSION['auth_session_public_id']??null); $_SESSION=[]; if(ini_get('session.use_cookies')){$p=session_get_cookie_params();setcookie(session_name(),'',time()-42000,$p['path'],$p['domain'],$p['secure'],$p['httponly']);} session_destroy(); return Response::redirect($url);
+        $url='/login';
+        try {
+            $url=$this->auth->logoutUrl(bin2hex(random_bytes(16)));
+        } catch(Throwable $error) {
+            error_log('Logout SSO AGEN menggunakan fallback lokal: '.$error->getMessage());
+        }
+        try {
+            $this->sessions->revoke($_SESSION['auth_session_public_id']??null);
+        } catch(Throwable $error) {
+            error_log('Revokasi sesi AGEN gagal saat logout: '.$error->getMessage());
+        }
+
+        $_SESSION=[];
+        if(session_status()===PHP_SESSION_ACTIVE){
+            if(ini_get('session.use_cookies')){
+                $params=session_get_cookie_params();
+                setcookie(session_name(),'',[
+                    'expires'=>time()-42000,
+                    'path'=>$params['path'],
+                    'domain'=>$params['domain'],
+                    'secure'=>$params['secure'],
+                    'httponly'=>$params['httponly'],
+                    'samesite'=>$params['samesite']??'Lax',
+                ]);
+            }
+            session_destroy();
+        }
+
+        return Response::redirect($url);
     }
     private function synchronizeUser(array $claims): array
     {

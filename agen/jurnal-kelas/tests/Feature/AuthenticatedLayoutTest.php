@@ -41,4 +41,10 @@ final class AuthenticatedLayoutTest extends TestCase
         $_SESSION['user']['role'] = 'AUDITOR';
         self::assertStringContainsString('href="/audit-logs"', Response::html('<html><head></head><body></body></html>')->content());
     }
+
+    public function test_html_and_redirect_responses_are_not_browser_cached(): void
+    {
+        self::assertSame('private, no-store', Response::html('<html><head></head><body></body></html>')->headers()['Cache-Control']);
+        self::assertSame('private, no-store', Response::redirect('/login')->headers()['Cache-Control']);
+    }
 }

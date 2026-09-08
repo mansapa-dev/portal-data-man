@@ -34,8 +34,12 @@ final class OidcAuthProvider implements AuthProvider
     }
     public function logoutUrl(string $state): string
     {
-        $discovery = $this->discovery();
-        return $discovery['end_session_endpoint'].'?'.http_build_query(['post_logout_redirect_uri' => $this->config->get('portal-data.post_logout_redirect_uri'), 'state' => $state]);
+        $issuer=rtrim((string)$this->config->get('portal-data.issuer'),'/');
+        if($issuer==='')throw new RuntimeException('Issuer Portal Data belum dikonfigurasi.');
+
+        // Logout tidak bergantung pada request discovery dari server AGEN.
+        // Browser tetap diarahkan ke Portal Data agar sesi SSO ikut berakhir.
+        return $issuer.'/logout?'.http_build_query(['post_logout_redirect_uri' => $this->config->get('portal-data.post_logout_redirect_uri'), 'state' => $state]);
     }
     private function discovery(): array { return $this->http->request('GET', rtrim((string) $this->config->get('portal-data.issuer'), '/').'/.well-known/openid-configuration', [], null, $this->timeout()); }
     private function clientId(): string { return (string) $this->config->get('portal-data.client_id'); }

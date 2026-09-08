@@ -37,9 +37,9 @@ final class Response
             $html = preg_replace('/<nav class="page-nav"[^>]*>.*?<\/nav>/s', '', $html) ?? $html;
             $html = preg_replace('/<body([^>]*)>/', '<body$1 class="agen-workspace">'.$navigation, $html, 1) ?? $html;
         }
-        return new self($html, $status, ['Content-Type' => 'text/html; charset=utf-8']);
+        return new self($html, $status, ['Content-Type' => 'text/html; charset=utf-8', 'Cache-Control' => 'private, no-store', 'Pragma' => 'no-cache']);
     }
-    public static function redirect(string $url, int $status = 302): self { return new self('', $status, ['Location' => $url]); }
+    public static function redirect(string $url, int $status = 302): self { return new self('', $status, ['Location' => $url, 'Cache-Control' => 'private, no-store', 'Pragma' => 'no-cache']); }
     public static function download(string $content, string $mime, string $filename): self { return new self($content, 200, ['Content-Type' => $mime, 'Content-Disposition' => 'inline; filename="'.str_replace(['"', "\r", "\n"], '', $filename).'"', 'Cache-Control' => 'private, no-store', 'X-Content-Type-Options' => 'nosniff']); }
     public static function attachment(string $content, string $mime, string $filename): self { return new self($content, 200, ['Content-Type' => $mime, 'Content-Disposition' => 'attachment; filename="'.str_replace(['"', "\r", "\n"], '', $filename).'"', 'Cache-Control' => 'private, no-store', 'X-Content-Type-Options' => 'nosniff']); }
     public function statusCode(): int { return $this->status; }
