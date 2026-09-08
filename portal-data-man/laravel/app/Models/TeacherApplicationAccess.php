@@ -9,7 +9,7 @@ class TeacherApplicationAccess extends Model
 {
     protected $table = 'TeacherApplicationAccess';
 
-    protected $hidden = ['id', 'teacherId', 'applicationClientId'];
+    protected $hidden = ['id', 'teacherId', 'employeeId', 'applicationClientId'];
 
     protected $guarded = ['id'];
 
@@ -25,6 +25,11 @@ class TeacherApplicationAccess extends Model
     public function teacher(): BelongsTo
     {
         return $this->belongsTo(Teacher::class, 'teacherId')->withTrashed();
+    }
+
+    public function employee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'employeeId')->withTrashed();
     }
 
     public function application(): BelongsTo

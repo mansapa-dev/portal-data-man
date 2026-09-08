@@ -16,11 +16,12 @@ class TeacherSessionController extends Controller
     public function store(Request $request): JsonResponse
     {
         $credentials = $request->validate(['username' => ['required', 'string'], 'password' => ['required', 'string']]);
-        $account = TeacherAccount::query()->with('teacher')->where('username', strtolower(trim($credentials['username'])))->first();
+        $account = TeacherAccount::query()->with(['teacher', 'employee'])->where('username', strtolower(trim($credentials['username'])))->first();
         if ($account?->status === 'LOCKED' && $account->lockedUntil?->isPast()) {
             $account->forceFill(['status' => 'ACTIVE', 'failedLoginAttempts' => 0, 'lockedUntil' => null])->save();
         }
-        $valid = $account && $account->status === 'ACTIVE' && $account->teacher?->status === 'ACTIVE' && ! $account->teacher?->deletedAt && $account->passwordHash && (! $account->lockedUntil || $account->lockedUntil->isPast()) && password_verify($credentials['password'], $account->passwordHash);
+        $person = $account?->person();
+        $valid = $account && $person && $account->status === 'ACTIVE' && $person->status === 'ACTIVE' && ! $person->deletedAt && $account->passwordHash && (! $account->lockedUntil || $account->lockedUntil->isPast()) && password_verify($credentials['password'], $account->passwordHash);
         if (! $valid) {
             if ($account) {
                 $attempts = $account->failedLoginAttempts + 1;
@@ -34,14 +35,14 @@ class TeacherSessionController extends Controller
         $request->session()->regenerate();
         $this->sessions->register($request, $account);
 
-        return response()->json(['success' => true, 'message' => 'Login berhasil.', 'data' => ['publicId' => $account->publicId, 'username' => $account->username, 'fullName' => $account->teacher->fullName]])->cookie('portal_teacher_csrf', $request->session()->token(), config('session.lifetime'), '/', null, $request->isSecure(), false, false, 'lax');
+        return response()->json(['success' => true, 'message' => 'Login berhasil.', 'data' => $this->identity($account)])->cookie('portal_teacher_csrf', $request->session()->token(), config('session.lifetime'), '/', null, $request->isSecure(), false, false, 'lax');
     }
 
     public function show(Request $request): JsonResponse
     {
-        $account = $request->user('teacher')->load('teacher');
+        $account = $request->user('teacher')->load(['teacher', 'employee']);
 
-        return response()->json(['success' => true, 'message' => 'Sesi guru aktif.', 'data' => ['publicId' => $account->publicId, 'username' => $account->username, 'fullName' => $account->teacher->fullName]]);
+        return response()->json(['success' => true, 'message' => 'Sesi akun aktif.', 'data' => $this->identity($account)]);
     }
 
     public function csrf(Request $request): JsonResponse
@@ -67,5 +68,10 @@ class TeacherSessionController extends Controller
         return response()->json(['success' => true, 'message' => 'Logout berhasil.', 'data' => null])
             ->withoutCookie('portal_teacher_csrf')
             ->header('Cache-Control', 'no-store');
+    }
+
+    private function identity(TeacherAccount $account): array
+    {
+        return ['publicId' => $account->publicId, 'username' => $account->username, 'fullName' => $account->person()?->fullName, 'accountType' => $account->accountType()];
     }
 }

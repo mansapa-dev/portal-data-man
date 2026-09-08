@@ -22,7 +22,7 @@ class OidcController extends Controller
     {
         $issuer = config('oidc.issuer');
 
-        return response()->json(['issuer' => $issuer, 'authorization_endpoint' => $issuer.'/authorize', 'token_endpoint' => $issuer.'/token', 'userinfo_endpoint' => $issuer.'/userinfo', 'jwks_uri' => $issuer.'/jwks', 'end_session_endpoint' => $issuer.'/logout', 'response_types_supported' => ['code'], 'grant_types_supported' => ['authorization_code', 'client_credentials'], 'subject_types_supported' => ['public'], 'id_token_signing_alg_values_supported' => ['RS256'], 'token_endpoint_auth_methods_supported' => ['none', 'client_secret_post', 'client_secret_basic'], 'code_challenge_methods_supported' => ['S256'], 'scopes_supported' => ['openid', 'profile', 'email', 'portal_role', 'portal_data.read'], 'claims_supported' => ['sub', 'name', 'preferred_username', 'email', 'email_verified', 'portal_teacher_id', 'portal_role', 'client_id']]);
+        return response()->json(['issuer' => $issuer, 'authorization_endpoint' => $issuer.'/authorize', 'token_endpoint' => $issuer.'/token', 'userinfo_endpoint' => $issuer.'/userinfo', 'jwks_uri' => $issuer.'/jwks', 'end_session_endpoint' => $issuer.'/logout', 'response_types_supported' => ['code'], 'grant_types_supported' => ['authorization_code', 'client_credentials'], 'subject_types_supported' => ['public'], 'id_token_signing_alg_values_supported' => ['RS256'], 'token_endpoint_auth_methods_supported' => ['none', 'client_secret_post', 'client_secret_basic'], 'code_challenge_methods_supported' => ['S256'], 'scopes_supported' => ['openid', 'profile', 'email', 'portal_role', 'portal_data.read'], 'claims_supported' => ['sub', 'name', 'preferred_username', 'email', 'email_verified', 'portal_person_id', 'portal_identity_type', 'portal_teacher_id', 'portal_employee_id', 'portal_role', 'client_id']]);
     }
 
     public function jwks(): JsonResponse
@@ -44,8 +44,8 @@ class OidcController extends Controller
         if (! $request->session()->has('portal_session_public_id')) {
             $this->sessions->register($request, $account);
         }
-        abort_unless($this->sessions->touch($request, $account), 401, 'Session guru tidak valid.');
-        $access = TeacherApplicationAccess::query()->where('teacherId', $account->teacherId)->where('applicationClientId', $client->id)->where('status', 'ACTIVE')->first();
+        abort_unless($this->sessions->touch($request, $account), 401, 'Session akun tidak valid.');
+        $access = $this->accessQuery($account)->where('applicationClientId', $client->id)->where('status', 'ACTIVE')->first();
         abort_unless($access, 403, 'Akun belum diberi akses ke aplikasi ini.');
         $raw = Str::random(80);
         OidcPayload::query()->create(['id' => hash('sha256', $raw), 'kind' => 'AuthorizationCode', 'payload' => ['clientId' => $client->clientId, 'accountPublicId' => $account->publicId, 'redirectUri' => $data['redirect_uri'], 'scope' => $scopes, 'nonce' => $data['nonce'] ?? null, 'codeChallenge' => $data['code_challenge'], 'role' => $access->role], 'expiresAt' => now()->addSeconds(config('oidc.authorization_code_ttl'))]);
@@ -73,9 +73,9 @@ class OidcController extends Controller
         if ($claimed !== 1) {
             return $this->oauthError('invalid_grant', 'Authorization code sudah digunakan.');
         }
-        $account = TeacherAccount::query()->with('teacher')->where('publicId', $payload['accountPublicId'])->where('status', 'ACTIVE')->first();
-        if (! $account || $account->teacher->status !== 'ACTIVE') {
-            return $this->oauthError('invalid_grant', 'Akun guru tidak aktif.');
+        $account = TeacherAccount::query()->with(['teacher', 'employee'])->where('publicId', $payload['accountPublicId'])->where('status', 'ACTIVE')->first();
+        if (! $account || ! $account->person() || $account->person()->status !== 'ACTIVE' || $account->person()->deletedAt) {
+            return $this->oauthError('invalid_grant', 'Akun tidak aktif.');
         }
         $now = time();
         $expires = $now + config('oidc.access_token_ttl');
@@ -127,9 +127,9 @@ class OidcController extends Controller
         if (! $claims || ($claims['token_use'] ?? null) !== 'access') {
             return response()->json(['error' => 'invalid_token'], 401)->header('WWW-Authenticate', 'Bearer error="invalid_token"');
         }
-        $account = TeacherAccount::query()->with('teacher')->where('publicId', $claims['sub'])->where('status', 'ACTIVE')->first();
-        $access = $account ? TeacherApplicationAccess::query()->where('teacherId', $account->teacherId)->whereHas('application', fn ($query) => $query->where('clientId', $claims['aud'])->where('status', 'ACTIVE'))->where('status', 'ACTIVE')->first() : null;
-        if (! $account || ! $access) {
+        $account = TeacherAccount::query()->with(['teacher', 'employee'])->where('publicId', $claims['sub'])->where('status', 'ACTIVE')->first();
+        $access = $account ? $this->accessQuery($account)->whereHas('application', fn ($query) => $query->where('clientId', $claims['aud'])->where('status', 'ACTIVE'))->where('status', 'ACTIVE')->first() : null;
+        if (! $account || ! $account->person() || $account->person()->status !== 'ACTIVE' || ! $access) {
             return response()->json(['error' => 'invalid_token'], 401);
         }
 
@@ -138,12 +138,13 @@ class OidcController extends Controller
 
     public function logout(Request $request): RedirectResponse
     {
+        $defaultLogoutUri = Auth::guard('teacher')->user()?->accountType() === 'EMPLOYEE' ? '/employee/login' : '/teacher/login';
         $this->sessions->revokeCurrent($request);
         Auth::guard('teacher')->logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
-        $uri = (string) $request->query('post_logout_redirect_uri', '/teacher/login');
-        if ($uri !== '/teacher/login') {
+        $uri = (string) $request->query('post_logout_redirect_uri', $defaultLogoutUri);
+        if (! in_array($uri, ['/teacher/login', '/employee/login'], true)) {
             $valid = ApplicationClient::query()->where('status', 'ACTIVE')->get()->contains(fn ($client) => in_array($uri, $client->postLogoutRedirectUris ?? [], true));
             abort_unless($valid, 400, 'post_logout_redirect_uri tidak terdaftar.');
         }
@@ -156,9 +157,21 @@ class OidcController extends Controller
 
     private function claims(TeacherAccount $account, string $role): array
     {
-        $email = $account->email ?? $account->teacher->email;
+        $person = $account->person();
+        $email = $account->email ?? $account->teacher?->email;
+        $type = $account->accountType();
+        $identityClaim = $type === 'EMPLOYEE' ? ['portal_employee_id' => $person->publicId] : ['portal_teacher_id' => $person->publicId];
 
-        return ['sub' => $account->publicId, 'name' => $account->teacher->fullName, 'preferred_username' => $account->username, 'email' => $email, 'email_verified' => (bool) $email, 'portal_teacher_id' => $account->teacher->publicId, 'portal_role' => $role];
+        return ['sub' => $account->publicId, 'name' => $person->fullName, 'preferred_username' => $account->username, 'email' => $email, 'email_verified' => (bool) $email, 'portal_person_id' => $person->publicId, 'portal_identity_type' => $type, ...$identityClaim, 'portal_role' => $role];
+    }
+
+    private function accessQuery(TeacherAccount $account)
+    {
+        return TeacherApplicationAccess::query()->when(
+            $account->employeeId,
+            fn ($query) => $query->where('employeeId', $account->employeeId),
+            fn ($query) => $query->where('teacherId', $account->teacherId),
+        );
     }
 
     private function oauthError(string $error, string $description): JsonResponse

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="csrf-token" content="{{ csrf_token() }}"><title>Portal Guru</title>@vite('resources/js/portal-react/main.tsx')</head>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="csrf-token" content="{{ csrf_token() }}"><title>Portal Personel</title>@vite('resources/js/portal-react/main.tsx')</head>
 <body>
 <div id="root"></div>
 <div id="legacy-teacher" hidden>

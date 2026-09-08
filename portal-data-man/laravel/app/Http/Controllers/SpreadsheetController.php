@@ -82,6 +82,14 @@ class SpreadsheetController extends Controller
         return $this->download($path, 'akun-guru-'.now()->format('Y-m-d-His').'.xlsx');
     }
 
+    public function employeeCredentials(Request $request): BinaryFileResponse
+    {
+        [$path, $count] = $this->exports->employeeCredentials($request);
+        $this->audit->write($request, 'EMPLOYEE_CREDENTIALS_EXPORTED', 'TeacherAccount', null, null, ['totalRows' => $count]);
+
+        return $this->download($path, 'akun-pegawai-'.now()->format('Y-m-d-His').'.xlsx');
+    }
+
     private function download(string $path, string $filename): BinaryFileResponse
     {
         return response()->download($path, $filename, ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Cache-Control' => 'private, no-store'])->deleteFileAfterSend();

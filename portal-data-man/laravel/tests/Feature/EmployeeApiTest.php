@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\AdminUser;
+use App\Models\Employee;
 use App\Models\ImportBatch;
 use App\Services\SpreadsheetExportService;
 use Illuminate\Database\Schema\Blueprint;
@@ -48,6 +49,50 @@ class EmployeeApiTest extends TestCase
             $table->dateTime('createdAt');
             $table->dateTime('updatedAt');
             $table->dateTime('deletedAt')->nullable();
+        });
+        Schema::create('TeacherAccount', function (Blueprint $table): void {
+            $table->id();
+            $table->string('publicId', 26)->unique();
+            $table->unsignedBigInteger('teacherId')->nullable();
+            $table->unsignedBigInteger('employeeId')->nullable()->unique();
+            $table->string('username')->unique();
+            $table->string('email')->nullable()->unique();
+            $table->string('passwordHash')->nullable();
+            $table->text('initialPassword')->nullable();
+            $table->string('status')->default('ACTIVE');
+            $table->boolean('mustChangePassword')->default(true);
+            $table->integer('failedLoginAttempts')->default(0);
+            $table->dateTime('lockedUntil')->nullable();
+            $table->dateTime('lastLoginAt')->nullable();
+            $table->dateTime('passwordChangedAt')->nullable();
+            $table->dateTime('activatedAt')->nullable();
+            $table->dateTime('disabledAt')->nullable();
+            $table->dateTime('createdAt');
+            $table->dateTime('updatedAt');
+        });
+        Schema::create('TeacherPasswordSetupToken', function (Blueprint $table): void {
+            $table->id();
+            $table->string('publicId', 26)->unique();
+            $table->unsignedBigInteger('teacherAccountId');
+            $table->string('tokenHash')->unique();
+            $table->dateTime('expiresAt');
+            $table->dateTime('usedAt')->nullable();
+            $table->dateTime('createdAt');
+        });
+        Schema::create('AuthSession', function (Blueprint $table): void {
+            $table->id();
+            $table->string('publicId', 26)->unique();
+            $table->unsignedBigInteger('adminUserId')->nullable();
+            $table->unsignedBigInteger('teacherAccountId')->nullable();
+            $table->string('secretHash')->unique();
+            $table->string('csrfHash');
+            $table->string('ipAddress')->nullable();
+            $table->string('userAgent')->nullable();
+            $table->dateTime('lastUsedAt');
+            $table->dateTime('expiresAt');
+            $table->dateTime('revokedAt')->nullable();
+            $table->dateTime('createdAt');
+            $table->string('rotatedFrom')->nullable();
         });
         Schema::create('AuditLog', function (Blueprint $table): void {
             $table->id();
@@ -107,6 +152,9 @@ class EmployeeApiTest extends TestCase
         Schema::dropIfExists('ImportRowResult');
         Schema::dropIfExists('ImportBatch');
         Schema::dropIfExists('AuditLog');
+        Schema::dropIfExists('AuthSession');
+        Schema::dropIfExists('TeacherPasswordSetupToken');
+        Schema::dropIfExists('TeacherAccount');
         Schema::dropIfExists('Employee');
         Schema::dropIfExists('AdminUser');
         parent::tearDown();
@@ -144,6 +192,22 @@ class EmployeeApiTest extends TestCase
             ->assertOk()->assertDownload('template-import-pegawai.xlsx');
         $this->assertDatabaseCount('AuditLog', 2);
         $this->assertDatabaseMissing('AuditLog', ['newValues' => json_encode(['type' => 'STUDENT'])]);
+    }
+
+    public function test_admin_can_create_employee_account_and_employee_can_login(): void
+    {
+        $admin = AdminUser::query()->create(['name' => 'Admin', 'email' => 'admin-account@example.test', 'passwordHash' => 'hash', 'role' => 'DATA_ADMIN', 'status' => 'ACTIVE']);
+        $employee = Employee::query()->create(['employmentType' => 'PPPK', 'fullName' => 'Ahmad Pegawai', 'nip' => '199001012026211099', 'position' => 'Staf Tata Usaha', 'status' => 'ACTIVE']);
+        $created = $this->actingAs($admin, 'admin')->postJson("/api/v1/employees/{$employee->publicId}/account")
+            ->assertCreated()
+            ->assertJsonPath('data.account.username', $employee->nip);
+        $password = $created->json('data.defaultPassword');
+
+        $this->postJson('/api/v1/auth/teacher/login', ['username' => $employee->nip, 'password' => $password])
+            ->assertOk()
+            ->assertJsonPath('data.accountType', 'EMPLOYEE')
+            ->assertJsonPath('data.fullName', 'Ahmad Pegawai');
+        $this->getJson('/api/v1/auth/teacher/me')->assertOk()->assertJsonPath('data.accountType', 'EMPLOYEE');
     }
 
     public function test_generated_employee_workbook_can_be_uploaded_and_validated(): void
@@ -190,5 +254,7 @@ class EmployeeApiTest extends TestCase
         $this->actingAs($admin, 'admin')->postJson("/api/v1/imports/employees/{$batch->publicId}/commit")->assertOk()->assertJsonPath('data.insertedRows', 1);
         $this->actingAs($admin, 'admin')->postJson("/api/v1/imports/employees/{$batch->publicId}/commit")->assertConflict();
         $this->assertDatabaseHas('Employee', ['nip' => '199001012026211001', 'employmentType' => 'PPPK', 'rank' => 'IX']);
+        $this->assertDatabaseHas('TeacherAccount', ['username' => '199001012026211001', 'status' => 'ACTIVE']);
+        $this->assertTrue($this->getJson('/api/v1/employees?status=ACTIVE')->json('data.0.account.mustChangePassword'));
     }
 }

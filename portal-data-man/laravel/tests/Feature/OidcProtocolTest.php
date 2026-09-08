@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\ApplicationClient;
+use App\Models\Employee;
 use App\Models\Teacher;
 use App\Models\TeacherAccount;
 use App\Models\TeacherApplicationAccess;
@@ -34,7 +35,7 @@ class OidcProtocolTest extends TestCase
     {
         @unlink($this->privateKey);
         @unlink($this->publicKey);
-        foreach (['OidcPayload', 'TeacherApplicationAccess', 'ApplicationClient', 'AuthSession', 'TeacherAccount', 'Teacher'] as $table) {
+        foreach (['OidcPayload', 'TeacherApplicationAccess', 'ApplicationClient', 'AuthSession', 'TeacherAccount', 'Employee', 'Teacher'] as $table) {
             Schema::dropIfExists($table);
         }
         parent::tearDown();
@@ -106,6 +107,28 @@ class OidcProtocolTest extends TestCase
         $this->assertDatabaseMissing('AuthSession', ['teacherAccountId' => $account->id, 'revokedAt' => null]);
     }
 
+    public function test_employee_account_uses_the_same_oidc_flow_with_employee_claims(): void
+    {
+        $employee = Employee::query()->create(['employmentType' => 'PPPK', 'nip' => '199001012026211001', 'fullName' => 'Pegawai OIDC', 'position' => 'Staf Tata Usaha', 'status' => 'ACTIVE']);
+        $account = TeacherAccount::query()->create(['employeeId' => $employee->id, 'username' => $employee->nip, 'email' => 'pegawai@example.test', 'passwordHash' => password_hash('Password123', PASSWORD_ARGON2ID), 'status' => 'ACTIVE']);
+        $client = ApplicationClient::query()->create(['name' => 'Portal Layanan', 'slug' => 'layanan', 'clientId' => 'portal_employee_test', 'clientType' => 'PUBLIC_WEB', 'status' => 'ACTIVE', 'redirectUris' => ['https://layanan.example.test/callback'], 'postLogoutRedirectUris' => [], 'allowedOrigins' => [], 'allowedScopes' => ['openid', 'profile', 'email', 'portal_role'], 'allowedGrantTypes' => ['authorization_code']]);
+        TeacherApplicationAccess::query()->create(['employeeId' => $employee->id, 'applicationClientId' => $client->id, 'role' => 'EMPLOYEE', 'status' => 'ACTIVE', 'grantedBy' => '01ADMIN00000000000000000']);
+        $verifier = str_repeat('b', 64);
+        $challenge = rtrim(strtr(base64_encode(hash('sha256', $verifier, true)), '+/', '-_'), '=');
+        $query = http_build_query(['client_id' => $client->clientId, 'redirect_uri' => 'https://layanan.example.test/callback', 'response_type' => 'code', 'scope' => 'openid profile email portal_role', 'state' => 'employee-state', 'nonce' => 'employee-nonce', 'code_challenge' => $challenge, 'code_challenge_method' => 'S256']);
+        $redirect = $this->actingAs($account, 'teacher')->get('/oidc/authorize?'.$query)->assertRedirect();
+        parse_str((string) parse_url($redirect->headers->get('Location'), PHP_URL_QUERY), $params);
+        $token = $this->postJson('/oidc/token', ['grant_type' => 'authorization_code', 'client_id' => $client->clientId, 'code' => $params['code'], 'redirect_uri' => 'https://layanan.example.test/callback', 'code_verifier' => $verifier])->assertOk()->json();
+
+        $this->withToken($token['access_token'])->getJson('/oidc/userinfo')
+            ->assertOk()
+            ->assertJsonPath('portal_employee_id', $employee->publicId)
+            ->assertJsonPath('portal_person_id', $employee->publicId)
+            ->assertJsonPath('portal_identity_type', 'EMPLOYEE')
+            ->assertJsonPath('portal_role', 'EMPLOYEE')
+            ->assertJsonMissingPath('portal_teacher_id');
+    }
+
     private function createTables(): void
     {
         Schema::create('Teacher', function (Blueprint $t) {
@@ -128,7 +151,8 @@ class OidcProtocolTest extends TestCase
         Schema::create('TeacherAccount', function (Blueprint $t) {
             $t->id();
             $t->string('publicId', 26)->unique();
-            $t->unsignedBigInteger('teacherId')->unique();
+            $t->unsignedBigInteger('teacherId')->nullable()->unique();
+            $t->unsignedBigInteger('employeeId')->nullable()->unique();
             $t->string('username')->unique();
             $t->string('email')->nullable();
             $t->string('passwordHash')->nullable();
@@ -142,6 +166,23 @@ class OidcProtocolTest extends TestCase
             $t->dateTime('disabledAt')->nullable();
             $t->dateTime('createdAt');
             $t->dateTime('updatedAt');
+        });
+        Schema::create('Employee', function (Blueprint $t) {
+            $t->id();
+            $t->string('publicId', 26)->unique();
+            $t->string('employmentType');
+            $t->string('fullName');
+            $t->string('nip')->unique();
+            $t->string('nuptk')->nullable();
+            $t->string('position');
+            $t->string('rank')->nullable();
+            $t->string('gender')->nullable();
+            $t->string('education')->nullable();
+            $t->string('grade')->nullable();
+            $t->string('status');
+            $t->dateTime('createdAt');
+            $t->dateTime('updatedAt');
+            $t->dateTime('deletedAt')->nullable();
         });
         Schema::create('AuthSession', function (Blueprint $t) {
             $t->id();
@@ -181,7 +222,8 @@ class OidcProtocolTest extends TestCase
         });
         Schema::create('TeacherApplicationAccess', function (Blueprint $t) {
             $t->id();
-            $t->unsignedBigInteger('teacherId');
+            $t->unsignedBigInteger('teacherId')->nullable();
+            $t->unsignedBigInteger('employeeId')->nullable();
             $t->unsignedBigInteger('applicationClientId');
             $t->string('role');
             $t->string('status');

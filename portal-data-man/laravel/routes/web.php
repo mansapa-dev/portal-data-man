@@ -8,6 +8,7 @@ use App\Http\Controllers\Auth\AdminSessionController;
 use App\Http\Controllers\Auth\TeacherSessionController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmployeeController;
+use App\Http\Controllers\EmployeeAccountController;
 use App\Http\Controllers\EmployeeImportController;
 use App\Http\Controllers\EnrollmentController;
 use App\Http\Controllers\ImportManagementController;
@@ -34,6 +35,7 @@ Route::get('/', function () {
 });
 Route::get('health', HealthController::class);
 Route::get('teacher/{path?}', fn () => view('teacher'))->where('path', '.*');
+Route::get('employee/{path?}', fn () => view('teacher'))->where('path', '.*');
 
 Route::get('.well-known/openid-configuration', [OidcController::class, 'discovery']);
 Route::get('oidc/.well-known/openid-configuration', [OidcController::class, 'discovery']);
@@ -85,6 +87,7 @@ Route::prefix('api/v1')->group(function (): void {
         Route::get('teachers/{teacher}', [TeacherController::class, 'show']);
         Route::get('employees', [EmployeeController::class, 'index']);
         Route::get('employees/{employee}', [EmployeeController::class, 'show']);
+        Route::get('employees/{employee}/account', [EmployeeAccountController::class, 'show']);
         Route::get('teachers/{teacher}/account', [TeacherAccountController::class, 'show']);
         Route::get('teachers/{teacher}/photo', [TeacherPhotoController::class, 'show']);
         Route::get('students/by-nisn/{nisn}', [StudentController::class, 'byNisn']);
@@ -106,6 +109,12 @@ Route::prefix('api/v1')->group(function (): void {
             Route::patch('teachers/{teacher}', [TeacherController::class, 'update']);
             Route::post('employees', [EmployeeController::class, 'store']);
             Route::patch('employees/{employee}', [EmployeeController::class, 'update']);
+            Route::post('employees/{employee}/account', [EmployeeAccountController::class, 'store']);
+            Route::post('employees/{employee}/account/setup-token', [EmployeeAccountController::class, 'regenerate']);
+            Route::post('employees/{employee}/account/disable', [EmployeeAccountController::class, 'disable']);
+            Route::post('employees/{employee}/account/enable', [EmployeeAccountController::class, 'enable']);
+            Route::post('employees/{employee}/account/unlock', [EmployeeAccountController::class, 'unlock']);
+            Route::post('employees/{employee}/account/revoke-sessions', [EmployeeAccountController::class, 'revokeSessions']);
             Route::post('imports/teachers/validate', [TeacherImportController::class, 'validateFile']);
             Route::post('imports/employees/validate', [EmployeeImportController::class, 'validateFile']);
             Route::post('teachers/{teacher}/account', [TeacherAccountController::class, 'store']);
@@ -130,6 +139,7 @@ Route::prefix('api/v1')->group(function (): void {
             Route::get('exports/teachers', [SpreadsheetController::class, 'teachers']);
             Route::get('exports/employees', [SpreadsheetController::class, 'employees']);
             Route::get('exports/teacher-credentials', [SpreadsheetController::class, 'teacherCredentials']);
+            Route::get('exports/employee-credentials', [SpreadsheetController::class, 'employeeCredentials']);
             Route::get('exports/classes/{schoolClass}/students', [SpreadsheetController::class, 'classStudents']);
             Route::post('classes', [SchoolClassController::class, 'store']);
             Route::patch('classes/{schoolClass}', [SchoolClassController::class, 'update']);
@@ -148,6 +158,8 @@ Route::prefix('api/v1')->group(function (): void {
             Route::post('sso/applications/{applicationClient}/access', [SsoApplicationController::class, 'grant']);
             Route::post('sso/applications/{applicationClient}/access/bulk', [SsoApplicationController::class, 'grantBulk']);
             Route::post('sso/applications/{applicationClient}/access/{teacherPublicId}/revoke', [SsoApplicationController::class, 'revoke']);
+            Route::post('sso/applications/{applicationClient}/employee-access/bulk', [SsoApplicationController::class, 'grantEmployeesBulk']);
+            Route::post('sso/applications/{applicationClient}/employee-access/{employeePublicId}/revoke', [SsoApplicationController::class, 'revokeEmployee']);
             Route::post('imports/students/{importBatch}/commit', [StudentImportController::class, 'commit']);
             Route::post('imports/teachers/{importBatch}/commit', [TeacherImportController::class, 'commit']);
             Route::post('imports/employees/{importBatch}/commit', [EmployeeImportController::class, 'commit']);
@@ -191,4 +203,4 @@ Route::prefix('api/v1')->group(function (): void {
 });
 
 // React Router owns portal pages; serve the shell on direct navigation/refresh.
-Route::get('{any}', fn () => view('portal'))->where('any', '^(?!teacher(?:/|$)|api(?:/|$)|oidc(?:/|$)|health$|\.well-known(?:/|$)).*');
+Route::get('{any}', fn () => view('portal'))->where('any', '^(?!(?:teacher|employee)(?:/|$)|api(?:/|$)|oidc(?:/|$)|health$|\.well-known(?:/|$)).*');

@@ -6,6 +6,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { z } from 'zod';
 import { ApiError, api } from '../lib/api';
 import { ConfirmDialog, DetailItem, EmptyState, ErrorState, FormField, LoadingSkeleton, PageHeader, ServerPagination, StatusBadge, humanizeStatus, useToast } from '../components/management';
+import { EmployeeAccountPanel } from './teacher-account';
 
 type Employee = {
   publicId: string;
@@ -19,6 +20,7 @@ type Employee = {
   education?: string;
   grade?: string;
   status: 'ACTIVE' | 'INACTIVE';
+  account?: { status: string; username: string } | null;
 };
 
 export const employeeSchema = z.object({
@@ -58,6 +60,7 @@ export function EmployeesPage() {
   return <div className="page">
     <PageHeader title="Data Pegawai" description="Data PNS, PPPK, dan tenaga honorer" action={<div className="actions">
       <a className="button" href={`/api/v1/exports/employees?${params}`}>Export</a>
+      <a className="button" href={`/api/v1/exports/employee-credentials?search=${encodeURIComponent(search)}`}>Export akun & password</a>
       <Link className="button" to="/imports/employees">Import pegawai</Link>
       <Link className="button primary" to="/employees/new">Tambah pegawai</Link>
     </div>} />
@@ -131,7 +134,8 @@ export function EmployeeDetailPage() {
   const canDelete = ['SUPER_ADMIN', 'DATA_ADMIN'].includes(me.data?.data.role ?? '');
 
   return <div className="page">
-    <PageHeader title={employee.fullName} description={`${humanizeStatus(employee.employmentType)} · ${employee.position}`} action={<div className="actions"><Link className="button" to={`/employees/${id}/edit`}>Edit</Link>{canDelete && <button className="danger" onClick={() => setConfirmDelete(true)}>Hapus pegawai</button>}</div>} />
+    <PageHeader title={employee.fullName} description={`${humanizeStatus(employee.employmentType)} · ${employee.position}`} action={<div className="actions"><a className="button primary" href="#portal-account">Buat akun Portal</a><Link className="button" to={`/employees/${id}/edit`}>Edit</Link>{canDelete && <button className="danger" onClick={() => setConfirmDelete(true)}>Hapus pegawai</button>}</div>} />
+    <div id="portal-account"><EmployeeAccountPanel employeeId={id!} /></div>
     <section className="details">
       <DetailItem label="Jenis pegawai" value={humanizeStatus(employee.employmentType)} /><DetailItem label="Status" value={<StatusBadge value={employee.status} />} />
       <DetailItem label="NIP" value={employee.nip} /><DetailItem label="NUPTK" value={employee.nuptk} /><DetailItem label="Jabatan" value={employee.position} />

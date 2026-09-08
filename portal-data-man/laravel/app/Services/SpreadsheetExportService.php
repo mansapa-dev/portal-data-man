@@ -9,6 +9,7 @@ use App\Models\Student;
 use App\Models\Teacher;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 use OpenSpout\Common\Entity\Row;
 use OpenSpout\Common\Entity\Style\Color;
 use OpenSpout\Common\Entity\Style\Style;
@@ -76,6 +77,7 @@ class SpreadsheetExportService
             'status' => ['nullable', 'in:ACTIVE,INACTIVE'],
         ]);
         $rows = Employee::query()
+            ->when(Schema::hasTable('TeacherAccount') && Schema::hasColumn('TeacherAccount', 'employeeId'), fn ($query) => $query->with('account'))
             ->when($filters['employmentType'] ?? null, fn ($query, $value) => $query->where('employmentType', $value))
             ->when($filters['status'] ?? null, fn ($query, $value) => $query->where('status', $value))
             ->when($filters['search'] ?? null, fn ($query, $value) => $query->where(fn ($nested) => $nested
@@ -86,7 +88,7 @@ class SpreadsheetExportService
             ->orderBy('fullName')->limit(config('exports.max_rows') + 1)->get();
         abort_if($rows->count() > config('exports.max_rows'), 422, 'Jumlah data melebihi batas export. Persempit filter.');
 
-        return [$this->write('Data Pegawai', EmployeeImportNormalizer::HEADERS, $rows->map(fn (Employee $employee) => [
+        return [$this->write('Data Pegawai', [...EmployeeImportNormalizer::HEADERS, 'Status Akun', 'Username Portal'], $rows->map(fn (Employee $employee) => [
             $employee->employmentType,
             $employee->fullName,
             $employee->nip ?? '',
@@ -96,7 +98,21 @@ class SpreadsheetExportService
             $employee->gender === 'MALE' ? 'LAKI_LAKI' : ($employee->gender === 'FEMALE' ? 'PEREMPUAN' : ''),
             $employee->education ?? '',
             $employee->grade ?? '',
+            $employee->relationLoaded('account') ? ($employee->account?->status ?? 'BELUM_ADA') : 'BELUM_ADA',
+            $employee->relationLoaded('account') ? ($employee->account?->username ?? '') : '',
         ])), $rows->count()];
+    }
+
+    public function employeeCredentials(Request $request): array
+    {
+        $filters = $request->validate(['search' => ['nullable', 'string']]);
+        $rows = Employee::query()->with('account')
+            ->whereHas('account', fn ($query) => $query->whereNotNull('initialPassword'))
+            ->when($filters['search'] ?? null, fn ($query, $value) => $query->where(fn ($nested) => $nested->where('fullName', 'like', "%{$value}%")->orWhere('nip', 'like', "%{$value}%")->orWhereHas('account', fn ($account) => $account->where('username', 'like', "%{$value}%"))))
+            ->orderBy('fullName')->limit(config('exports.max_rows') + 1)->get();
+        abort_if($rows->count() > config('exports.max_rows'), 422, 'Jumlah data melebihi batas export. Persempit pencarian.');
+
+        return [$this->write('Akun Pegawai', ['Nama Pegawai', 'NIP/NUPTK', 'Username', 'Password Awal', 'Status Akun', 'Wajib Ganti Password'], $rows->map(fn (Employee $employee) => [$employee->fullName, $employee->nip ?? $employee->nuptk ?? '', $employee->account->username, $employee->account->initialPassword, $employee->account->status, $employee->account->mustChangePassword ? 'YA' : 'TIDAK'])), $rows->count()];
     }
 
     public function teacherCredentials(Request $request): array

@@ -4,11 +4,15 @@ namespace App\Services;
 
 use App\Models\Employee;
 use App\Models\ImportBatch;
+use App\Models\TeacherAccount;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 use OpenSpout\Reader\XLSX\Reader;
 use RuntimeException;
@@ -65,7 +69,7 @@ class EmployeeImportService
         abort_unless($batch->status === 'READY', 409, 'Batch sudah atau belum dapat diproses.');
         $claimed = ImportBatch::query()->whereKey($batch->id)->where('status', 'READY')->update(['status' => 'PROCESSING', 'startedAt' => now()]);
         abort_unless($claimed === 1, 409, 'Batch sedang atau sudah diproses.');
-        $counts = ['insertedRows' => 0, 'updatedRows' => 0, 'skippedRows' => 0, 'commitFailedRows' => 0];
+        $counts = ['insertedRows' => 0, 'updatedRows' => 0, 'skippedRows' => 0, 'commitFailedRows' => 0, 'accountsCreated' => 0];
 
         try {
             $batch->rows()->whereNotNull('normalizedData')->orderBy('rowNumber')->chunkById((int) config('imports.chunk_size'), function ($rows) use (&$counts): void {
@@ -90,6 +94,15 @@ class EmployeeImportService
                                 $employee = Employee::query()->create($values);
                                 $status = 'INSERTED';
                             }
+                            if ($employee->status === 'ACTIVE' && Schema::hasTable('TeacherAccount') && Schema::hasColumn('TeacherAccount', 'employeeId') && ! $employee->account()->exists()) {
+                                $this->provisionAccount($employee);
+                                $counts['accountsCreated']++;
+                            }
+                            if ($employee->status === 'INACTIVE' && Schema::hasTable('TeacherAccount') && Schema::hasColumn('TeacherAccount', 'employeeId') && $employee->account) {
+                                $employee->account->forceFill(['status' => 'DISABLED', 'disabledAt' => now()])->save();
+                                $employee->account->sessions()->whereNull('revokedAt')->update(['revokedAt' => now()]);
+                                $employee->applicationAccess()->update(['status' => 'INACTIVE']);
+                            }
 
                             $counts[strtolower($status).'Rows']++;
                             $row->update(['status' => $status, 'identifier' => $data['nip'] ?? $data['nuptk'] ?? $data['fullName']]);
@@ -108,6 +121,7 @@ class EmployeeImportService
                 'skippedRows' => $counts['skippedRows'],
                 'failedRows' => $batch->failedRows + $counts['commitFailedRows'],
                 'completedAt' => now(),
+                'summary' => [...($batch->summary ?? []), 'accountsCreated' => $counts['accountsCreated']],
             ]);
             $batch->refresh();
             $this->refreshErrorFile($batch);
@@ -206,6 +220,19 @@ class EmployeeImportService
         }
 
         return $query->where('employmentType', $data['employmentType'])->where('fullName', $data['fullName'])->get();
+    }
+
+    private function provisionAccount(Employee $employee): TeacherAccount
+    {
+        $username = collect([$employee->nip, $employee->nuptk])
+            ->map(fn ($value) => strtolower(trim((string) $value)))
+            ->first(fn ($value) => $value !== '' && ! TeacherAccount::query()->where('username', $value)->exists());
+        if (! $username) {
+            throw new InvalidArgumentException('Username akun tidak tersedia untuk pegawai ini.');
+        }
+        $password = 'Pegawai#'.Str::upper(Str::random(8)).random_int(10, 99);
+
+        return $employee->account()->create(['username' => $username, 'passwordHash' => Hash::make($password), 'initialPassword' => $password, 'status' => 'ACTIVE', 'mustChangePassword' => true, 'activatedAt' => now()]);
     }
 
     private function safeMessage(Throwable $error): string

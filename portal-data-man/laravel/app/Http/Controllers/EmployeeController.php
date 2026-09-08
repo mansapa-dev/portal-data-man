@@ -9,6 +9,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
 class EmployeeController extends Controller
@@ -24,6 +25,7 @@ class EmployeeController extends Controller
             'perPage' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
         $query = Employee::query()
+            ->when(Schema::hasTable('TeacherAccount') && Schema::hasColumn('TeacherAccount', 'employeeId'), fn ($query) => $query->with('account'))
             ->when($data['search'] ?? null, fn ($query, $value) => $query->where(fn ($nested) => $nested
                 ->where('fullName', 'like', "%{$value}%")
                 ->orWhere('nip', 'like', "%{$value}%")
@@ -38,6 +40,10 @@ class EmployeeController extends Controller
 
     public function show(Employee $employee): JsonResponse
     {
+        if (Schema::hasTable('TeacherAccount') && Schema::hasColumn('TeacherAccount', 'employeeId')) {
+            $employee->load('account');
+        }
+
         return ApiResponse::success($employee, 'Pegawai berhasil diambil.');
     }
 
@@ -65,6 +71,11 @@ class EmployeeController extends Controller
             $updated = DB::transaction(function () use ($request, $employee, $data): Employee {
                 $old = $employee->replicate();
                 $employee->fill($this->normalize($data))->save();
+                if ($employee->status === 'INACTIVE' && Schema::hasTable('TeacherAccount') && Schema::hasColumn('TeacherAccount', 'employeeId') && $employee->account) {
+                    $employee->account->forceFill(['status' => 'DISABLED', 'disabledAt' => now()])->save();
+                    $employee->account->sessions()->whereNull('revokedAt')->update(['revokedAt' => now()]);
+                    $employee->applicationAccess()->update(['status' => 'INACTIVE']);
+                }
                 $this->audit->write($request, 'UPDATE', 'Employee', $employee->publicId, $old, $employee);
 
                 return $employee->fresh();
@@ -81,6 +92,11 @@ class EmployeeController extends Controller
         DB::transaction(function () use ($request, $employee): void {
             $old = $employee->replicate();
             $employee->forceFill(['status' => 'INACTIVE'])->save();
+            if (Schema::hasTable('TeacherAccount') && Schema::hasColumn('TeacherAccount', 'employeeId') && $employee->account) {
+                $employee->account->forceFill(['status' => 'DISABLED', 'disabledAt' => now()])->save();
+                $employee->account->sessions()->whereNull('revokedAt')->update(['revokedAt' => now()]);
+                $employee->applicationAccess()->update(['status' => 'INACTIVE']);
+            }
             $employee->delete();
             $this->audit->write($request, 'DELETE', 'Employee', $employee->publicId, $old, null);
         });

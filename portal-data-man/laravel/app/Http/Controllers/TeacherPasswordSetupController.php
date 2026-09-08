@@ -16,7 +16,7 @@ class TeacherPasswordSetupController extends Controller
     {
         $token = $this->token((string) $request->query('token'));
 
-        return ApiResponse::success(['valid' => (bool) $token, 'account' => $token ? ['fullName' => $token->account->teacher->fullName, 'username' => $token->account->username] : null], 'Status token berhasil diperiksa.')
+        return ApiResponse::success(['valid' => (bool) $token, 'account' => $token ? ['fullName' => $token->account->person()?->fullName, 'username' => $token->account->username, 'accountType' => $token->account->accountType()] : null], 'Status token berhasil diperiksa.')
             ->cookie('portal_teacher_csrf', $request->session()->token(), config('session.lifetime'), '/', null, $request->isSecure(), false, false, 'lax');
     }
 
@@ -42,6 +42,6 @@ class TeacherPasswordSetupController extends Controller
             return null;
         }
 
-return TeacherPasswordSetupToken::query()->with('account.teacher')->where('tokenHash', hash('sha256', $raw))->whereNull('usedAt')->where('expiresAt', '>', now())->whereHas('account', fn ($q) => $q->where('mustChangePassword', true)->whereIn('status', ['PENDING_SETUP', 'ACTIVE']))->first();
+        return TeacherPasswordSetupToken::query()->with(['account.teacher', 'account.employee'])->where('tokenHash', hash('sha256', $raw))->whereNull('usedAt')->where('expiresAt', '>', now())->whereHas('account', fn ($q) => $q->where('mustChangePassword', true)->whereIn('status', ['PENDING_SETUP', 'ACTIVE']))->first();
     }
 }
