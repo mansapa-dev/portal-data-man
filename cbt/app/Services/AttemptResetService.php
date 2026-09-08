@@ -23,15 +23,14 @@ final class AttemptResetService
             if (!$attempt || $attempt['status'] !== 'TERMINATED' || (int)$attempt['violation_count'] < 3) {
                 throw new DomainException('Reset hanya untuk ujian yang dihentikan karena tiga pelanggaran.', 409);
             }
-            $exam = $pdo->prepare("SELECT e.ends_at FROM exams e JOIN students s ON s.id=? WHERE e.id=? AND e.status='ACTIVE' AND s.is_active=1 AND s.cbt_status='ACTIVE' AND UTC_TIMESTAMP(3) BETWEEN e.starts_at AND e.ends_at LOCK IN SHARE MODE");
+            $exam = $pdo->prepare("SELECT e.id FROM exams e JOIN students s ON s.id=? WHERE e.id=? AND s.is_active=1 AND s.cbt_status='ACTIVE' LOCK IN SHARE MODE");
             $exam->execute([$studentId, $examId]);
-            $endsAt = $exam->fetchColumn();
-            if (!$endsAt) throw new DomainException('Siswa dan jadwal ujian harus masih aktif untuk melanjutkan.', 409);
+            if (!$exam->fetchColumn()) throw new DomainException('Siswa harus aktif untuk melanjutkan ujian.', 409);
             $last = $pdo->prepare('SELECT MAX(occurred_at) FROM violations WHERE attempt_id=?');
             $last->execute([$attempt['id']]);
             $stoppedAt = $last->fetchColumn();
             $remaining = $stoppedAt ? max(0, strtotime($attempt['expires_at'].' UTC') - strtotime($stoppedAt.' UTC')) : 0;
-            $expires = min(strtotime($endsAt.' UTC'), time() + $remaining);
+            $expires = time() + $remaining;
             if ($expires <= time()) throw new DomainException('Sisa waktu ujian sudah habis.', 409);
             $after = ['status'=>'IN_PROGRESS', 'violation_count'=>0, 'expires_at'=>gmdate('Y-m-d H:i:s', $expires), 'reason'=>mb_substr(trim($reason), 0, 1000)];
             // Preserve the previous locked score in the same transaction as reopening.

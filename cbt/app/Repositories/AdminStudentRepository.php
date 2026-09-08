@@ -20,11 +20,9 @@ final class AdminStudentRepository
                  (SELECT latest.status FROM exam_attempts latest WHERE latest.student_id=s.id ORDER BY latest.updated_at DESC,latest.id DESC LIMIT 1) latest_attempt_status,
                  (SELECT reset_attempt.exam_id FROM exam_attempts reset_attempt JOIN exams reset_exam ON reset_exam.id=reset_attempt.exam_id
                    WHERE reset_attempt.student_id=s.id AND reset_attempt.status='TERMINATED' AND reset_attempt.violation_count>=3
-                     AND reset_exam.status='ACTIVE' AND UTC_TIMESTAMP(3) BETWEEN reset_exam.starts_at AND reset_exam.ends_at
                    ORDER BY reset_attempt.updated_at DESC,reset_attempt.id DESC LIMIT 1) reset_exam_id,
                  (SELECT reset_exam.name FROM exam_attempts reset_attempt JOIN exams reset_exam ON reset_exam.id=reset_attempt.exam_id
                    WHERE reset_attempt.student_id=s.id AND reset_attempt.status='TERMINATED' AND reset_attempt.violation_count>=3
-                     AND reset_exam.status='ACTIVE' AND UTC_TIMESTAMP(3) BETWEEN reset_exam.starts_at AND reset_exam.ends_at
                    ORDER BY reset_attempt.updated_at DESC,reset_attempt.id DESC LIMIT 1) reset_exam_name
           FROM students s WHERE s.is_active=1
         ) listed

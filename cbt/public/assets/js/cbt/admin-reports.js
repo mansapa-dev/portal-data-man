@@ -232,7 +232,7 @@ function cetakKartuPesertaUjian() {
 window.addEventListener('cbt:data-updated',event=>{if(String(event.detail?.path||'').includes('/students'))cacheSiswaGlobal=[];});
 
 function resetCbtAttempt(studentId, examId) {
-  const reason = window.prompt('Alasan reset CBT: jawaban tetap tersimpan, hitungan pelanggaran kembali nol. Sisa waktu dipulihkan maksimal sampai jadwal berakhir.');
+  const reason = window.prompt('Alasan reset CBT: jawaban tetap tersimpan, hitungan pelanggaran kembali nol, dan sisa waktu dipulihkan meskipun jadwal sudah berakhir.');
   if (!reason?.trim()) return;
   showLoading('Membuka kembali CBT...');
   cbtApi.withSuccessHandler(() => {

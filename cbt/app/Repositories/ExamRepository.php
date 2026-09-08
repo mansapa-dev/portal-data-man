@@ -27,12 +27,16 @@ final class ExamRepository
         $regularTarget=$hasTargets?"({$studentTarget} OR (NOT EXISTS(SELECT 1 FROM exam_target_students ts0 WHERE ts0.exam_id=e.id) AND (NOT EXISTS(SELECT 1 FROM exam_target_classes x WHERE x.exam_id=e.id) OR class_target.exam_id IS NOT NULL)))":"(NOT EXISTS(SELECT 1 FROM exam_target_classes x WHERE x.exam_id=e.id) OR class_target.exam_id IS NOT NULL)";
         $specialEligible=$hasTargets?$studentTarget:'0=1';
         $sql="SELECT e.*,m.type follow_up_type,COALESCE(visible_attempt.status,'NOT_STARTED') attempt_status,
-              CASE WHEN (visible_attempt.id IS NULL OR (visible_attempt.status='IN_PROGRESS' AND visible_attempt.expires_at>UTC_TIMESTAMP(3))) AND e.status='ACTIVE' AND UTC_TIMESTAMP(3) BETWEEN e.starts_at AND e.ends_at
-                AND (CASE WHEN m.exam_id IS NULL THEN {$regularTarget} ELSE {$specialEligible} END)
-              THEN 1 ELSE 0 END can_start,
+              CASE
+                WHEN visible_attempt.status='IN_PROGRESS' AND visible_attempt.expires_at>UTC_TIMESTAMP(3) THEN 1
+                WHEN visible_attempt.id IS NULL AND e.status='ACTIVE' AND UTC_TIMESTAMP(3) BETWEEN e.starts_at AND e.ends_at
+                  AND (CASE WHEN m.exam_id IS NULL THEN {$regularTarget} ELSE {$specialEligible} END) THEN 1
+                ELSE 0
+              END can_start,
               CASE
                 WHEN visible_attempt.status IN ('COMPLETED','TERMINATED','EXPIRED') THEN visible_attempt.status
                 WHEN visible_attempt.status='IN_PROGRESS' AND visible_attempt.expires_at<=UTC_TIMESTAMP(3) THEN 'EXPIRED'
+                WHEN visible_attempt.status='IN_PROGRESS' THEN 'AVAILABLE'
                 WHEN m.exam_id IS NOT NULL AND NOT ({$specialEligible}) THEN 'NOT_SCHEDULED'
                 WHEN e.status<>'ACTIVE' THEN 'INACTIVE'
                 WHEN UTC_TIMESTAMP(3)<e.starts_at THEN 'UPCOMING'
@@ -67,6 +71,13 @@ final class ExamRepository
         if ($lock) $sql .= ' LOCK IN SHARE MODE';
         $statement = $this->db->prepare($sql);
         $params=['id' => $examId, 'grade' => $student['grade_snapshot'], 'class_id' => $student['portal_class_id']];if($hasTargets)$params['student_id']=$student['id'];$statement->execute($params);
+        return $statement->fetch() ?: null;
+    }
+    public function find(int $examId, bool $lock = false): ?array
+    {
+        $sql = 'SELECT * FROM exams WHERE id=:id LIMIT 1'.($lock ? ' LOCK IN SHARE MODE' : '');
+        $statement = $this->db->prepare($sql);
+        $statement->execute(['id' => $examId]);
         return $statement->fetch() ?: null;
     }
     private function hasStudentTargets():bool{try{$s=$this->db->query("SHOW TABLES LIKE 'exam_target_students'");return(bool)$s->fetchColumn();}catch(\PDOException){return false;}}

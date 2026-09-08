@@ -26,7 +26,8 @@ final class ExamSessionService
             if((int)$student['id']!==$studentId)throw new DomainException('Sesi siswa tidak valid.',401);
             $attempt=$this->attempts->find($studentId,$examId,true);
             if($attempt&&in_array($attempt['status'],['COMPLETED','TERMINATED','EXPIRED'],true))throw new DomainException('Ujian ini tidak dapat dilanjutkan.',409);
-            $exam=$this->exams->findEligible($examId,$student,true)??throw new DomainException('Ujian tidak tersedia untuk siswa ini.',403);
+            $resuming=$attempt&&$attempt['status']==='IN_PROGRESS'&&strtotime($attempt['expires_at'].' UTC')>time();
+            $exam=($resuming?$this->exams->find($examId,true):$this->exams->findEligible($examId,$student,true))??throw new DomainException('Ujian tidak tersedia untuk siswa ini.',403);
             $questions=$attempt?$this->attempts->questions((int)$attempt['id']):$this->exams->questions($examId,true);
             if(!$questions)throw new DomainException('Soal ujian belum tersedia.',409);
             if(!$attempt){$seed=hash('sha256',$studentId.':'.$examId.':'.random_bytes(16));$ids=array_map(fn($q)=>(int)$q['id'],$questions);$ids=$this->stableShuffle($ids,$seed);$mapping=[];foreach($ids as$id)$mapping[(string)$id]=$this->stableShuffle(['A','B','C','D','E'],hash('sha256',$seed.':'.$id));$attempt=$this->attempts->create($student,$exam,$ids,$mapping,$seed,$questions);}
