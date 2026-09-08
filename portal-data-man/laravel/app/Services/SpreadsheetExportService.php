@@ -2,8 +2,9 @@
 
 namespace App\Services;
 
-use App\Models\SchoolClass;
+use App\Models\Employee;
 use App\Models\ImportBatch;
+use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\Teacher;
 use Illuminate\Http\Request;
@@ -67,6 +68,37 @@ class SpreadsheetExportService
         return [$this->write('Guru', ['NIP', 'NUPTK', 'Nomor Pegawai', 'Nama Guru', 'Jenis Kelamin', 'Email', 'No. Telepon', 'Alamat', 'Status', 'Status Akun', 'Username Portal', 'Password Awal', 'Kelas Wali'], $rows->map(fn (Teacher $teacher) => [$teacher->nip ?? '', $teacher->nuptk ?? '', $teacher->employeeNumber ?? '', $teacher->fullName, $teacher->gender ?? '', $teacher->email ?? '', $teacher->phone ?? '', $teacher->address ?? '', $teacher->status, $teacher->account?->status ?? 'BELUM_ADA', $teacher->account?->username ?? '', $teacher->account?->initialPassword ?? '', $teacher->homeroomClasses->pluck('code')->implode(', ')])), $rows->count()];
     }
 
+    public function employees(Request $request): array
+    {
+        $filters = $request->validate([
+            'search' => ['nullable', 'string'],
+            'employmentType' => ['nullable', 'in:PPPK,HONORER'],
+            'status' => ['nullable', 'in:ACTIVE,INACTIVE'],
+        ]);
+        $rows = Employee::query()
+            ->when($filters['employmentType'] ?? null, fn ($query, $value) => $query->where('employmentType', $value))
+            ->when($filters['status'] ?? null, fn ($query, $value) => $query->where('status', $value))
+            ->when($filters['search'] ?? null, fn ($query, $value) => $query->where(fn ($nested) => $nested
+                ->where('fullName', 'like', "%{$value}%")
+                ->orWhere('nip', 'like', "%{$value}%")
+                ->orWhere('nuptk', 'like', "%{$value}%")
+                ->orWhere('position', 'like', "%{$value}%")))
+            ->orderBy('fullName')->limit(config('exports.max_rows') + 1)->get();
+        abort_if($rows->count() > config('exports.max_rows'), 422, 'Jumlah data melebihi batas export. Persempit filter.');
+
+        return [$this->write('Data Pegawai', EmployeeImportNormalizer::HEADERS, $rows->map(fn (Employee $employee) => [
+            $employee->employmentType,
+            $employee->fullName,
+            $employee->nip ?? '',
+            $employee->nuptk ?? '',
+            $employee->position,
+            $employee->rank ?? '',
+            $employee->gender === 'MALE' ? 'LAKI_LAKI' : ($employee->gender === 'FEMALE' ? 'PEREMPUAN' : ''),
+            $employee->education ?? '',
+            $employee->grade ?? '',
+        ])), $rows->count()];
+    }
+
     public function teacherCredentials(Request $request): array
     {
         $filters = $request->validate(['search' => ['nullable', 'string']]);
@@ -87,6 +119,14 @@ class SpreadsheetExportService
     public function teacherTemplate(): string
     {
         return $this->write('Data Guru', TeacherImportNormalizer::HEADERS, collect([['Contoh Guru', '198001012010011001', '1234567890123456', 'PEG-001', 'contoh@example.sch.id', '081234567890', 'LAKI_LAKI', 'ACTIVE', 'Alamat contoh']]));
+    }
+
+    public function employeeTemplate(): string
+    {
+        return $this->write('Data Pegawai', EmployeeImportNormalizer::HEADERS, collect([
+            ['PPPK', 'Contoh Pegawai PPPK', '199001012026211001', '1234567890123456', 'Tenaga Administrasi', 'IX', 'LAKI_LAKI', 'S1 Administrasi', '9'],
+            ['HONORER', 'Contoh Pegawai Honorer', 'HON-001', '', 'Petugas Perpustakaan', '', 'PEREMPUAN', 'SMA', ''],
+        ]));
     }
 
     public function importErrors(ImportBatch $batch): string

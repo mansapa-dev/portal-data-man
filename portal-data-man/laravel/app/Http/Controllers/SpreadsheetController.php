@@ -52,6 +52,22 @@ class SpreadsheetController extends Controller
         return $this->download($path, 'export-guru-'.now()->format('Y-m-d-His').'.xlsx');
     }
 
+    public function employees(Request $request): BinaryFileResponse
+    {
+        [$path, $count] = $this->exports->employees($request);
+        $this->audit->write($request, 'EMPLOYEES_EXPORTED', 'Employee', null, null, ['totalRows' => $count]);
+
+        return $this->download($path, 'export-pegawai-'.now()->format('Y-m-d-His').'.xlsx');
+    }
+
+    public function employeeTemplate(Request $request): BinaryFileResponse
+    {
+        $path = $this->exports->employeeTemplate();
+        $this->audit->write($request, 'TEMPLATE_DOWNLOADED', 'ImportTemplate', null, null, ['type' => 'EMPLOYEE']);
+
+        return $this->download($path, 'template-import-pegawai.xlsx');
+    }
+
     public function teacherCredentials(Request $request): BinaryFileResponse
     {
         [$path, $count] = $this->exports->teacherCredentials($request);

@@ -6,8 +6,8 @@ use App\Models\ImportBatch;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 
 class ImportManagementController extends Controller
 {
@@ -15,7 +15,7 @@ class ImportManagementController extends Controller
     {
         $filters = $request->validate([
             'search' => ['nullable', 'string', 'max:255'],
-            'type' => ['nullable', Rule::in(['STUDENT', 'TEACHER'])],
+            'type' => ['nullable', Rule::in(['STUDENT', 'TEACHER', 'EMPLOYEE'])],
             'status' => ['nullable', Rule::in(['UPLOADED', 'VALIDATING', 'READY', 'PROCESSING', 'COMPLETED', 'COMPLETED_WITH_WARNINGS', 'FAILED'])],
             'createdBy' => ['nullable', 'string', 'size:26'],
             'dateFrom' => ['nullable', 'date_format:Y-m-d'],
