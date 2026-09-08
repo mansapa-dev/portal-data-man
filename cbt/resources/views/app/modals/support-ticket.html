@@ -1,0 +1,21 @@
+<div class="modal" id="modalSupportTicket">
+  <div class="modal-content support-ticket-modal">
+    <div class="modal-header">
+      <div><h3><i class="fa-solid fa-headset"></i> Tiket Bantuan CBT</h3><p>Kirim kendala langsung ke petugas tanpa meninggalkan halaman ujian.</p></div>
+      <button type="button" class="btn-close" id="btnCloseSupportTicket" aria-label="Tutup">&times;</button>
+    </div>
+    <form id="formSupportTicket">
+      <div class="support-form-grid">
+        <div class="input-group" id="supportNisnGroup"><label for="supportNisn">NISN</label><input id="supportNisn" type="text" inputmode="numeric" maxlength="20" autocomplete="off" placeholder="Masukkan NISN"></div>
+        <div class="input-group hidden" id="supportExamGroup"><label for="supportExam">Ujian terkait</label><select id="supportExam"><option value="">Tidak terkait ujian tertentu</option></select></div>
+        <div class="input-group"><label for="supportCategory">Jenis kendala</label><select id="supportCategory">
+          <option value="ACCOUNT_ACCESS">Tidak bisa masuk akun</option><option value="EXAM_LOCKED">Ujian terkunci / 3 pelanggaran</option><option value="PIN">PIN bermasalah</option><option value="CONNECTION">Koneksi / jawaban tidak tersimpan</option><option value="TECHNICAL">Masalah perangkat atau sistem</option><option value="OTHER">Kendala lainnya</option>
+        </select></div>
+      </div>
+      <div class="input-group"><label for="supportMessage">Jelaskan kendala</label><textarea id="supportMessage" rows="4" maxlength="1000" placeholder="Contoh: ujian Matematika terkunci setelah muncul pelanggaran ketiga." required></textarea></div>
+      <div id="supportTicketFeedback" class="alert" aria-live="polite"></div>
+      <div class="modal-footer"><button type="button" class="btn btn-secondary" id="btnCancelSupportTicket">Batal</button><button type="submit" class="btn btn-primary" id="btnSendSupportTicket"><i class="fa-solid fa-paper-plane"></i> Kirim ke Petugas</button></div>
+    </form>
+    <section id="studentTicketStatusSection" class="student-ticket-status hidden"><h4>Status permintaan terakhir</h4><div id="studentTicketStatusList"></div></section>
+  </div>
+</div>

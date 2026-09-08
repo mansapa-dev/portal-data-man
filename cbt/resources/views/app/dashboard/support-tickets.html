@@ -1,0 +1,8 @@
+<div id="tabAdminSupportTickets" class="dash-tab hidden">
+  <section class="support-ticket-page">
+    <div class="support-page-header"><div><span class="special-eyebrow">LAYANAN PESERTA</span><h2><i class="fa-solid fa-headset"></i> Tiket Bantuan CBT</h2><p>Permintaan siswa diperbarui otomatis. Reset CBT tetap hanya dapat dilakukan administrator.</p></div><button class="btn btn-secondary" type="button" onclick="loadDataSupportTickets()"><i class="fa-solid fa-rotate"></i> Perbarui</button></div>
+    <div class="support-toolbar"><select id="supportAdminStatus" class="form-control" onchange="loadDataSupportTickets()"><option value="ALL">Semua status</option><option value="OPEN">Baru</option><option value="IN_PROGRESS">Ditangani</option><option value="RESOLVED">Selesai</option><option value="CLOSED">Ditutup</option></select><span id="supportAdminSummary">Memuat tiket…</span></div>
+    <div id="supportAdminNotice" class="alert" aria-live="polite"></div>
+    <div id="supportAdminList" class="support-ticket-list"></div>
+  </section>
+</div>

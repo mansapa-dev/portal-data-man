@@ -15,7 +15,7 @@ function dashboard() {
   return {context,container,started};
 }
 
-test('completed and terminated exams remain visible with disabled buttons', () => {
+test('completed exams stay disabled and terminated exams offer a support ticket', () => {
   const {context,container,started} = dashboard();
   context.renderDaftarJadwal([
     {id:1,nama_ujian:'Matematika',status_pengerjaan:'selesai',can_start:false},
@@ -23,8 +23,8 @@ test('completed and terminated exams remain visible with disabled buttons', () =
   ]);
   assert.match(container.innerHTML,/Matematika/);
   assert.match(container.innerHTML,/Biologi/);
-  assert.equal((container.innerHTML.match(/disabled/g)||[]).length,2);
-  assert.doesNotMatch(container.innerHTML,/onclick=/);
+  assert.equal((container.innerHTML.match(/disabled/g)||[]).length,1);
+  assert.match(container.innerHTML,/openSupportTicket\('EXAM_LOCKED', 2\)/);
   context.persiapkanUjianById(1); context.persiapkanUjianById(2);
   assert.deepEqual(started,[]);
 });

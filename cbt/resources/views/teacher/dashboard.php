@@ -12,7 +12,7 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
   <title>Dashboard Guru - CBT MAN 1 Palembang</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <link rel="stylesheet" href="../assets/css/teacher.css?v=20260907-1">
+  <link rel="stylesheet" href="../assets/css/teacher.css?v=20260908-support-1">
 </head>
 <body class="dashboard-page">
   <div class="teacher-sidebar-backdrop" id="teacherSidebarBackdrop"></div>
@@ -29,13 +29,14 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
       <button class="nav-item" data-section="exams"><i class="fa-solid fa-calendar-days"></i><span>Ujian Diampu</span></button>
       <button class="nav-item" data-section="results"><i class="fa-solid fa-square-poll-vertical"></i><span>Hasil Siswa</span></button>
       <button class="nav-item" data-section="violations"><i class="fa-solid fa-shield-halved"></i><span>Pelanggaran</span></button>
+      <button class="nav-item" data-section="support"><i class="fa-solid fa-headset"></i><span>Tiket Bantuan</span></button>
     </nav>
     <div class="teacher-help-box">
       <h5>Butuh Bantuan?</h5>
-      <p>Hubungi tim proktor atau admin jika terdapat kendala ujian.</p>
-      <button type="button" id="teacherHelpButton">Bantuan Proktor</button>
+      <p>Tiket siswa pada ujian tugas Anda tersedia langsung di dashboard.</p>
+      <button type="button" id="teacherHelpButton">Buka Tiket Siswa</button>
     </div>
-    <div class="teacher-user-footer"><div class="teacher-avatar" id="teacherAvatar">G</div><div><strong id="teacherSidebarName"><?=htmlspecialchars($nip, ENT_QUOTES, 'UTF-8')?></strong><small>Guru Mata Pelajaran</small></div></div>
+    <div class="teacher-user-footer"><div class="teacher-avatar" id="teacherAvatar">G</div><div><strong id="teacherSidebarName"><?=htmlspecialchars($nip, ENT_QUOTES, 'UTF-8')?></strong><small>Guru / Petugas Ujian</small></div></div>
   </aside>
 
   <main class="main">
@@ -65,7 +66,8 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
   </main>
 
   <script src="../assets/js/teacher/live-sessions.js?v=20260907-1"></script>
-  <script src="../assets/js/teacher/dashboard.js?v=20260907-1"></script>
+  <script src="../assets/js/cbt/support-tickets.js?v=20260908-1"></script>
+  <script src="../assets/js/teacher/dashboard.js?v=20260908-support-1"></script>
   <script src="../assets/js/table-pagination.js?v=20260904-10"></script>
 </body>
 </html>

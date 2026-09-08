@@ -86,6 +86,7 @@ function initDashboardPengelola(nama, role) {
 const tabTitles = {
   'tabAdminOverview': 'Ringkasan Sistem',
   'tabAdminLiveSessions': 'Live Sessions',
+  'tabAdminSupportTickets': 'Tiket Bantuan CBT',
   'tabAdminUjian': 'Kelola Ujian & Arsip',
   'tabAdminUjianLanjutan': 'Ujian Khusus',
   'tabAdminSoal': 'Kelola Bank Soal',
@@ -93,13 +94,14 @@ const tabTitles = {
   'tabAdminLogPelanggaran': 'Log Pelanggaran Siswa',
   'tabAdminHasil': 'Rekap & Laporan Hasil',
   'tabAdminKartu': 'Cetak Kartu Ujian',
-  'tabAdminGuruUjian': 'Penugasan Guru Mapel',
+  'tabAdminGuruUjian': 'Penugasan Guru / Piket Ujian',
   'tabAdminAkun': 'Kelola Akun Staff',
   'tabGuruMonitor': 'Ujian & Mapel Diampu'
 };
 
 function switchDashTab(tabId, btnEl) {
   if (window.CbtLiveSessions) window.CbtLiveSessions.stop();
+  if (window.CbtSupportTickets) window.CbtSupportTickets.stopStaff();
   document.querySelectorAll('.dash-tab').forEach(t => t.classList.add('hidden'));
   const targetTab = document.getElementById(tabId);
   if (targetTab) targetTab.classList.remove('hidden');
@@ -117,6 +119,7 @@ function switchDashTab(tabId, btnEl) {
   
   if(tabId === 'tabAdminOverview') loadDataAdminDash();
   if(tabId === 'tabAdminLiveSessions') loadDataAdminLiveSessions();
+  if(tabId === 'tabAdminSupportTickets') loadDataSupportTickets();
   if(tabId === 'tabAdminUjian') loadDataAdminUjian();
   if(tabId === 'tabAdminUjianLanjutan') loadDataFollowUpExams();
   if(tabId === 'tabAdminSoal') loadDataAdminSoal();
@@ -139,6 +142,7 @@ function refreshActiveDashboardTab() {
   const loaders = {
     tabAdminOverview: loadDataAdminDash,
     tabAdminLiveSessions: loadDataAdminLiveSessions,
+    tabAdminSupportTickets: loadDataSupportTickets,
     tabAdminUjian: loadDataAdminUjian,
     tabAdminUjianLanjutan: loadDataFollowUpExams,
     tabAdminSoal: loadDataAdminSoal,
@@ -238,6 +242,10 @@ window.addEventListener('DOMContentLoaded', async () => {
       document.getElementById('lblNamaSiswa').textContent = stSiswa.nama;
       document.getElementById('lblKelasSiswa').textContent = stSiswa.kelas;
       document.getElementById('lblNoSiswa').textContent = stSiswa.no;
+      if(String(student.cbt_status||'ACTIVE')!=='ACTIVE'){
+        const list=document.getElementById('listJadwalUjian');if(list)list.innerHTML='<div class="alert error" style="margin:0;">Akun CBT sedang terkunci. Gunakan tombol bantuan di bawah untuk mengirim tiket tanpa keluar dari akun.</div>';
+        switchView('viewPortalSiswa');return;
+      }
       cbtApi.withSuccessHandler(result => {
         renderDaftarJadwal(result.jadwal);switchView('viewPortalSiswa');
         const active = result.jadwal.find(exam => exam.status_pengerjaan === 'berlangsung');

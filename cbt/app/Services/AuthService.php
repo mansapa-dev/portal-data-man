@@ -31,7 +31,7 @@ final class AuthService
         $student=null;$staff=null;
         if(isset($_SESSION['student']['nisn'],$_SESSION['student']['student_id'])){
             $row=$this->students->findActiveByNisn((string)$_SESSION['student']['nisn']);
-            if($row&&(int)$row['id']===(int)$_SESSION['student']['student_id']&&$row['cbt_status']==='ACTIVE')$student=['id'=>(int)$row['id'],'nisn'=>$row['nisn'],'nama'=>$row['name_snapshot'],'kelas'=>$row['class_snapshot'],'tingkat'=>$row['grade_snapshot']];else unset($_SESSION['student']);
+            if($row&&(int)$row['id']===(int)$_SESSION['student']['student_id'])$student=['id'=>(int)$row['id'],'nisn'=>$row['nisn'],'nama'=>$row['name_snapshot'],'kelas'=>$row['class_snapshot'],'tingkat'=>$row['grade_snapshot'],'cbt_status'=>$row['cbt_status']];else unset($_SESSION['student']);
         }
         if(isset($_SESSION['auth']['user_id'],$_SESSION['auth']['role'])){
             $row=$this->users->findById((int)$_SESSION['auth']['user_id']);

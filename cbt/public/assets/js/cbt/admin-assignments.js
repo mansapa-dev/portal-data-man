@@ -4,7 +4,7 @@ function loadDataAdminGuruUjian() {
   cbtApi
     .withSuccessHandler(res => {
       if(!res.success || !res.data || res.data.length === 0) {
-        tb.innerHTML = `<tr><td colspan="4" align="center">Belum ada penugasan guru mapel.</td></tr>`;
+        tb.innerHTML = `<tr><td colspan="4" align="center">Belum ada penugasan guru / piket ujian.</td></tr>`;
         window.cacheGuruList = res.guruList || [];
         window.cacheUjianList = res.ujianList || [];
         return;
@@ -31,7 +31,7 @@ function loadDataAdminGuruUjian() {
 function bukaModalGuruUjian() {
   document.getElementById('formGuruUjian').reset();
   document.getElementById('editGuruUjianId').value = '';
-  document.getElementById('titleModalGuruUjian').textContent = 'Form Penugasan Guru Mapel';
+  document.getElementById('titleModalGuruUjian').textContent = 'Form Penugasan Guru / Piket';
   
   const selGuru = document.getElementById('inGuruId');
   const selUjian = document.getElementById('inUjianId');
@@ -50,7 +50,7 @@ function editGuruUjianById(id) {
 function editGuruUjian(r) {
   document.getElementById('formGuruUjian').reset();
   document.getElementById('editGuruUjianId').value = r.id;
-  document.getElementById('titleModalGuruUjian').textContent = 'Edit Penugasan Guru Mapel';
+  document.getElementById('titleModalGuruUjian').textContent = 'Edit Penugasan Guru / Piket';
   
   const selGuru = document.getElementById('inGuruId');
   const selUjian = document.getElementById('inUjianId');

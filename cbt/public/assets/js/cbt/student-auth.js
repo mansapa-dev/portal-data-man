@@ -45,7 +45,7 @@ function renderDaftarJadwal(jadwalArr) {
       btnHtml = `<button class="btn btn-secondary" style="padding:8px 16px; font-size:12px; width:auto;" disabled><i class="fa-solid fa-check"></i> Sudah Dikerjakan</button>`;
     } else if (j.status_pengerjaan === 'terblokir') {
       cardClass = 'style="border-color:var(--danger); background:#fef2f2;"';
-      btnHtml = `<button class="btn btn-danger" style="padding:8px 16px; font-size:12px; width:auto;" disabled><i class="fa-solid fa-lock"></i> Hubungi Admin untuk Reset</button>`;
+      btnHtml = `<button class="btn btn-danger" style="padding:8px 16px; font-size:12px; width:auto;" onclick="openSupportTicket('EXAM_LOCKED', ${j.id})"><i class="fa-solid fa-headset"></i> Minta Bantuan Petugas</button>`;
     } else if (j.status_pengerjaan === 'berlangsung' && j.can_start) {
       btnHtml = `<button class="btn btn-success" style="padding:8px 16px; font-size:12px; width:auto;" onclick="persiapkanUjianById(${j.id})"><i class="fa-solid fa-play"></i> Lanjutkan</button>`;
     } else if (!j.can_start) {

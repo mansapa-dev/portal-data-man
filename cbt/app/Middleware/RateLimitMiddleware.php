@@ -11,6 +11,7 @@ final class RateLimitMiddleware
   $identity = match ($this->bucket) {
    'student-login' => preg_replace('/\s+/', '', trim((string)$request->input('nisn', ''))),
    'staff-login' => strtolower(trim((string)$request->input('username', ''))),
+   'support-ticket' => (string)($_SESSION['student']['student_id'] ?? preg_replace('/\s+/', '', trim((string)$request->input('nisn', '')))).'|'.$request->ip(),
    'submit', 'violation' => (string)($_SESSION['student']['student_id'] ?? 'anonymous').'|'.(string)($request->attributes['id'] ?? ''),
    default => $request->ip(),
   };
