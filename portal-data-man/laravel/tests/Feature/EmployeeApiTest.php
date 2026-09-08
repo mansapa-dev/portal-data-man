@@ -131,6 +131,18 @@ class EmployeeApiTest extends TestCase
         $this->assertDatabaseHas('AuditLog', ['action' => 'EMPLOYEES_EXPORTED']);
     }
 
+    public function test_employee_template_download_works_through_canonical_and_cached_route(): void
+    {
+        $admin = AdminUser::query()->create(['name' => 'Admin', 'email' => 'admin-template@example.test', 'passwordHash' => 'hash', 'role' => 'DATA_ADMIN', 'status' => 'ACTIVE']);
+
+        $this->actingAs($admin, 'admin')->get('/api/v1/import-templates/employees')
+            ->assertOk()->assertDownload('template-import-pegawai.xlsx');
+        $this->actingAs($admin, 'admin')->get('/api/v1/import-templates/students?type=EMPLOYEE')
+            ->assertOk()->assertDownload('template-import-pegawai.xlsx');
+        $this->assertDatabaseCount('AuditLog', 2);
+        $this->assertDatabaseMissing('AuditLog', ['newValues' => json_encode(['type' => 'STUDENT'])]);
+    }
+
     public function test_auditor_cannot_create_employee(): void
     {
         $auditor = AdminUser::query()->create(['name' => 'Auditor', 'email' => 'audit@example.test', 'passwordHash' => 'hash', 'role' => 'AUDITOR', 'status' => 'ACTIVE']);

@@ -30,6 +30,12 @@ class SpreadsheetController extends Controller
 
     public function studentTemplate(Request $request): BinaryFileResponse
     {
+        // Keep employee template downloads working during rolling deployments
+        // where the server may still have the older route table cached.
+        if (strtoupper((string) $request->query('type')) === 'EMPLOYEE') {
+            return $this->employeeTemplate($request);
+        }
+
         $path = $this->exports->studentTemplate();
         $this->audit->write($request, 'TEMPLATE_DOWNLOADED', 'ImportTemplate', null, null, ['type' => 'STUDENT']);
 
