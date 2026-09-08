@@ -9,7 +9,7 @@ import { ConfirmDialog, DetailItem, EmptyState, ErrorState, FormField, LoadingSk
 
 type Employee = {
   publicId: string;
-  employmentType: 'PPPK' | 'HONORER';
+  employmentType: 'PNS' | 'PPPK' | 'HONORER';
   fullName: string;
   nip?: string;
   nuptk?: string;
@@ -22,7 +22,7 @@ type Employee = {
 };
 
 export const employeeSchema = z.object({
-  employmentType: z.enum(['PPPK', 'HONORER']),
+  employmentType: z.enum(['PNS', 'PPPK', 'HONORER']),
   fullName: z.string().min(2, 'Nama minimal 2 karakter.'),
   nip: z.string().min(1, 'NIP wajib diisi.'),
   nuptk: z.string().optional(),
@@ -56,14 +56,14 @@ export function EmployeesPage() {
   };
 
   return <div className="page">
-    <PageHeader title="Data Pegawai" description="Data PPPK dan tenaga honorer" action={<div className="actions">
+    <PageHeader title="Data Pegawai" description="Data PNS, PPPK, dan tenaga honorer" action={<div className="actions">
       <a className="button" href={`/api/v1/exports/employees?${params}`}>Export</a>
       <Link className="button" to="/imports/employees">Import pegawai</Link>
       <Link className="button primary" to="/employees/new">Tambah pegawai</Link>
     </div>} />
     <div className="filters">
       <input aria-label="Cari pegawai" placeholder="Cari nama, NIP, NUPTK, atau jabatan…" value={search} onChange={event => setSearch(event.target.value)} />
-      <select aria-label="Jenis pegawai" value={params.get('employmentType') ?? ''} onChange={event => filter('employmentType', event.target.value)}><option value="">Semua jenis</option><option value="PPPK">PPPK</option><option value="HONORER">Honorer</option></select>
+      <select aria-label="Jenis pegawai" value={params.get('employmentType') ?? ''} onChange={event => filter('employmentType', event.target.value)}><option value="">Semua jenis</option><option value="PNS">PNS</option><option value="PPPK">PPPK</option><option value="HONORER">Honorer</option></select>
       <select aria-label="Status pegawai" value={params.get('status') ?? ''} onChange={event => filter('status', event.target.value)}><option value="">Semua status</option><option value="ACTIVE">Aktif</option><option value="INACTIVE">Tidak aktif</option></select>
       <button onClick={() => { setSearch(''); setParams({ page: '1' }); }}>Reset</button>
     </div>
@@ -95,9 +95,9 @@ export function EmployeeFormPage() {
   });
   if (edit && detail.isPending) return <LoadingSkeleton />;
 
-  return <div className="page"><PageHeader title={edit ? 'Edit Pegawai' : 'Tambah Pegawai'} description="Data PPPK atau tenaga honorer" />
+  return <div className="page"><PageHeader title={edit ? 'Edit Pegawai' : 'Tambah Pegawai'} description="Data PNS, PPPK, atau tenaga honorer" />
     <form className="formcard" onSubmit={handleSubmit(values => save.mutate(values))}>
-      <FormField label="Jenis pegawai" required error={errors.employmentType?.message}><select {...register('employmentType')}><option value="PPPK">PPPK</option><option value="HONORER">Honorer</option></select></FormField>
+      <FormField label="Jenis pegawai" required error={errors.employmentType?.message}><select {...register('employmentType')}><option value="PNS">PNS</option><option value="PPPK">PPPK</option><option value="HONORER">Honorer</option></select></FormField>
       <FormField label="Nama" required error={errors.fullName?.message}><input {...register('fullName')} /></FormField>
       <FormField label="NIP" required error={errors.nip?.message}><input {...register('nip')} /></FormField>
       <FormField label="NUPTK" helper="Boleh kosong untuk tenaga honorer"><input {...register('nuptk')} /></FormField>

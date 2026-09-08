@@ -4,8 +4,11 @@ namespace Tests\Feature;
 
 use App\Models\AdminUser;
 use App\Models\ImportBatch;
+use App\Services\SpreadsheetExportService;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class EmployeeApiTest extends TestCase
@@ -141,6 +144,27 @@ class EmployeeApiTest extends TestCase
             ->assertOk()->assertDownload('template-import-pegawai.xlsx');
         $this->assertDatabaseCount('AuditLog', 2);
         $this->assertDatabaseMissing('AuditLog', ['newValues' => json_encode(['type' => 'STUDENT'])]);
+    }
+
+    public function test_generated_employee_workbook_can_be_uploaded_and_validated(): void
+    {
+        Storage::fake('local');
+        $admin = AdminUser::query()->create(['name' => 'Admin', 'email' => 'admin-upload@example.test', 'passwordHash' => 'hash', 'role' => 'DATA_ADMIN', 'status' => 'ACTIVE']);
+        $path = app(SpreadsheetExportService::class)->employeeTemplate();
+
+        try {
+            $response = $this->actingAs($admin, 'admin')->post('/api/v1/imports/employees/validate', [
+                'file' => new UploadedFile($path, 'import-pegawai.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true),
+            ]);
+
+            $response->assertCreated()
+                ->assertJsonPath('data.status', 'READY')
+                ->assertJsonPath('data.summary.totalRows', 3)
+                ->assertJsonPath('data.summary.failedRows', 0);
+            $this->assertDatabaseHas('ImportBatch', ['type' => 'EMPLOYEE', 'status' => 'READY', 'totalRows' => 3]);
+        } finally {
+            @unlink($path);
+        }
     }
 
     public function test_auditor_cannot_create_employee(): void

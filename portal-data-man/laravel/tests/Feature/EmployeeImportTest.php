@@ -17,12 +17,13 @@ class EmployeeImportTest extends TestCase
         try {
             [$rows, $summary] = app(EmployeeImportService::class)->parseFile($path);
 
-            $this->assertSame(2, $summary['totalRows']);
+            $this->assertSame(3, $summary['totalRows']);
             $this->assertSame(0, $summary['failedRows']);
-            $this->assertSame('PPPK', $rows[0]['normalizedData']['employmentType']);
-            $this->assertSame('HONORER', $rows[1]['normalizedData']['employmentType']);
-            $this->assertNull($rows[1]['normalizedData']['nuptk']);
-            $this->assertNull($rows[1]['normalizedData']['rank']);
+            $this->assertSame('PNS', $rows[0]['normalizedData']['employmentType']);
+            $this->assertSame('PPPK', $rows[1]['normalizedData']['employmentType']);
+            $this->assertSame('HONORER', $rows[2]['normalizedData']['employmentType']);
+            $this->assertNull($rows[2]['normalizedData']['nuptk']);
+            $this->assertNull($rows[2]['normalizedData']['rank']);
         } finally {
             @unlink($path);
         }
@@ -49,13 +50,13 @@ class EmployeeImportTest extends TestCase
         $this->assertSame('FEMALE', $data['gender']);
     }
 
-    public function test_employee_type_must_be_pppk_or_honorary(): void
+    public function test_employee_type_must_be_pns_pppk_or_honorary(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('Jenis pegawai wajib PPPK atau HONORER.');
+        $this->expectExceptionMessage('Jenis pegawai wajib PNS, PPPK, atau HONORER.');
 
         app(EmployeeImportNormalizer::class)->normalize([
-            'Jenis Pegawai' => 'PNS',
+            'Jenis Pegawai' => 'KONTRAKTOR',
             'Nama' => 'Pegawai Uji',
             'Jabatan' => 'Staf',
         ]);

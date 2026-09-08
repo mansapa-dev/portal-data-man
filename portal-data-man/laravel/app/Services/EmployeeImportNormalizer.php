@@ -13,9 +13,10 @@ class EmployeeImportNormalizer
         $warnings = [];
         $employmentType = strtoupper(trim($this->text($values['Jenis Pegawai'] ?? null)));
         $employmentType = match ($employmentType) {
+            'PNS' => 'PNS',
             'PPPK', 'P3K' => 'PPPK',
             'HONOR', 'HONORER', 'HONORER SEKOLAH' => 'HONORER',
-            default => throw new InvalidArgumentException('Jenis pegawai wajib PPPK atau HONORER.'),
+            default => throw new InvalidArgumentException('Jenis pegawai wajib PNS, PPPK, atau HONORER.'),
         };
 
         $fullName = $this->clean($values['Nama'] ?? null);

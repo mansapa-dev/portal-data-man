@@ -72,7 +72,7 @@ class SpreadsheetExportService
     {
         $filters = $request->validate([
             'search' => ['nullable', 'string'],
-            'employmentType' => ['nullable', 'in:PPPK,HONORER'],
+            'employmentType' => ['nullable', 'in:PNS,PPPK,HONORER'],
             'status' => ['nullable', 'in:ACTIVE,INACTIVE'],
         ]);
         $rows = Employee::query()
@@ -124,6 +124,7 @@ class SpreadsheetExportService
     public function employeeTemplate(): string
     {
         return $this->write('Data Pegawai', EmployeeImportNormalizer::HEADERS, collect([
+            ['PNS', 'Contoh Pegawai PNS', '198001012010011001', '1234567890123450', 'Analis Kepegawaian', 'III/b', 'LAKI_LAKI', 'S1 Administrasi', '7'],
             ['PPPK', 'Contoh Pegawai PPPK', '199001012026211001', '1234567890123456', 'Tenaga Administrasi', 'IX', 'LAKI_LAKI', 'S1 Administrasi', '9'],
             ['HONORER', 'Contoh Pegawai Honorer', 'HON-001', '', 'Petugas Perpustakaan', '', 'PEREMPUAN', 'SMA', ''],
         ]));

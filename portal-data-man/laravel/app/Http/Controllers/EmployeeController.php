@@ -19,7 +19,7 @@ class EmployeeController extends Controller
     {
         $data = $request->validate([
             'search' => ['nullable', 'string', 'max:191'],
-            'employmentType' => ['nullable', Rule::in(['PPPK', 'HONORER'])],
+            'employmentType' => ['nullable', Rule::in(['PNS', 'PPPK', 'HONORER'])],
             'status' => ['nullable', Rule::in(['ACTIVE', 'INACTIVE'])],
             'perPage' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
@@ -105,7 +105,7 @@ class EmployeeController extends Controller
         $required = $partial ? 'sometimes' : 'required';
 
         return $request->validate([
-            'employmentType' => [$required, Rule::in(['PPPK', 'HONORER'])],
+            'employmentType' => [$required, Rule::in(['PNS', 'PPPK', 'HONORER'])],
             'fullName' => [$required, 'string', 'min:2', 'max:191'],
             'nip' => [$required, 'string', 'max:50', Rule::unique('Employee', 'nip')->ignore($employee?->id)],
             'nuptk' => ['nullable', 'string', 'max:50', Rule::unique('Employee', 'nuptk')->ignore($employee?->id)],

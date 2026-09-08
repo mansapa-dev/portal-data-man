@@ -13,7 +13,7 @@ return new class extends Migration
             Schema::create('Employee', function (Blueprint $table): void {
                 $table->id();
                 $table->string('publicId', 26)->unique();
-                $table->enum('employmentType', ['PPPK', 'HONORER'])->index();
+                $table->enum('employmentType', ['PNS', 'PPPK', 'HONORER'])->index();
                 $table->string('fullName', 191)->index();
                 $table->string('nip', 50)->unique();
                 $table->string('nuptk', 50)->nullable()->unique();
