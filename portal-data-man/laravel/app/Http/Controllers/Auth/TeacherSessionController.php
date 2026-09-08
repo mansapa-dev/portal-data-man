@@ -64,6 +64,8 @@ class TeacherSessionController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return response()->json(['success' => true, 'message' => 'Logout berhasil.', 'data' => null]);
+        return response()->json(['success' => true, 'message' => 'Logout berhasil.', 'data' => null])
+            ->withoutCookie('portal_teacher_csrf')
+            ->header('Cache-Control', 'no-store');
     }
 }

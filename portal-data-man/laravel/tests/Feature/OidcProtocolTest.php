@@ -87,6 +87,25 @@ class OidcProtocolTest extends TestCase
         $this->postJson('/oidc/token', ['grant_type' => 'client_credentials', 'client_id' => $client->clientId, 'client_secret' => 'wrong', 'scope' => 'portal_data.read'])->assertStatus(401)->assertJsonPath('error', 'invalid_client');
     }
 
+    public function test_oidc_logout_from_agent_ends_portal_teacher_session(): void
+    {
+        $teacher = Teacher::query()->create(['nip' => '19870003', 'fullName' => 'Guru Logout SSO', 'status' => 'ACTIVE']);
+        $account = TeacherAccount::query()->create(['teacherId' => $teacher->id, 'username' => '19870003', 'passwordHash' => password_hash('Password123', PASSWORD_ARGON2ID), 'status' => 'ACTIVE']);
+        ApplicationClient::query()->create([
+            'name' => 'AGEN', 'slug' => 'agen', 'clientId' => 'portal_agen_test', 'clientType' => 'PUBLIC_WEB', 'status' => 'ACTIVE',
+            'redirectUris' => ['https://agen.example.test/callback'], 'postLogoutRedirectUris' => ['https://agen.example.test/login'],
+            'allowedOrigins' => [], 'allowedScopes' => ['openid'], 'allowedGrantTypes' => ['authorization_code'],
+        ]);
+        $this->postJson('/api/v1/auth/teacher/login', ['username' => $account->username, 'password' => 'Password123'])->assertOk();
+
+        $this->get('/oidc/logout?'.http_build_query(['post_logout_redirect_uri' => 'https://agen.example.test/login', 'state' => 'logout-state']))
+            ->assertRedirect('https://agen.example.test/login?state=logout-state')
+            ->assertCookieExpired('portal_teacher_csrf');
+
+        $this->getJson('/api/v1/auth/teacher/me')->assertUnauthorized();
+        $this->assertDatabaseMissing('AuthSession', ['teacherAccountId' => $account->id, 'revokedAt' => null]);
+    }
+
     private function createTables(): void
     {
         Schema::create('Teacher', function (Blueprint $t) {

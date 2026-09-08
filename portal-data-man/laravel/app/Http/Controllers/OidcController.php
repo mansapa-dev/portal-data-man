@@ -138,9 +138,10 @@ class OidcController extends Controller
 
     public function logout(Request $request): RedirectResponse
     {
-        Auth::guard('teacher')->logout();
         $this->sessions->revokeCurrent($request);
+        Auth::guard('teacher')->logout();
         $request->session()->invalidate();
+        $request->session()->regenerateToken();
         $uri = (string) $request->query('post_logout_redirect_uri', '/teacher/login');
         if ($uri !== '/teacher/login') {
             $valid = ApplicationClient::query()->where('status', 'ACTIVE')->get()->contains(fn ($client) => in_array($uri, $client->postLogoutRedirectUris ?? [], true));
@@ -148,7 +149,9 @@ class OidcController extends Controller
         }
         $state = $request->query('state');
 
-        return redirect()->away($uri.($state ? (str_contains($uri, '?') ? '&' : '?').'state='.urlencode((string) $state) : ''));
+        return redirect()->away($uri.($state ? (str_contains($uri, '?') ? '&' : '?').'state='.urlencode((string) $state) : ''))
+            ->withoutCookie('portal_teacher_csrf')
+            ->header('Cache-Control', 'no-store');
     }
 
     private function claims(TeacherAccount $account, string $role): array

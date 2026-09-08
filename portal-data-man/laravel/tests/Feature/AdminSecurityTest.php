@@ -91,4 +91,17 @@ class AdminSecurityTest extends TestCase
         $this->actingAs($admin, 'admin')->postJson("/api/v1/admin-users/{$second->publicId}/deactivate")->assertOk();
         $this->assertDatabaseHas('AdminUser', ['publicId' => $second->publicId, 'status' => 'INACTIVE']);
     }
+
+    public function test_logout_revokes_server_session_and_clears_browser_csrf_cookie(): void
+    {
+        $admin = AdminUser::query()->create(['name' => 'Admin', 'email' => 'logout@example.test', 'passwordHash' => Hash::make('PasswordLama123'), 'role' => 'SUPER_ADMIN', 'status' => 'ACTIVE']);
+        $this->postJson('/api/v1/auth/admin/login', ['email' => $admin->email, 'password' => 'PasswordLama123'])->assertOk();
+
+        $this->postJson('/api/v1/auth/admin/logout')
+            ->assertOk()
+            ->assertCookieExpired('portal_csrf')
+            ->assertHeader('Cache-Control', 'no-store, private');
+        $this->getJson('/api/v1/auth/admin/me')->assertUnauthorized();
+        $this->assertDatabaseMissing('AuthSession', ['adminUserId' => $admin->id, 'revokedAt' => null]);
+    }
 }
