@@ -12,7 +12,7 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
   <title>Dashboard Guru - CBT MAN 1 Palembang</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <link rel="stylesheet" href="../assets/css/teacher.css?v=20260910-1">
+  <link rel="stylesheet" href="../assets/css/teacher.css?v=20260910-all-results">
 </head>
 <body class="dashboard-page">
   <div class="teacher-sidebar-backdrop" id="teacherSidebarBackdrop"></div>
@@ -65,8 +65,8 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
   </main>
 
   <script src="../assets/js/teacher/live-sessions.js?v=20260910-filters"></script>
-  <script src="../assets/js/teacher/dashboard.js?v=20260910-reports"></script>
-  <script src="../assets/js/table-pagination.js?v=20260904-10"></script>
+  <script src="../assets/js/teacher/dashboard.js?v=20260910-all-results"></script>
+  <script src="../assets/js/table-pagination.js?v=20260910-cleanup"></script>
 </body>
 </html>
 <?php return ob_get_clean();

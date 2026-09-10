@@ -23,10 +23,13 @@
     let state = states.get(table);
 
     if (!state) {
+      const host = pagerHost(table);
+      let stale = host.nextElementSibling;
+      while (stale?.classList.contains('universal-table-pagination')) { const next=stale.nextElementSibling;stale.remove();stale=next; }
       const pager = document.createElement('nav');
       pager.className = 'table-pagination universal-table-pagination';
       pager.setAttribute('aria-label', 'Navigasi halaman tabel');
-      pagerHost(table).insertAdjacentElement('afterend', pager);
+      host.insertAdjacentElement('afterend', pager);
       state = { page: 1, pager, rowCount: rows.length };
       states.set(table, state);
     }
