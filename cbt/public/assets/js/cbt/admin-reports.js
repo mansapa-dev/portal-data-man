@@ -58,7 +58,8 @@ function loadDataAdminHasil() {
 }
 
 const urutkanHasilAbjad = rows => [...rows].sort((a,b) => String(a.nama_siswa || '').localeCompare(String(b.nama_siswa || ''),'id',{sensitivity:'base',numeric:true}) || String(a.nomor_ujian || '').localeCompare(String(b.nomor_ujian || ''),'id',{numeric:true}));
-const formatWaktuSelesai = value => value ? new Date(String(value).replace(' ','T').replace(/Z?$/,'Z')).toLocaleString('id-ID',{timeZone:'Asia/Jakarta',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '-';
+const formatWaktuSelesai = value => value ? new Date(String(value).replace(' ','T').replace(/Z?$/,'Z')).toLocaleString('id-ID',{timeZone:'Asia/Jakarta',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).replace(',','') : '-';
+const labelStatusHasil = value => ({completed:'Selesai',terminated:'Dihentikan',expired:'Kedaluwarsa'}[String(value||'').toLowerCase()] || String(value||'-'));
 
 function applyFilterHasil() {
   const fThn = document.getElementById('fltTahunAjaran').value;
@@ -87,7 +88,7 @@ function applyFilterHasil() {
       <td>${h.kelas}</td>
       <td>${h.nama_ujian}</td>
       <td><b style="color:var(--primary); font-size:14px;">${h.nilai}</b></td>
-      <td><span class="badge bg-green">${h.status.toUpperCase()}</span></td>
+      <td><span class="badge bg-green">${labelStatusHasil(h.status)}</span></td>
       <td><small>${formatWaktuSelesai(h.waktu_selesai)}</small></td>
     </tr>
   `).join('');
@@ -113,11 +114,11 @@ function exportFilterHasil(type) {
   
   if(type === 'ujian') {
     let headers = ['Nama Ujian', 'Nomor Peserta', 'Nama Siswa', 'Tingkat', 'Kelas', 'Tahun Ajaran', 'Semester', 'Nilai Akhir', 'Status', 'Waktu Selesai'];
-    let rows = filtered.map(h => [h.nama_ujian, h.nomor_ujian, h.nama_siswa, h.tingkat, h.kelas, h.tahun_ajaran, h.semester, h.nilai, h.status, formatWaktuSelesai(h.waktu_selesai)]);
+    let rows = filtered.map(h => [h.nama_ujian, h.nomor_ujian, h.nama_siswa, h.tingkat, h.kelas, h.tahun_ajaran, h.semester, h.nilai, labelStatusHasil(h.status), formatWaktuSelesai(h.waktu_selesai)]);
     exportToExcel('rekap_rekapitulasi_ujian.xlsx', 'Rekap Ujian', headers, rows);
   } else if(type === 'rombel') {
     let headers = ['Tingkat', 'Kelas/Rombel', 'Nama Ujian', 'Nomor Peserta', 'Nama Siswa', 'Nilai Akhir', 'Status', 'Waktu Selesai'];
-    let rows = filtered.map(h => [h.tingkat, h.kelas, h.nama_ujian, h.nomor_ujian, h.nama_siswa, h.nilai, h.status, formatWaktuSelesai(h.waktu_selesai)]);
+    let rows = filtered.map(h => [h.tingkat, h.kelas, h.nama_ujian, h.nomor_ujian, h.nama_siswa, h.nilai, labelStatusHasil(h.status), formatWaktuSelesai(h.waktu_selesai)]);
     exportToExcel('rekap_per_rombel.xlsx', 'Per Rombel', headers, rows);
   }
 }
@@ -158,7 +159,7 @@ function cetakLaporanResmiPDF() {
   let html = `<table class="print-results-table" style="width:100%; border-collapse:collapse; table-layout:fixed; font-size:9px;" border="1" cellpadding="5">
     <thead>
       <tr style="background:#f1f5f9;">
-        <th style="width:4%">No</th><th style="width:12%">No Peserta</th><th style="width:20%">Nama Siswa</th><th style="width:7%">Tingkat</th><th style="width:10%">Kelas</th><th style="width:19%">Mata Ujian</th><th style="width:7%">Nilai</th><th style="width:9%">Status</th><th style="width:12%">Waktu Selesai</th>
+        <th style="width:4%">No.</th><th style="width:12%">No. Peserta</th><th style="width:20%">Nama Siswa</th><th style="width:7%">Tingkat</th><th style="width:10%">Kelas</th><th style="width:19%">Mata Ujian</th><th style="width:7%">Nilai</th><th style="width:9%">Status</th><th style="width:12%">Waktu Selesai</th>
       </tr>
     </thead>
     <tbody>`;
@@ -172,7 +173,7 @@ function cetakLaporanResmiPDF() {
       <td>${h.kelas}</td>
       <td>${h.nama_ujian}</td>
       <td align="center"><b>${h.nilai}</b></td>
-      <td align="center">${h.status.toUpperCase()}</td>
+      <td align="center">${labelStatusHasil(h.status)}</td>
       <td align="center">${formatWaktuSelesai(h.waktu_selesai)}</td>
     </tr>`;
   });
@@ -180,10 +181,13 @@ function cetakLaporanResmiPDF() {
   html += `</tbody></table>`;
   document.getElementById('printContentTable').innerHTML = html;
   
-  // Aktifkan mode cetak laporan khusus
-  document.body.className = "mode-cetak-laporan";
+  document.getElementById('printTanggalTtd').textContent = new Date().toLocaleDateString('id-ID',{timeZone:'Asia/Jakarta',day:'2-digit',month:'long',year:'numeric'});
+  const pageStyle=document.createElement('style');pageStyle.id='admin-report-page-style';pageStyle.textContent='@page{size:A4 landscape;margin:10mm 12mm}';document.head.append(pageStyle);
+  document.body.classList.add('mode-cetak-laporan');
+  const cleanup=()=>{document.body.classList.remove('mode-cetak-laporan');pageStyle.remove();};
+  window.addEventListener('afterprint',cleanup,{once:true});
   window.print();
-  document.body.className = "";
+  setTimeout(cleanup,2000);
 }
 
 function renderDataAdminKartu(rows) {

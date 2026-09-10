@@ -1632,8 +1632,12 @@ tr:hover td {
 
   #printJudulResmi { margin:0 0 18px!important; font-size:12pt!important; line-height:1.35; letter-spacing:.15px; }
   #printContentTable { font-size:10.5pt; }
-  #printContentTable table { font-family:"Times New Roman",Times,serif!important; }
-  #printContentTable th { background:#f3f3f3!important; font-weight:700; }
+  #printContentTable table { font-family:"Times New Roman",Times,serif!important; border-color:#555!important; }
+  #printContentTable thead { display:table-header-group; }
+  #printContentTable tr { break-inside:avoid; page-break-inside:avoid; }
+  #printContentTable th { padding:6px 5px!important; background:#edf2ed!important; font-size:8.5pt; font-weight:700; line-height:1.15; text-align:center; text-transform:uppercase; vertical-align:middle; white-space:normal; overflow-wrap:anywhere; }
+  #printContentTable td { padding:5px!important; font-size:8.5pt; line-height:1.2; vertical-align:middle; overflow-wrap:anywhere; }
+  #printContentTable td:nth-child(2),#printContentTable td:nth-child(7),#printContentTable td:nth-child(9){font-variant-numeric:tabular-nums;white-space:nowrap}
 
   .ttd-container {
     display: flex;
