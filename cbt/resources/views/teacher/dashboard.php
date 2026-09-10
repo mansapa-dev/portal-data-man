@@ -64,8 +64,8 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
     <section id="content" class="content-grid"></section>
   </main>
 
-  <script src="../assets/js/teacher/live-sessions.js?v=20260910-filters"></script>
-  <script src="../assets/js/teacher/dashboard.js?v=20260910-all-results"></script>
+  <script src="../assets/js/teacher/live-sessions.js?v=20260910-assigned-options"></script>
+  <script src="../assets/js/teacher/dashboard.js?v=20260910-assigned-options"></script>
   <script src="../assets/js/table-pagination.js?v=20260910-cleanup"></script>
 </body>
 </html>

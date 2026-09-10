@@ -133,11 +133,14 @@
     if (pageTitle) pageTitle.textContent = titles[section] || 'Dashboard';
     if (section === 'live') {
       if (pageTitle) pageTitle.textContent = 'Sesi Berlangsung';
+      const assignedGrades=[...new Set(data.ujianList.map(exam=>String(exam.tingkat||'').trim()).filter(Boolean))];
+      const assignedClasses=[...new Set(data.ujianList.flatMap(exam=>String(exam.nama_kelas_target||'').split(',')).map(name=>name.trim()).filter(Boolean))];
       window.CbtLiveSessions.mount(content, api, notice, {
         title: 'Live Sessions Kelas Diampu',
         description: 'Pilih tingkatan dan kelas dari ujian yang ditugaskan kepada Anda.',
         enableFilters: true,
         filterFields: ['grade', 'className'],
+        filterOptions: { grade: assignedGrades, className: assignedClasses },
         groupByExam: true
       });
       return;
