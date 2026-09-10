@@ -103,6 +103,8 @@
     async getPortalDataReferences() { const r=await api('api/admin/portal-data/references');return {success:true,...r.data}; },
     async syncPortalData(type) { const r=await api(`api/admin/portal-data/sync/${type}`,'POST',{});return {success:true,...r.data}; },
     async getAdminUjianList() { const r=await api('api/admin/exams');return r.data; },
+    async hentikanSesiSiswaAdmin(session,attemptId) { const r=await api(`api/admin/live-sessions/${attemptId}/terminate`,'POST',{});return {success:true,...r.data,message:r.message}; },
+    async akhiriSesiUjianAdmin(session,examId) { const r=await api(`api/admin/exams/${examId}/terminate`,'POST',{});return {success:true,...r.data,message:r.message}; },
     async simpanUjianAdmin(session,data) { await api('api/admin/exams','POST',data);return {success:true,message:'Ujian berhasil disimpan.'}; },
     async simpanUjianLanjutanAdmin(session,data) { const r=await api('api/admin/follow-up-exams','POST',data);return {success:true,...r.data,message:r.message}; },
     async getKandidatUjianLanjutan() { const r=await api('api/admin/follow-up-exams/candidates');return r.data; },

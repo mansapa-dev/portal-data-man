@@ -40,6 +40,16 @@ final class AdminService
  public function approveRetakeCandidates(array$studentIds,int$examId,int$actor):int{$ids=array_values(array_unique(array_filter(array_map('intval',$studentIds))));if(!$examId||!$ids)throw new DomainException('Pilih minimal satu kandidat ujian ulang.',422);return$this->db->transaction(fn()=>$this->repo->approveRetakeCandidates($examId,$ids,$actor));}
  public function followUpSchedules():array{return$this->repo->followUpSchedules();}
  public function setFollowUpStatus(int$id,bool$active):void{try{$this->db->transaction(fn()=>$this->repo->setFollowUpStatus($id,$active));}catch(\UnexpectedValueException$e){throw new DomainException($e->getMessage(),404);}}
+ public function terminateStudentSession(string$publicId):array
+ {
+  if(!preg_match('/^[0-9A-HJKMNP-TV-Z]{26}$/',$publicId))throw new DomainException('Sesi siswa tidak valid.',422);
+  return$this->db->transaction(function()use($publicId){$attempt=$this->repo->activeAttemptByPublicId($publicId,true)??throw new DomainException('Sesi siswa sudah tidak aktif atau tidak ditemukan.',409);$this->repo->terminateAttempts([(int)$attempt['id']]);return$attempt;});
+ }
+ public function terminateExamSession(int$examId):array
+ {
+  if($examId<=0)throw new DomainException('Ujian tidak valid.',422);
+  return$this->db->transaction(function()use($examId){$attempts=$this->repo->activeAttemptsForExam($examId,true);if(!$this->repo->deactivateExam($examId)&&!$attempts)throw new DomainException('Ujian tidak ditemukan.',404);$this->repo->terminateAttempts(array_column($attempts,'id'));return$attempts;});
+ }
  public function questions(?int$id):array{return array_map([\Cbt\Support\QuestionHtml::class,'row'],$this->repo->questions($id));}
  public function saveQuestion(array$d):void{foreach(['ujian_id','pertanyaan','opsi_a','opsi_b','opsi_c','opsi_d','jawaban_benar']as$key)if(trim((string)($d[$key]??''))==='')throw new DomainException('Data soal belum lengkap.',422);$answer=strtoupper((string)$d['jawaban_benar']);if(!in_array($answer,['A','B','C','D','E'],true)||((float)($d['poin']??0))<=0)throw new DomainException('Jawaban benar atau poin tidak valid.',422);$d['jawaban_benar']=$answer;$d['pertanyaan']=\Cbt\Support\QuestionImage::persistInHtml((string)$d['pertanyaan']);$this->repo->saveQuestion(\Cbt\Support\QuestionHtml::row($d+['opsi_e'=>'','poin'=>1]));}
  public function users():array{return$this->repo->users();}

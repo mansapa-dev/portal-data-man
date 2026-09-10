@@ -2,12 +2,14 @@
 declare(strict_types=1);
 namespace Cbt\Controllers;
 use Cbt\Core\{Request,Response};
-use Cbt\Services\AdminService;
+use Cbt\Services\{AdminService,ScoringService};
 final class AdminController
 {
- public function __construct(private AdminService$admin){}
+ public function __construct(private AdminService$admin,private ScoringService$scoring){}
  public function dashboard(Request$r):Response{return Response::json($this->admin->dashboard());}
  public function liveSessions(Request$r):Response{return Response::json($this->admin->adminLiveSessions());}
+ public function terminateStudentSession(Request$r):Response{$attempt=$this->admin->terminateStudentSession((string)$r->attributes['id']);$result=$this->scoring->submit((int)$attempt['student_id'],(int)$attempt['exam_id']);return Response::json(['result'=>$result],'Sesi siswa dihentikan dan hasil berhasil diproses.');}
+ public function terminateExamSession(Request$r):Response{$attempts=$this->admin->terminateExamSession((int)$r->attributes['id']);$processed=0;foreach($attempts as$attempt){$this->scoring->submit((int)$attempt['student_id'],(int)$attempt['exam_id']);$processed++;}return Response::json(['terminated'=>$processed],'Sesi ujian diakhiri dan seluruh hasil aktif telah diproses.');}
  public function references(Request$r):Response{return Response::json($this->admin->references());}
  public function exams(Request$r):Response{return Response::json($this->admin->exams());}
  public function saveExam(Request$r):Response{$this->admin->saveExam($r->json(),(int)$_SESSION['auth']['user_id']);return Response::json(null,'Ujian berhasil disimpan.');}

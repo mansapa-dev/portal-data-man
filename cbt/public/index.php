@@ -31,10 +31,11 @@ if($request->path==='/health'){
 $database=new Database();$pdo=$database->pdo();
 $students=new StudentRepository($pdo);$users=new UserRepository($pdo);$exams=new ExamRepository($pdo);$attempts=new AttemptRepository($pdo);
 $auth=new AuthController(new AuthService($students,$users));
-$student=new StudentExamController(new ExamSessionService($database,$students,$exams,$attempts),new AnswerService($database,$attempts),new ViolationService($database,$attempts),new ScoringService($database,$attempts));
+$scoring=new ScoringService($database,$attempts);
+$student=new StudentExamController(new ExamSessionService($database,$students,$exams,$attempts),new AnswerService($database,$attempts),new ViolationService($database,$attempts),$scoring);
 $sync=new SyncController(new PortalDataSyncService($database,new HttpPortalDataClient()));
 $setup=new SetupController($database);
-$adminService=new AdminService($database,new AdminRepository($pdo));$admin=new AdminController($adminService);$teacher=new TeacherController($adminService);$teacherSso=new TeacherSsoController($pdo);
+$adminService=new AdminService($database,new AdminRepository($pdo));$admin=new AdminController($adminService,$scoring);$teacher=new TeacherController($adminService);$teacherSso=new TeacherSsoController($pdo);
 $adminStudents=new AdminStudentController(new AdminStudentService($database,new AdminStudentRepository($pdo),new SecretCipher()),new \Cbt\Services\AttemptResetService($database));
 $csrf=new CsrfMiddleware();$studentAuth=new AuthMiddleware('student',null,$pdo);
 $adminAuth=new AuthMiddleware('auth','ADMIN',$pdo);
@@ -62,6 +63,7 @@ $router->post('/api/admin/portal-data/sync/{type}',[$sync,'run'],[$adminAuth,$cs
 $router->get('/api/admin/portal-data/sync/status',[$sync,'status'],[$adminAuth]);
 $router->get('/api/admin/dashboard',[$admin,'dashboard'],[$adminAuth]);
 $router->get('/api/admin/live-sessions',[$admin,'liveSessions'],[$adminAuth]);
+$router->post('/api/admin/live-sessions/{id}/terminate',[$admin,'terminateStudentSession'],[$adminAuth,$csrf,$audit('STUDENT_SESSION_TERMINATED','ExamAttempt')]);
 $router->get('/api/admin/portal-data/references',[$admin,'references'],[$adminAuth]);
 $router->get('/api/admin/students',[$adminStudents,'index'],[$adminAuth]);
 $router->post('/api/admin/students/pin',[$adminStudents,'setPin'],[$adminAuth,$csrf,$audit('STUDENT_PIN_CHANGED','Student')]);
@@ -69,6 +71,7 @@ $router->post('/api/admin/students/generate-pins',[$adminStudents,'generateBatch
 $router->post('/api/admin/students/{id}/reset',[$adminStudents,'reset'],[$adminAuth,$csrf,$audit('STUDENT_ATTEMPT_RESET','Student')]);
 $router->get('/api/admin/exams',[$admin,'exams'],[$adminAuth]);
 $router->post('/api/admin/exams',[$admin,'saveExam'],[$adminAuth,$csrf,$audit('EXAM_SAVED','Exam')]);
+$router->post('/api/admin/exams/{id}/terminate',[$admin,'terminateExamSession'],[$adminAuth,$csrf,$audit('EXAM_SESSION_TERMINATED','Exam')]);
 $router->post('/api/admin/follow-up-exams',[$admin,'scheduleFollowUpExam'],[$adminAuth,$csrf,$audit('FOLLOW_UP_EXAM_SCHEDULED','Exam')]);
 $router->get('/api/admin/follow-up-exams/candidates',[$admin,'followUpCandidates'],[$adminAuth]);
 $router->post('/api/admin/follow-up-exams/retake-candidates/approve',[$admin,'approveRetakeCandidates'],[$adminAuth,$csrf,$audit('RETAKE_CANDIDATES_APPROVED','Exam')]);

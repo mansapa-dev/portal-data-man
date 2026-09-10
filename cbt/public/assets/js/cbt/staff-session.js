@@ -182,7 +182,8 @@ function loadDataAdminLiveSessions() {
     title: 'Live Sessions Seluruh Ujian',
     description: 'Pantau progres peserta dari seluruh ujian secara otomatis setiap 10 detik.',
     enableFilters: true,
-    groupByExam: true
+    groupByExam: true,
+    allowAdminActions: true
   });
 }
 
