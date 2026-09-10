@@ -133,7 +133,13 @@
     if (pageTitle) pageTitle.textContent = titles[section] || 'Dashboard';
     if (section === 'live') {
       if (pageTitle) pageTitle.textContent = 'Sesi Berlangsung';
-      window.CbtLiveSessions.mount(content, api, notice);
+      window.CbtLiveSessions.mount(content, api, notice, {
+        title: 'Live Sessions Kelas Diampu',
+        description: 'Pilih tingkatan dan kelas dari ujian yang ditugaskan kepada Anda.',
+        enableFilters: true,
+        filterFields: ['grade', 'className'],
+        groupByExam: true
+      });
       return;
     }
 
@@ -258,7 +264,7 @@
           (subject.value === 'ALL' || String(x.nama_mapel) === subject.value) &&
           (yearSel.value === 'ALL' || String(x.tahun_ajaran) === yearSel.value) &&
           (semesterSel.value === 'ALL' || String(x.semester) === semesterSel.value)
-        );
+        ).sort((a,b) => String(a.nama_siswa || '').localeCompare(String(b.nama_siswa || ''),'id',{sensitivity:'base',numeric:true}) || String(a.nomor_ujian || '').localeCompare(String(b.nomor_ujian || ''),'id',{numeric:true}));
 
         resultTable.replaceChildren(table(
           ['No. Peserta', 'Nama Siswa', 'Kelas', 'Tingkat', 'Mata Pelajaran', 'Nama Ujian', 'Nilai', 'Benar', 'Salah', 'Status', 'Waktu Selesai'],
@@ -308,9 +314,13 @@
           { wch: 35 }, { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 14 },
           { wch: 22 }, { wch: 18 }, { wch: 10 },
         ];
+        const centered = /^(no\.?|kelas|tingkat|nilai|benar|salah|status|waktu|tahun|semester)/i;
+        rows.forEach((_,rowIndex) => headers.forEach((header,columnIndex) => { const cell=sheet[XLSX.utils.encode_cell({r:rowIndex+1,c:columnIndex})];if(cell)cell.s={alignment:{horizontal:centered.test(header)?'center':'left',vertical:'center',wrapText:true}}; }));
+        headers.forEach((_,columnIndex) => { const cell=sheet[XLSX.utils.encode_cell({r:0,c:columnIndex})];if(cell)cell.s={alignment:{horizontal:'center',vertical:'center',wrapText:true},font:{bold:true}}; });
+        if(sheet['!ref'])sheet['!autofilter']={ref:sheet['!ref']};
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, sheet, 'Hasil Ujian');
-        XLSX.writeFile(workbook, `hasil_ujian_guru_${new Date().toISOString().slice(0, 10)}.xlsx`);
+        XLSX.writeFile(workbook, `hasil_ujian_guru_${new Date().toISOString().slice(0, 10)}.xlsx`, { cellStyles: true });
       });
 
       controls.append(

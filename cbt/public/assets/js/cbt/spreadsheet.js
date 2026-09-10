@@ -7,8 +7,12 @@ function exportToExcel(filename, sheetName, headers, dataRows) {
   let wsData = [headers, ...dataRows];
   let wb = XLSX.utils.book_new();
   let ws = XLSX.utils.aoa_to_sheet(wsData);
+  ws['!cols'] = headers.map((header, column) => ({ wch: Math.min(42, Math.max(String(header).length + 2, ...dataRows.map(row => String(row[column] ?? '').length + 2))) }));
+  if (ws['!ref']) ws['!autofilter'] = { ref: ws['!ref'] };
+  const centered = /^(no\.?|nomor|tingkat|kelas|semester|nilai|benar|salah|status|waktu|tahun)/i;
+  wsData.forEach((row,rowIndex) => row.forEach((_,columnIndex) => { const cell=ws[XLSX.utils.encode_cell({r:rowIndex,c:columnIndex})];if(!cell)return;cell.s={alignment:{horizontal:rowIndex===0||centered.test(String(headers[columnIndex]||''))?'center':'left',vertical:'center',wrapText:true},font:rowIndex===0?{bold:true}:undefined}; }));
   XLSX.utils.book_append_sheet(wb, ws, sheetName);
-  XLSX.writeFile(wb, filename);
+  XLSX.writeFile(wb, filename, { cellStyles: true });
 }
 
 function downloadTemplateSiswa() {

@@ -57,6 +57,9 @@ function loadDataAdminHasil() {
     .getAdminHasilGlobal(stPengelola);
 }
 
+const urutkanHasilAbjad = rows => [...rows].sort((a,b) => String(a.nama_siswa || '').localeCompare(String(b.nama_siswa || ''),'id',{sensitivity:'base',numeric:true}) || String(a.nomor_ujian || '').localeCompare(String(b.nomor_ujian || ''),'id',{numeric:true}));
+const formatWaktuSelesai = value => value ? new Date(String(value).replace(' ','T').replace(/Z?$/,'Z')).toLocaleString('id-ID',{timeZone:'Asia/Jakarta',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '-';
+
 function applyFilterHasil() {
   const fThn = document.getElementById('fltTahunAjaran').value;
   const fSem = document.getElementById('fltSemester').value;
@@ -64,17 +67,17 @@ function applyFilterHasil() {
   const fKelas = document.getElementById('fltHasilKelas').value;
   const fUjian = document.getElementById('fltHasilUjian').value;
   
-  const filtered = cacheHasilRaw.filter(h => {
+  const filtered = urutkanHasilAbjad(cacheHasilRaw.filter(h => {
     let matchThn = fThn === 'ALL' || h.tahun_ajaran === fThn;
     let matchSem = fSem === 'ALL' || h.semester === fSem;
     let matchTingkat = fTingkat === 'ALL' || h.tingkat === fTingkat;
     let matchK = fKelas === 'ALL' || h.kelas === fKelas;
     let matchU = fUjian === 'ALL' || h.nama_ujian === fUjian;
     return matchThn && matchSem && matchTingkat && matchK && matchU;
-  });
+  }));
   
   const tb = document.getElementById('tblAdminHasil');
-  if(filtered.length === 0) { tb.innerHTML = `<tr><td colspan="7" align="center">Data tidak ditemukan.</td></tr>`; return; }
+  if(filtered.length === 0) { tb.innerHTML = `<tr><td colspan="8" class="text-center">Data tidak ditemukan.</td></tr>`; return; }
   
   tb.innerHTML = filtered.map(h => `
     <tr>
@@ -85,6 +88,7 @@ function applyFilterHasil() {
       <td>${h.nama_ujian}</td>
       <td><b style="color:var(--primary); font-size:14px;">${h.nilai}</b></td>
       <td><span class="badge bg-green">${h.status.toUpperCase()}</span></td>
+      <td><small>${formatWaktuSelesai(h.waktu_selesai)}</small></td>
     </tr>
   `).join('');
 }
@@ -96,24 +100,24 @@ function exportFilterHasil(type) {
   const fKelas = document.getElementById('fltHasilKelas').value;
   const fUjian = document.getElementById('fltHasilUjian').value;
   
-  const filtered = cacheHasilRaw.filter(h => {
+  const filtered = urutkanHasilAbjad(cacheHasilRaw.filter(h => {
     let matchThn = fThn === 'ALL' || h.tahun_ajaran === fThn;
     let matchSem = fSem === 'ALL' || h.semester === fSem;
     let matchTingkat = fTingkat === 'ALL' || h.tingkat === fTingkat;
     let matchK = fKelas === 'ALL' || h.kelas === fKelas;
     let matchU = fUjian === 'ALL' || h.nama_ujian === fUjian;
     return matchThn && matchSem && matchTingkat && matchK && matchU;
-  });
+  }));
 
   if(filtered.length === 0) { showCustomAlert('Peringatan', 'Tidak ada data yang sesuai filter untuk diexport.'); return; }
   
   if(type === 'ujian') {
-    let headers = ['Nama Ujian', 'Nomor Peserta', 'Nama Siswa', 'Tingkat', 'Kelas', 'Tahun Ajaran', 'Semester', 'Nilai Akhir', 'Status'];
-    let rows = filtered.map(h => [h.nama_ujian, h.nomor_ujian, h.nama_siswa, h.tingkat, h.kelas, h.tahun_ajaran, h.semester, h.nilai, h.status]);
+    let headers = ['Nama Ujian', 'Nomor Peserta', 'Nama Siswa', 'Tingkat', 'Kelas', 'Tahun Ajaran', 'Semester', 'Nilai Akhir', 'Status', 'Waktu Selesai'];
+    let rows = filtered.map(h => [h.nama_ujian, h.nomor_ujian, h.nama_siswa, h.tingkat, h.kelas, h.tahun_ajaran, h.semester, h.nilai, h.status, formatWaktuSelesai(h.waktu_selesai)]);
     exportToExcel('rekap_rekapitulasi_ujian.xlsx', 'Rekap Ujian', headers, rows);
   } else if(type === 'rombel') {
-    let headers = ['Tingkat', 'Kelas/Rombel', 'Nama Ujian', 'Nomor Peserta', 'Nama Siswa', 'Nilai Akhir', 'Status'];
-    let rows = filtered.map(h => [h.tingkat, h.kelas, h.nama_ujian, h.nomor_ujian, h.nama_siswa, h.nilai, h.status]);
+    let headers = ['Tingkat', 'Kelas/Rombel', 'Nama Ujian', 'Nomor Peserta', 'Nama Siswa', 'Nilai Akhir', 'Status', 'Waktu Selesai'];
+    let rows = filtered.map(h => [h.tingkat, h.kelas, h.nama_ujian, h.nomor_ujian, h.nama_siswa, h.nilai, h.status, formatWaktuSelesai(h.waktu_selesai)]);
     exportToExcel('rekap_per_rombel.xlsx', 'Per Rombel', headers, rows);
   }
 }
@@ -125,14 +129,14 @@ function cetakLaporanResmiPDF() {
   const fKelas = document.getElementById('fltHasilKelas').value;
   const fUjian = document.getElementById('fltHasilUjian').value;
   
-  const filtered = cacheHasilRaw.filter(h => {
+  const filtered = urutkanHasilAbjad(cacheHasilRaw.filter(h => {
     let matchThn = fThn === 'ALL' || h.tahun_ajaran === fThn;
     let matchSem = fSem === 'ALL' || h.semester === fSem;
     let matchTingkat = fTingkat === 'ALL' || h.tingkat === fTingkat;
     let matchK = fKelas === 'ALL' || h.kelas === fKelas;
     let matchU = fUjian === 'ALL' || h.nama_ujian === fUjian;
     return matchThn && matchSem && matchTingkat && matchK && matchU;
-  });
+  }));
 
   if(filtered.length === 0) { showCustomAlert('Peringatan', 'Tidak ada data sesuai filter untuk dicetak.'); return; }
   
@@ -151,10 +155,10 @@ function cetakLaporanResmiPDF() {
   document.getElementById('lblPrintWakur').innerHTML = `<u>${valWakur}</u>`;
   document.getElementById('lblPrintNipWakur').textContent = valNipWakur;
   
-  let html = `<table style="width:100%; border-collapse:collapse; font-size:11px;" border="1" cellpadding="6">
+  let html = `<table class="print-results-table" style="width:100%; border-collapse:collapse; table-layout:fixed; font-size:9px;" border="1" cellpadding="5">
     <thead>
       <tr style="background:#f1f5f9;">
-        <th>No</th><th>No Peserta</th><th>Nama Siswa</th><th>Tingkat</th><th>Kelas</th><th>Mata Ujian</th><th>Nilai</th><th>Status</th>
+        <th style="width:4%">No</th><th style="width:12%">No Peserta</th><th style="width:20%">Nama Siswa</th><th style="width:7%">Tingkat</th><th style="width:10%">Kelas</th><th style="width:19%">Mata Ujian</th><th style="width:7%">Nilai</th><th style="width:9%">Status</th><th style="width:12%">Waktu Selesai</th>
       </tr>
     </thead>
     <tbody>`;
@@ -169,6 +173,7 @@ function cetakLaporanResmiPDF() {
       <td>${h.nama_ujian}</td>
       <td align="center"><b>${h.nilai}</b></td>
       <td align="center">${h.status.toUpperCase()}</td>
+      <td align="center">${formatWaktuSelesai(h.waktu_selesai)}</td>
     </tr>`;
   });
   

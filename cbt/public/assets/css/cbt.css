@@ -1537,6 +1537,9 @@ tr:hover td {
   }
 }
 
+/* Result tables keep identity columns readable and numeric/date columns aligned. */
+.results-table th,.results-table td{vertical-align:middle}.results-table th:nth-child(1),.results-table td:nth-child(1),.results-table th:nth-child(n+3),.results-table td:nth-child(n+3){text-align:center}.results-table th:nth-child(2),.results-table td:nth-child(2),.results-table th:nth-child(5),.results-table td:nth-child(5){text-align:left}.results-table td:last-child{white-space:nowrap;font-variant-numeric:tabular-nums}
+
 /* PRINT STYLES */
 .print-laporan-only,
 .print-kartu-only {
