@@ -20,6 +20,10 @@
 .teacher-live .session-meta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 11px; color: var(--muted); }
 .teacher-live .refresh-live { padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--green-dark); cursor: pointer; }
 .teacher-live .live-empty, .teacher-live .live-loading { grid-column: 1 / -1; padding: 32px; border: 1px dashed var(--line); border-radius: 12px; text-align: center; }
+.teacher-live .live-session-group { display: grid; gap: 14px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.teacher-live .live-session-group > header, .teacher-live .catalog-pager, .teacher-live .catalog-pager div { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.teacher-live .live-session-group h3, .teacher-live .live-session-group p { margin: 0; }.teacher-live .live-session-group p { margin-top: 4px; color: var(--muted); font-size: 11px; }
+.teacher-live .catalog-toggle, .teacher-live .catalog-pager button { padding: 8px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--green-dark); font-weight: 800; cursor: pointer; }.teacher-live .catalog-pager { color: var(--muted); font-size: 11px; }.teacher-live .catalog-pager button:disabled { cursor: not-allowed; opacity: .45; }
 @media(max-width: 800px) { .teacher-live .live-summary { grid-template-columns: repeat(2,minmax(0,1fr)); } .teacher-live .session-grid { grid-template-columns: 1fr; } .teacher-live .live-heading { align-items: flex-start; flex-direction: column; } }
 
 :root {

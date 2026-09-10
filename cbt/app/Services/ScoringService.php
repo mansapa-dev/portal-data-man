@@ -38,7 +38,10 @@ final class ScoringService
   return$this->db->transaction(function()use($studentId,$examId,$onlyDue){
    $attempt=$this->attempts->find($studentId,$examId,true)??throw new DomainException('Sesi ujian tidak ditemukan.',404);
    $existing=$this->attempts->result((int)$attempt['id']);
-   if($existing)return$this->format($existing);
+   if($existing){
+    if($attempt['status']==='IN_PROGRESS')$this->db->pdo()->prepare("UPDATE exam_attempts SET status='COMPLETED',completed_at=COALESCE(completed_at,UTC_TIMESTAMP(3)) WHERE id=:id AND status='IN_PROGRESS'")->execute(['id'=>$attempt['id']]);
+    return$this->format($existing);
+   }
    if($onlyDue && $attempt['status']==='IN_PROGRESS' && strtotime($attempt['expires_at'].' UTC')>time())throw new DomainException('Ujian telah dibuka kembali oleh admin. Muat ulang dashboard untuk melanjutkan.',409);
    if(!in_array($attempt['status'],['IN_PROGRESS','TERMINATED'],true))throw new DomainException('Ujian tidak dapat disubmit.',409);
 

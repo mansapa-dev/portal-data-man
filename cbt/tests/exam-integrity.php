@@ -36,6 +36,8 @@ try {
  $assert($one['revision']===1,'first answer saved at revision one');
  $two=$answers->save(1,1,1,'B',true,$attempt,1,str_repeat('b',32));
  $assert($two['revision']===2,'latest answer and flag saved');
+ $scoredLive=$monitor->liveSessions([1]);
+ $assert((float)$scoredLive[0]['liveScore']===100.0,'live monitoring calculates temporary score without exposing answer keys');
  $duplicate=$answers->save(1,1,1,'B',true,$attempt,1,str_repeat('b',32));
  $assert($duplicate['duplicate']&&$duplicate['revision']===2,'lost response retry is idempotent');
  $reject(fn()=>$answers->save(1,1,1,'A',false,$attempt,0,str_repeat('c',32)),409,'stale write rejected');
@@ -57,6 +59,7 @@ try {
  $resettableStudent=(new \Cbt\Repositories\AdminStudentRepository($pdo))->all()[0];
  $assert((int)$resettableStudent['reset_exam_id']===1&&$resettableStudent['reset_exam_name']==='Test Exam','admin student list exposes a resettable exam while its schedule is inactive');
  $scoring->submit(1,1,true);
+ $assert($monitor->liveSessions([1])===[],'scored terminated attempt leaves live monitoring');
  $pdo->exec("INSERT INTO users(username,password_hash,name,role) VALUES('teacher','unused','Teacher','TEACHER')");
  $reject(fn()=>$reset->reset(1,1,2,'Not allowed'),403,'teacher cannot reset a terminated exam');
  $_SESSION['auth']=['user_id'=>2,'role'=>'TEACHER'];$allowed=false;
@@ -101,7 +104,9 @@ try {
  $summary=$scoring->finalizeDue();$assert($summary['completed']===1&&$summary['failed']===0,'server finalizes expired attempt without browser');
  $result=$scoring->submit(1,1);$assert((float)$result['nilai']===100.0,'score uses latest accepted answer');
  $reject(fn()=>$reset->reset(1,1,1,'completed'),409,'completed exams cannot be reset for another attempt');
- $scoring->submit(1,1);$assert((int)$pdo->query('SELECT COUNT(*) FROM exam_results')->fetchColumn()===1,'repeated submit produces exactly one result');
+ $pdo->exec("UPDATE exam_attempts SET status='IN_PROGRESS',completed_at=NULL WHERE id=1");
+ $scoring->submit(1,1);$assert($pdo->query('SELECT status FROM exam_attempts WHERE id=1')->fetchColumn()==='COMPLETED','existing result repairs stale in-progress attempt status');
+ $assert((int)$pdo->query('SELECT COUNT(*) FROM exam_results')->fetchColumn()===1,'repeated submit produces exactly one result');
  $assert($scoring->recover(1,1)['completed']===true,'refresh recovers committed result');
  $review=$scoring->review(1,1);
  $assert($review['soal'][0]['status']==='BENAR'&&!isset($review['soal'][0]['jawaban_benar'],$review['soal'][0]['opsi'],$review['jawaban']),'completed student receives correctness without answer key before the exam schedule ends');

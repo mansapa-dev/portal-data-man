@@ -35,8 +35,9 @@
 
 /* Group live participants by exam/session on the administrator monitor. */
 .live-session-group{display:grid;gap:12px;padding:15px;border:1px solid var(--border);border-radius:16px;background:var(--surface-subtle)}
-.live-session-group>header h3{margin:0;color:var(--text-main);font-size:15px}
+.live-session-group>header{display:flex;align-items:center;justify-content:space-between;gap:16px}.live-session-group>header h3{margin:0;color:var(--text-main);font-size:15px}
 .live-session-group>header p{margin:4px 0 0;color:var(--text-muted);font-size:11px}
+.catalog-toggle,.catalog-pager button{padding:8px 11px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--primary-dark);font-weight:800;cursor:pointer}.catalog-pager{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--text-muted);font-size:11px}.catalog-pager div{display:flex;align-items:center;gap:9px}.catalog-pager button:disabled{cursor:not-allowed;opacity:.45}
 
 * {
   box-sizing: border-box;
