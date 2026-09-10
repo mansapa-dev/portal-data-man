@@ -99,6 +99,7 @@ try {
  $assert(!$future['can_start']&&$future['availability_reason']==='UPCOMING','dashboard includes future exams but blocks starting early');
  $reject(fn()=>$sessions->start(1,'0000000001',2),403,'server rejects early starts even with direct request');
  $pdo->exec("UPDATE exam_attempts SET expires_at=UTC_TIMESTAMP()-INTERVAL 1 SECOND");
+ $assert($monitor->liveSessions([1])===[],'expired attempt leaves live monitoring before background finalization');
  $reject(fn()=>$answers->save(1,1,1,'A',false,$attempt,2,str_repeat('d',32)),409,'late answer rejected');
  $assert($answers->save(1,1,1,'B',true,$attempt,1,str_repeat('b',32))['duplicate'],'previously saved write acknowledged after deadline');
  $summary=$scoring->finalizeDue();$assert($summary['completed']===1&&$summary['failed']===0,'server finalizes expired attempt without browser');
