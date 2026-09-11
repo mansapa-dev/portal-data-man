@@ -256,6 +256,7 @@ CREATE TABLE IF NOT EXISTS violations (
 
 CREATE TABLE IF NOT EXISTS teacher_exam_assignments (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, teacher_id BIGINT UNSIGNED NOT NULL, exam_id BIGINT UNSIGNED NOT NULL,
+ duty_role ENUM('TEACHER','PROCTOR') NOT NULL DEFAULT 'TEACHER',
  created_by BIGINT UNSIGNED NOT NULL, created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
  UNIQUE KEY uq_teacher_exam (teacher_id,exam_id), KEY idx_assignment_exam (exam_id),
  CONSTRAINT fk_assignment_teacher FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON DELETE RESTRICT,

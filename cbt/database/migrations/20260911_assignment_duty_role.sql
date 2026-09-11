@@ -1,0 +1,2 @@
+ALTER TABLE teacher_exam_assignments
+ ADD COLUMN IF NOT EXISTS duty_role ENUM('TEACHER','PROCTOR') NOT NULL DEFAULT 'TEACHER' AFTER exam_id;

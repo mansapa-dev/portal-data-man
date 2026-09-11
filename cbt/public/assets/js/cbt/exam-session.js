@@ -324,7 +324,7 @@ function tampilHasilUjian(hasil, isTerminate = false) {
 
   if (lblKet) {
     if (isTerminate) {
-      lblKet.textContent = 'Ujian dihentikan karena 3 kali pelanggaran. Kirim tiket bantuan; setelah admin mereset CBT, Anda dapat melanjutkan dengan jawaban sebelumnya.';
+      lblKet.textContent = 'Ujian dihentikan karena 3 kali pelanggaran. Kirim tiket bantuan; setelah petugas piket mereset CBT, Anda dapat melanjutkan dengan jawaban sebelumnya.';
       lblKet.style.color = '#dc2626';
     } else if (hasil.is_remedial && hasil.score_cap !== null) {
       lblKet.textContent = `Ini adalah ujian ulang (remedial). Nilai maksimum yang dapat diraih adalah ${hasil.score_cap}.`;

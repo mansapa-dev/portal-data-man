@@ -33,7 +33,7 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
     </nav>
     <div class="teacher-help-box">
       <h5>Butuh Bantuan?</h5>
-      <p>Tiket siswa pada ujian tugas Anda tersedia langsung di dashboard.</p>
+      <p>Tiket hanya tersedia saat Anda ditugaskan sebagai petugas piket ujian.</p>
       <button type="button" id="teacherHelpButton">Buka Tiket Siswa</button>
     </div>
     <div class="teacher-user-footer"><div class="teacher-avatar" id="teacherAvatar">G</div><div><strong id="teacherSidebarName"><?=htmlspecialchars($nip, ENT_QUOTES, 'UTF-8')?></strong><small>Guru / Petugas Ujian</small></div></div>
@@ -65,16 +65,10 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
     <section id="content" class="content-grid"></section>
   </main>
 
-<<<<<<< HEAD
   <script src="../assets/js/teacher/live-sessions.js?v=20260910-assigned-options"></script>
-  <script src="../assets/js/teacher/dashboard.js?v=20260910-assigned-options"></script>
+  <script src="../assets/js/cbt/support-tickets.js?v=20260911-proctor-1"></script>
+  <script src="../assets/js/teacher/dashboard.js?v=20260911-proctor-1"></script>
   <script src="../assets/js/table-pagination.js?v=20260910-cleanup"></script>
-=======
-  <script src="../assets/js/teacher/live-sessions.js?v=20260907-1"></script>
-  <script src="../assets/js/cbt/support-tickets.js?v=20260908-1"></script>
-  <script src="../assets/js/teacher/dashboard.js?v=20260908-support-1"></script>
-  <script src="../assets/js/table-pagination.js?v=20260904-10"></script>
->>>>>>> b8a04d74 (feat(cbt): add student support ticket workflow)
 </body>
 </html>
 <?php return ob_get_clean();

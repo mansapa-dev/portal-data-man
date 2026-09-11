@@ -147,10 +147,10 @@
       return;
     }
     if(section==='support'){
-      const heading=panel('Tiket Bantuan Siswa','Hanya tiket dari ujian yang ditugaskan kepada Anda yang tampil di sini. Reset CBT tetap dilakukan administrator.');
+      const heading=panel('Tiket Bantuan Siswa','Hanya petugas piket yang ditugaskan pada ujian ini yang menerima tiket dan dapat mereset CBT siswa.');
       const list=el('div',undefined,'teacher-support-list');heading.append(list);content.append(heading);
-      const client={list:async status=>(await api(`api/staff/support-tickets?status=${encodeURIComponent(status)}`)).data,update:async(id,status,note)=>(await api(`api/staff/support-tickets/${id}/status`,'POST',{status,note})).data};
-      window.CbtSupportTickets.mountStaff(list,client,false,notice);
+      const client={list:async status=>(await api(`api/staff/support-tickets?status=${encodeURIComponent(status)}`)).data,update:async(id,status,note)=>(await api(`api/staff/support-tickets/${id}/status`,'POST',{status,note})).data,reset:async(id,reason)=>(await api(`api/staff/support-tickets/${id}/reset`,'POST',{reason})).data};
+      window.CbtSupportTickets.mountStaff(list,client,true,notice);
       return;
     }
 

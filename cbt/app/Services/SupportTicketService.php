@@ -64,7 +64,7 @@ final class SupportTicketService
         $role=(string)($auth['role']??'');$params=[];$where=[];
         if($role==='TEACHER'){
             $teacherId=(int)($auth['teacher_id']??0);if($teacherId<1)throw new DomainException('Identitas guru tidak tersedia.',403);
-            $where[]='EXISTS(SELECT 1 FROM teacher_exam_assignments tea WHERE tea.teacher_id=:teacher AND tea.exam_id=t.exam_id)';$params['teacher']=$teacherId;
+            $where[]="EXISTS(SELECT 1 FROM teacher_exam_assignments tea JOIN exams duty_exam ON duty_exam.id=tea.exam_id WHERE tea.teacher_id=:teacher AND tea.duty_role='PROCTOR' AND (tea.exam_id=t.exam_id OR (t.exam_id IS NULL AND DATE(CONVERT_TZ(duty_exam.starts_at,'+00:00','+07:00'))=DATE(CONVERT_TZ(UTC_TIMESTAMP(3),'+00:00','+07:00')))))";$params['teacher']=$teacherId;
         }elseif($role!=='ADMIN')throw new DomainException('Akses petugas ditolak.',403);
         $status=$status!==null?strtoupper(trim($status)):null;
         if($status&&$status!=='ALL'){if(!in_array($status,self::STATUSES,true))throw new DomainException('Filter status tidak valid.',422);$where[]='t.status=:status';$params['status']=$status;}
@@ -88,7 +88,6 @@ final class SupportTicketService
 
     public function resetAndResolve(string $publicId,array $auth,string $reason):array
     {
-        if(($auth['role']??'')!=='ADMIN')throw new DomainException('Hanya admin yang dapat mereset CBT.',403);
         $ticket=$this->accessibleTicket($this->db->pdo(),$publicId,$auth,false);
         if(!(int)$ticket['exam_id'])throw new DomainException('Tiket ini tidak memiliki ujian yang dapat direset.',409);
         $result=$this->resets->reset((int)$ticket['student_id'],(int)$ticket['exam_id'],(int)$auth['user_id'],$reason);
@@ -101,7 +100,7 @@ final class SupportTicketService
     private function accessibleTicket(PDO $pdo,string $publicId,array $auth,bool $lock):array
     {
         $sql='SELECT t.* FROM support_tickets t WHERE t.public_id=:public';$params=['public'=>$publicId];
-        if(($auth['role']??'')==='TEACHER'){$sql.=' AND EXISTS(SELECT 1 FROM teacher_exam_assignments tea WHERE tea.teacher_id=:teacher AND tea.exam_id=t.exam_id)';$params['teacher']=(int)($auth['teacher_id']??0);}
+        if(($auth['role']??'')==='TEACHER'){$sql.=" AND EXISTS(SELECT 1 FROM teacher_exam_assignments tea JOIN exams duty_exam ON duty_exam.id=tea.exam_id WHERE tea.teacher_id=:teacher AND tea.duty_role='PROCTOR' AND (tea.exam_id=t.exam_id OR (t.exam_id IS NULL AND DATE(CONVERT_TZ(duty_exam.starts_at,'+00:00','+07:00'))=DATE(CONVERT_TZ(UTC_TIMESTAMP(3),'+00:00','+07:00')))))";$params['teacher']=(int)($auth['teacher_id']??0);}
         elseif(($auth['role']??'')!=='ADMIN')throw new DomainException('Akses petugas ditolak.',403);
         if($lock)$sql.=' FOR UPDATE';$q=$pdo->prepare($sql);$q->execute($params);return$q->fetch()?:throw new DomainException('Tiket tidak ditemukan atau bukan penugasan Anda.',404);
     }
@@ -114,7 +113,7 @@ final class SupportTicketService
     private function accessibleDetailed(PDO $pdo,string $publicId,array $auth):array
     {
         $where=' WHERE t.public_id=:public';$params=['public'=>$publicId];
-        if(($auth['role']??'')==='TEACHER'){$where.=' AND EXISTS(SELECT 1 FROM teacher_exam_assignments tea WHERE tea.teacher_id=:teacher AND tea.exam_id=t.exam_id)';$params['teacher']=(int)($auth['teacher_id']??0);}
+        if(($auth['role']??'')==='TEACHER'){$where.=" AND EXISTS(SELECT 1 FROM teacher_exam_assignments tea JOIN exams duty_exam ON duty_exam.id=tea.exam_id WHERE tea.teacher_id=:teacher AND tea.duty_role='PROCTOR' AND (tea.exam_id=t.exam_id OR (t.exam_id IS NULL AND DATE(CONVERT_TZ(duty_exam.starts_at,'+00:00','+07:00'))=DATE(CONVERT_TZ(UTC_TIMESTAMP(3),'+00:00','+07:00')))))";$params['teacher']=(int)($auth['teacher_id']??0);}
         $q=$pdo->prepare($this->selectSql().$where);$q->execute($params);return$q->fetch()?:throw new DomainException('Tiket tidak ditemukan.',404);
     }
     private function selectSql():string

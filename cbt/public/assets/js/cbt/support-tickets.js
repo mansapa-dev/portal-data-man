@@ -32,7 +32,7 @@
       finally{button.disabled=false;}
     });
   }
-  function staffCard(ticket,client,isAdmin,refresh){
+  function staffCard(ticket,client,canReset,refresh){
     const card=el('article',undefined,'support-ticket-card'),head=el('header'),identity=el('div'),meta=el('div',undefined,'support-ticket-meta');
     identity.append(el('h3',ticket.studentName),el('p',`${ticket.nisn} · ${ticket.className||'-'}`));head.append(identity,statusBadge(ticket.status));
     meta.append(el('span',labels[ticket.category]||ticket.category),el('span',ticket.examName||'Kendala akun'),el('span',localTime(ticket.createdAt)));card.append(head,meta,el('p',ticket.message,'support-ticket-message'));
@@ -41,16 +41,16 @@
       const textarea=el('textarea',undefined,'support-note-input');textarea.rows=2;textarea.maxLength=1000;textarea.placeholder='Catatan untuk siswa (opsional)';const actions=el('div',undefined,'support-ticket-actions');
       if(ticket.status==='OPEN'){const take=el('button','Ambil tiket','btn btn-secondary');take.type='button';take.addEventListener('click',()=>act(take,()=>client.update(ticket.id,'IN_PROGRESS',textarea.value),refresh));actions.append(take);}
       const solve=el('button','Tandai selesai','btn btn-success');solve.type='button';solve.addEventListener('click',()=>act(solve,()=>client.update(ticket.id,'RESOLVED',textarea.value||'Kendala telah ditangani petugas.'),refresh));actions.append(solve);
-      if(isAdmin&&ticket.canReset){const reset=el('button','Reset CBT & selesaikan','btn btn-danger');reset.type='button';reset.addEventListener('click',()=>act(reset,()=>client.reset(ticket.id,textarea.value.trim()||'Reset melalui tiket bantuan siswa'),refresh));actions.append(reset);}
+      if(canReset&&ticket.canReset&&client.reset){const reset=el('button','Reset CBT & selesaikan','btn btn-danger');reset.type='button';reset.addEventListener('click',()=>act(reset,()=>client.reset(ticket.id,textarea.value.trim()||'Reset melalui tiket bantuan siswa'),refresh));actions.append(reset);}
       card.append(textarea,actions);
     }
     return card;
   }
   async function act(button,request,refresh){button.disabled=true;try{await request();await refresh();}catch(error){alert(error.message);}finally{button.disabled=false;}}
   function stopStaff(){staffGeneration+=1;clearTimeout(staffTimer);staffTimer=null;}
-  function mountStaff(root,client,isAdmin=false,notice=null,statusGetter=()=> 'ALL'){
+  function mountStaff(root,client,canReset=false,notice=null,statusGetter=()=> 'ALL'){
     stopStaff();const generation=staffGeneration;
-    const load=async()=>{if(generation!==staffGeneration)return;try{const tickets=await client.list(statusGetter());if(generation!==staffGeneration)return;root.replaceChildren(...tickets.map(ticket=>staffCard(ticket,client,isAdmin,load)));if(!tickets.length)root.append(el('div','Belum ada tiket pada status ini.','support-empty'));if(notice){notice.className='alert';notice.textContent='';}}
+    const load=async()=>{if(generation!==staffGeneration)return;try{const tickets=await client.list(statusGetter());if(generation!==staffGeneration)return;root.replaceChildren(...tickets.map(ticket=>staffCard(ticket,client,canReset,load)));if(!tickets.length)root.append(el('div','Belum ada tiket pada status ini.','support-empty'));if(notice){notice.className='alert';notice.textContent='';}}
       catch(error){if(notice){notice.className='alert error';notice.textContent=error.message;}if(!root.children.length)root.append(el('div','Tiket belum dapat dimuat.','support-empty'));}
       finally{if(generation===staffGeneration)staffTimer=setTimeout(load,10000);}};load();return load;
   }

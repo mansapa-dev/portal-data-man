@@ -1,10 +1,10 @@
 // Teacher-to-exam assignment management.
 function loadDataAdminGuruUjian() {
-  const tb = document.getElementById('tblAdminGuruUjian'); tb.innerHTML = `<tr><td colspan="4" align="center">Memuat...</td></tr>`;
+  const tb = document.getElementById('tblAdminGuruUjian'); tb.innerHTML = `<tr><td colspan="5" align="center">Memuat...</td></tr>`;
   cbtApi
     .withSuccessHandler(res => {
       if(!res.success || !res.data || res.data.length === 0) {
-        tb.innerHTML = `<tr><td colspan="4" align="center">Belum ada penugasan guru / piket ujian.</td></tr>`;
+        tb.innerHTML = `<tr><td colspan="5" align="center">Belum ada penugasan guru / piket ujian.</td></tr>`;
         window.cacheGuruList = res.guruList || [];
         window.cacheUjianList = res.ujianList || [];
         return;
@@ -17,6 +17,7 @@ function loadDataAdminGuruUjian() {
         <tr>
           <td><b>${r.nama_guru}</b></td>
           <td>${r.nama_ujian}</td>
+          <td><span class="badge ${r.duty_role === 'PROCTOR' ? 'bg-blue' : 'bg-gray'}">${r.duty_role === 'PROCTOR' ? 'Petugas Piket Ujian' : 'Guru Mapel'}</span></td>
           <td><span class="badge bg-gray">Tingkat ${r.tingkat}</span></td>
           <td style="display:flex; gap:6px;">
             <button class="btn btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="editGuruUjianById(${r.id})"><i class="fa-solid fa-pen"></i> Edit</button>
@@ -60,6 +61,7 @@ function editGuruUjian(r) {
   
   selGuru.value = r.guru_id;
   selUjian.value = r.ujian_id;
+  document.getElementById('inDutyRole').value = r.duty_role || 'TEACHER';
   
   document.getElementById('modalGuruUjian').classList.add('show');
 }
@@ -69,7 +71,8 @@ document.getElementById('formGuruUjian').addEventListener('submit', function(e){
   const payload = {
     id: document.getElementById('editGuruUjianId').value || null,
     guru_id: document.getElementById('inGuruId').value,
-    ujian_id: document.getElementById('inUjianId').value
+    ujian_id: document.getElementById('inUjianId').value,
+    duty_role: document.getElementById('inDutyRole').value
   };
   showLoading('Menyimpan penugasan...');
   cbtApi
