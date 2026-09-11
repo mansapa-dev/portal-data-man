@@ -153,8 +153,8 @@ function mulaiTimerCBT(endTimeMs, clockOffset = 0) {
  * Update progress dots merah sesuai jumlah pelanggaran (1, 2, atau 3).
  */
 function updateViolationDots(jumlah) {
-  const colors = { active: '#dc2626', inactive: '#e5e7eb' };
-  const borders = { active: '#dc2626', inactive: '#d1d5db' };
+  const colors = { active: 'var(--ui-danger)', inactive: 'var(--border)' };
+  const borders = { active: 'var(--ui-danger)', inactive: '#d1d5db' };
   for (let i = 1; i <= 3; i++) {
     const dot = document.getElementById(`pdot${i}`);
     if (!dot) continue;
@@ -191,10 +191,10 @@ function showViolationModal(jumlah, terminated, onDismiss = null) {
     if(ticketButton)ticketButton.classList.remove('hidden');
     // ── Terminate state ──
     title.textContent = 'Ujian Dihentikan!';
-    title.style.color = '#dc2626';
+    title.style.color = 'var(--ui-danger)';
     icon.className = 'fa-solid fa-triangle-exclamation';
-    iconWrap.style.background = '#fecaca';
-    iconWrap.style.border = '2px solid #dc2626';
+    iconWrap.style.background = 'var(--ui-danger-border)';
+    iconWrap.style.border = '2px solid var(--ui-danger)';
     txt.textContent = 'Anda telah melakukan 3 kali pelanggaran. Ujian otomatis dihentikan dan nilai dikunci. Kirim tiket dari tombol di bawah agar petugas dapat menanganinya tanpa Anda meninggalkan ruangan ujian.';
     btn.textContent = 'Memuat hasil...';
     btn.disabled = true;
@@ -219,9 +219,9 @@ function showViolationModal(jumlah, terminated, onDismiss = null) {
     // ── Warning state ──
     const isLastWarn = jumlah === 2;
     title.textContent = isLastWarn ? 'Peringatan Terakhir!' : 'Peringatan Sistem!';
-    title.style.color = isLastWarn ? '#b45309' : '#dc2626';
+    title.style.color = isLastWarn ? 'var(--ui-warning)' : 'var(--ui-danger)';
     icon.className = 'fa-solid fa-triangle-exclamation';
-    iconWrap.style.background = isLastWarn ? '#fef3c7' : '#fee2e2';
+    iconWrap.style.background = isLastWarn ? 'var(--ui-warning-bg)' : 'var(--ui-danger-bg)';
     iconWrap.style.border = isLastWarn ? '2px solid #f59e0b' : 'none';
     txt.textContent = isLastWarn
       ? `Peringatan ${jumlah}/3: Anda terdeteksi keluar dari aplikasi CBT. Satu pelanggaran lagi akan menghentikan ujian Anda secara otomatis!`
@@ -312,20 +312,20 @@ function tampilHasilUjian(hasil, isTerminate = false) {
 
   if (lblStatus) {
     lblStatus.textContent = isTerminate ? 'Ujian Dihentikan' : (hasil.is_remedial ? 'Ujian Ulang Selesai' : 'Ujian Selesai!');
-    lblStatus.style.color = isTerminate ? '#dc2626' : 'var(--text-main)';
+    lblStatus.style.color = isTerminate ? 'var(--ui-danger)' : 'var(--text-main)';
   }
 
   if (statusIcon && statusIconWrap) {
     statusIcon.className = isTerminate ? 'fa-solid fa-triangle-exclamation' : 'fa-solid fa-check-double';
-    statusIcon.style.color = isTerminate ? '#b91c1c' : 'var(--primary-dark)';
-    statusIconWrap.style.background = isTerminate ? '#fee2e2' : 'var(--primary-soft)';
+    statusIcon.style.color = isTerminate ? 'var(--ui-danger)' : 'var(--primary-dark)';
+    statusIconWrap.style.background = isTerminate ? 'var(--ui-danger-bg)' : 'var(--primary-soft)';
     statusIconWrap.style.boxShadow = isTerminate ? '0 4px 14px rgba(220,38,38,.18)' : '0 4px 14px rgba(76,175,80,.2)';
   }
 
   if (lblKet) {
     if (isTerminate) {
       lblKet.textContent = 'Ujian dihentikan karena 3 kali pelanggaran. Kirim tiket bantuan; setelah petugas piket mereset CBT, Anda dapat melanjutkan dengan jawaban sebelumnya.';
-      lblKet.style.color = '#dc2626';
+      lblKet.style.color = 'var(--ui-danger)';
     } else if (hasil.is_remedial && hasil.score_cap !== null) {
       lblKet.textContent = `Ini adalah ujian ulang (remedial). Nilai maksimum yang dapat diraih adalah ${hasil.score_cap}.`;
       lblKet.style.color = 'var(--text-muted)';

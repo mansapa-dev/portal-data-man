@@ -13,6 +13,8 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <link rel="stylesheet" href="../assets/css/teacher.css?v=20260910-all-results">
+  <link rel="stylesheet" href="../assets/css/ui-theme.css?v=20260911-2">
+  <script src="../assets/js/dashboard-design.js?v=20260911"></script>
 </head>
 <body class="dashboard-page">
   <div class="teacher-sidebar-backdrop" id="teacherSidebarBackdrop"></div>
@@ -42,7 +44,7 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
   <main class="main">
     <header class="topbar">
       <div class="teacher-topbar-left"><button id="menu" class="menu" aria-label="Buka menu navigasi" aria-expanded="true"><i class="fa-solid fa-bars"></i></button><div class="teacher-topbar-brand"><img src="../assets/img/logo-man1-palembang.png" alt="Lambang MAN 1 Palembang"><div><strong>MANSAPA ARENA</strong><span id="teacherPageTitle">Dashboard</span></div></div></div>
-      <div class="teacher-topbar-actions">
+      <div class="teacher-topbar-actions"><button type="button" class="theme-toggle" data-theme-toggle aria-label="Aktifkan mode gelap" aria-pressed="false">◐</button>
         <span class="teacher-online"><span></span>Sistem Online</span>
         <div class="teacher-identity"><small>Portal Guru</small><strong id="teacherName"><?=htmlspecialchars($nip, ENT_QUOTES, 'UTF-8')?></strong></div>
         <button id="topbarLogoutGuru" type="button" class="topbar-logout" title="Keluar dari dashboard guru"><i class="fa-solid fa-arrow-right-from-bracket"></i><span>Keluar</span></button>

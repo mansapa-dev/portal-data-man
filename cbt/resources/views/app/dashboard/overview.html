@@ -3,15 +3,16 @@
         <!-- Hero Welcome Banner -->
         <div class="dash-hero">
           <div class="hero-text">
-            <h1>Selamat Bertugas, <span id="heroWelcomeName">Administrator</span> 👋</h1>
-            <p>Berikut ringkasan operasional MANSAPA ARENA hari ini, <span id="heroCurrentDate"></span>.</p>
+            <h1>Dashboard <span class="overview-greeting">/ <span id="heroWelcomeName">Administrator</span></span></h1>
+            <p>Kelola ujian, pantau peserta, dan lihat hasil asesmen. <span id="heroCurrentDate"></span>.</p>
           </div>
           <div class="hero-badge">
             <i class="fa-solid fa-circle-check"></i>
-            <span>Seluruh Sistem Operasional</span>
+            <span>Ruang kerja CBT</span>
           </div>
         </div>
 
+        <div class="overview-actions"><button class="btn btn-primary" onclick="bukaModalUjian()"><i class="fa-solid fa-plus"></i> Buat ujian</button><button class="btn btn-secondary" onclick="overviewNavigate('tabAdminHasil')"><i class="fa-solid fa-chart-column"></i> Laporan hasil</button></div>
         <!-- 4 Metric Cards -->
         <div class="stat-grid-4">
           <div class="stat-card-modern dashboard-metric-action" role="button" tabindex="0" onclick="switchDashTab('tabAdminSiswa', document.querySelector('.sb-item[onclick*=tabAdminSiswa]'))" title="Buka Kontrol Siswa">
@@ -67,58 +68,9 @@
           </div>
         </section>
 
-        <!-- Bottom Quick Widgets Grid -->
-        <div class="dash-quick-grid">
-          <div class="card" style="margin-bottom:0;">
-            <div class="card-header">
-              <div>
-                <div class="card-title"><i class="fa-solid fa-gauge-high" style="color:var(--primary);"></i> Metrik Cepat Operasional</div>
-                <div class="card-subtitle">Pemantauan data lalu lintas ujian secara langsung</div>
-              </div>
-              <button type="button" class="btn btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="loadDataAdminDash()"><i class="fa-solid fa-rotate"></i> Refresh</button>
-            </div>
-            <div class="widget-item-row">
-              <span class="widget-item-label">Status Sesi Ujian</span>
-              <span class="badge bg-green"><span class="badge-dot"></span> Online & Siap</span>
-            </div>
-            <div class="widget-item-row">
-              <span class="widget-item-label">Anti-Cheat Proctoring</span>
-              <span class="widget-item-val" style="color:var(--primary-dark);"><i class="fa-solid fa-shield-halved"></i> Aktif (Tab Switch Detect)</span>
-            </div>
-            <div class="widget-item-row">
-              <span class="widget-item-label">Sinkronisasi Portal Data</span>
-              <span class="widget-item-val" style="color:#0369a1;"><i class="fa-solid fa-arrows-rotate"></i> Sinkron Otomatis</span>
-            </div>
-            <div class="widget-item-row">
-              <span class="widget-item-label">Kecepatan Response Engine</span>
-              <span class="widget-item-val" style="color:var(--primary-dark);">&lt; 35 ms</span>
-            </div>
-          </div>
-
-          <div class="card" style="margin-bottom:0;">
-            <div class="card-header">
-              <div>
-                <div class="card-title"><i class="fa-solid fa-server" style="color:var(--primary);"></i> Status Infrastruktur CBT</div>
-                <div class="card-subtitle">Kondisi layanan server dan basis data</div>
-              </div>
-              <span class="badge bg-green"><span class="badge-dot"></span> Operasional</span>
-            </div>
-            <div class="widget-item-row">
-              <span class="widget-item-label">CBT REST API Service</span>
-              <span class="badge bg-green"><span class="badge-dot"></span> Normal (200 OK)</span>
-            </div>
-            <div class="widget-item-row">
-              <span class="widget-item-label">Database MySQL Engine</span>
-              <span class="badge bg-green"><span class="badge-dot"></span> Connected (Latency: 1ms)</span>
-            </div>
-            <div class="widget-item-row">
-              <span class="widget-item-label">Portal Data Integration Client</span>
-              <span class="badge bg-green"><span class="badge-dot"></span> Ready</span>
-            </div>
-            <div class="widget-item-row">
-              <span class="widget-item-label">Session Security Middleware</span>
-              <span class="badge bg-green"><span class="badge-dot"></span> Enforced (CSRF & Rate Limit)</span>
-            </div>
-          </div>
+        <div class="overview-panels">
+          <section class="card result-chart"><div class="card-header"><div><h2 class="card-title">Analisis Hasil Ujian</h2><p class="card-subtitle">Distribusi nilai seluruh hasil yang terkumpul</p></div><button class="btn btn-secondary" onclick="loadDataAdminDash()" aria-label="Perbarui ringkasan"><i class="fa-solid fa-rotate"></i></button></div><div id="overviewScoreChart" class="score-bars" aria-live="polite">Memuat hasil ujian…</div><div class="chart-footer"><span>Rentang nilai peserta</span><button class="btn btn-secondary" onclick="overviewNavigate('tabAdminHasil')">Lihat analisis <i class="fa-solid fa-arrow-up-right-from-square"></i></button></div></section>
+          <section class="card monitor-card"><span class="section-kicker">PEMANTAUAN UJIAN</span><div class="monitor-symbol"><i class="fa-solid fa-tower-broadcast"></i></div><h2>Setiap sesi, terpantau.</h2><p>Lihat peserta yang sedang mengerjakan, progres jawaban, dan aktivitas sesi ujian.</p><button class="btn btn-primary" onclick="overviewNavigate('tabAdminLiveSessions')"><i class="fa-solid fa-signal"></i> Pantau ujian berlangsung</button></section>
+          <section class="card schedule-card"><div class="card-header"><div><h2 class="card-title">Jadwal Ujian</h2><p class="card-subtitle">Jadwal aktif, diurutkan berdasarkan tanggal</p></div><button class="btn btn-secondary" onclick="overviewNavigate('tabAdminUjian')">Lihat semua <i class="fa-solid fa-arrow-right"></i></button></div><div id="overviewSchedule" aria-live="polite">Memuat jadwal…</div></section>
         </div>
       </div>

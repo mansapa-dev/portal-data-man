@@ -10,8 +10,10 @@ ob_start();
   <title>Login Guru - CBT MAN 1 Palembang</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="assets/css/teacher.css">
+  <link rel="stylesheet" href="assets/css/ui-theme.css?v=20260911-2">
+  <script src="assets/js/dashboard-design.js?v=20260911"></script>
 </head>
-<body class="auth-page">
+<body class="auth-page"><button type="button" class="theme-toggle auth-theme-toggle" data-theme-toggle aria-label="Aktifkan mode gelap" aria-pressed="false">◐</button>
   <main class="auth-card">
     <section class="auth-visual">
       <div class="school-mark"><i class="fa-solid fa-graduation-cap"></i></div>

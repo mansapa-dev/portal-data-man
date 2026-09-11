@@ -1,0 +1,133 @@
+/* Shared CBT design tokens. Loaded last on admin, student and teacher entry points. */
+:root {
+  --primary:#006527; --primary-hover:#005421; --primary-dark:#006527;
+  --primary-light:#80b99a; --primary-soft:#eaf3e9; --primary-soft-border:#d7e7d6;
+  --primary-gradient:linear-gradient(135deg,#006527,#008342); --primary-glow:#00652726;
+  --bg-body:#f7f8f3; --surface:#fff; --surface-subtle:#f1f4ed;
+  --text-main:#24291f; --text-muted:#71796a; --border:#dfe5da; --border-subtle:#e8ece3;
+  --secondary-bg:var(--surface-subtle); --secondary:var(--text-muted);
+  --ui-success:#176b3c; --ui-success-bg:#e8f3e9; --ui-success-border:#c8e4cf;
+  --ui-danger:#b42332; --ui-danger-bg:#fff0f1; --ui-danger-border:#f2c9cf;
+  --ui-warning:#8f570c; --ui-warning-bg:#fff5db; --ui-warning-border:#ebd49f;
+  --ui-info:#22698a; --ui-info-bg:#eaf4fa; --ui-info-border:#c8dfe9;
+  --green:var(--primary); --green-dark:var(--primary-dark); --green-hover:var(--primary-hover);
+  --green-soft:var(--primary-soft); --green-soft-border:var(--primary-soft-border);
+  --ink:var(--text-main); --muted:var(--text-muted); --line:var(--border); --bg:var(--bg-body);
+  --shadow-sm:0 3px 5px #14231308; --shadow-md:0 8px 22px #1423130d;
+  --shadow-lg:0 20px 60px #14231324; --shadow-primary:0 4px 12px #00652718;
+}
+:root[data-theme=dark] {
+  color-scheme:dark;
+  --primary:#70d69b; --primary-hover:#a0e6bb; --primary-dark:#8cdeac;
+  --primary-light:#538968; --primary-soft:#243b2b; --primary-soft-border:#3a5643;
+  --primary-glow:#70d69b30; --bg-body:#141b17; --surface:#1d2721; --surface-subtle:#253128;
+  --text-main:#edf2e9; --text-muted:#acb7a9; --border:#39463c; --border-subtle:#303d34;
+  --ui-success:#9ce0b1; --ui-success-bg:#233e2b; --ui-success-border:#3b6048;
+  --ui-danger:#ffadb6; --ui-danger-bg:#43282d; --ui-danger-border:#70434b;
+  --ui-warning:#f2ce84; --ui-warning-bg:#3f3522; --ui-warning-border:#695638;
+  --ui-info:#9ed5f0; --ui-info-bg:#233943; --ui-info-border:#3d5b6b;
+}
+@media screen {
+  body{background:var(--bg-body);color:var(--text-main)}
+  :is(.auth-card,.q-panel,.nav-panel,.cbt-header,.panel,.card,.stat-card,.session-card,.live-metric,.teacher-metric,.settings-content-card){background:var(--surface);border:1px solid var(--border);border-radius:22px;box-shadow:var(--shadow-sm)}
+  :is(.settings-page-header,.special-exams-page-header,.follow-up-form-grid,.special-exam-summary,.settings-grade-card,.makeup-stepper,.violation-filter-grid,.live-toolbar){background:var(--surface-subtle);border-color:var(--border);border-radius:18px;color:var(--text-main)}
+  :is(.special-exams-page .makeup-stat,.special-exam-summary-card,.subject-katalog-card,.dropdown-menu-list,.follow-up-student-list){background:var(--surface);border-color:var(--border);border-radius:16px}
+  :is(.follow-up-hero,.settings-hero){background:var(--primary-soft);color:var(--text-main);box-shadow:none;border:1px solid var(--border);border-radius:22px}
+  .follow-up-hero:after{display:none}
+  :is(.follow-up-hero-icon,.settings-hero-icon){background:var(--surface);color:var(--primary-dark);border-color:var(--border);border-radius:50%}
+  :is(.card-header,.settings-section-heading){gap:14px;flex-wrap:wrap}
+  :is(.card-title,.panel h3){font-size:18px;letter-spacing:-.3px;line-height:1.4}
+  :is(.card-subtitle,.settings-page-header p,.panel p){line-height:1.65;color:var(--text-muted)}
+  :is(.btn,.sso-button,.refresh-live,.teacher-print-button,.teacher-excel-button,.topbar-logout,.teacher-help-box button){border-radius:24px;min-height:38px;transition:background .18s,box-shadow .18s,transform .18s}
+  :is(.btn-primary,.sso-button,.teacher-print-button,.teacher-excel-button){background:#006527;border-color:#006527;color:#fff}
+  :is(.btn-primary,.sso-button,.teacher-print-button,.teacher-excel-button):hover{background:#005421;color:#fff}
+  .btn-secondary{background:var(--surface);color:var(--text-main);border-color:var(--border);box-shadow:var(--shadow-sm)}
+  .btn-secondary:hover{background:var(--primary-soft);color:var(--primary-dark);border-color:var(--primary-soft-border)}
+  .btn-danger,.topbar-logout{background:var(--ui-danger-bg);color:var(--ui-danger);border-color:var(--ui-danger-border)}
+  .btn-danger:hover,.topbar-logout:hover{background:var(--ui-danger-border);color:var(--ui-danger)}
+  .btn-warning{background:var(--ui-warning-bg);color:var(--ui-warning);border-color:var(--ui-warning-border)}
+  button:disabled{opacity:.5;cursor:not-allowed;transform:none}
+  :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea,.form-control,.search-box input,.teacher-result-controls input,.teacher-result-controls select,.special-exams-page .special-filter-grid .form-control,.violation-filter-grid .search-box,.dropdown-trigger-btn){background:var(--surface);color:var(--text-main);border-color:var(--border);border-radius:12px;min-height:38px}
+  input::placeholder,textarea::placeholder{color:var(--text-muted);opacity:.85}
+  input[type=checkbox],input[type=radio],input[type=range]{accent-color:#16834c}
+  :is(input,select,textarea):focus{outline:2px solid var(--primary-light);outline-offset:2px}
+  :is(.table-wrapper,.table-container,.schedule-table,.follow-up-table,.teacher-result-table){border:1px solid var(--border);border-radius:16px;overflow:auto}
+  table{background:var(--surface);color:var(--text-main)}
+  table th{background:var(--surface-subtle);color:var(--text-muted);border-color:var(--border);font-size:11px;letter-spacing:.35px;padding:13px 14px}
+  table td{background:var(--surface);color:var(--text-main);border-color:var(--border);padding:13px 14px}
+  table tbody tr:hover td{background:var(--surface-subtle)}
+  .table-pagination button{background:var(--surface);color:var(--primary-dark);border-radius:50%;border-color:var(--border)}
+  .badge{border-radius:20px;font-weight:600}
+  :is(.bg-green,.badge-green,.stat-trend.green,.session-status,.settings-status){background:var(--ui-success-bg);color:var(--ui-success);border-color:var(--ui-success-border)}
+  :is(.bg-red,.bg-rose,.badge-red,.stat-trend.rose,.status-terminated,.alert.error){background:var(--ui-danger-bg);color:var(--ui-danger);border-color:var(--ui-danger-border)}
+  :is(.bg-amber,.bg-yellow,.badge-amber,.stat-trend.amber){background:var(--ui-warning-bg);color:var(--ui-warning);border-color:var(--ui-warning-border)}
+  :is(.bg-blue,.badge-blue,.stat-trend.blue,.alert.info){background:var(--ui-info-bg);color:var(--ui-info);border-color:var(--ui-info-border)}
+  :is(.bg-gray,.badge-gray,.status-expired){background:var(--surface-subtle);color:var(--text-muted);border-color:var(--border)}
+  .stat-card-modern:first-child .stat-trend{background:#ffffff20;color:#e2f3e4}
+  .modal{background:#08150eb3;backdrop-filter:blur(4px);padding:20px}
+  .modal-content{background:var(--surface);color:var(--text-main);border:1px solid var(--border);border-radius:24px;box-shadow:var(--shadow-lg);max-height:calc(100dvh - 40px);overflow-y:auto}
+  .loader-overlay{background:#08150eb3;backdrop-filter:blur(4px)}
+  .spinner{border-color:var(--border);border-top-color:var(--primary)}
+  .alert{border-radius:14px;line-height:1.6}
+  .auth-card{box-shadow:var(--shadow-md)}
+  .auth-header h2{font-size:27px;letter-spacing:-.7px}
+  .auth-header i.auth-icon{border-radius:50%;width:60px;height:60px}
+  .cbt-header{padding:20px 24px}.timer-box{border-radius:14px}.timer-time{font-variant-numeric:tabular-nums}
+  .timer-box.danger{background:var(--ui-danger-bg);border-color:var(--ui-danger-border)}.timer-box.danger .timer-time{color:var(--ui-danger)}
+  .opt-btn{border-radius:16px;color:var(--text-main)}.opt-char{border-radius:50%;background:var(--surface-subtle)}
+  .opt-btn.selected .opt-char,.btn-num.answered{background:#006527;color:#fff;border-color:#006527}
+  .btn-num{border-radius:12px}.btn-num.flagged{background:var(--ui-warning-bg);color:var(--ui-warning);border-color:var(--ui-warning-border)}
+  .btn-num.active{outline:2px solid var(--primary);outline-offset:2px}
+  .q-nav-actions{gap:10px;flex-wrap:wrap}.q-text img,.opt-btn img{max-width:100%;height:auto}
+  .theme-toggle{display:grid;place-items:center;flex-shrink:0;width:36px;height:36px;border:1px solid var(--border);border-radius:50%;background:var(--surface);color:var(--text-main);font-size:22px;cursor:pointer}
+  .auth-theme-toggle{position:fixed;top:20px;right:20px;z-index:2}
+  /* Teacher workspace uses the same light sidebar and green active pill. */
+  .dashboard-page .sidebar{background:var(--surface);color:var(--text-main);border-right:1px solid var(--border);box-shadow:none}
+  .dashboard-page .brand strong,.teacher-user-footer strong{color:var(--text-main)}
+  .dashboard-page .brand small,.dashboard-page .nav-label,.teacher-user-footer small{color:var(--text-muted)}
+  .dashboard-page .nav-item{border-radius:24px;color:var(--text-muted)}
+  .dashboard-page .nav-item:hover{background:var(--primary-soft);color:var(--primary-dark)}
+  .dashboard-page .nav-item.active{background:#006527;color:white;box-shadow:var(--shadow-primary)}
+  .dashboard-page .topbar{background:var(--bg-body);border-color:var(--border)}
+  .dashboard-page .welcome{padding:6px 0 20px;background:none;box-shadow:none;border-radius:0;color:var(--text-main)}
+  .dashboard-page .welcome h1{color:var(--text-main);font-size:30px;letter-spacing:-.7px}
+  .dashboard-page .welcome p{color:var(--text-muted)}.dashboard-page .welcome .eyebrow{color:var(--primary-dark)}
+  .nip-card{background:var(--primary-soft);border:1px solid var(--primary-soft-border);color:var(--primary-dark);border-radius:16px}
+  .nip-card small,.nip-card strong{color:inherit}
+  .teacher-help-box{background:var(--primary-soft);border-color:var(--primary-soft-border);border-radius:18px}
+  .teacher-help-box h5{color:var(--text-main)}.teacher-help-box p{color:var(--text-muted)}
+  .teacher-help-box button{background:var(--surface);color:var(--primary-dark)}.teacher-user-footer{border-color:var(--border)}
+  .teacher-metric-icon{border-radius:50%}.teacher-metric:first-child{background:#006527;color:#fff;border-color:#006527}
+  .teacher-metric:first-child small,.teacher-metric:first-child span{color:#dcefe0}.teacher-metric:first-child .teacher-metric-icon{background:#ffffff24;color:white}
+  .teacher-online{background:var(--ui-success-bg);color:var(--ui-success)}
+  .auth-page{background:var(--bg-body)}.auth-visual{background:var(--primary-soft)}
+  :focus-visible{outline:3px solid var(--primary-light);outline-offset:3px}
+  .teacher-metric:focus-visible{outline:3px solid var(--primary-light)}
+  @media(max-width:800px){.dashboard-page .welcome h1{font-size:25px}.modal{padding:12px}.modal-content{max-height:calc(100dvh - 24px);border-radius:20px}.cbt-header{padding:16px}.q-panel{padding:20px}.card-header>div{min-width:0}.teacher-live .live-actions{flex-wrap:wrap}}
+  @media(max-width:500px){.q-nav-actions .btn{flex:1;min-width:110px}.cbt-identity{gap:12px;flex-wrap:wrap}.cbt-header{gap:14px;flex-wrap:wrap}.timer-box{margin-left:auto}.auth-card{padding:24px}.auth-page .auth-card{padding:0}.modal-content{padding:20px}.nav-grid{gap:9px}}
+}
+@media print {
+  :root,:root[data-theme=dark]{color-scheme:light;--text-main:#222;--text-muted:#555;--surface:#fff;--surface-subtle:#f4f4f4;--border:#ccc;--bg-body:#fff;--primary:#006527;--primary-dark:#006527;--primary-soft:#eaf3e9}
+  .theme-toggle{display:none!important}
+}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+@media screen {
+  .table-responsive{border:1px solid var(--border);border-radius:16px;overflow-x:auto}
+  .teacher-live .status-terminated{background:var(--ui-danger-bg);color:var(--ui-danger)}
+  .teacher-live .status-expired{background:var(--surface-subtle);color:var(--text-muted)}
+  .teacher-live .session-status{border-radius:20px}
+  .teacher-metric.blue .teacher-metric-icon{background:var(--ui-info-bg);color:var(--ui-info)}
+  .teacher-metric.red .teacher-metric-icon{background:var(--ui-danger-bg);color:var(--ui-danger)}
+  .teacher-metric:first-child .teacher-metric-icon{background:#ffffff24;color:#fff}
+  .settings-grade-card .settings-stepper label,.settings-stepper button{background:var(--surface);color:var(--text-main);border-color:var(--border)}
+  .settings-note{background:var(--ui-info-bg);color:var(--ui-info);border-color:var(--ui-info-border)}
+}
+@media screen {
+  .settings-eyebrow,.follow-up-eyebrow,.special-eyebrow{color:var(--primary-dark)}
+  .settings-page-header .settings-eyebrow{color:var(--primary-dark)}
+}
+@media screen {
+  body.dashboard-page{background:var(--bg-body)}
+  .teacher-avatar{background:var(--primary-soft)!important;color:var(--primary-dark)!important}
+  .sidebar .user-profile-avatar{background:#006527;color:#fff}
+}

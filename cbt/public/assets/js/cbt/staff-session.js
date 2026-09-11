@@ -205,12 +205,18 @@ function loadDataAdminDash() {
   cbtApi
     .withSuccessHandler(res => {
       if(res && res.success){
+        renderOverviewScores(res.scoreDistribution || []);
+        loadOverviewSchedule();
         document.getElementById('statJmlSiswa').textContent = (res.totalSiswa || 0).toLocaleString('id-ID');
         document.getElementById('statJmlUjian').textContent = (res.totalUjianAktif || 0).toLocaleString('id-ID');
         document.getElementById('statJmlSubmit').textContent = (res.totalSubmit || 0).toLocaleString('id-ID');
         document.getElementById('statJmlPelanggaran').textContent = (res.totalPelanggaran || 0).toLocaleString('id-ID');
       }
       if(typeof loadFollowUpDashboardActions==='function')loadFollowUpDashboardActions();
+    })
+    .withFailureHandler(() => {
+      document.getElementById('overviewScoreChart').textContent = 'Ringkasan gagal dimuat. Silakan perbarui untuk mencoba lagi.';
+      document.getElementById('overviewSchedule').textContent = 'Jadwal belum dimuat.';
     })
     .getAdminDashboardStats(stPengelola);
 }
