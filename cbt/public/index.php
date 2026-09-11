@@ -36,7 +36,9 @@ $student=new StudentExamController(new ExamSessionService($database,$students,$e
 $sync=new SyncController(new PortalDataSyncService($database,new HttpPortalDataClient()));
 $setup=new SetupController($database);
 $adminService=new AdminService($database,new AdminRepository($pdo));$admin=new AdminController($adminService,$scoring);$teacher=new TeacherController($adminService);$teacherSso=new TeacherSsoController($pdo);
-$adminStudents=new AdminStudentController(new AdminStudentService($database,new AdminStudentRepository($pdo),new SecretCipher()),new \Cbt\Services\AttemptResetService($database));
+$attemptResets=new AttemptResetService($database);
+$adminStudents=new AdminStudentController(new AdminStudentService($database,new AdminStudentRepository($pdo),new SecretCipher()),$attemptResets);
+$supportTickets=new SupportTicketController(new SupportTicketService($database,$attemptResets));
 $csrf=new CsrfMiddleware();$studentAuth=new AuthMiddleware('student',null,$pdo);
 $studentSupportAuth=new AuthMiddleware('student',null,$pdo,true);
 $adminAuth=new AuthMiddleware('auth','ADMIN',$pdo);
