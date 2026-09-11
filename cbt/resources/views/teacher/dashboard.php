@@ -13,8 +13,8 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <link rel="stylesheet" href="../assets/css/teacher.css?v=20260910-all-results">
-  <link rel="stylesheet" href="../assets/css/ui-theme.css?v=20260911-2">
-  <script src="../assets/js/dashboard-design.js?v=20260911"></script>
+  <link rel="stylesheet" href="../assets/css/ui-theme.css?v=20260911-3">
+  <script src="../assets/js/dashboard-design.js?v=20260911-3"></script>
 </head>
 <body class="dashboard-page">
   <div class="teacher-sidebar-backdrop" id="teacherSidebarBackdrop"></div>

@@ -1,7 +1,7 @@
 (() => {
-  const key = 'mansapa-dashboard-theme';
+  // Separate explicit CBT choices from the old system-derived shared preference.
+  const key = 'mansapa-cbt-theme-v2';
   let saved; try { saved = localStorage.getItem(key); } catch (_) {}
-  const system = matchMedia('(prefers-color-scheme: dark)');
   function apply(theme) {
     document.documentElement.dataset.theme = theme;
     document.querySelectorAll('[data-theme-toggle]').forEach(button => {
@@ -10,7 +10,7 @@
       button.title = button.getAttribute('aria-label');
     });
   }
-  apply(saved === 'dark' || saved === 'light' ? saved : system.matches ? 'dark' : 'light');
+  apply(saved === 'dark' ? 'dark' : 'light');
   document.addEventListener('DOMContentLoaded', () => {
     apply(document.documentElement.dataset.theme);
     document.querySelectorAll('[data-theme-toggle]').forEach(button => button.addEventListener('click', () => {
@@ -21,7 +21,6 @@
       if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); card.click(); }
     }));
   });
-  system.addEventListener('change', event => { if (!saved) apply(event.matches ? 'dark' : 'light'); });
 })();
 
 function overviewNavigate(tab) {
