@@ -11,7 +11,18 @@ use Throwable;
 final class AuthController
 {
     public function __construct(private readonly AuthProvider $auth, private readonly Connection $database, private readonly PortalDataClient $portal, private readonly SessionService $sessions) {}
-    public function login(Request $request): Response { if (isset($_SESSION['user'])) return Response::redirect('/dashboard'); ob_start(); require dirname(__DIR__, 3).'/resources/views/auth/login.php'; return Response::html((string) ob_get_clean()); }
+    public function login(Request $request): Response
+    {
+        if($this->hasValidSession())return Response::redirect('/dashboard');
+        if(isset($_SESSION['user'])||isset($_SESSION['auth_session_public_id']))$_SESSION=[];
+        ob_start();require dirname(__DIR__,3).'/resources/views/auth/login.php';return Response::html((string)ob_get_clean());
+    }
+    public function status(Request $request):Response
+    {
+        $authenticated=$this->hasValidSession();
+        if(!$authenticated&&(isset($_SESSION['user'])||isset($_SESSION['auth_session_public_id'])))$_SESSION=[];
+        return Response::json(['success'=>true,'data'=>['authenticated'=>$authenticated]]);
+    }
     public function redirect(Request $request): Response { return Response::redirect($this->auth->authorizationUrl()); }
     public function callback(Request $request): Response
     {
@@ -50,6 +61,10 @@ final class AuthController
         }
 
         return Response::redirect($url);
+    }
+    private function hasValidSession():bool
+    {
+        return isset($_SESSION['user'],$_SESSION['auth_session_public_id'])&&$this->sessions->validate((string)$_SESSION['auth_session_public_id']);
     }
     private function synchronizeUser(array $claims): array
     {

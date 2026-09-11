@@ -1,4 +1,5 @@
 <?php
+use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ReferenceController;
 use App\Http\Middleware\AuthenticateMiddleware;
 use App\Http\Controllers\AttendanceController;
@@ -9,6 +10,7 @@ use App\Http\Controllers\AuditController;
 use App\Http\Middleware\AuditAccessMiddleware;
 use App\Http\Middleware\TeacherOnlyMiddleware;
 
+$router->get('/api/auth/status', [AuthController::class, 'status']);
 $router->get('/api/classes', [ReferenceController::class, 'classes'], [AuthenticateMiddleware::class]);
 $router->get('/api/periods', [ReferenceController::class, 'periods'], [AuthenticateMiddleware::class]);
 $router->get('/api/classes/{publicId}/students', [ReferenceController::class, 'students'], [AuthenticateMiddleware::class]);

@@ -4,12 +4,13 @@ namespace App\Http;
 final class Response
 {
     public function __construct(private readonly string $content = '', private readonly int $status = 200, private readonly array $headers = []) {}
-    public static function json(array $data, int $status = 200): self { return new self(json_encode($data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE), $status, ['Content-Type' => 'application/json; charset=utf-8']); }
+    public static function json(array $data, int $status = 200): self { return new self(json_encode($data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE), $status, ['Content-Type' => 'application/json; charset=utf-8', 'Cache-Control' => 'private, no-store', 'Pragma' => 'no-cache']); }
     public static function html(string $html, int $status = 200): self
     {
         $stylesheet = '<link rel="stylesheet" href="/assets/css/ui.css">';
         if (!str_contains($html, '/assets/css/ui.css')) $html = str_replace('</head>', $stylesheet.'</head>', $html);
         if (!str_contains($html, '/assets/js/toast.js')) $html = str_replace('</body>', '<script src="/assets/js/toast.js"></script></body>', $html);
+        if (!str_contains($html, '/assets/js/session-guard.js')) $html = str_replace('</body>', '<script src="/assets/js/session-guard.js?v=20260911-1"></script></body>', $html);
         if (isset($_SESSION['user']) && !str_contains($html, 'class="app-shell"')) {
             $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
             $active = static fn (string $prefix): string => str_starts_with($path, $prefix) ? ' class="active"' : '';

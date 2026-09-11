@@ -29,6 +29,7 @@ final class AuthenticatedLayoutTest extends TestCase
         self::assertSame(6, substr_count($html, '<svg viewBox="0 0 24 24"'));
         self::assertStringContainsString('Guru Uji', $html);
         self::assertStringNotContainsString('href="/old"', $html);
+        self::assertStringContainsString('/assets/js/session-guard.js', $html);
     }
 
     public function test_audit_navigation_is_limited_to_authorized_roles(): void
@@ -46,5 +47,18 @@ final class AuthenticatedLayoutTest extends TestCase
     {
         self::assertSame('private, no-store', Response::html('<html><head></head><body></body></html>')->headers()['Cache-Control']);
         self::assertSame('private, no-store', Response::redirect('/login')->headers()['Cache-Control']);
+        self::assertSame('private, no-store', Response::json(['ok'=>true])->headers()['Cache-Control']);
+    }
+
+    public function test_session_guard_synchronizes_logout_and_rechecks_restored_pages():void
+    {
+        $script=(string)file_get_contents(dirname(__DIR__,2).'/public/assets/js/session-guard.js');
+        $routes=(string)file_get_contents(dirname(__DIR__,2).'/routes/api.php');
+        self::assertStringContainsString("new BroadcastChannel('agen-auth')",$script);
+        self::assertStringContainsString("addEventListener('storage'",$script);
+        self::assertStringContainsString("addEventListener('pageshow'",$script);
+        self::assertStringContainsString("visibilityState==='visible'",$script);
+        self::assertStringContainsString("location.replace(LOGIN_URL)",$script);
+        self::assertStringContainsString("/api/auth/status",$routes);
     }
 }
