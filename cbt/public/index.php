@@ -16,7 +16,7 @@ $request=Request::capture();
 if($request->path==='/'||$request->path==='/index.php'){
  $html=file_get_contents(dirname(__DIR__).'/index.html')?:'';
  $html=(new ViewRenderer(dirname(__DIR__).'/resources/views/app'))->render($html);
- $html=str_replace('</body>','<script src="assets/js/native-api-adapter.js?v=20260911-proctor-1"></script></body>',$html);
+ $html=str_replace('</body>','<script src="assets/js/native-api-adapter.js?v=20260911-question-crud-1"></script></body>',$html);
  Response::html($html)->send();
 }
 if($request->path==='/guru')Response::html((string)include dirname(__DIR__).'/resources/views/teacher/login.php')->send();
@@ -84,6 +84,7 @@ $router->get('/api/admin/follow-up-exams',[$admin,'followUpSchedules'],[$adminAu
 $router->post('/api/admin/follow-up-exams/{id}/status',[$admin,'setFollowUpStatus'],[$adminAuth,$csrf,$audit('FOLLOW_UP_EXAM_STATUS_CHANGED','Exam')]);
 $router->get('/api/admin/questions',[$admin,'questions'],[$adminAuth]);
 $router->post('/api/admin/questions',[$admin,'saveQuestion'],[$adminAuth,$csrf,$audit('QUESTION_SAVED','Question')]);
+$router->delete('/api/admin/questions/{id}',[$admin,'deleteQuestion'],[$adminAuth,$csrf,$audit('QUESTION_DELETED','Question')]);
 $router->post('/api/admin/questions/import',[$admin,'importQuestions'],[$adminAuth,$csrf,$audit('QUESTIONS_IMPORTED','Question')]);
 $router->get('/api/admin/users',[$admin,'users'],[$adminAuth]);
 $router->post('/api/admin/users',[$admin,'saveUser'],[$adminAuth,$csrf,$audit('USER_SAVED','User')]);

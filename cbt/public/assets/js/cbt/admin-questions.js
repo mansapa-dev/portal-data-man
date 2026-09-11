@@ -361,18 +361,66 @@ function applyFilterDetailSoal() {
         <td style="text-align:center;"><span class="badge bg-green" style="font-size:12px; font-weight:800; padding:4px 8px;">${s.jawaban_benar}</span></td>
         <td style="text-align:center;"><strong style="color:var(--text-main); font-size:13px;">${s.poin || 1}</strong></td>
         <td style="text-align:center;">
-          <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="editSoalById(${s.id})">
-            <i class="fa-solid fa-pen"></i> Edit
-          </button>
+          <div style="display:flex; justify-content:center; flex-wrap:wrap; gap:5px;">
+            <button class="btn btn-secondary" style="padding:4px 7px; font-size:10.5px;" onclick="lihatSoalById(${s.id})" title="Lihat soal">
+              <i class="fa-solid fa-eye"></i> Lihat
+            </button>
+            <button class="btn btn-secondary" style="padding:4px 7px; font-size:10.5px;" onclick="editSoalById(${s.id})" title="Ubah soal">
+              <i class="fa-solid fa-pen"></i> Ubah
+            </button>
+            <button class="btn btn-danger" style="padding:4px 7px; font-size:10.5px;" onclick="hapusSoalById(${s.id})" title="Hapus soal">
+              <i class="fa-solid fa-trash"></i> Hapus
+            </button>
+          </div>
         </td>
       </tr>
     `;
   }).join('');
 }
 
+function lihatSoalById(id) {
+  const s = (cacheAdminSoalRows || []).find(x => String(x.id) === String(id));
+  if (!s) return showCustomAlert('Soal Tidak Ditemukan', 'Muat ulang bank soal lalu coba kembali.', 'warning');
+  document.getElementById('detailSoalMeta').textContent = `${s.nama_ujian || 'Ujian #' + (s.exam_id || s.ujian_id)} • ${s.nama_mapel || 'Mapel Umum'}${s.tingkat ? ' • Tingkat ' + s.tingkat : ''}`;
+  document.getElementById('detailSoalPertanyaan').innerHTML = s.pertanyaan || '';
+  const options = [['A', s.opsi_a], ['B', s.opsi_b], ['C', s.opsi_c], ['D', s.opsi_d], ['E', s.opsi_e]].filter(([, value]) => value);
+  document.getElementById('detailSoalPilihan').innerHTML = options.map(([key, value]) => `
+    <div style="display:flex; gap:8px; align-items:flex-start; padding:9px 10px; border:1px solid var(--border); border-radius:8px; ${key === s.jawaban_benar ? 'background:#ecfdf5; border-color:#86efac;' : 'background:var(--surface);'}">
+      <span class="badge ${key === s.jawaban_benar ? 'bg-green' : 'bg-gray'}" style="min-width:24px; text-align:center;">${key}</span>
+      <div style="font-size:13px; line-height:1.5;">${value}</div>
+    </div>`).join('');
+  document.getElementById('detailSoalKunci').textContent = s.jawaban_benar || '-';
+  document.getElementById('detailSoalPoin').textContent = String(s.poin || 1);
+  document.getElementById('btnUbahDariDetailSoal').onclick = () => {
+    document.getElementById('modalDetailSoal').classList.remove('show');
+    editSoalById(id);
+  };
+  document.getElementById('modalDetailSoal').classList.add('show');
+}
+
 function editSoalById(id) {
   const s = (cacheAdminSoalRows || []).find(x => String(x.id) === String(id));
   if (s) bukaModalSoal(s);
+}
+
+function hapusSoalById(id) {
+  const s = (cacheAdminSoalRows || []).find(x => String(x.id) === String(id));
+  if (!s) return showCustomAlert('Soal Tidak Ditemukan', 'Muat ulang bank soal lalu coba kembali.', 'warning');
+  showCustomConfirm('Hapus Soal', `Hapus soal #${id} dari bank soal? Riwayat ujian siswa tetap disimpan.`, () => {
+    showLoading('Menghapus soal...');
+    cbtApi
+      .withSuccessHandler(res => {
+        hideLoading();
+        document.getElementById('modalDetailSoal')?.classList.remove('show');
+        showCustomAlert('Soal Berhasil Dihapus', res.message || 'Soal telah dihapus dari bank soal.', 'success');
+        loadDataAdminSoal();
+      })
+      .withFailureHandler(err => {
+        hideLoading();
+        showCustomAlert('Gagal Menghapus Soal', err.message, 'error');
+      })
+      .hapusSoalAdmin(stPengelola, id);
+  });
 }
 
 function editSoal(s) {
@@ -543,7 +591,7 @@ document.getElementById('formSoal').addEventListener('submit', function (e) {
     })
     .withFailureHandler(err => {
       hideLoading();
-      showCustomAlert('Error', err.message);
+      showCustomAlert(err.status === 409 ? 'Peringatan Soal Duplikat' : 'Gagal Menyimpan Soal', err.message, err.status === 409 ? 'warning' : 'error');
     })
     .simpanSoalAdmin(stPengelola, payload);
 });
@@ -559,7 +607,8 @@ function handleImportSoal(input) {
       .withSuccessHandler(res => {
         hideLoading();
         const details = (res.summary?.errors || []).slice(0, 5).map(error => `Baris ${error.row}: ${error.reason}`).join('\n');
-        showCustomAlert('Informasi', res.message + (details ? `\n${details}` : ''));
+        const failed = Number(res.summary?.failed || 0);
+        showCustomAlert(failed ? 'Peringatan Hasil Import' : 'Import Soal Berhasil', res.message + (details ? `\n${details}` : ''), failed ? 'warning' : 'success');
         loadDataAdminSoal();
         input.value = '';
       })

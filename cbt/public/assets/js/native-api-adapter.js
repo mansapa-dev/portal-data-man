@@ -119,6 +119,7 @@
     async setStatusUjianLanjutan(session,id,active) { await api(`api/admin/follow-up-exams/${id}/status`,'POST',{active});return {success:true}; },
     async getAdminSoalList(session,examId) { const r=await api(`api/admin/questions${examId?`?exam_id=${encodeURIComponent(examId)}`:''}`);return r.data; },
     async simpanSoalAdmin(session,data) { await api('api/admin/questions','POST',data);return {success:true,message:'Soal berhasil disimpan.'}; },
+    async hapusSoalAdmin(session,id) { const r=await api(`api/admin/questions/${id}`,'DELETE');return {success:true,message:r.message}; },
     async getAdminAkunList() { const r=await api('api/admin/users');return r.data; },
     async simpanAkunAdmin(session,data) { await api('api/admin/users','POST',data);return {success:true,message:'Akun berhasil disimpan.'}; },
     async getAdminGuruUjianList() { const r=await api('api/admin/teacher-assignments');return {success:true,...r.data}; },

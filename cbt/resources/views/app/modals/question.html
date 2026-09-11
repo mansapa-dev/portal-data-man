@@ -89,3 +89,28 @@
       </form>
     </div>
   </div>
+
+  <div class="modal" id="modalDetailSoal">
+    <div class="modal-content" style="width:min(660px, 94%); max-height:90vh; overflow-y:auto;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:16px;">
+        <div>
+          <h3 style="font-size:16px; font-weight:800; margin-bottom:4px;">Detail Soal</h3>
+          <div id="detailSoalMeta" style="font-size:11.5px; color:var(--text-muted);"></div>
+        </div>
+        <button type="button" style="background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted);" onclick="document.getElementById('modalDetailSoal').classList.remove('show')">&times;</button>
+      </div>
+      <div style="padding:14px; border:1px solid var(--border); border-radius:10px; background:var(--surface-subtle); margin-bottom:12px;">
+        <div style="font-size:11px; font-weight:800; color:var(--text-muted); text-transform:uppercase; margin-bottom:8px;">Pertanyaan</div>
+        <div id="detailSoalPertanyaan" style="font-size:14px; line-height:1.6; color:var(--text-main);"></div>
+      </div>
+      <div id="detailSoalPilihan" style="display:grid; gap:7px; margin-bottom:12px;"></div>
+      <div style="display:flex; gap:8px; margin-bottom:16px;">
+        <span class="badge bg-green">Kunci: <strong id="detailSoalKunci">-</strong></span>
+        <span class="badge bg-blue">Poin: <strong id="detailSoalPoin">-</strong></span>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px;">
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('modalDetailSoal').classList.remove('show')">Tutup</button>
+        <button type="button" class="btn btn-primary" id="btnUbahDariDetailSoal"><i class="fa-solid fa-pen"></i> Ubah Soal</button>
+      </div>
+    </div>
+  </div>
