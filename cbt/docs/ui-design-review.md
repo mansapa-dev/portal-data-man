@@ -30,3 +30,36 @@ Browser fixtures use illustrative data only; inspect ticket page at desktop and 
 - WCAG text contrast: https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum
 
 Text targets at least 4.5:1 contrast; this review is not a claim of whole-product WCAG conformance.
+
+## Whole-CBT review (12 September 2026)
+
+`atomic-components.css` composes the shared theme tokens into reusable atoms (`ui-control`, `ui-label`, `ui-button`), filter/header molecules, table/form/session organisms, and responsive admin/teacher/student templates. The layer is screen-only: official print layouts retain their typography and dimensions.
+
+| Area | Heuristic finding | Implemented change |
+| --- | --- | --- |
+| Overview | Metrics compete with operational actions | Common metric density, bounded grids and consistent action sizing |
+| Exam schedules | Filters and table controls differ in sizing | Shared field atoms, label associations and table spacing |
+| Follow-up exams | Dense schedule/form controls | Same field rhythm, mobile form stacking, readable status badges |
+| Question catalog/detail | Template/download actions compete with creation | Secondary styling for imports/templates; consistent catalog and form controls |
+| Participants/PIN | Dense filters and compact labels | Readable labelled controls, keyboard names for searches, responsive filters |
+| Results/reports | Letterhead editing displaces the primary results task | Native expandable print settings, retaining export field IDs and values |
+| Participant cards | Inconsistent filter/print controls | Common input/action atoms; unchanged print stylesheet |
+| Teacher assignments | Search/action presentation differs | Common search, action, table and assignment-modal styles |
+| Staff accounts | Upload/template actions visually overpower creation | Secondary utilities and consistent account form/table |
+| Violations | Dense filters and status text | Shared filter spacing, semantic colors, readable table density |
+| System settings | Controls depart from other pages | Shared labels, actions and section spacing |
+| Live sessions | Participant progress metadata too small | Shared session cards, 12px metadata, action/filter sizing |
+| Support tickets | Mixed theme surfaces and cramped request cards | Paired theme tokens, bounded card widths, clear status/filter hierarchy |
+| Teacher overview/results/live | Independent visual defaults | Shared metrics, panels, result controls, session and table organisms |
+| Login and participant portal | Field hierarchy differs from admin | Same field/label/button atoms and readable instructions |
+| Active exam | Reading area and navigation compete | Wider readable question area, bounded navigation column, single column on mobile |
+| Completion/review | Inconsistent actions and close targets | Same action atoms, 44px named dialog-close controls |
+| All static forms/modals | Many labels lack an explicit association | `for` associations for adjacent fields; search accessible names |
+
+### Validation scope
+
+- Compared IDs and inline event handlers in 33 templates against their pre-change versions: no removals or handler changes.
+- PHP regression suite: 29 passing; theme regression checks passing; PHP lint passing.
+- Browser review covers all static admin tabs, participant states and modal templates at 390px and 1440px in both themes. Dynamic authenticated records need a separate operational acceptance check with real roles; this is not a claim of complete accessibility compliance or a moderated usability study.
+
+Final static browser audit: 70 page/theme combinations at an emulated 390px viewport and 70 at 1440px; zero reported document/control overflows, missing names on visible `ui-control` elements, or hardcoded white backgrounds on inspected dark-theme surfaces. Three missing control names found in the first pass were corrected. Bank-soal desktop and report desktop/mobile screenshots were inspected. The table itself intentionally scrolls horizontally on small screens.

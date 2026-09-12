@@ -15,6 +15,7 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
   <link rel="stylesheet" href="../assets/css/teacher.css?v=20260910-all-results">
   <link rel="stylesheet" href="../assets/css/ui-theme.css?v=20260911-3">
   <script src="../assets/js/dashboard-design.js?v=20260911-3"></script>
+  <link rel="stylesheet" href="../assets/css/atomic-components.css?v=20260911-1">
 </head>
 <body class="dashboard-page">
   <div class="teacher-sidebar-backdrop" id="teacherSidebarBackdrop"></div>

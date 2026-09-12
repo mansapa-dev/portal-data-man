@@ -9,17 +9,17 @@
               <div class="card-subtitle">Kelola akses ujian siswa, generate PIN otomatis per rombel/tingkat, dan monitoring status ujian</div>
             </div>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
-              <button class="btn btn-secondary" onclick="exportToExcel('data_siswa_cbt.xlsx', 'Siswa', ['NISN / No Peserta', 'Nama Lengkap', 'Kelas', 'Tingkat', 'PIN CBT', 'Tahun Ajaran', 'Status Ujian'], window.cacheSiswaExcel || [])"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
-              <button class="btn btn-warning" onclick="bukaModalGeneratePinOtomatis()"><i class="fa-solid fa-key"></i> ⚡ Generate PIN Otomatis</button>
-              <button class="btn btn-primary" onclick="sinkronkanSemuaPortalData()"><i class="fa-solid fa-rotate"></i> Sinkronkan Portal Data</button>
+              <button class="ui-button btn btn-secondary" onclick="exportToExcel('data_siswa_cbt.xlsx', 'Siswa', ['NISN / No Peserta', 'Nama Lengkap', 'Kelas', 'Tingkat', 'PIN CBT', 'Tahun Ajaran', 'Status Ujian'], window.cacheSiswaExcel || [])"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
+              <button class="ui-button btn btn-warning" onclick="bukaModalGeneratePinOtomatis()"><i class="fa-solid fa-key"></i> ⚡ Generate PIN Otomatis</button>
+              <button class="ui-button btn btn-primary" onclick="sinkronkanSemuaPortalData()"><i class="fa-solid fa-rotate"></i> Sinkronkan Portal Data</button>
             </div>
           </div>
 
           <!-- FILTER BAR SISWA: Tingkat, Kelas, Status, Pencarian -->
           <div class="filter-bar-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:12px; margin-bottom:14px; background:var(--surface-subtle); padding:14px; border-radius:10px; border:1px solid var(--border);">
             <div>
-              <label style="font-size:11px; font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px;">Tingkatan:</label>
-              <select id="fltSiswaTingkat" onchange="if(typeof populateAdminSiswaFilters==='function')populateAdminSiswaFilters(); applyFilterSiswa();" style="width:100%; padding:8px 10px; border-radius:8px; border:1.5px solid var(--border); font-size:12.5px; background:var(--surface);">
+              <label style="font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px" class="ui-label" for="fltSiswaTingkat">Tingkatan:</label>
+              <select id="fltSiswaTingkat" onchange="if(typeof populateAdminSiswaFilters==='function')populateAdminSiswaFilters(); applyFilterSiswa();" style="width:100%; padding:8px 10px; border:1.5px solid var(--border); background:var(--surface)" class="ui-control">
                 <option value="ALL">Semua Tingkat</option>
                 <option value="X">Tingkat X</option>
                 <option value="XI">Tingkat XI</option>
@@ -27,14 +27,14 @@
               </select>
             </div>
             <div>
-              <label style="font-size:11px; font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px;">Rombel / Kelas:</label>
-              <select id="fltSiswaKelas" onchange="applyFilterSiswa()" style="width:100%; padding:8px 10px; border-radius:8px; border:1.5px solid var(--border); font-size:12.5px; background:var(--surface);">
+              <label style="font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px" class="ui-label" for="fltSiswaKelas">Rombel / Kelas:</label>
+              <select id="fltSiswaKelas" onchange="applyFilterSiswa()" style="width:100%; padding:8px 10px; border:1.5px solid var(--border); background:var(--surface)" class="ui-control">
                 <option value="ALL">Semua Kelas</option>
               </select>
             </div>
             <div>
-              <label style="font-size:11px; font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px;">Status Ujian:</label>
-              <select id="fltSiswaStatus" onchange="applyFilterSiswa()" style="width:100%; padding:8px 10px; border-radius:8px; border:1.5px solid var(--border); font-size:12.5px; background:var(--surface);">
+              <label style="font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px" class="ui-label" for="fltSiswaStatus">Status Ujian:</label>
+              <select id="fltSiswaStatus" onchange="applyFilterSiswa()" style="width:100%; padding:8px 10px; border:1.5px solid var(--border); background:var(--surface)" class="ui-control">
                 <option value="ALL">Semua Status</option>
                 <option value="belum">Belum Mulai</option>
                 <option value="berlangsung">Sedang Ujian</option>
@@ -43,17 +43,17 @@
               </select>
             </div>
             <div>
-              <label style="font-size:11px; font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px;">Urutan Nama:</label>
-              <select id="fltSiswaSort" onchange="applyFilterSiswa()" style="width:100%; padding:8px 10px; border-radius:8px; border:1.5px solid var(--border); font-size:12.5px; background:var(--surface);">
+              <label style="font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px" class="ui-label" for="fltSiswaSort">Urutan Nama:</label>
+              <select id="fltSiswaSort" onchange="applyFilterSiswa()" style="width:100%; padding:8px 10px; border:1.5px solid var(--border); background:var(--surface)" class="ui-control">
                 <option value="nama_asc">Nama A–Z</option>
                 <option value="nama_desc">Nama Z–A</option>
               </select>
             </div>
             <div>
-              <label style="font-size:11px; font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px;">Pencarian Siswa:</label>
+              <label style="font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px" class="ui-label" for="searchSiswa">Pencarian Siswa:</label>
               <div style="position:relative;">
                 <i class="fa-solid fa-search" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:12px; color:var(--text-muted);"></i>
-                <input type="text" id="searchSiswa" placeholder="Cari NISN atau Nama..." onkeyup="applyFilterSiswa()" style="width:100%; padding:8px 10px 8px 30px; border-radius:8px; border:1.5px solid var(--border); font-size:12.5px; background:var(--surface);">
+                <input type="text" id="searchSiswa" placeholder="Cari NISN atau Nama..." onkeyup="applyFilterSiswa()" style="width:100%; padding:8px 10px 8px 30px; border:1.5px solid var(--border); background:var(--surface)" class="ui-control" aria-label="Cari NISN atau Nama...">
               </div>
             </div>
           </div>

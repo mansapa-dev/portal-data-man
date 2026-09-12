@@ -2,14 +2,14 @@
     <div class="modal-content" style="width:min(450px, 90%);">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
         <h3 style="font-size:16px; font-weight:800;" id="titleModalGuruUjian">Form Penugasan Guru / Piket</h3>
-        <button style="background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted);" onclick="document.getElementById('modalGuruUjian').classList.remove('show')">&times;</button>
+        <button aria-label="Tutup dialog" style="background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted);" onclick="document.getElementById('modalGuruUjian').classList.remove('show')">&times;</button>
       </div>
       <form id="formGuruUjian">
         <input type="hidden" id="editGuruUjianId">
-        <div class="input-group"><label>Pilih Guru / Piket</label><div class="input-wrapper"><select id="inGuruId" required></select></div></div>
-        <div class="input-group"><label>Pilih Ujian / Mapel</label><div class="input-wrapper"><select id="inUjianId" required></select></div></div>
-        <div class="input-group"><label>Jenis Penugasan</label><div class="input-wrapper"><select id="inDutyRole" required><option value="TEACHER">Guru Mata Pelajaran</option><option value="PROCTOR">Petugas Piket Ujian — menerima tiket & reset CBT</option></select></div></div>
-        <button type="submit" class="btn btn-primary" style="width:100%; margin-top:8px;">Simpan Penugasan</button>
+        <div class="input-group"><label class="ui-label" for="inGuruId">Pilih Guru / Piket</label><div class="input-wrapper"><select id="inGuruId" required class="ui-control"></select></div></div>
+        <div class="input-group"><label class="ui-label" for="inUjianId">Pilih Ujian / Mapel</label><div class="input-wrapper"><select id="inUjianId" required class="ui-control"></select></div></div>
+        <div class="input-group"><label class="ui-label" for="inDutyRole">Jenis Penugasan</label><div class="input-wrapper"><select id="inDutyRole" required class="ui-control"><option value="TEACHER">Guru Mata Pelajaran</option><option value="PROCTOR">Petugas Piket Ujian — menerima tiket & reset CBT</option></select></div></div>
+        <button type="submit" class="ui-button btn btn-primary" style="width:100%; margin-top:8px">Simpan Penugasan</button>
       </form>
     </div>
   </div>

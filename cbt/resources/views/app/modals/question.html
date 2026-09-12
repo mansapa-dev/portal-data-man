@@ -2,37 +2,37 @@
     <div class="modal-content" style="width:min(580px, 94%); max-height:90vh; overflow-y:auto;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
         <h3 style="font-size:16px; font-weight:800;" id="titleModalSoal">Form Soal Pilihan Ganda</h3>
-        <button type="button" style="background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted);" onclick="document.getElementById('modalSoal').classList.remove('show')">&times;</button>
+        <button aria-label="Tutup dialog" type="button" style="background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted);" onclick="document.getElementById('modalSoal').classList.remove('show')">&times;</button>
       </div>
       <form id="formSoal">
         <input type="hidden" id="editSoalId">
         
         <div class="input-group">
-          <label>Pilih Jadwal Ujian / Mapel</label>
-          <div class="input-wrapper"><select id="inSoalUjianId" required></select></div>
+          <label class="ui-label" for="inSoalUjianId">Pilih Jadwal Ujian / Mapel</label>
+          <div class="input-wrapper"><select id="inSoalUjianId" required class="ui-control"></select></div>
         </div>
 
         <div class="input-group">
-          <label>Teks Pertanyaan</label>
+          <label class="ui-label" for="inPertanyaan">Teks Pertanyaan</label>
           <div class="input-wrapper">
-            <textarea id="inPertanyaan" rows="3" required style="padding:10px 12px; font-size:13px;" placeholder="Tulis teks pertanyaan di sini..."></textarea>
+            <textarea id="inPertanyaan" rows="3" required style="padding:10px 12px" placeholder="Tulis teks pertanyaan di sini..." class="ui-control"></textarea>
           </div>
         </div>
 
         <!-- LAMPIRAN GAMBAR SOAL -->
         <div class="input-group" style="background:var(--surface-subtle); border:1.5px dashed var(--border); padding:12px; border-radius:10px; margin-bottom:14px;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-            <label style="font-size:12px; font-weight:700; color:var(--text-main); margin:0;">
+            <label style="font-weight:700; color:var(--text-main); margin:0" class="ui-label">
               <i class="fa-solid fa-image" style="color:var(--primary); margin-right:4px;"></i> Lampirkan Gambar Soal (Opsional)
             </label>
-            <button type="button" class="btn btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="document.getElementById('inGambarSoalFile').click()">
+            <button type="button" class="ui-button btn btn-secondary" style="padding:4px 10px" onclick="document.getElementById('inGambarSoalFile').click()">
               <i class="fa-solid fa-upload"></i> Upload File Gambar
             </button>
             <input type="file" id="inGambarSoalFile" accept="image/*" style="display:none" onchange="handleGambarSoalFile(this)">
           </div>
 
           <div style="display:flex; gap:8px;">
-            <input type="text" id="inGambarSoalUrl" placeholder="Atau path gambar lokal: assets/img/contoh.png" oninput="handleGambarSoalUrlInput(this.value)" style="width:100%; padding:7px 10px; border-radius:6px; border:1px solid var(--border); font-size:12px; background:var(--surface);">
+            <input type="text" id="inGambarSoalUrl" aria-label="Alamat gambar soal" placeholder="Atau path gambar lokal: assets/img/contoh.png" oninput="handleGambarSoalUrlInput(this.value)" style="width:100%; padding:7px 10px; border:1px solid var(--border); background:var(--surface)" class="ui-control">
           </div>
 
           <div id="previewGambarContainer" class="hidden" style="margin-top:10px; display:flex; align-items:center; gap:12px; padding:8px; background:var(--surface); border:1px solid var(--border); border-radius:8px;">
@@ -41,7 +41,7 @@
               <div style="font-size:11.5px; font-weight:700; color:var(--text-main);">Gambar Terlampir</div>
               <small style="color:var(--text-muted); font-size:10.5px;">Gambar ini akan disematkan pada soal</small>
             </div>
-            <button type="button" class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="hapusGambarSoalModal()">
+            <button type="button" class="ui-button btn btn-danger" style="padding:4px 8px" onclick="hapusGambarSoalModal()">
               <i class="fa-solid fa-trash"></i> Hapus
             </button>
           </div>
@@ -49,43 +49,43 @@
 
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
           <div class="input-group">
-            <label>Opsi A</label>
-            <div class="input-wrapper"><input type="text" id="inOpsiA" required placeholder="Jawaban A" style="padding-left:12px;"></div>
+            <label class="ui-label" for="inOpsiA">Opsi A</label>
+            <div class="input-wrapper"><input type="text" id="inOpsiA" required placeholder="Jawaban A" style="padding-left:12px" class="ui-control"></div>
           </div>
           <div class="input-group">
-            <label>Opsi B</label>
-            <div class="input-wrapper"><input type="text" id="inOpsiB" required placeholder="Jawaban B" style="padding-left:12px;"></div>
+            <label class="ui-label" for="inOpsiB">Opsi B</label>
+            <div class="input-wrapper"><input type="text" id="inOpsiB" required placeholder="Jawaban B" style="padding-left:12px" class="ui-control"></div>
           </div>
         </div>
 
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
           <div class="input-group">
-            <label>Opsi C</label>
-            <div class="input-wrapper"><input type="text" id="inOpsiC" required placeholder="Jawaban C" style="padding-left:12px;"></div>
+            <label class="ui-label" for="inOpsiC">Opsi C</label>
+            <div class="input-wrapper"><input type="text" id="inOpsiC" required placeholder="Jawaban C" style="padding-left:12px" class="ui-control"></div>
           </div>
           <div class="input-group">
-            <label>Opsi D</label>
-            <div class="input-wrapper"><input type="text" id="inOpsiD" required placeholder="Jawaban D" style="padding-left:12px;"></div>
+            <label class="ui-label" for="inOpsiD">Opsi D</label>
+            <div class="input-wrapper"><input type="text" id="inOpsiD" required placeholder="Jawaban D" style="padding-left:12px" class="ui-control"></div>
           </div>
         </div>
 
         <div class="input-group">
-          <label>Opsi E (Opsional)</label>
-          <div class="input-wrapper"><input type="text" id="inOpsiE" placeholder="Jawaban E" style="padding-left:12px;"></div>
+          <label class="ui-label" for="inOpsiE">Opsi E (Opsional)</label>
+          <div class="input-wrapper"><input type="text" id="inOpsiE" placeholder="Jawaban E" style="padding-left:12px" class="ui-control"></div>
         </div>
 
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
           <div class="input-group">
-            <label>Kunci Jawaban</label>
-            <div class="input-wrapper"><select id="inJawabanBenar"><option value="A">Opsi A</option><option value="B">Opsi B</option><option value="C">Opsi C</option><option value="D">Opsi D</option><option value="E">Opsi E</option></select></div>
+            <label class="ui-label" for="inJawabanBenar">Kunci Jawaban</label>
+            <div class="input-wrapper"><select id="inJawabanBenar" class="ui-control"><option value="A">Opsi A</option><option value="B">Opsi B</option><option value="C">Opsi C</option><option value="D">Opsi D</option><option value="E">Opsi E</option></select></div>
           </div>
           <div class="input-group">
-            <label>Poin Soal</label>
-            <div class="input-wrapper"><input type="number" id="inPoinSoal" value="1" required style="padding-left:12px;"></div>
+            <label class="ui-label" for="inPoinSoal">Poin Soal</label>
+            <div class="input-wrapper"><input type="number" id="inPoinSoal" value="1" required style="padding-left:12px" class="ui-control"></div>
           </div>
         </div>
 
-        <button type="submit" class="btn btn-primary" style="width:100%; margin-top:8px;">Simpan Soal</button>
+        <button type="submit" class="ui-button btn btn-primary" style="width:100%; margin-top:8px">Simpan Soal</button>
       </form>
     </div>
   </div>
@@ -97,7 +97,7 @@
           <h3 style="font-size:16px; font-weight:800; margin-bottom:4px;">Detail Soal</h3>
           <div id="detailSoalMeta" style="font-size:11.5px; color:var(--text-muted);"></div>
         </div>
-        <button type="button" style="background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted);" onclick="document.getElementById('modalDetailSoal').classList.remove('show')">&times;</button>
+        <button aria-label="Tutup dialog" type="button" style="background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted);" onclick="document.getElementById('modalDetailSoal').classList.remove('show')">&times;</button>
       </div>
       <div style="padding:14px; border:1px solid var(--border); border-radius:10px; background:var(--surface-subtle); margin-bottom:12px;">
         <div style="font-size:11px; font-weight:800; color:var(--text-muted); text-transform:uppercase; margin-bottom:8px;">Pertanyaan</div>
@@ -109,8 +109,8 @@
         <span class="badge bg-blue">Poin: <strong id="detailSoalPoin">-</strong></span>
       </div>
       <div style="display:flex; justify-content:flex-end; gap:8px;">
-        <button type="button" class="btn btn-secondary" onclick="document.getElementById('modalDetailSoal').classList.remove('show')">Tutup</button>
-        <button type="button" class="btn btn-primary" id="btnUbahDariDetailSoal"><i class="fa-solid fa-pen"></i> Ubah Soal</button>
+        <button type="button" class="ui-button btn btn-secondary" onclick="document.getElementById('modalDetailSoal').classList.remove('show')">Tutup</button>
+        <button type="button" class="ui-button btn btn-primary" id="btnUbahDariDetailSoal"><i class="fa-solid fa-pen"></i> Ubah Soal</button>
       </div>
     </div>
   </div>

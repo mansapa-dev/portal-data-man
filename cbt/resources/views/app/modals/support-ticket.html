@@ -6,15 +6,15 @@
     </div>
     <form id="formSupportTicket">
       <div class="support-form-grid">
-        <div class="input-group" id="supportNisnGroup"><label for="supportNisn">NISN</label><input id="supportNisn" type="text" inputmode="numeric" maxlength="20" autocomplete="off" placeholder="Masukkan NISN"></div>
-        <div class="input-group hidden" id="supportExamGroup"><label for="supportExam">Ujian terkait</label><select id="supportExam"><option value="">Tidak terkait ujian tertentu</option></select></div>
-        <div class="input-group"><label for="supportCategory">Jenis kendala</label><select id="supportCategory">
+        <div class="input-group" id="supportNisnGroup"><label for="supportNisn" class="ui-label">NISN</label><input id="supportNisn" type="text" inputmode="numeric" maxlength="20" autocomplete="off" placeholder="Masukkan NISN" class="ui-control"></div>
+        <div class="input-group hidden" id="supportExamGroup"><label for="supportExam" class="ui-label">Ujian terkait</label><select id="supportExam" class="ui-control"><option value="">Tidak terkait ujian tertentu</option></select></div>
+        <div class="input-group"><label for="supportCategory" class="ui-label">Jenis kendala</label><select id="supportCategory" class="ui-control">
           <option value="ACCOUNT_ACCESS">Tidak bisa masuk akun</option><option value="EXAM_LOCKED">Ujian terkunci / 3 pelanggaran</option><option value="PIN">PIN bermasalah</option><option value="CONNECTION">Koneksi / jawaban tidak tersimpan</option><option value="TECHNICAL">Masalah perangkat atau sistem</option><option value="OTHER">Kendala lainnya</option>
         </select></div>
       </div>
-      <div class="input-group"><label for="supportMessage">Jelaskan kendala</label><textarea id="supportMessage" rows="4" maxlength="1000" placeholder="Contoh: ujian Matematika terkunci setelah muncul pelanggaran ketiga." required></textarea></div>
+      <div class="input-group"><label for="supportMessage" class="ui-label">Jelaskan kendala</label><textarea id="supportMessage" rows="4" maxlength="1000" placeholder="Contoh: ujian Matematika terkunci setelah muncul pelanggaran ketiga." required class="ui-control"></textarea></div>
       <div id="supportTicketFeedback" class="alert" aria-live="polite"></div>
-      <div class="modal-footer"><button type="button" class="btn btn-secondary" id="btnCancelSupportTicket">Batal</button><button type="submit" class="btn btn-primary" id="btnSendSupportTicket"><i class="fa-solid fa-paper-plane"></i> Kirim ke Petugas</button></div>
+      <div class="modal-footer"><button type="button" class="ui-button btn btn-secondary" id="btnCancelSupportTicket">Batal</button><button type="submit" class="ui-button btn btn-primary" id="btnSendSupportTicket"><i class="fa-solid fa-paper-plane"></i> Kirim ke Petugas</button></div>
     </form>
     <section id="studentTicketStatusSection" class="student-ticket-status hidden"><h4>Status permintaan terakhir</h4><div id="studentTicketStatusList"></div></section>
   </div>

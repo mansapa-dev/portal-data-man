@@ -9,21 +9,21 @@
       <div id="alertLoginSiswa" class="alert"></div>
       <form id="formLoginSiswa">
         <div class="input-group">
-          <label>Nomor Peserta (NISN)</label>
+          <label class="ui-label" for="inNoUjian">Nomor Peserta (NISN)</label>
           <div class="input-wrapper">
             <i class="fa-regular fa-id-badge left-icon"></i>
-            <input type="text" id="inNoUjian" placeholder="Masukkan NISN" inputmode="numeric" required autocomplete="off">
+            <input type="text" id="inNoUjian" placeholder="Masukkan NISN" inputmode="numeric" required autocomplete="off" class="ui-control">
           </div>
         </div>
         <div class="input-group">
-          <label>PIN Ujian (4 Digit)</label>
+          <label class="ui-label" for="inPin">PIN Ujian (4 Digit)</label>
           <div class="input-wrapper">
             <i class="fa-solid fa-key left-icon"></i>
-            <input type="password" id="inPin" placeholder="••••" maxlength="4" required autocomplete="off">
+            <input type="password" id="inPin" placeholder="••••" maxlength="4" required autocomplete="off" class="ui-control">
             <button type="button" class="toggle-pw" onclick="const x=document.getElementById('inPin'); x.type=x.type==='password'?'text':'password'; this.querySelector('i').classList.toggle('fa-eye'); this.querySelector('i').classList.toggle('fa-eye-slash');"><i class="fa-regular fa-eye"></i></button>
           </div>
         </div>
-        <button type="submit" class="btn btn-primary" style="width:100%; margin-top:12px; padding:12px;">Masuk Ujian <i class="fa-solid fa-arrow-right"></i></button>
+        <button type="submit" class="ui-button btn btn-primary" style="width:100%; margin-top:12px; padding:12px">Masuk Ujian <i class="fa-solid fa-arrow-right"></i></button>
       </form>
       <button type="button" class="support-link-button" onclick="openSupportTicket('ACCOUNT_ACCESS')"><i class="fa-solid fa-headset"></i> Tidak bisa masuk? Kirim tiket bantuan</button>
     </div>
@@ -47,7 +47,7 @@
       <h3 style="font-size:14px; font-weight:700; margin-bottom:12px; color:var(--text-main);">Daftar Ujian Aktif:</h3>
       <div id="listJadwalUjian" style="display:flex; flex-direction:column; gap:12px;"></div>
       <button type="button" class="support-link-button" onclick="openSupportTicket('OTHER')"><i class="fa-solid fa-headset"></i> Ada kendala? Hubungi petugas dari sini</button>
-      <button class="btn btn-secondary" style="width:100%; margin-top:24px;" onclick="appResetLogout()"><i class="fa-solid fa-arrow-right-from-bracket"></i> Keluar</button>
+      <button class="ui-button btn btn-secondary" style="width:100%; margin-top:24px" onclick="appResetLogout()"><i class="fa-solid fa-arrow-right-from-bracket"></i> Keluar</button>
     </div>
   </main>
 
@@ -75,9 +75,9 @@
         <div class="q-text" id="cbtSoalText">Memuat pertanyaan...</div>
         <div class="opt-list" id="cbtOptionList"></div>
         <div class="q-nav-actions">
-          <button class="btn btn-secondary" onclick="navigasiSoal(-1)"><i class="fa-solid fa-chevron-left"></i> Sebelumnya</button>
-          <button class="btn btn-warning" id="btnRagu" onclick="toggleRagu()"><i class="fa-solid fa-flag"></i> Ragu-ragu</button>
-          <button class="btn btn-primary" onclick="navigasiSoal(1)">Berikutnya <i class="fa-solid fa-chevron-right"></i></button>
+          <button class="ui-button btn btn-secondary" onclick="navigasiSoal(-1)"><i class="fa-solid fa-chevron-left"></i> Sebelumnya</button>
+          <button class="ui-button btn btn-warning" id="btnRagu" onclick="toggleRagu()"><i class="fa-solid fa-flag"></i> Ragu-ragu</button>
+          <button class="ui-button btn btn-primary" onclick="navigasiSoal(1)">Berikutnya <i class="fa-solid fa-chevron-right"></i></button>
         </div>
       </div>
 
@@ -85,7 +85,7 @@
         <h3 style="font-size:13px; font-weight:700; margin-bottom:16px; color:var(--text-main);"><i class="fa-solid fa-grid-2" style="color:var(--primary);"></i> Navigasi Soal</h3>
         <div class="nav-grid" id="cbtNavGrid"></div>
         <hr style="border:0; border-top:1px solid var(--border); margin:16px 0;">
-        <button class="btn btn-danger" style="width:100%; padding:12px; font-weight:800;" onclick="bukaModalSubmit()"><i class="fa-solid fa-paper-plane"></i> SELESAI UJIAN</button>
+        <button class="ui-button btn btn-danger" style="width:100%; padding:12px" onclick="bukaModalSubmit()"><i class="fa-solid fa-paper-plane"></i> SELESAI UJIAN</button>
       </div>
     </div>
   </div>
@@ -106,9 +106,9 @@
       </div>
 
       <div style="display:flex; flex-direction:column; gap:8px;">
-        <button id="btnSupportHasil" class="btn btn-danger hidden" onclick="openSupportTicket('EXAM_LOCKED', stUjian.id)"><i class="fa-solid fa-headset"></i> Minta Bantuan Petugas</button>
-        <button id="btnReviewHasil" class="btn btn-secondary" onclick="bukaModalReview()"><i class="fa-solid fa-magnifying-glass"></i> Review Status (Benar/Salah)</button>
-        <button class="btn btn-primary" onclick="kembaliKeDashboardSiswa()"><i class="fa-solid fa-house"></i> Kembali ke Dashboard Ujian</button>
+        <button id="btnSupportHasil" class="ui-button btn btn-danger hidden" onclick="openSupportTicket('EXAM_LOCKED', stUjian.id)"><i class="fa-solid fa-headset"></i> Minta Bantuan Petugas</button>
+        <button id="btnReviewHasil" class="ui-button btn btn-secondary" onclick="bukaModalReview()"><i class="fa-solid fa-magnifying-glass"></i> Review Status (Benar/Salah)</button>
+        <button class="ui-button btn btn-primary" onclick="kembaliKeDashboardSiswa()"><i class="fa-solid fa-house"></i> Kembali ke Dashboard Ujian</button>
       </div>
     </div>
   </main>

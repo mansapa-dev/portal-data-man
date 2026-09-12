@@ -12,6 +12,7 @@ ob_start();
   <link rel="stylesheet" href="assets/css/teacher.css">
   <link rel="stylesheet" href="assets/css/ui-theme.css?v=20260911-3">
   <script src="assets/js/dashboard-design.js?v=20260911-3"></script>
+  <link rel="stylesheet" href="assets/css/atomic-components.css?v=20260911-1">
 </head>
 <body class="auth-page"><button type="button" class="theme-toggle auth-theme-toggle" data-theme-toggle aria-label="Aktifkan mode gelap" aria-pressed="false">◐</button>
   <main class="auth-card">

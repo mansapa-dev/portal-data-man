@@ -1,0 +1,83 @@
+/* CBT Atomic Design: shared atoms, composed molecules, operational organisms, templates.
+   Screen-only: official printed reports/cards retain their own typography and layout. */
+@media screen {
+  :root{--type-caption:12px;--type-body:14px;--type-heading:22px;--field-height:44px;--panel-gap:24px;--field-gap:12px}
+  /* ATOMS — consistent readable controls regardless of original page stylesheet. */
+  body{font-size:var(--type-body);line-height:1.5}
+  .ui-label{display:block;font-size:var(--type-caption);font-weight:600;color:var(--text-main);line-height:1.5;margin-bottom:6px}
+  .ui-control{font-size:var(--type-body)!important;border-radius:12px!important;min-height:var(--field-height)!important;max-width:100%;border:1px solid var(--border);color:var(--text-main);background:var(--surface);line-height:1.5}
+  textarea.ui-control{min-height:112px!important;resize:vertical}
+  :is(.ui-button,.teacher-result-controls button,.teacher-live .refresh-live){font-size:13px!important;min-height:var(--field-height);border-radius:12px!important;font-weight:600;line-height:1.4}
+  .ui-button:active{transform:translateY(1px)}
+  :is(.badge,.session-status,.stat-trend){font-size:12px;line-height:1.5;white-space:normal}
+  :is(.table-pagination button,.btn-num){min-width:36px;min-height:36px}
+  .ui-control:focus-visible,.ui-button:focus-visible{outline:3px solid var(--primary-light);outline-offset:3px;box-shadow:none}
+  /* MOLECULES — headings, filter groups, and actions always use the same rhythm. */
+  .card-header{align-items:flex-start;gap:16px;margin-bottom:24px}
+  .card-header>div:first-child{flex:1 1 280px;min-width:0}
+  .card-header .card-title{font-size:var(--type-heading);line-height:1.35;font-weight:700;color:var(--text-main)}
+  .card-header .card-subtitle{max-width:72ch;font-size:13px;line-height:1.65;margin-top:6px}
+  .card-header>div:has(>.btn){display:flex;flex:0 1 auto;align-items:center;flex-wrap:wrap;gap:8px}
+  :is(.filter-bar-grid,.special-filter-grid,.violation-filter-grid,.teacher-result-controls,.live-filters){gap:var(--field-gap);align-items:end}
+  :is(.filter-bar-grid,.special-filter-grid,.violation-filter-grid){background:var(--surface-subtle);padding:16px;border-radius:16px;border:1px solid var(--border)}
+  :is(.filter-bar-grid,.special-filter-grid,.violation-filter-grid)>*{min-width:0}
+  .search-box{max-width:520px;margin-bottom:16px}
+  .search-box input{width:100%;min-height:44px;font-size:14px}
+  .search-box:focus-within{border-color:var(--primary)}
+  .table-pagination{font-size:12px;padding-top:16px;gap:16px}
+  /* ORGANISMS — tables and forms have a common reading density. */
+  .dash-tab>.card,.dash-tab>div>.card,.dashboard-page .panel{padding:24px;border-radius:20px}
+  .table-responsive{max-width:100%;overflow-x:auto;overscroll-behavior-x:contain}
+  table th{font-size:12px;line-height:1.5;padding:14px 16px;white-space:nowrap}
+  table td{font-size:13px;line-height:1.6;padding:14px 16px;vertical-align:middle}
+  table td .btn{min-height:36px;padding:8px 12px}
+  .subject-katalog-card{padding:20px;border-radius:18px}
+  .subject-katalog-card:hover{border-color:var(--primary-light);box-shadow:var(--shadow-md)}
+  :is(.stat-grid-4,.teacher-metrics,.live-summary){gap:16px}
+  .stat-card-modern{min-height:170px}.stat-label{font-size:13px;line-height:1.5}
+  .stat-value,.stat-number{font-variant-numeric:tabular-nums}
+  .teacher-live .session-card,.session-card{padding:20px;border-radius:18px}
+  .session-meta,.teacher-live .session-meta{font-size:12px;line-height:1.6}
+  :is(.live-empty,.live-loading,.empty-cell){padding:32px 20px;color:var(--text-muted);font-size:14px;line-height:1.7;text-align:center}
+  .ui-report-options{margin-bottom:24px;border:1px solid var(--border);border-radius:16px;background:var(--surface)}
+  .ui-report-options>summary{cursor:pointer;padding:16px 20px;font-size:14px;font-weight:600;color:var(--text-main)}
+  .ui-report-options>summary:focus-visible{outline:3px solid var(--primary-light);outline-offset:3px}
+  .ui-report-options[open]{padding:0 20px 4px}.ui-report-options[open]>summary{margin-inline:-20px;border-bottom:1px solid var(--border);margin-bottom:16px}
+  .ui-report-options>p{font-size:13px;color:var(--text-muted);margin:0 0 16px}
+  .modal-content .input-group{margin-bottom:16px}
+  .modal-content h3{font-size:20px!important;line-height:1.4}
+  .modal-content button[aria-label="Tutup dialog"]{min-width:44px;min-height:44px;border-radius:50%;flex-shrink:0}
+  .modal-content button[aria-label="Tutup dialog"]:hover{background:var(--surface-subtle)!important}
+  .modal-content form{min-width:0}.modal-content .input-wrapper{min-width:0}
+  /* TEMPLATES — the same proportions across admin, teacher, and participant pages. */
+  .dash-content{padding:28px}.dashboard-page .main{padding-inline:28px}
+  .dash-tab{width:100%;min-width:0}.dash-tab>.card{margin-bottom:24px}
+  .auth-card{width:100%;max-width:480px;padding:32px}.auth-page .auth-card{max-width:1000px;padding:0}
+  .auth-header p{font-size:14px;line-height:1.6}
+  .cbt-wrapper{max-width:1280px;padding:24px}.cbt-grid{grid-template-columns:minmax(0,1fr) 280px;gap:24px}
+  .q-panel{padding:28px;min-width:0}.q-text{font-size:17px;line-height:1.8}.opt-btn{min-height:56px;font-size:15px;line-height:1.6}
+  .q-nav-actions{gap:12px}.q-nav-actions .btn{min-height:44px;font-size:13px}
+  .nav-panel{position:sticky;top:80px}.nav-grid{gap:8px}.nav-grid .btn-num{font-size:13px}
+  .teacher-result-controls :is(input,select){min-height:44px;font-size:14px}
+  .teacher-filter-field>span{font-size:12px;color:var(--text-main)}
+  .teacher-metric{min-height:130px}.teacher-metric small,.teacher-metric span{font-size:12px}
+  .teacher-activity-row{gap:16px;padding-block:16px}.teacher-activity-row span{font-size:13px}
+  @media(max-width:1100px){.card-header>div:has(>.btn){flex-basis:100%}.stat-grid-4{grid-template-columns:repeat(2,minmax(0,1fr))}.cbt-grid{grid-template-columns:minmax(0,1fr) 240px}}
+  @media(max-width:800px){
+    .dash-content{padding:20px 14px}.dashboard-page .main{padding-inline:16px}
+    .dash-tab>.card,.dash-tab>div>.card,.dashboard-page .panel{padding:20px}
+    .card-header .card-title{font-size:20px}.card-header>div:first-child{flex-basis:100%}
+    .card-header>div:has(>.btn){display:flex;width:100%}.card-header .btn{flex:1 1 150px}
+    .cbt-wrapper{padding:16px}.cbt-grid{grid-template-columns:1fr}.nav-panel{position:static}
+    .q-panel{padding:20px}.q-text{font-size:16px}.q-nav-actions .btn{flex:1 1 120px}
+    .modal-content{max-width:calc(100vw - 24px)!important;width:min(640px,100%)!important;padding:20px}
+    .auth-card{padding:24px}.teacher-result-controls{grid-template-columns:repeat(2,minmax(0,1fr))}
+  }
+  @media(max-width:520px){
+    .filter-bar-grid{grid-template-columns:1fr!important}
+    .modal-content form>div[style*="grid-template-columns"]{grid-template-columns:1fr!important}
+    .teacher-result-controls{grid-template-columns:1fr}.stat-grid-4{gap:12px}
+    #gridKatalogMapelContainer{grid-template-columns:minmax(0,1fr)!important}
+    .stat-trend{font-size:11px}.stat-card-modern{padding:16px}
+  }
+}

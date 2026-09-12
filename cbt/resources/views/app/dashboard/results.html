@@ -2,28 +2,29 @@
       <div id="tabAdminHasil" class="dash-tab hidden">
         <div class="card">
           <div class="card-header">
-            <div class="card-title">Rekapitulasi Laporan Ujian & Penandatangan Resmi</div>
+            <div class="card-title">Hasil Ujian & Laporan</div>
           </div>
           
+          <details class="ui-report-options"><summary>Pengaturan cetak: kop surat &amp; penandatangan</summary><p>Opsional. Sesuaikan identitas laporan sebelum mencetak.</p>
           <!-- KOP SURAT MANUAL -->
           <div style="margin-bottom:16px; background:var(--surface-subtle); padding:16px; border-radius:8px; border:1px solid var(--border);">
             <h4 style="font-size:13px; font-weight:700; margin-bottom:10px; color:var(--primary);"><i class="fa-solid fa-heading"></i> Kustomisasi Kop Surat Manual (Cetak Resmi)</h4>
             <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px;">
               <div>
-                <label style="font-size:11px; font-weight:700; color:var(--text-muted);">Baris 1 (Kementerian/Yayasan):</label>
-                <input type="text" id="kopBaris1" value="KEMENTERIAN AGAMA REPUBLIK INDONESIA" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); margin-top:4px; font-size:12px;">
+                <label style="font-weight:700; color:var(--text-muted)" class="ui-label" for="kopBaris1">Baris 1 (Kementerian/Yayasan):</label>
+                <input type="text" id="kopBaris1" value="KEMENTERIAN AGAMA REPUBLIK INDONESIA" style="width:100%; padding:8px; border:1px solid var(--border); margin-top:4px" class="ui-control">
               </div>
               <div>
-                <label style="font-size:11px; font-weight:700; color:var(--text-muted);">Baris 2 (Kanwil/Kantor):</label>
-                <input type="text" id="kopBaris2" value="KANTOR KEMENTERIAN AGAMA KOTA PALEMBANG" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); margin-top:4px; font-size:12px;">
+                <label style="font-weight:700; color:var(--text-muted)" class="ui-label" for="kopBaris2">Baris 2 (Kanwil/Kantor):</label>
+                <input type="text" id="kopBaris2" value="KANTOR KEMENTERIAN AGAMA KOTA PALEMBANG" style="width:100%; padding:8px; border:1px solid var(--border); margin-top:4px" class="ui-control">
               </div>
               <div>
-                <label style="font-size:11px; font-weight:700; color:var(--text-muted);">Baris 3 (Nama Madrasah/Sekolah):</label>
-                <input type="text" id="kopBaris3" value="MADRASAH ALIYAH NEGERI 1 PALEMBANG" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); margin-top:4px; font-size:12px;">
+                <label style="font-weight:700; color:var(--text-muted)" class="ui-label" for="kopBaris3">Baris 3 (Nama Madrasah/Sekolah):</label>
+                <input type="text" id="kopBaris3" value="MADRASAH ALIYAH NEGERI 1 PALEMBANG" style="width:100%; padding:8px; border:1px solid var(--border); margin-top:4px" class="ui-control">
               </div>
               <div>
-                <label style="font-size:11px; font-weight:700; color:var(--text-muted);">Baris 4 (Alamat):</label>
-                <input type="text" id="kopBaris4" value="Jln. Gub. H. Bastari (Jln. Pendidikan), Jakabaring, Palembang, Sumatera Selatan" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); margin-top:4px; font-size:12px;">
+                <label style="font-weight:700; color:var(--text-muted)" class="ui-label" for="kopBaris4">Baris 4 (Alamat):</label>
+                <input type="text" id="kopBaris4" value="Jln. Gub. H. Bastari (Jln. Pendidikan), Jakabaring, Palembang, Sumatera Selatan" style="width:100%; padding:8px; border:1px solid var(--border); margin-top:4px" class="ui-control">
               </div>
             </div>
           </div>
@@ -31,56 +32,58 @@
           <!-- PENANDATANGAN -->
           <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; margin-bottom:16px; background:var(--secondary-bg); padding:16px; border-radius:8px;">
             <div>
-              <label style="font-size:11px; font-weight:700; color:var(--text-muted);">Nama Kepala Madrasah:</label>
-              <input type="text" id="inputKepsek" placeholder="Nama Kepala" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); margin-top:4px; font-size:13px;">
+              <label style="font-weight:700; color:var(--text-muted)" class="ui-label" for="inputKepsek">Nama Kepala Madrasah:</label>
+              <input type="text" id="inputKepsek" placeholder="Nama Kepala" style="width:100%; padding:8px; border:1px solid var(--border); margin-top:4px" class="ui-control">
             </div>
             <div>
-              <label style="font-size:11px; font-weight:700; color:var(--text-muted);">NIP Kepala Madrasah:</label>
-              <input type="text" id="inputNipKepsek" placeholder="NIP Kepala" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); margin-top:4px; font-size:13px;">
+              <label style="font-weight:700; color:var(--text-muted)" class="ui-label" for="inputNipKepsek">NIP Kepala Madrasah:</label>
+              <input type="text" id="inputNipKepsek" placeholder="NIP Kepala" style="width:100%; padding:8px; border:1px solid var(--border); margin-top:4px" class="ui-control">
             </div>
             <div>
-              <label style="font-size:11px; font-weight:700; color:var(--text-muted);">Nama Wakur Kurikulum:</label>
-              <input type="text" id="inputWakur" placeholder="Nama Wakur" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); margin-top:4px; font-size:13px;">
+              <label style="font-weight:700; color:var(--text-muted)" class="ui-label" for="inputWakur">Nama Wakur Kurikulum:</label>
+              <input type="text" id="inputWakur" placeholder="Nama Wakur" style="width:100%; padding:8px; border:1px solid var(--border); margin-top:4px" class="ui-control">
             </div>
             <div>
-              <label style="font-size:11px; font-weight:700; color:var(--text-muted);">NIP Wakur Kurikulum:</label>
-              <input type="text" id="inputNipWakur" placeholder="NIP Wakur" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); margin-top:4px; font-size:13px;">
+              <label style="font-weight:700; color:var(--text-muted)" class="ui-label" for="inputNipWakur">NIP Wakur Kurikulum:</label>
+              <input type="text" id="inputNipWakur" placeholder="NIP Wakur" style="width:100%; padding:8px; border:1px solid var(--border); margin-top:4px" class="ui-control">
             </div>
           </div>
+
+          </details>
 
           <!-- FILTER HASIL -->
           <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:12px; margin-bottom:20px;">
             <div>
-              <label style="font-size:11px; font-weight:700; color:var(--text-muted);">Tahun Ajaran:</label>
-              <select id="fltTahunAjaran" onchange="applyFilterHasil()" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); margin-top:4px;"><option value="ALL">Semua Tahun</option></select>
+              <label style="font-weight:700; color:var(--text-muted)" class="ui-label" for="fltTahunAjaran">Tahun Ajaran:</label>
+              <select id="fltTahunAjaran" onchange="applyFilterHasil()" style="width:100%; padding:8px; border:1px solid var(--border); margin-top:4px" class="ui-control"><option value="ALL">Semua Tahun</option></select>
             </div>
             <div>
-              <label style="font-size:11px; font-weight:700; color:var(--text-muted);">Semester:</label>
-              <select id="fltSemester" onchange="applyFilterHasil()" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); margin-top:4px;"><option value="ALL">Semua Semester</option><option value="Ganjil">Ganjil</option><option value="Genap">Genap</option></select>
+              <label style="font-weight:700; color:var(--text-muted)" class="ui-label" for="fltSemester">Semester:</label>
+              <select id="fltSemester" onchange="applyFilterHasil()" style="width:100%; padding:8px; border:1px solid var(--border); margin-top:4px" class="ui-control"><option value="ALL">Semua Semester</option><option value="Ganjil">Ganjil</option><option value="Genap">Genap</option></select>
             </div>
             <div>
-              <label style="font-size:11px; font-weight:700; color:var(--text-muted);">Tingkat:</label>
-              <select id="fltHasilTingkat" onchange="applyFilterHasil()" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); margin-top:4px;"><option value="ALL">Semua Tingkat</option><option value="X">X</option><option value="XI">XI</option><option value="XII">XII</option></select>
+              <label style="font-weight:700; color:var(--text-muted)" class="ui-label" for="fltHasilTingkat">Tingkat:</label>
+              <select id="fltHasilTingkat" onchange="applyFilterHasil()" style="width:100%; padding:8px; border:1px solid var(--border); margin-top:4px" class="ui-control"><option value="ALL">Semua Tingkat</option><option value="X">X</option><option value="XI">XI</option><option value="XII">XII</option></select>
             </div>
             <div>
-              <label style="font-size:11px; font-weight:700; color:var(--text-muted);">Rombel / Kelas:</label>
-              <select id="fltHasilKelas" onchange="applyFilterHasil()" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); margin-top:4px;"><option value="ALL">Semua Rombel</option></select>
+              <label style="font-weight:700; color:var(--text-muted)" class="ui-label" for="fltHasilKelas">Rombel / Kelas:</label>
+              <select id="fltHasilKelas" onchange="applyFilterHasil()" style="width:100%; padding:8px; border:1px solid var(--border); margin-top:4px" class="ui-control"><option value="ALL">Semua Rombel</option></select>
             </div>
             <div>
-              <label style="font-size:11px; font-weight:700; color:var(--text-muted);">Mata Ujian:</label>
-              <select id="fltHasilUjian" onchange="applyFilterHasil()" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); margin-top:4px;"><option value="ALL">Semua Ujian</option></select>
+              <label style="font-weight:700; color:var(--text-muted)" class="ui-label" for="fltHasilUjian">Mata Ujian:</label>
+              <select id="fltHasilUjian" onchange="applyFilterHasil()" style="width:100%; padding:8px; border:1px solid var(--border); margin-top:4px" class="ui-control"><option value="ALL">Semua Ujian</option></select>
             </div>
           </div>
 
           <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
-            <button class="btn btn-secondary" onclick="exportFilterHasil('ujian')"><i class="fa-solid fa-file-excel"></i> Export (Per Ujian)</button>
-            <button class="btn btn-secondary" onclick="exportFilterHasil('rombel')"><i class="fa-solid fa-file-excel"></i> Export (Per Rombel)</button>
-            <button class="btn btn-primary" onclick="cetakLaporanResmiPDF()"><i class="fa-solid fa-print"></i> Cetak Laporan Resmi</button>
+            <button class="ui-button btn btn-secondary" onclick="exportFilterHasil('ujian')"><i class="fa-solid fa-file-excel"></i> Export (Per Ujian)</button>
+            <button class="ui-button btn btn-secondary" onclick="exportFilterHasil('rombel')"><i class="fa-solid fa-file-excel"></i> Export (Per Rombel)</button>
+            <button class="ui-button btn btn-primary" onclick="cetakLaporanResmiPDF()"><i class="fa-solid fa-print"></i> Cetak Laporan Resmi</button>
           </div>
 
           <div class="search-box">
             <i class="fa-solid fa-search"></i>
-            <input type="text" id="searchHasil" placeholder="Cari hasil..." onkeyup="filterTable('tblAdminHasil', this.value)">
+            <input type="text" id="searchHasil" placeholder="Cari hasil..." onkeyup="filterTable('tblAdminHasil', this.value)" class="ui-control" aria-label="Cari hasil...">
           </div>
           <div class="table-responsive">
             <table class="results-table">

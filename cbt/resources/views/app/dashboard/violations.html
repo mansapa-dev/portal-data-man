@@ -4,17 +4,17 @@
           <div class="card-header">
             <div class="card-title">Log Monitoring Kecurangan & Pelanggaran Siswa</div>
             <div class="violation-header-actions">
-              <button class="btn btn-secondary" onclick="exportToExcel('log_pelanggaran_cbt.xlsx', 'Pelanggaran', ['Nomor Ujian', 'Nama Siswa', 'Kelas', 'Nama Ujian', 'Jumlah', 'Keterangan', 'Waktu'], window.cachePelanggaranExcel || [])"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
-              <button class="btn btn-secondary" onclick="loadDataAdminLogPelanggaran()"><i class="fa-solid fa-rotate-right"></i> Refresh</button>
+              <button class="ui-button btn btn-secondary" onclick="exportToExcel('log_pelanggaran_cbt.xlsx', 'Pelanggaran', ['Nomor Ujian', 'Nama Siswa', 'Kelas', 'Nama Ujian', 'Jumlah', 'Keterangan', 'Waktu'], window.cachePelanggaranExcel || [])"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
+              <button class="ui-button btn btn-secondary" onclick="loadDataAdminLogPelanggaran()"><i class="fa-solid fa-rotate-right"></i> Refresh</button>
             </div>
           </div>
           <div class="violation-filter-grid">
-            <label><span>Tanggal</span><input id="fltPelanggaranTanggal" type="date" class="form-control" onchange="applyFilterPelanggaran()"></label>
-            <label><span>Tingkatan</span><select id="fltPelanggaranTingkat" class="form-control" onchange="applyFilterPelanggaran()"><option value="ALL">Semua Tingkat</option></select></label>
-            <label><span>Kelas</span><select id="fltPelanggaranKelas" class="form-control" onchange="applyFilterPelanggaran()"><option value="ALL">Semua Kelas</option></select></label>
-            <label><span>Ujian / Mapel</span><select id="fltPelanggaranUjian" class="form-control" onchange="applyFilterPelanggaran()"><option value="ALL">Semua Ujian / Mapel</option></select></label>
-            <label><span>Jenis Pelanggaran</span><select id="fltPelanggaranJenis" class="form-control" onchange="applyFilterPelanggaran()"><option value="ALL">Semua Jenis Pelanggaran</option></select></label>
-            <label class="violation-search"><span>Cari Siswa</span><div class="search-box"><i class="fa-solid fa-search"></i><input type="search" id="searchPelanggaran" placeholder="Nama atau NISN..." oninput="applyFilterPelanggaran()"></div></label>
+            <label class="ui-label"><span>Tanggal</span><input id="fltPelanggaranTanggal" type="date" class="ui-control form-control" onchange="applyFilterPelanggaran()"></label>
+            <label class="ui-label"><span>Tingkatan</span><select id="fltPelanggaranTingkat" class="ui-control form-control" onchange="applyFilterPelanggaran()"><option value="ALL">Semua Tingkat</option></select></label>
+            <label class="ui-label"><span>Kelas</span><select id="fltPelanggaranKelas" class="ui-control form-control" onchange="applyFilterPelanggaran()"><option value="ALL">Semua Kelas</option></select></label>
+            <label class="ui-label"><span>Ujian / Mapel</span><select id="fltPelanggaranUjian" class="ui-control form-control" onchange="applyFilterPelanggaran()"><option value="ALL">Semua Ujian / Mapel</option></select></label>
+            <label class="ui-label"><span>Jenis Pelanggaran</span><select id="fltPelanggaranJenis" class="ui-control form-control" onchange="applyFilterPelanggaran()"><option value="ALL">Semua Jenis Pelanggaran</option></select></label>
+            <label class="ui-label violation-search"><span>Cari Siswa</span><div class="search-box"><i class="fa-solid fa-search"></i><input type="search" id="searchPelanggaran" placeholder="Nama atau NISN..." oninput="applyFilterPelanggaran()" class="ui-control" aria-label="Nama atau NISN..."></div></label>
           </div>
           <div class="table-responsive">
             <table>

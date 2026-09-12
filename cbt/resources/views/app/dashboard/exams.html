@@ -7,16 +7,16 @@
               <div class="card-subtitle">Pengaturan jadwal pelaksanaan ujian, sesi, target rombel, dan mata pelajaran</div>
             </div>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
-              <button class="btn btn-secondary" onclick="exportToExcel('tabel_ujian.xlsx', 'Ujian', ['ID', 'Nama Ujian', 'Tingkat', 'Sesi', 'Tanggal', 'Target Kelas', 'Durasi', 'Tahun Ajaran', 'Semester', 'Status'], window.cacheUjianExcel || [])"><i class="fa-solid fa-file-excel"></i> Download Excel</button>
-              <button class="btn btn-primary" onclick="bukaModalUjian()"><i class="fa-solid fa-plus"></i> Tambah Ujian</button>
+              <button class="ui-button btn btn-secondary" onclick="exportToExcel('tabel_ujian.xlsx', 'Ujian', ['ID', 'Nama Ujian', 'Tingkat', 'Sesi', 'Tanggal', 'Target Kelas', 'Durasi', 'Tahun Ajaran', 'Semester', 'Status'], window.cacheUjianExcel || [])"><i class="fa-solid fa-file-excel"></i> Download Excel</button>
+              <button class="ui-button btn btn-primary" onclick="bukaModalUjian()"><i class="fa-solid fa-plus"></i> Tambah Ujian</button>
             </div>
           </div>
 
           <!-- FILTER UJIAN: Tingkat, Kelas/Rombel, Mata Pelajaran, Search -->
           <div class="filter-bar-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:12px; margin-bottom:16px; background:var(--surface-subtle); padding:14px; border-radius:10px; border:1px solid var(--border);">
             <div>
-              <label style="font-size:11px; font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px;">Tingkatan:</label>
-              <select id="fltUjianTingkat" onchange="if(typeof populateAdminUjianFilters==='function')populateAdminUjianFilters(); applyFilterUjian();" style="width:100%; padding:8px 10px; border-radius:8px; border:1.5px solid var(--border); font-size:12.5px; background:var(--surface);">
+              <label style="font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px" class="ui-label" for="fltUjianTingkat">Tingkatan:</label>
+              <select id="fltUjianTingkat" onchange="if(typeof populateAdminUjianFilters==='function')populateAdminUjianFilters(); applyFilterUjian();" style="width:100%; padding:8px 10px; border:1.5px solid var(--border); background:var(--surface)" class="ui-control">
                 <option value="ALL">Semua Tingkat</option>
                 <option value="X">Tingkat X</option>
                 <option value="XI">Tingkat XI</option>
@@ -24,22 +24,22 @@
               </select>
             </div>
             <div>
-              <label style="font-size:11px; font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px;">Rombel / Kelas:</label>
-              <select id="fltUjianKelas" onchange="applyFilterUjian()" style="width:100%; padding:8px 10px; border-radius:8px; border:1.5px solid var(--border); font-size:12.5px; background:var(--surface);">
+              <label style="font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px" class="ui-label" for="fltUjianKelas">Rombel / Kelas:</label>
+              <select id="fltUjianKelas" onchange="applyFilterUjian()" style="width:100%; padding:8px 10px; border:1.5px solid var(--border); background:var(--surface)" class="ui-control">
                 <option value="ALL">Semua Kelas</option>
               </select>
             </div>
             <div>
-              <label style="font-size:11px; font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px;">Mata Pelajaran:</label>
-              <select id="fltUjianMapel" onchange="applyFilterUjian()" style="width:100%; padding:8px 10px; border-radius:8px; border:1.5px solid var(--border); font-size:12.5px; background:var(--surface);">
+              <label style="font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px" class="ui-label" for="fltUjianMapel">Mata Pelajaran:</label>
+              <select id="fltUjianMapel" onchange="applyFilterUjian()" style="width:100%; padding:8px 10px; border:1.5px solid var(--border); background:var(--surface)" class="ui-control">
                 <option value="ALL">Semua Mata Pelajaran</option>
               </select>
             </div>
             <div>
-              <label style="font-size:11px; font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px;">Pencarian:</label>
+              <label style="font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px" class="ui-label" for="searchUjian">Pencarian:</label>
               <div style="position:relative;">
                 <i class="fa-solid fa-search" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:12px; color:var(--text-muted);"></i>
-                <input type="text" id="searchUjian" placeholder="Cari nama ujian..." onkeyup="applyFilterUjian()" style="width:100%; padding:8px 10px 8px 30px; border-radius:8px; border:1.5px solid var(--border); font-size:12.5px; background:var(--surface);">
+                <input type="text" id="searchUjian" placeholder="Cari nama ujian..." onkeyup="applyFilterUjian()" style="width:100%; padding:8px 10px 8px 30px; border:1.5px solid var(--border); background:var(--surface)" class="ui-control" aria-label="Cari nama ujian...">
               </div>
             </div>
           </div>
