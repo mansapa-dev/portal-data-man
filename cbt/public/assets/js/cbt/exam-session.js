@@ -104,7 +104,8 @@ function toggleRagu() {
 
 function renderSoal() {
   const s = stSoal[stIdx];
-  document.getElementById('cbtSoalNum').textContent = `Soal ${stIdx + 1}`;
+  document.getElementById('cbtSoalNum').textContent = `Soal ${stIdx + 1} dari ${stSoal.length}`;
+  if (typeof updateStudentExamProgress === 'function') updateStudentExamProgress();
   // The API sanitizes question markup using a server-side allowlist.
   document.getElementById('cbtSoalText').innerHTML = s.q;
 
@@ -116,7 +117,7 @@ function renderSoal() {
   document.getElementById('cbtOptionList').innerHTML = s.opts.map((opt, i) => {
     const visualLabel = String.fromCharCode(65 + i);
     const cls = svd === opt.key ? 'selected' : '';
-    return `<div class="opt-btn ${cls}" onclick="simpanJawaban('${s.id}','${opt.key}', ${stIdx + 1})">
+    return `<div class="opt-btn ${cls}" role="radio" tabindex="${svd === opt.key || (!svd && i === 0) ? 0 : -1}" aria-checked="${svd === opt.key}" onkeydown="studentOptionKey(event, this)" onclick="simpanJawaban('${s.id}','${opt.key}', ${stIdx + 1})">
       <div class="opt-char">${visualLabel}</div><div class="opt-text">${opt.text}</div>
     </div>`;
   }).join('');
@@ -309,6 +310,7 @@ function tampilHasilUjian(hasil, isTerminate = false) {
   const statusIconWrap = document.getElementById('hasilStatusIconWrap');
 
   if (lblNilai) lblNilai.textContent = hasil.nilai !== undefined ? Number(hasil.nilai).toFixed(1) : '-';
+  if (typeof updateStudentScoreRing === 'function') updateStudentScoreRing(hasil.nilai, isTerminate);
 
   if (lblStatus) {
     lblStatus.textContent = isTerminate ? 'Ujian Dihentikan' : (hasil.is_remedial ? 'Ujian Ulang Selesai' : 'Ujian Selesai!');
@@ -410,7 +412,8 @@ function submitUjianSilenKeServer(onDone) {
     .withFailureHandler(() => {
       setTimeout(() => {
         document.getElementById('modalPelanggaran').classList.remove('show');
-        switchView('viewHasilSiswa');
+        tampilHasilUjian({}, true);
+        document.getElementById('lblKeteranganHasil').textContent = 'Ujian dihentikan. Hasil belum dapat dikonfirmasi karena koneksi bermasalah. Minta bantuan petugas untuk memeriksa status ujian.';
       }, 5500);
     })
     .submitUjian({ siswa_id: stSiswa.id, ujian_id: stUjian.id });

@@ -1,10 +1,10 @@
   <!-- VIEW: LOGIN SISWA -->
-  <main class="center-wrapper" id="viewLoginSiswa">
+  <main class="center-wrapper" id="viewLoginSiswa" data-student-screen="login">
     <div class="auth-card">
       <div class="auth-header">
         <i class="fa-solid fa-user-graduate auth-icon"></i>
-        <h2>Portal Siswa</h2>
-        <p>Silakan masuk menggunakan kredensial ujian Anda.</p>
+        <span class="student-eyebrow">MANSAPA ARENA</span><h2>Siap untuk ujian?</h2>
+        <p>Masuk dengan nomor peserta dan PIN dari petugas.</p>
       </div>
       <div id="alertLoginSiswa" class="alert"></div>
       <form id="formLoginSiswa">
@@ -20,7 +20,7 @@
           <div class="input-wrapper">
             <i class="fa-solid fa-key left-icon"></i>
             <input type="password" id="inPin" placeholder="••••" maxlength="4" required autocomplete="off" class="ui-control">
-            <button type="button" class="toggle-pw" onclick="const x=document.getElementById('inPin'); x.type=x.type==='password'?'text':'password'; this.querySelector('i').classList.toggle('fa-eye'); this.querySelector('i').classList.toggle('fa-eye-slash');"><i class="fa-regular fa-eye"></i></button>
+            <button type="button" class="toggle-pw" aria-label="Tampilkan atau sembunyikan PIN" onclick="const x=document.getElementById('inPin'); x.type=x.type==='password'?'text':'password'; this.querySelector('i').classList.toggle('fa-eye'); this.querySelector('i').classList.toggle('fa-eye-slash');"><i class="fa-regular fa-eye"></i></button>
           </div>
         </div>
         <button type="submit" class="ui-button btn btn-primary" style="width:100%; margin-top:12px; padding:12px">Masuk Ujian <i class="fa-solid fa-arrow-right"></i></button>
@@ -30,11 +30,11 @@
   </main>
 
   <!-- VIEW: PORTAL SISWA -->
-  <main class="center-wrapper hidden" id="viewPortalSiswa">
+  <main class="center-wrapper hidden" id="viewPortalSiswa" data-student-screen="home">
     <div class="auth-card" style="max-width:520px;">
       <div class="auth-header" style="text-align:left; display:flex; justify-content:space-between; align-items:flex-start;">
         <div>
-          <h2>Data Peserta</h2>
+          <span class="student-eyebrow">RUANG BELAJAR &amp; ASESMEN</span><h2>Halo, selamat datang.</h2>
           <p style="font-size:15px; color:var(--text-main); font-weight:800; margin-top:6px;" id="lblNamaSiswa">-</p>
           <p style="font-size:12.5px; color:var(--text-muted); margin-top:2px;">Kelas: <strong id="lblKelasSiswa">-</strong> | NISN: <strong id="lblNoSiswa">-</strong></p>
         </div>
@@ -42,17 +42,18 @@
           <i class="fa-solid fa-circle-check"></i>
         </div>
       </div>
-      <hr style="border:0; border-top:1px solid var(--border); margin:20px 0;">
-      
-      <h3 style="font-size:14px; font-weight:700; margin-bottom:12px; color:var(--text-main);">Daftar Ujian Aktif:</h3>
+      <section class="student-welcome" id="studentWelcome"><div><span>LANGKAH KECIL, HASIL BERARTI</span><h3>Fokus hari ini.<br>Lakukan yang terbaik.</h3><p>Periksa jadwal, siapkan diri, dan kerjakan ujian dengan tenang.</p></div><i class="fa-solid fa-book-open-reader" aria-hidden="true"></i></section>
+      <section class="student-stats" aria-label="Ringkasan jadwal"><div><i class="fa-regular fa-calendar" aria-hidden="true"></i><strong id="studentExamCount">0</strong><span>Jadwal</span></div><div><i class="fa-solid fa-pen" aria-hidden="true"></i><strong id="studentReadyCount">0</strong><span>Bisa dikerjakan</span></div><div><i class="fa-solid fa-check" aria-hidden="true"></i><strong id="studentDoneCount">0</strong><span>Selesai</span></div></section>
+      <div class="student-section-head"><h3 id="studentScheduleTitle">Ujian saya</h3><span>Jadwal kelas Anda</span></div>
+      <div class="student-segments" role="group" aria-label="Filter jadwal"><button type="button" data-student-filter="all" aria-pressed="true" onclick="studentFilterExams('all')">Semua ujian</button><button type="button" data-student-filter="done" aria-pressed="false" onclick="studentFilterExams('done')">Selesai</button></div>
       <div id="listJadwalUjian" style="display:flex; flex-direction:column; gap:12px;"></div>
-      <button type="button" class="support-link-button" onclick="openSupportTicket('OTHER')"><i class="fa-solid fa-headset"></i> Ada kendala? Hubungi petugas dari sini</button>
-      <button class="ui-button btn btn-secondary" style="width:100%; margin-top:24px" onclick="appResetLogout()"><i class="fa-solid fa-arrow-right-from-bracket"></i> Keluar</button>
+      <div class="student-account-actions"><button type="button" class="support-link-button" onclick="openSupportTicket('OTHER')"><i class="fa-solid fa-headset"></i> Bantuan petugas</button><button type="button" class="support-link-button" onclick="appResetLogout()"><i class="fa-solid fa-arrow-right-from-bracket"></i> Keluar akun</button></div>
     </div>
+    <nav class="student-bottom-nav" aria-label="Navigasi peserta"><button type="button" data-student-page="home" aria-current="page" onclick="studentHomeSection('home')"><i class="fa-solid fa-house" aria-hidden="true"></i><span>Beranda</span></button><button type="button" data-student-page="exams" onclick="studentHomeSection('exams')"><i class="fa-regular fa-file-lines" aria-hidden="true"></i><span>Ujian</span></button><button type="button" onclick="openSupportTicket('OTHER')"><i class="fa-solid fa-headset" aria-hidden="true"></i><span>Bantuan</span></button></nav>
   </main>
 
   <!-- VIEW: RUANG UJIAN CBT -->
-  <div class="cbt-wrapper hidden" id="viewRuangUjian">
+  <div class="cbt-wrapper hidden" id="viewRuangUjian" data-student-screen="exam">
     <div class="cbt-header">
       <div class="cbt-identity">
         <div class="id-item"><span class="id-label">Mata Pelajaran</span><span class="id-val" id="cbtMapel">Nama Ujian</span></div>
@@ -66,6 +67,7 @@
       <button type="button" class="cbt-help-button" onclick="openSupportTicket('TECHNICAL', stUjian.id)" title="Laporkan kendala"><i class="fa-solid fa-headset"></i><span>Bantuan</span></button>
     </div>
 
+    <div class="student-exam-progress"><div><span id="studentAnswerCount">0 soal dijawab</span><span id="studentQuestionCount">0 soal</span></div><progress id="studentAnswerProgress" max="1" value="0" aria-label="Jumlah soal dijawab"></progress></div>
     <div class="cbt-grid">
       <div class="q-panel">
         <div class="q-meta">
@@ -73,25 +75,25 @@
           <span style="font-size:12px; color:var(--text-muted); font-weight:600;"><i class="fa-solid fa-cloud-arrow-up" style="margin-right:4px; color:var(--primary);"></i><span id="cbtSaveStatus">Tersimpan</span></span>
         </div>
         <div class="q-text" id="cbtSoalText">Memuat pertanyaan...</div>
-        <div class="opt-list" id="cbtOptionList"></div>
+        <div class="opt-list" id="cbtOptionList" role="radiogroup" aria-label="Pilihan jawaban"></div>
         <div class="q-nav-actions">
-          <button class="ui-button btn btn-secondary" onclick="navigasiSoal(-1)"><i class="fa-solid fa-chevron-left"></i> Sebelumnya</button>
+          <button class="ui-button btn btn-secondary" id="studentPreviousQuestion" onclick="navigasiSoal(-1)"><i class="fa-solid fa-chevron-left"></i> Sebelumnya</button>
           <button class="ui-button btn btn-warning" id="btnRagu" onclick="toggleRagu()"><i class="fa-solid fa-flag"></i> Ragu-ragu</button>
-          <button class="ui-button btn btn-primary" onclick="navigasiSoal(1)">Berikutnya <i class="fa-solid fa-chevron-right"></i></button>
+          <button class="ui-button btn btn-primary" id="studentNextQuestion" onclick="navigasiSoal(1)">Berikutnya <i class="fa-solid fa-chevron-right"></i></button>
         </div>
       </div>
 
-      <div class="nav-panel">
-        <h3 style="font-size:13px; font-weight:700; margin-bottom:16px; color:var(--text-main);"><i class="fa-solid fa-grid-2" style="color:var(--primary);"></i> Navigasi Soal</h3>
+      <details class="nav-panel student-question-map" open><summary><i class="fa-solid fa-border-all" aria-hidden="true"></i> Peta soal <span>Pilih nomor soal</span></summary>
+<div class="student-map-legend"><span>Hijau: dijawab</span><span>Kuning: ragu-ragu</span></div>
         <div class="nav-grid" id="cbtNavGrid"></div>
         <hr style="border:0; border-top:1px solid var(--border); margin:16px 0;">
         <button class="ui-button btn btn-danger" style="width:100%; padding:12px" onclick="bukaModalSubmit()"><i class="fa-solid fa-paper-plane"></i> SELESAI UJIAN</button>
-      </div>
+      </details>
     </div>
   </div>
 
   <!-- VIEW: HASIL UJIAN SISWA -->
-  <main class="center-wrapper hidden" id="viewHasilSiswa">
+  <main class="center-wrapper hidden" id="viewHasilSiswa" data-student-screen="result">
     <div class="auth-card" style="text-align:center;">
       <div id="hasilStatusIconWrap" style="width:76px; height:76px; background:var(--primary-soft); border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 20px; box-shadow:0 4px 14px rgba(76, 175, 80, 0.2);">
         <i id="hasilStatusIcon" class="fa-solid fa-check-double" style="font-size:36px; color:var(--primary-dark);"></i>
@@ -99,9 +101,7 @@
       <h2 id="lblStatusUjian" style="font-size:24px; font-weight:800; color:var(--text-main);">Ujian Selesai!</h2>
       <p id="lblKeteranganHasil" style="font-size:13px; color:var(--text-muted); margin-top:8px; line-height:1.6;">Jawaban Anda telah berhasil dikirim dan tersimpan di server.</p>
 
-      <div style="margin:20px 0; padding:18px; background:var(--primary-soft); border:1px solid var(--primary-soft-border); border-radius:14px;">
-        <span style="font-size:12px; font-weight:700; color:var(--primary-dark); letter-spacing:0.5px;">NILAI ANDA</span>
-        <div style="font-size:46px; font-weight:900; color:var(--primary-dark); margin-top:4px;" id="lblNilaiAkhir">0</div>
+      <div class="student-result-score"><div class="student-score-ring" id="studentScoreRing"><svg viewBox="0 0 120 120" aria-hidden="true"><circle class="score-track" cx="60" cy="60" r="52"/><circle id="studentScoreArc" class="score-value" cx="60" cy="60" r="52" pathLength="100" stroke-dasharray="0 100"/></svg><div><span>NILAI ANDA</span><strong id="lblNilaiAkhir">—</strong><small>dari 100</small></div></div>
         <div id="badgeRemedialCap" style="display:none; margin-top:10px; font-size:10px; font-weight:800; letter-spacing:0.8px; color:var(--ui-warning); background:var(--ui-warning-bg); border:1px solid var(--ui-warning-border); border-radius:6px; padding:5px 12px;"></div>
       </div>
 

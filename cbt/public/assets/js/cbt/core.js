@@ -107,6 +107,7 @@ function switchView(viewId) {
   });
   const target = document.getElementById(viewId);
   if (target) target.classList.remove('hidden');
+  if (typeof studentScreenChanged === 'function') studentScreenChanged(viewId);
 }
 
 function updateTopbarAuthUI(isLoggedIn) {
