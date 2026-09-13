@@ -9,7 +9,9 @@ final class Response
     {
         $stylesheet = '<link rel="stylesheet" href="/assets/css/ui.css">';
         if (!str_contains($html, '/assets/css/ui.css')) $html = str_replace('</head>', $stylesheet.'</head>', $html);
-        $dashboardShell = '<link rel="stylesheet" href="/assets/css/dashboard-shell.css">';
+        $shellPath = dirname(__DIR__, 2).'/public/assets/css/dashboard-shell.css';
+        $shellVersion = is_file($shellPath) ? substr((string) hash_file('sha256', $shellPath), 0, 12) : 'dev';
+        $dashboardShell = '<link rel="stylesheet" href="/assets/css/dashboard-shell.css?v='.$shellVersion.'">';
         if (!str_contains($html, '/assets/css/dashboard-shell.css')) $html = str_replace('</head>', $dashboardShell.'</head>', $html);
         if (!str_contains($html, '/assets/js/toast.js')) $html = str_replace('</body>', '<script src="/assets/js/toast.js"></script></body>', $html);
         if (!str_contains($html, '/assets/js/session-guard.js')) $html = str_replace('</body>', '<script src="/assets/js/session-guard.js?v=20260911-1"></script></body>', $html);
