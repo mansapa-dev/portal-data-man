@@ -11,7 +11,7 @@ document.getElementById('formLoginPengelola').addEventListener('submit', functio
       hideLoading();
       if(res && res.success) {
         document.getElementById('modalLoginPengelola').classList.remove('show');
-        stPengelola = { userId: res.userId || res.id, id: res.userId || res.id, role: res.role, nama: res.nama, username: u };
+        stPengelola = { userId: res.userId || res.id, id: res.userId || res.id, role: String(res.role || '').toUpperCase(), nama: res.nama, username: u };
         initDashboardPengelola(res.nama, res.role);
       } else { alert.className = 'alert error'; alert.textContent = res?.message || 'Gagal login.'; }
     })
@@ -33,6 +33,26 @@ function initDashboardPengelola(nama, role) {
 
   // Topbar Controls
   updateTopbarAuthUI(true);
+
+  // Pertahankan pilihan sidebar desktop pengguna setelah halaman dimuat ulang.
+  const sidebar = document.getElementById('mainSidebar');
+  const sidebarToggle = document.getElementById('btnMobileSidebarToggle');
+  if (sidebar && window.innerWidth > 900) {
+    let sidebarCollapsed = false;
+    try { sidebarCollapsed = localStorage.getItem('cbt_admin_sidebar_collapsed') === '1'; } catch (_) {}
+    sidebar.classList.toggle('collapsed', sidebarCollapsed);
+    sidebar.querySelectorAll('.sb-item').forEach(item => {
+      const label = item.querySelector('.sb-label')?.textContent?.trim();
+      if (label) item.title = sidebarCollapsed ? label : '';
+    });
+    if (sidebarToggle) {
+      sidebarToggle.innerHTML = sidebarCollapsed
+        ? '<i class="fa-solid fa-bars"></i>'
+        : '<i class="fa-solid fa-bars-staggered"></i>';
+      sidebarToggle.title = sidebarCollapsed ? 'Perluas Menu Sidebar' : 'Ciutkan Menu Sidebar';
+      sidebarToggle.setAttribute('aria-expanded', String(!sidebarCollapsed));
+    }
+  }
 
   // Sidebar Avatar
   const elAvatarSide = document.getElementById('sidebarAvatarInitial');
@@ -66,6 +86,7 @@ function initDashboardPengelola(nama, role) {
 const tabTitles = {
   'tabAdminOverview': 'Ringkasan Sistem',
   'tabAdminLiveSessions': 'Live Sessions',
+  'tabAdminSupportTickets': 'Tiket Bantuan CBT',
   'tabAdminUjian': 'Kelola Ujian & Arsip',
   'tabAdminUjianLanjutan': 'Ujian Khusus',
   'tabAdminSoal': 'Kelola Bank Soal',
@@ -73,13 +94,14 @@ const tabTitles = {
   'tabAdminLogPelanggaran': 'Log Pelanggaran Siswa',
   'tabAdminHasil': 'Rekap & Laporan Hasil',
   'tabAdminKartu': 'Cetak Kartu Ujian',
-  'tabAdminGuruUjian': 'Penugasan Guru Mapel',
+  'tabAdminGuruUjian': 'Penugasan Guru / Piket Ujian',
   'tabAdminAkun': 'Kelola Akun Staff',
   'tabGuruMonitor': 'Ujian & Mapel Diampu'
 };
 
 function switchDashTab(tabId, btnEl) {
   if (window.CbtLiveSessions) window.CbtLiveSessions.stop();
+  if (window.CbtSupportTickets) window.CbtSupportTickets.stopStaff();
   document.querySelectorAll('.dash-tab').forEach(t => t.classList.add('hidden'));
   const targetTab = document.getElementById(tabId);
   if (targetTab) targetTab.classList.remove('hidden');
@@ -97,6 +119,7 @@ function switchDashTab(tabId, btnEl) {
   
   if(tabId === 'tabAdminOverview') loadDataAdminDash();
   if(tabId === 'tabAdminLiveSessions') loadDataAdminLiveSessions();
+  if(tabId === 'tabAdminSupportTickets') loadDataSupportTickets();
   if(tabId === 'tabAdminUjian') loadDataAdminUjian();
   if(tabId === 'tabAdminUjianLanjutan') loadDataFollowUpExams();
   if(tabId === 'tabAdminSoal') loadDataAdminSoal();
@@ -108,6 +131,46 @@ function switchDashTab(tabId, btnEl) {
   if(tabId === 'tabAdminAkun') loadDataAdminAkun();
   if(tabId === 'tabGuruMonitor') loadDataGuru();
 }
+
+function refreshActiveDashboardTab() {
+  if (!stPengelola || document.getElementById('viewDashboardPengelola')?.classList.contains('hidden')) return false;
+  if (document.hidden || document.querySelector('.modal.show')) return false;
+  const focused = document.activeElement;
+  if (focused && ['INPUT', 'SELECT', 'TEXTAREA'].includes(focused.tagName)) return false;
+  const active = document.querySelector('.dash-tab:not(.hidden)');
+  if (!active) return false;
+  const loaders = {
+    tabAdminOverview: loadDataAdminDash,
+    tabAdminLiveSessions: loadDataAdminLiveSessions,
+    tabAdminSupportTickets: loadDataSupportTickets,
+    tabAdminUjian: loadDataAdminUjian,
+    tabAdminUjianLanjutan: loadDataFollowUpExams,
+    tabAdminSoal: loadDataAdminSoal,
+    tabAdminSiswa: loadDataAdminSiswa,
+    tabAdminLogPelanggaran: loadDataAdminLogPelanggaran,
+    tabAdminHasil: loadDataAdminHasil,
+    tabAdminKartu: loadDataAdminKartu,
+    tabAdminGuruUjian: loadDataAdminGuruUjian,
+    tabAdminAkun: loadDataAdminAkun,
+    tabAdminPengaturan: loadDataAdminPengaturan,
+    tabGuruMonitor: loadDataGuru
+  };
+  const loader = loaders[active.id];
+  if (typeof loader !== 'function') return false;
+  loader();
+  return true;
+}
+
+let dashboardRefreshTimer = null;
+function scheduleDashboardRefresh(delay = 500) {
+  clearTimeout(dashboardRefreshTimer);
+  dashboardRefreshTimer = setTimeout(() => {
+    if (!refreshActiveDashboardTab()) scheduleDashboardRefresh(1500);
+  }, delay);
+}
+
+window.addEventListener('cbt:data-updated', () => scheduleDashboardRefresh());
+setInterval(() => refreshActiveDashboardTab(), 20000);
 
 function loadDataAdminLiveSessions() {
   const root = document.getElementById('adminLiveSessionsContent');
@@ -122,7 +185,9 @@ function loadDataAdminLiveSessions() {
   window.CbtLiveSessions.mount(root, api, notice, {
     title: 'Live Sessions Seluruh Ujian',
     description: 'Pantau progres peserta dari seluruh ujian secara otomatis setiap 10 detik.',
-    enableFilters: true
+    enableFilters: true,
+    groupByExam: true,
+    allowAdminActions: true
   });
 }
 
@@ -140,12 +205,18 @@ function loadDataAdminDash() {
   cbtApi
     .withSuccessHandler(res => {
       if(res && res.success){
+        renderOverviewScores(res.scoreDistribution || []);
+        loadOverviewSchedule();
         document.getElementById('statJmlSiswa').textContent = (res.totalSiswa || 0).toLocaleString('id-ID');
         document.getElementById('statJmlUjian').textContent = (res.totalUjianAktif || 0).toLocaleString('id-ID');
         document.getElementById('statJmlSubmit').textContent = (res.totalSubmit || 0).toLocaleString('id-ID');
         document.getElementById('statJmlPelanggaran').textContent = (res.totalPelanggaran || 0).toLocaleString('id-ID');
       }
       if(typeof loadFollowUpDashboardActions==='function')loadFollowUpDashboardActions();
+    })
+    .withFailureHandler(() => {
+      document.getElementById('overviewScoreChart').textContent = 'Ringkasan gagal dimuat. Silakan perbarui untuk mencoba lagi.';
+      document.getElementById('overviewSchedule').textContent = 'Jadwal belum dimuat.';
     })
     .getAdminDashboardStats(stPengelola);
 }
@@ -169,7 +240,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     const student = payload.data.student;
     if (staff?.role === 'TEACHER') { window.location.replace('guru/dashboard'); return; }
     if (staff?.role === 'ADMIN') {
-      stPengelola = { userId: staff.id, id: staff.id, role: 'admin', nama: staff.nama, username: staff.username };
+      stPengelola = { userId: staff.id, id: staff.id, role: 'ADMIN', nama: staff.nama, username: staff.username };
       initDashboardPengelola(staff.nama, 'admin');
       return;
     }
@@ -178,6 +249,10 @@ window.addEventListener('DOMContentLoaded', async () => {
       document.getElementById('lblNamaSiswa').textContent = stSiswa.nama;
       document.getElementById('lblKelasSiswa').textContent = stSiswa.kelas;
       document.getElementById('lblNoSiswa').textContent = stSiswa.no;
+      if(String(student.cbt_status||'ACTIVE')!=='ACTIVE'){
+        const list=document.getElementById('listJadwalUjian');if(list)list.innerHTML='<div class="alert error" style="margin:0;">Akun CBT sedang terkunci. Gunakan tombol bantuan di bawah untuk mengirim tiket tanpa keluar dari akun.</div>';
+        switchView('viewPortalSiswa');return;
+      }
       cbtApi.withSuccessHandler(result => {
         renderDaftarJadwal(result.jadwal);switchView('viewPortalSiswa');
         const active = result.jadwal.find(exam => exam.status_pengerjaan === 'berlangsung');

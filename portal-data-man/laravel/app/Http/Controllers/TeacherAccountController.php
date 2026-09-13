@@ -12,8 +12,8 @@ use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
 class TeacherAccountController extends Controller
@@ -119,7 +119,7 @@ class TeacherAccountController extends Controller
         if (! $to) {
             return 'NO_EMAIL';
         }try {
-            Mail::to($to)->send(new TeacherActivationMail($account->load('teacher'), $url));
+            Mail::to($to)->send(new TeacherActivationMail($account->load(['teacher', 'employee']), $url));
 
             return 'SENT';
         } catch (\Throwable $error) {

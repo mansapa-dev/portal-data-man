@@ -8,17 +8,48 @@ final class ScoringService
 {
  public function __construct(private Database$db,private AttemptRepository$attempts){}
 
- public function submit(int$studentId,int$examId):array
+ public function recover(int $studentId, int $examId): ?array
  {
-  return$this->db->transaction(function()use($studentId,$examId){
+  $attempt = $this->attempts->find($studentId, $examId);
+  if (!$attempt) return null;
+  $result = $this->attempts->result((int)$attempt['id']);
+  if ($result) return ['completed' => true, 'terminated' => $attempt['status'] === 'TERMINATED', 'hasil' => $this->format($result)];
+  if ($attempt['status'] === 'TERMINATED' || ($attempt['status'] === 'IN_PROGRESS' && strtotime($attempt['expires_at'].' UTC') <= time())) {
+   return ['completed' => true, 'terminated' => $attempt['status'] === 'TERMINATED', 'hasil' => $this->submit($studentId, $examId, true)];
+  }
+  return null;
+ }
+
+ public function finalizeDue(int $limit = 200): array
+ {
+  $limit = max(1, min(1000, $limit));
+  $rows = $this->db->pdo()->query("SELECT a.student_id,a.exam_id FROM exam_attempts a LEFT JOIN exam_results r ON r.attempt_id=a.id WHERE r.attempt_id IS NULL AND (a.status='TERMINATED' OR (a.status='IN_PROGRESS' AND a.expires_at<=UTC_TIMESTAMP(3))) ORDER BY a.expires_at LIMIT ".$limit)->fetchAll();
+  $done = 0; $failed = 0;
+  foreach ($rows as $row) {
+   try { $this->submit((int)$row['student_id'], (int)$row['exam_id'], true); $done++; }
+   catch (DomainException $error) { if($error->status!==409){$failed++;error_log($error->getMessage());} }
+   catch (\Throwable $error) { $failed++; error_log('CBT finalization exam '.$row['exam_id'].': '.$error->getMessage()); }
+  }
+  return ['completed' => $done, 'failed' => $failed];
+ }
+
+ public function submit(int$studentId,int$examId,bool$onlyDue=false):array
+ {
+  return$this->db->transaction(function()use($studentId,$examId,$onlyDue){
    $attempt=$this->attempts->find($studentId,$examId,true)??throw new DomainException('Sesi ujian tidak ditemukan.',404);
    $existing=$this->attempts->result((int)$attempt['id']);
-   if($existing)return$this->format($existing);
+   if($existing){
+    if($attempt['status']==='IN_PROGRESS')$this->db->pdo()->prepare("UPDATE exam_attempts SET status='COMPLETED',completed_at=COALESCE(completed_at,UTC_TIMESTAMP(3)) WHERE id=:id AND status='IN_PROGRESS'")->execute(['id'=>$attempt['id']]);
+    return$this->format($existing);
+   }
+   if($onlyDue && $attempt['status']==='IN_PROGRESS' && strtotime($attempt['expires_at'].' UTC')>time())throw new DomainException('Ujian telah dibuka kembali oleh admin. Muat ulang dashboard untuk melanjutkan.',409);
    if(!in_array($attempt['status'],['IN_PROGRESS','TERMINATED'],true))throw new DomainException('Ujian tidak dapat disubmit.',409);
 
-   $sql='SELECT q.id,q.correct_answer,q.points,a.answer FROM questions q LEFT JOIN student_answers a ON a.question_id=q.id AND a.attempt_id=:attempt WHERE q.exam_id=:exam AND q.status=\'ACTIVE\'';
+   $this->ensureAttemptQuestions($attempt);
+
+   $sql='SELECT q.question_id id,q.correct_answer,q.points,a.answer FROM attempt_questions q LEFT JOIN student_answers a ON a.question_id=q.question_id AND a.attempt_id=q.attempt_id WHERE q.attempt_id=:attempt';
    $statement=$this->db->pdo()->prepare($sql);
-   $statement->execute(['attempt'=>$attempt['id'],'exam'=>$examId]);
+   $statement->execute(['attempt'=>$attempt['id']]);
    $rows=$statement->fetchAll();
    if(!$rows)throw new DomainException('Soal ujian tidak ditemukan.',409);
 
@@ -85,9 +116,29 @@ final class ScoringService
  public function review(int$studentId,int$examId):array
  {
   $attempt=$this->attempts->find($studentId,$examId)??throw new DomainException('Sesi ujian tidak ditemukan.',404);
-  if(!in_array($attempt['status'],['COMPLETED','TERMINATED'],true))throw new DomainException('Review hanya tersedia setelah ujian selesai.',403);
-  $sql='SELECT q.id,q.question_text,q.correct_answer,a.answer FROM questions q LEFT JOIN student_answers a ON a.question_id=q.id AND a.attempt_id=:attempt WHERE q.exam_id=:exam AND q.status=\'ACTIVE\'';
-  $s=$this->db->pdo()->prepare($sql);$s->execute(['attempt'=>$attempt['id'],'exam'=>$examId]);$rows=$s->fetchAll();
-  return['soal'=>array_map(fn($r)=>['id'=>(int)$r['id'],'pertanyaan'=>$r['question_text'],'jawaban_benar'=>$r['correct_answer']],$rows),'jawaban'=>array_map(fn($r)=>['soal_id'=>(int)$r['id'],'jawaban'=>$r['answer']],$rows)];
+  if($attempt['status']!=='COMPLETED')throw new DomainException('Review hanya tersedia untuk ujian yang diselesaikan.',403);
+  $this->ensureAttemptQuestions($attempt);
+  $sql='SELECT q.question_id id,q.question_text,q.correct_answer,a.answer FROM attempt_questions q LEFT JOIN student_answers a ON a.question_id=q.question_id AND a.attempt_id=q.attempt_id WHERE q.attempt_id=:attempt';
+  $s=$this->db->pdo()->prepare($sql);$s->execute(['attempt'=>$attempt['id']]);$rows=$s->fetchAll();
+  if(!$rows)throw new DomainException('Data soal untuk review tidak tersedia. Jalankan upgrade database atau pulihkan bank soal ujian ini.',409);
+  $byId=[];foreach($rows as$row)$byId[(int)$row['id']]=$row;$ordered=[];
+  foreach(json_decode($attempt['question_order'],true,512,JSON_THROW_ON_ERROR)as$id)if(isset($byId[(int)$id]))$ordered[]=$byId[(int)$id];
+   $questions=[];
+   foreach($ordered as$row){
+    $status=$row['answer']===null?'KOSONG':(hash_equals((string)$row['correct_answer'],(string)$row['answer'])?'BENAR':'SALAH');
+    $questions[]=['id'=>(int)$row['id'],'pertanyaan'=>\Cbt\Support\QuestionHtml::clean($row['question_text']),'status'=>$status];
+   }
+   return['soal'=>$questions];
+ }
+
+ private function ensureAttemptQuestions(array $attempt):void
+ {
+  $count=$this->db->pdo()->prepare('SELECT COUNT(*) FROM attempt_questions WHERE attempt_id=:attempt');
+  $count->execute(['attempt'=>$attempt['id']]);
+  if((int)$count->fetchColumn()>0)return;
+  // Compatibility for attempts created before question snapshots existed. Current
+  // bank contents are the only recoverable source for these legacy attempts.
+  $insert=$this->db->pdo()->prepare("INSERT IGNORE INTO attempt_questions(attempt_id,question_id,question_text,option_a,option_b,option_c,option_d,option_e,correct_answer,points) SELECT :attempt,q.id,q.question_text,q.option_a,q.option_b,q.option_c,q.option_d,q.option_e,q.correct_answer,q.points FROM questions q WHERE q.exam_id=:exam AND JSON_CONTAINS(:question_order,CAST(q.id AS CHAR))");
+  $insert->execute(['attempt'=>$attempt['id'],'exam'=>$attempt['exam_id'],'question_order'=>$attempt['question_order']]);
  }
 }

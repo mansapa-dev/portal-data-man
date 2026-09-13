@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS students (
  grade_snapshot VARCHAR(10) NULL,
  academic_year_snapshot VARCHAR(30) NULL,
  pin_hash VARCHAR(255) NULL,
- pin_encrypted TEXT NULL,
+ pin_encrypted TEXT NULL COMMENT 'Encrypted copy for authorized administrator display',
  cbt_status ENUM('ACTIVE','INACTIVE','BLOCKED') NOT NULL DEFAULT 'ACTIVE',
  is_active TINYINT(1) NOT NULL DEFAULT 1,
  last_synced_at DATETIME(3) NULL,
@@ -256,11 +256,28 @@ CREATE TABLE IF NOT EXISTS violations (
 
 CREATE TABLE IF NOT EXISTS teacher_exam_assignments (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, teacher_id BIGINT UNSIGNED NOT NULL, exam_id BIGINT UNSIGNED NOT NULL,
+ duty_role ENUM('TEACHER','PROCTOR') NOT NULL DEFAULT 'TEACHER',
  created_by BIGINT UNSIGNED NOT NULL, created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
  UNIQUE KEY uq_teacher_exam (teacher_id,exam_id), KEY idx_assignment_exam (exam_id),
  CONSTRAINT fk_assignment_teacher FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON DELETE RESTRICT,
  CONSTRAINT fk_assignment_exam FOREIGN KEY (exam_id) REFERENCES exams(id) ON DELETE CASCADE,
  CONSTRAINT fk_assignment_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS support_tickets (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, public_id CHAR(26) NOT NULL,
+ student_id BIGINT UNSIGNED NOT NULL, exam_id BIGINT UNSIGNED NULL, attempt_id BIGINT UNSIGNED NULL,
+ category ENUM('ACCOUNT_ACCESS','EXAM_LOCKED','PIN','CONNECTION','TECHNICAL','OTHER') NOT NULL,
+ message VARCHAR(1000) NOT NULL, status ENUM('OPEN','IN_PROGRESS','RESOLVED','CLOSED') NOT NULL DEFAULT 'OPEN',
+ handled_by BIGINT UNSIGNED NULL, staff_note VARCHAR(1000) NULL, resolution_type ENUM('ASSISTED','CBT_RESET') NULL,
+ resolved_at DATETIME(3) NULL, created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+ updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+ UNIQUE KEY uq_support_tickets_public (public_id), KEY idx_support_status_updated (status,updated_at),
+ KEY idx_support_student_updated (student_id,updated_at), KEY idx_support_exam_status (exam_id,status),
+ CONSTRAINT fk_support_student FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE RESTRICT,
+ CONSTRAINT fk_support_exam FOREIGN KEY (exam_id) REFERENCES exams(id) ON DELETE SET NULL,
+ CONSTRAINT fk_support_attempt FOREIGN KEY (attempt_id) REFERENCES exam_attempts(id) ON DELETE SET NULL,
+ CONSTRAINT fk_support_handler FOREIGN KEY (handled_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS portal_sync_logs (
@@ -299,3 +316,31 @@ INSERT INTO cbt_settings (key_name,value,description) VALUES
  ('remedial_score_cap_XI','75','Nilai maksimum ujian ulang siswa tingkat XI (0-100)'),
  ('remedial_score_cap_XII','75','Nilai maksimum ujian ulang siswa tingkat XII (0-100)')
 ON DUPLICATE KEY UPDATE key_name=VALUES(key_name);
+
+CREATE TABLE IF NOT EXISTS answer_write_versions (
+ attempt_id BIGINT UNSIGNED NOT NULL,
+ question_id BIGINT UNSIGNED NOT NULL,
+ revision BIGINT UNSIGNED NOT NULL,
+ mutation_id VARCHAR(100) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ PRIMARY KEY (attempt_id,question_id),
+ CONSTRAINT fk_answer_version_attempt FOREIGN KEY (attempt_id) REFERENCES exam_attempts(id) ON DELETE CASCADE,
+ CONSTRAINT fk_answer_version_question FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS attempt_questions (
+ attempt_id BIGINT UNSIGNED NOT NULL,
+ question_id BIGINT UNSIGNED NOT NULL,
+ question_text TEXT NOT NULL,
+ option_a TEXT NOT NULL, option_b TEXT NOT NULL, option_c TEXT NOT NULL, option_d TEXT NOT NULL, option_e TEXT NULL,
+ correct_answer CHAR(1) NOT NULL,
+ points DECIMAL(8,2) NOT NULL,
+ PRIMARY KEY (attempt_id,question_id),
+ CONSTRAINT fk_attempt_questions_attempt FOREIGN KEY (attempt_id) REFERENCES exam_attempts(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+CREATE TABLE IF NOT EXISTS attempt_connections (
+ attempt_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+ last_seen_at DATETIME(3) NOT NULL,
+ CONSTRAINT fk_attempt_connection FOREIGN KEY (attempt_id) REFERENCES exam_attempts(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

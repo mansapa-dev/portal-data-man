@@ -2,12 +2,14 @@
 declare(strict_types=1);
 namespace Cbt\Controllers;
 use Cbt\Core\{Request,Response};
-use Cbt\Services\AdminService;
+use Cbt\Services\{AdminService,ScoringService};
 final class AdminController
 {
- public function __construct(private AdminService$admin){}
+ public function __construct(private AdminService$admin,private ScoringService$scoring){}
  public function dashboard(Request$r):Response{return Response::json($this->admin->dashboard());}
  public function liveSessions(Request$r):Response{return Response::json($this->admin->adminLiveSessions());}
+ public function terminateStudentSession(Request$r):Response{$attempt=$this->admin->terminateStudentSession((string)$r->attributes['id']);$result=$this->scoring->submit((int)$attempt['student_id'],(int)$attempt['exam_id']);return Response::json(['result'=>$result],'Sesi siswa dihentikan dan hasil berhasil diproses.');}
+ public function terminateExamSession(Request$r):Response{$attempts=$this->admin->terminateExamSession((int)$r->attributes['id']);$processed=0;foreach($attempts as$attempt){$this->scoring->submit((int)$attempt['student_id'],(int)$attempt['exam_id']);$processed++;}return Response::json(['terminated'=>$processed],'Sesi ujian diakhiri dan seluruh hasil aktif telah diproses.');}
  public function references(Request$r):Response{return Response::json($this->admin->references());}
  public function exams(Request$r):Response{return Response::json($this->admin->exams());}
  public function saveExam(Request$r):Response{$this->admin->saveExam($r->json(),(int)$_SESSION['auth']['user_id']);return Response::json(null,'Ujian berhasil disimpan.');}
@@ -19,6 +21,7 @@ final class AdminController
  public function setFollowUpStatus(Request$r):Response{$data=$r->json();$this->admin->setFollowUpStatus((int)$r->attributes['id'],filter_var($data['active']??false,FILTER_VALIDATE_BOOL));return Response::json(null,'Status jadwal berhasil diperbarui.');}
  public function questions(Request$r):Response{return Response::json($this->admin->questions($r->input('exam_id')!==null?(int)$r->input('exam_id'):null));}
  public function saveQuestion(Request$r):Response{$this->admin->saveQuestion($r->json());return Response::json(null,'Soal berhasil disimpan.');}
+ public function deleteQuestion(Request$r):Response{$this->admin->deleteQuestion((int)$r->attributes['id']);return Response::json(null,'Soal berhasil dihapus dari bank soal.');}
  public function users(Request$r):Response{return Response::json($this->admin->users());}
  public function saveUser(Request$r):Response{$this->admin->saveUser($r->json());return Response::json(null,'Akun berhasil disimpan.');}
  public function assignments(Request$r):Response{return Response::json($this->admin->assignments());}
@@ -29,5 +32,5 @@ final class AdminController
  public function importQuestions(Request$r):Response{$summary=$this->admin->importQuestions((array)$r->input('rows',[]));return Response::json($summary,"Import selesai: {$summary['inserted']} berhasil, {$summary['failed']} gagal.");}
  public function importUsers(Request$r):Response{$summary=$this->admin->importUsers((array)$r->input('rows',[]));return Response::json($summary,"Import selesai: {$summary['inserted']} berhasil, {$summary['failed']} gagal.");}
  public function settings(Request$r):Response{return Response::json($this->admin->settings());}
- public function saveSettings(Request$r):Response{$this->admin->saveSettings($r->json());return Response::json(null,'Pengaturan berhasil disimpan.');}
+ public function saveSettings(Request$r):Response{$saved=$this->admin->saveSettings($r->json());return Response::json($saved,'Pengaturan berhasil disimpan dan diverifikasi.');}
 }

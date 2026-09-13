@@ -1,5 +1,6 @@
 // Violation logs, result filtering, reports, and participant card printing.
 let cachePelanggaranRaw=[];
+let cacheKartuSiap=[];
 function loadDataAdminLogPelanggaran() {
   const tb = document.getElementById('tblAdminLogPelanggaran'); tb.innerHTML = `<tr><td colspan="7" align="center">Memuat...</td></tr>`;
   cbtApi
@@ -24,7 +25,7 @@ function applyFilterPelanggaran(){const date=document.getElementById('fltPelangg
           <td>${p.kelas}</td>
           <td>${p.nama_ujian}</td>
           <td><span class="badge bg-red">${p.jumlah_pelanggaran} Kali</span></td>
-          <td>${p.keterangan}</td>
+          <td>${p.keterangan}${p.attempt_status === 'TERMINATED' && Number(p.jumlah_pelanggaran) >= 3 ? `<br><button class="btn btn-warning" onclick="resetCbtAttempt(${Number(p.student_id)},${Number(p.exam_id)})"><i class="fa-solid fa-unlock"></i> Reset CBT</button>` : ''}</td>
         </tr>
       `).join(''):`<tr><td colspan="7" align="center">Tidak ada data sesuai filter.</td></tr>`;}
 
@@ -57,6 +58,10 @@ function loadDataAdminHasil() {
     .getAdminHasilGlobal(stPengelola);
 }
 
+const urutkanHasilAbjad = rows => [...rows].sort((a,b) => String(a.nama_siswa || '').localeCompare(String(b.nama_siswa || ''),'id',{sensitivity:'base',numeric:true}) || String(a.nomor_ujian || '').localeCompare(String(b.nomor_ujian || ''),'id',{numeric:true}));
+const formatWaktuSelesai = value => value ? new Date(String(value).replace(' ','T').replace(/Z?$/,'Z')).toLocaleString('id-ID',{timeZone:'Asia/Jakarta',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).replace(',','') : '-';
+const labelStatusHasil = value => ({completed:'Selesai',terminated:'Dihentikan',expired:'Kedaluwarsa'}[String(value||'').toLowerCase()] || String(value||'-'));
+
 function applyFilterHasil() {
   const fThn = document.getElementById('fltTahunAjaran').value;
   const fSem = document.getElementById('fltSemester').value;
@@ -64,17 +69,17 @@ function applyFilterHasil() {
   const fKelas = document.getElementById('fltHasilKelas').value;
   const fUjian = document.getElementById('fltHasilUjian').value;
   
-  const filtered = cacheHasilRaw.filter(h => {
+  const filtered = urutkanHasilAbjad(cacheHasilRaw.filter(h => {
     let matchThn = fThn === 'ALL' || h.tahun_ajaran === fThn;
     let matchSem = fSem === 'ALL' || h.semester === fSem;
     let matchTingkat = fTingkat === 'ALL' || h.tingkat === fTingkat;
     let matchK = fKelas === 'ALL' || h.kelas === fKelas;
     let matchU = fUjian === 'ALL' || h.nama_ujian === fUjian;
     return matchThn && matchSem && matchTingkat && matchK && matchU;
-  });
+  }));
   
   const tb = document.getElementById('tblAdminHasil');
-  if(filtered.length === 0) { tb.innerHTML = `<tr><td colspan="7" align="center">Data tidak ditemukan.</td></tr>`; return; }
+  if(filtered.length === 0) { tb.innerHTML = `<tr><td colspan="8" class="text-center">Data tidak ditemukan.</td></tr>`; return; }
   
   tb.innerHTML = filtered.map(h => `
     <tr>
@@ -84,7 +89,8 @@ function applyFilterHasil() {
       <td>${h.kelas}</td>
       <td>${h.nama_ujian}</td>
       <td><b style="color:var(--primary); font-size:14px;">${h.nilai}</b></td>
-      <td><span class="badge bg-green">${h.status.toUpperCase()}</span></td>
+      <td><span class="badge bg-green">${labelStatusHasil(h.status)}</span></td>
+      <td><small>${formatWaktuSelesai(h.waktu_selesai)}</small></td>
     </tr>
   `).join('');
 }
@@ -96,24 +102,24 @@ function exportFilterHasil(type) {
   const fKelas = document.getElementById('fltHasilKelas').value;
   const fUjian = document.getElementById('fltHasilUjian').value;
   
-  const filtered = cacheHasilRaw.filter(h => {
+  const filtered = urutkanHasilAbjad(cacheHasilRaw.filter(h => {
     let matchThn = fThn === 'ALL' || h.tahun_ajaran === fThn;
     let matchSem = fSem === 'ALL' || h.semester === fSem;
     let matchTingkat = fTingkat === 'ALL' || h.tingkat === fTingkat;
     let matchK = fKelas === 'ALL' || h.kelas === fKelas;
     let matchU = fUjian === 'ALL' || h.nama_ujian === fUjian;
     return matchThn && matchSem && matchTingkat && matchK && matchU;
-  });
+  }));
 
   if(filtered.length === 0) { showCustomAlert('Peringatan', 'Tidak ada data yang sesuai filter untuk diexport.'); return; }
   
   if(type === 'ujian') {
-    let headers = ['Nama Ujian', 'Nomor Peserta', 'Nama Siswa', 'Tingkat', 'Kelas', 'Tahun Ajaran', 'Semester', 'Nilai Akhir', 'Status'];
-    let rows = filtered.map(h => [h.nama_ujian, h.nomor_ujian, h.nama_siswa, h.tingkat, h.kelas, h.tahun_ajaran, h.semester, h.nilai, h.status]);
+    let headers = ['Nama Ujian', 'Nomor Peserta', 'Nama Siswa', 'Tingkat', 'Kelas', 'Tahun Ajaran', 'Semester', 'Nilai Akhir', 'Status', 'Waktu Selesai'];
+    let rows = filtered.map(h => [h.nama_ujian, h.nomor_ujian, h.nama_siswa, h.tingkat, h.kelas, h.tahun_ajaran, h.semester, h.nilai, labelStatusHasil(h.status), formatWaktuSelesai(h.waktu_selesai)]);
     exportToExcel('rekap_rekapitulasi_ujian.xlsx', 'Rekap Ujian', headers, rows);
   } else if(type === 'rombel') {
-    let headers = ['Tingkat', 'Kelas/Rombel', 'Nama Ujian', 'Nomor Peserta', 'Nama Siswa', 'Nilai Akhir', 'Status'];
-    let rows = filtered.map(h => [h.tingkat, h.kelas, h.nama_ujian, h.nomor_ujian, h.nama_siswa, h.nilai, h.status]);
+    let headers = ['Tingkat', 'Kelas/Rombel', 'Nama Ujian', 'Nomor Peserta', 'Nama Siswa', 'Nilai Akhir', 'Status', 'Waktu Selesai'];
+    let rows = filtered.map(h => [h.tingkat, h.kelas, h.nama_ujian, h.nomor_ujian, h.nama_siswa, h.nilai, labelStatusHasil(h.status), formatWaktuSelesai(h.waktu_selesai)]);
     exportToExcel('rekap_per_rombel.xlsx', 'Per Rombel', headers, rows);
   }
 }
@@ -125,14 +131,14 @@ function cetakLaporanResmiPDF() {
   const fKelas = document.getElementById('fltHasilKelas').value;
   const fUjian = document.getElementById('fltHasilUjian').value;
   
-  const filtered = cacheHasilRaw.filter(h => {
+  const filtered = urutkanHasilAbjad(cacheHasilRaw.filter(h => {
     let matchThn = fThn === 'ALL' || h.tahun_ajaran === fThn;
     let matchSem = fSem === 'ALL' || h.semester === fSem;
     let matchTingkat = fTingkat === 'ALL' || h.tingkat === fTingkat;
     let matchK = fKelas === 'ALL' || h.kelas === fKelas;
     let matchU = fUjian === 'ALL' || h.nama_ujian === fUjian;
     return matchThn && matchSem && matchTingkat && matchK && matchU;
-  });
+  }));
 
   if(filtered.length === 0) { showCustomAlert('Peringatan', 'Tidak ada data sesuai filter untuk dicetak.'); return; }
   
@@ -151,10 +157,10 @@ function cetakLaporanResmiPDF() {
   document.getElementById('lblPrintWakur').innerHTML = `<u>${valWakur}</u>`;
   document.getElementById('lblPrintNipWakur').textContent = valNipWakur;
   
-  let html = `<table style="width:100%; border-collapse:collapse; font-size:11px;" border="1" cellpadding="6">
+  let html = `<table class="print-results-table" style="width:100%; border-collapse:collapse; table-layout:fixed; font-size:9px;" border="1" cellpadding="5">
     <thead>
       <tr style="background:#f1f5f9;">
-        <th>No</th><th>No Peserta</th><th>Nama Siswa</th><th>Tingkat</th><th>Kelas</th><th>Mata Ujian</th><th>Nilai</th><th>Status</th>
+        <th style="width:4%">No.</th><th style="width:12%">No. Peserta</th><th style="width:20%">Nama Siswa</th><th style="width:7%">Tingkat</th><th style="width:10%">Kelas</th><th style="width:19%">Mata Ujian</th><th style="width:7%">Nilai</th><th style="width:9%">Status</th><th style="width:12%">Waktu Selesai</th>
       </tr>
     </thead>
     <tbody>`;
@@ -168,70 +174,95 @@ function cetakLaporanResmiPDF() {
       <td>${h.kelas}</td>
       <td>${h.nama_ujian}</td>
       <td align="center"><b>${h.nilai}</b></td>
-      <td align="center">${h.status.toUpperCase()}</td>
+      <td align="center">${labelStatusHasil(h.status)}</td>
+      <td align="center">${formatWaktuSelesai(h.waktu_selesai)}</td>
     </tr>`;
   });
   
   html += `</tbody></table>`;
   document.getElementById('printContentTable').innerHTML = html;
   
-  // Aktifkan mode cetak laporan khusus
-  document.body.className = "mode-cetak-laporan";
+  document.getElementById('printTanggalTtd').textContent = new Date().toLocaleDateString('id-ID',{timeZone:'Asia/Jakarta',day:'2-digit',month:'long',year:'numeric'});
+  const pageStyle=document.createElement('style');pageStyle.id='admin-report-page-style';pageStyle.textContent='@page{size:A4 landscape;margin:10mm 12mm}';document.head.append(pageStyle);
+  document.body.classList.add('mode-cetak-laporan');
+  const cleanup=()=>{document.body.classList.remove('mode-cetak-laporan');pageStyle.remove();};
+  window.addEventListener('afterprint',cleanup,{once:true});
   window.print();
-  document.body.className = "";
+  setTimeout(cleanup,2000);
 }
 
-function loadDataAdminKartu() {
+function renderDataAdminKartu(rows) {
   const container = document.getElementById('printAreaCards');
+  container.className = '';
   const printContainer = document.getElementById('printAreaKartuContainer');
-  container.innerHTML = `<div class="alert info">Memuat kartu peserta...</div>`;
-  
+  const summary = document.getElementById('cardPrintSummary');
+  const printButton = document.getElementById('btnCetakKartu');
+  const excelButton = document.getElementById('btnExcelKartu');
   const fTingkat = document.getElementById('filterKartuTingkat').value;
   const fKelas = document.getElementById('filterKartuKelas').value.toLowerCase().trim();
-
-  cbtApi
-    .withSuccessHandler(rows => {
-      if(!rows || rows.length === 0) { 
-        container.innerHTML = `<div class="alert error">Tidak ada data siswa.</div>`; 
-        printContainer.innerHTML = '';
-        return; 
-      }
-      
-      const filtered = rows.filter(s => {
-        let matchT = fTingkat === 'ALL' || String(s.tingkat).toUpperCase() === fTingkat;
-        let matchK = !fKelas || String(s.kelas).toLowerCase().includes(fKelas);
-        return matchT && matchK;
-      });
-
-      if(filtered.length === 0) {
-        container.innerHTML = `<div class="alert error">Tidak ada siswa yang cocok dengan filter tingkat/kelas tersebut.</div>`;
-        printContainer.innerHTML = '';
-        return;
-      }
-
-      const cardsHtml = filtered.map(s => `
+  const eligible=(Array.isArray(rows)?rows:[]).filter(s=>(fTingkat==='ALL'||String(s.tingkat).toUpperCase()===fTingkat)&&(!fKelas||String(s.kelas).toLowerCase()===fKelas));
+  const ready=eligible.filter(s=>s.pin&&!['BELUM DISET','PERLU DIGANTI'].includes(s.pin)).sort((a,b)=>String(a.kelas||'').localeCompare(String(b.kelas||''),'id',{numeric:true,sensitivity:'base'})||String(a.nama||'').localeCompare(String(b.nama||''),'id',{numeric:true,sensitivity:'base'}));
+  cacheKartuSiap=ready;
+  const skipped=eligible.length-ready.length;
+  if(!eligible.length){container.innerHTML=`<div class="alert error">Tidak ada siswa yang cocok dengan filter tingkat/kelas tersebut.</div>`;printContainer.innerHTML='';summary.textContent='0 kartu siap dicetak.';printButton.disabled=true;excelButton.disabled=true;return;}
+  const safe=value=>String(value??'').replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+  const cardsHtml=ready.map(s => `
         <div class="card-ujian-print" style="border: 2px solid var(--border); padding: 14px; border-radius: 10px; background: white; margin-bottom: 12px;">
           <div class="card-print-letterhead" style="display:flex; align-items:center; gap:8px; border-bottom:2px solid var(--primary); padding-bottom:6px; margin-bottom:10px;">
             <img src="assets/img/logo-man1-palembang.png" alt="Lambang MAN 1 Palembang" style="width:34px; height:34px; object-fit:contain;">
             <div style="flex:1;"><b style="display:block; font-size:12px; color:var(--primary);">KARTU PESERTA UJIAN</b><span style="font-size:10px; font-weight:700;">MADRASAH ALIYAH NEGERI 1 PALEMBANG</span></div>
           </div>
           <table style="font-size:11px; width:100%;">
-            <tr><td style="padding:3px; width:35%;">No Peserta</td><td style="padding:3px;">: <b>${s.nomor_ujian}</b></td></tr>
-            <tr><td style="padding:3px;">Nama Siswa</td><td style="padding:3px;">: <b>${s.nama}</b></td></tr>
-            <tr><td style="padding:3px;">Kelas / Tingkat</td><td style="padding:3px;">: ${s.kelas} / ${s.tingkat}</td></tr>
-            <tr><td style="padding:3px;">PIN Ujian</td><td style="padding:3px;"><span class="badge bg-gray" style="font-size:12px; font-weight:900; letter-spacing:1px;">${s.pin}</span></td></tr>
+            <tr><td style="padding:3px; width:35%;">No Peserta</td><td style="padding:3px;">: <b>${safe(s.nomor_ujian)}</b></td></tr>
+            <tr><td style="padding:3px;">Nama Siswa</td><td style="padding:3px;">: <b>${safe(s.nama)}</b></td></tr>
+            <tr><td style="padding:3px;">Kelas / Tingkat</td><td style="padding:3px;">: ${safe(s.kelas)} / ${safe(s.tingkat)}</td></tr>
+            <tr><td style="padding:3px;">PIN Ujian</td><td style="padding:3px;"><span class="badge bg-gray" style="font-size:12px; font-weight:900; letter-spacing:1px;">${safe(s.pin)}</span></td></tr>
           </table>
         </div>
       `).join('');
+  container.innerHTML=cardsHtml||`<div class="alert error">Tidak ada kartu dengan PIN yang siap dicetak.</div>`;
+  printContainer.innerHTML=cardsHtml;
+  summary.textContent=`${ready.length} kartu siap dicetak${skipped?`; ${skipped} siswa dilewati karena PIN belum tersedia`:''}. Data tersinkron dengan Seluruh Data Siswa.`;
+  printButton.disabled=ready.length===0;
+  excelButton.disabled=ready.length===0;
+}
 
-      container.innerHTML = cardsHtml;
-      printContainer.innerHTML = cardsHtml;
-    })
-    .getAdminSiswaList(stPengelola);
+function loadDataAdminKartu(force=false) {
+  const container=document.getElementById('printAreaCards');
+  if(!force&&Array.isArray(cacheSiswaGlobal)&&cacheSiswaGlobal.length){renderDataAdminKartu(cacheSiswaGlobal);return;}
+  container.innerHTML=`<div class="alert info">Menyinkronkan data kartu dengan Seluruh Data Siswa...</div>`;
+  document.getElementById('btnCetakKartu').disabled=true;
+  document.getElementById('btnExcelKartu').disabled=true;
+  cbtApi.withSuccessHandler(rows=>{cacheSiswaGlobal=Array.isArray(rows)?rows:[];renderDataAdminKartu(cacheSiswaGlobal);}).withFailureHandler(()=>{cacheKartuSiap=[];container.textContent='Gagal menyinkronkan data kartu siswa.';container.className='alert error';document.getElementById('printAreaKartuContainer').innerHTML='';}).getAdminSiswaList(stPengelola);
 }
 
 function cetakKartuPesertaUjian() {
-  document.body.className = "mode-cetak-kartu";
+  if(!document.getElementById('printAreaKartuContainer').children.length)return showCustomAlert('Kartu Belum Siap','Sinkronkan data dan pastikan siswa sudah memiliki PIN.','warning');
+  document.body.classList.add('mode-cetak-kartu');
   window.print();
-  document.body.className = "";
+  document.body.classList.remove('mode-cetak-kartu');
+}
+
+function exportKartuPesertaExcel() {
+  if(!cacheKartuSiap.length)return showCustomAlert('Kartu Belum Siap','Sinkronkan data dan pastikan siswa sudah memiliki PIN.','warning');
+  const grade=document.getElementById('filterKartuTingkat').value;
+  const className=document.getElementById('filterKartuKelas').value.trim();
+  const suffix=[grade!=='ALL'?grade:'semua-tingkat',className||'semua-kelas'].join('_').toLowerCase().replace(/[^a-z0-9_-]+/g,'-');
+  const headers=['No','Nomor Peserta','Nama Siswa','Kelas','Tingkat','PIN Ujian','Tahun Ajaran'];
+  const rows=cacheKartuSiap.map((student,index)=>[index+1,String(student.nomor_ujian||student.nisn||''),student.nama||'',student.kelas||'',student.tingkat||'',String(student.pin||''),student.tahun_ajaran||'']);
+  exportToExcel(`kartu_peserta_ujian_${suffix}.xlsx`,'Kartu Peserta',headers,rows);
+}
+
+window.addEventListener('cbt:data-updated',event=>{if(String(event.detail?.path||'').includes('/students'))cacheSiswaGlobal=[];});
+
+function resetCbtAttempt(studentId, examId) {
+  const reason = window.prompt('Alasan reset CBT: jawaban tetap tersimpan, hitungan pelanggaran kembali nol, dan sisa waktu dipulihkan meskipun jadwal sudah berakhir.');
+  if (!reason?.trim()) return;
+  showLoading('Membuka kembali CBT...');
+  cbtApi.withSuccessHandler(() => {
+    hideLoading(); loadDataAdminLogPelanggaran();
+    if (typeof loadDataAdminSiswa === 'function') loadDataAdminSiswa();
+    showCustomAlert('CBT Dibuka', 'Siswa dapat kembali ke dashboard dan melanjutkan ujian. Jawaban sebelumnya tetap tersimpan.', 'success');
+  }).withFailureHandler(error => { hideLoading(); showCustomAlert('Reset Gagal', error.message, 'error'); })
+    .adminBukaBlokirSiswa(stPengelola, studentId, examId, reason.trim());
 }

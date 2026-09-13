@@ -1,5 +1,14 @@
 // Exam lifecycle: deterministic questions, answers, timer, anti-cheat, and submission.
 let stTerminated = false;
+let stDeadline = 0, stClockOffset = 0, submitRetryTimer = null;
+function updateSaveStatus(state) {
+  const element = document.getElementById('cbtSaveStatus');
+  if (!element) return;
+  element.textContent = state.pending
+    ? `${state.pending} perubahan belum dikonfirmasi server${state.error ? ': ' + state.error : (state.saving ? ' — mengirim...' : ' — tersimpan di perangkat')}`
+    : 'Semua jawaban tersimpan di server';
+}
+window.addEventListener('cbt:answer-status', event => updateSaveStatus(event.detail));
 
 function rngSeed(str) {
   let h = 2166136261 >>> 0;
@@ -20,11 +29,14 @@ function persiapkanUjian(uData) {
   showLoading('Mempersiapkan Lembar Soal...');
   stUjian = uData;
   stTerminated = false;
+  isSubmitting = false;
+  clearTimeout(submitRetryTimer);
 
   cbtApi
     .withSuccessHandler(res => {
       hideLoading();
       if(!res.success) { showCustomAlert('Gagal', res.message); return; }
+      if (res.completed) { tampilHasilUjian(res.hasil, res.terminated); return; }
 
       const soalRaw = res.soal;
       const jawRaw = res.jawaban;
@@ -59,6 +71,7 @@ function persiapkanUjian(uData) {
       const clockOffset = Number.isFinite(serverNow) ? serverNow - Date.now() : 0;
       mulaiTimerCBT(res.expiresAt ? Date.parse(res.expiresAt) : Date.now() + (uData.durasi_menit * 60000), clockOffset);
       aktifkanAntiCheat();
+      updateSaveStatus(window.cbtAnswerState());
     })
     .withFailureHandler(err => { hideLoading(); showCustomAlert('Error Koneksi', err.message); })
     .getServerSoal(uData.id, stSiswa.id);
@@ -80,16 +93,21 @@ function navigasiSoal(dir) {
 }
 
 function toggleRagu() {
+  if (!isUjianJalan || isSubmitting) return;
   let sId = stSoal[stIdx].id;
+  const previous = !!stRagu[sId];
   stRagu[sId] = !stRagu[sId];
   renderSoal(); renderGridNav();
-  cbtApi.simpanJawabanServer({ siswaId: stSiswa.id, ujianId: stUjian.id, soalId: sId, jawaban: stJawab[sId] || null, ragu: stRagu[sId] });
+  cbtApi.withFailureHandler(error => { stRagu[sId] = previous; renderSoal(); renderGridNav(); showCustomAlert('Belum tersimpan', error.message); })
+    .simpanJawabanServer({ siswaId: stSiswa.id, ujianId: stUjian.id, soalId: sId, jawaban: stJawab[sId] || null, ragu: stRagu[sId] });
 }
 
 function renderSoal() {
   const s = stSoal[stIdx];
-  document.getElementById('cbtSoalNum').textContent = `Soal ${stIdx + 1}`;
-  document.getElementById('cbtSoalText').textContent = s.q;
+  document.getElementById('cbtSoalNum').textContent = `Soal ${stIdx + 1} dari ${stSoal.length}`;
+  if (typeof updateStudentExamProgress === 'function') updateStudentExamProgress();
+  // The API sanitizes question markup using a server-side allowlist.
+  document.getElementById('cbtSoalText').innerHTML = s.q;
 
   const btnR = document.getElementById('btnRagu');
   if(stRagu[s.id]) { btnR.className = 'btn btn-warning'; btnR.innerHTML = '<i class="fa-solid fa-flag"></i> Ragu (✔)'; }
@@ -99,24 +117,27 @@ function renderSoal() {
   document.getElementById('cbtOptionList').innerHTML = s.opts.map((opt, i) => {
     const visualLabel = String.fromCharCode(65 + i);
     const cls = svd === opt.key ? 'selected' : '';
-    return `<div class="opt-btn ${cls}" onclick="simpanJawaban('${s.id}','${opt.key}', ${stIdx + 1})">
+    return `<div class="opt-btn ${cls}" role="radio" tabindex="${svd === opt.key || (!svd && i === 0) ? 0 : -1}" aria-checked="${svd === opt.key}" onkeydown="studentOptionKey(event, this)" onclick="simpanJawaban('${s.id}','${opt.key}', ${stIdx + 1})">
       <div class="opt-char">${visualLabel}</div><div class="opt-text">${opt.text}</div>
     </div>`;
   }).join('');
 }
 
 function simpanJawaban(soalId, originalKey, nomorSoal) {
+  if (!isUjianJalan || isSubmitting) return;
+  const previous = stJawab[soalId];
   stJawab[soalId] = originalKey;
   renderSoal(); renderGridNav();
   document.getElementById('cbtSaveStatus').textContent = 'Menyimpan...';
 
   cbtApi
-    .withSuccessHandler(res => { document.getElementById('cbtSaveStatus').textContent = res.success ? 'Tersimpan' : 'Gagal simpan'; })
-    .withFailureHandler(() => { document.getElementById('cbtSaveStatus').textContent = 'Tersimpan Lokal'; })
+    .withSuccessHandler(() => updateSaveStatus(window.cbtAnswerState()))
+    .withFailureHandler(error => { if(stJawab[soalId] === originalKey) { if(previous) stJawab[soalId] = previous; else delete stJawab[soalId]; } renderSoal(); renderGridNav(); showCustomAlert('Jawaban belum tersimpan', error.message); })
     .simpanJawabanServer({ siswaId: stSiswa.id, ujianId: stUjian.id, soalId: soalId, jawaban: originalKey, ragu: !!stRagu[soalId], nomorUjian: stSiswa.no, namaSiswa: stSiswa.nama, kelas: stSiswa.kelas, nomorSoal: nomorSoal });
 }
 
 function mulaiTimerCBT(endTimeMs, clockOffset = 0) {
+  stDeadline = endTimeMs; stClockOffset = clockOffset;
   clearInterval(tmrUjian);
   const tb = document.getElementById('cbtTimerBox'), tt = document.getElementById('cbtTimer');
   tmrUjian = setInterval(() => {
@@ -133,8 +154,8 @@ function mulaiTimerCBT(endTimeMs, clockOffset = 0) {
  * Update progress dots merah sesuai jumlah pelanggaran (1, 2, atau 3).
  */
 function updateViolationDots(jumlah) {
-  const colors = { active: '#dc2626', inactive: '#e5e7eb' };
-  const borders = { active: '#dc2626', inactive: '#d1d5db' };
+  const colors = { active: 'var(--ui-danger)', inactive: 'var(--border)' };
+  const borders = { active: 'var(--ui-danger)', inactive: '#d1d5db' };
   for (let i = 1; i <= 3; i++) {
     const dot = document.getElementById(`pdot${i}`);
     if (!dot) continue;
@@ -162,18 +183,20 @@ function showViolationModal(jumlah, terminated, onDismiss = null) {
   const cdWrap = document.getElementById('pelanggaranCountdownWrap');
   const cdBar = document.getElementById('pelanggaranCountdownBar');
   const cdText = document.getElementById('pelanggaranCountdownText');
+  const ticketButton = document.getElementById('btnTiketPelanggaran');
 
   updateViolationDots(jumlah);
   counter.textContent = `PELANGGARAN ${jumlah} / 3`;
 
   if (terminated) {
+    if(ticketButton)ticketButton.classList.remove('hidden');
     // ── Terminate state ──
     title.textContent = 'Ujian Dihentikan!';
-    title.style.color = '#dc2626';
+    title.style.color = 'var(--ui-danger)';
     icon.className = 'fa-solid fa-triangle-exclamation';
-    iconWrap.style.background = '#fecaca';
-    iconWrap.style.border = '2px solid #dc2626';
-    txt.textContent = 'Anda telah melakukan 3 kali pelanggaran. Ujian otomatis dihentikan dan nilai dikunci oleh sistem. Temui admin dan guru mata pelajaran untuk melakukan ujian ulang.';
+    iconWrap.style.background = 'var(--ui-danger-border)';
+    iconWrap.style.border = '2px solid var(--ui-danger)';
+    txt.textContent = 'Anda telah melakukan 3 kali pelanggaran. Ujian otomatis dihentikan dan nilai dikunci. Kirim tiket dari tombol di bawah agar petugas dapat menanganinya tanpa Anda meninggalkan ruangan ujian.';
     btn.textContent = 'Memuat hasil...';
     btn.disabled = true;
     cdWrap.style.display = 'block';
@@ -193,12 +216,13 @@ function showViolationModal(jumlah, terminated, onDismiss = null) {
       }
     }, 1000);
   } else {
+    if(ticketButton)ticketButton.classList.add('hidden');
     // ── Warning state ──
     const isLastWarn = jumlah === 2;
     title.textContent = isLastWarn ? 'Peringatan Terakhir!' : 'Peringatan Sistem!';
-    title.style.color = isLastWarn ? '#b45309' : '#dc2626';
+    title.style.color = isLastWarn ? 'var(--ui-warning)' : 'var(--ui-danger)';
     icon.className = 'fa-solid fa-triangle-exclamation';
-    iconWrap.style.background = isLastWarn ? '#fef3c7' : '#fee2e2';
+    iconWrap.style.background = isLastWarn ? 'var(--ui-warning-bg)' : 'var(--ui-danger-bg)';
     iconWrap.style.border = isLastWarn ? '2px solid #f59e0b' : 'none';
     txt.textContent = isLastWarn
       ? `Peringatan ${jumlah}/3: Anda terdeteksi keluar dari aplikasi CBT. Satu pelanggaran lagi akan menghentikan ujian Anda secara otomatis!`
@@ -273,32 +297,37 @@ function aktifkanAntiCheat() {
  * @param {boolean} isTerminate — apakah karena pelanggaran
  */
 function tampilHasilUjian(hasil, isTerminate = false) {
+  isUjianJalan = false; isSubmitting = false;
+  clearInterval(tmrUjian); clearTimeout(submitRetryTimer);
   const lblNilai = document.getElementById('lblNilaiAkhir');
   const lblKet = document.getElementById('lblKeteranganHasil');
   const lblStatus = document.getElementById('lblStatusUjian');
   const badgeCap = document.getElementById('badgeRemedialCap');
+  const supportButton = document.getElementById('btnSupportHasil');
+  if(supportButton)supportButton.classList.toggle('hidden',!isTerminate);
   const btnReview = document.getElementById('btnReviewHasil');
   const statusIcon = document.getElementById('hasilStatusIcon');
   const statusIconWrap = document.getElementById('hasilStatusIconWrap');
 
   if (lblNilai) lblNilai.textContent = hasil.nilai !== undefined ? Number(hasil.nilai).toFixed(1) : '-';
+  if (typeof updateStudentScoreRing === 'function') updateStudentScoreRing(hasil.nilai, isTerminate);
 
   if (lblStatus) {
     lblStatus.textContent = isTerminate ? 'Ujian Dihentikan' : (hasil.is_remedial ? 'Ujian Ulang Selesai' : 'Ujian Selesai!');
-    lblStatus.style.color = isTerminate ? '#dc2626' : 'var(--text-main)';
+    lblStatus.style.color = isTerminate ? 'var(--ui-danger)' : 'var(--text-main)';
   }
 
   if (statusIcon && statusIconWrap) {
     statusIcon.className = isTerminate ? 'fa-solid fa-triangle-exclamation' : 'fa-solid fa-check-double';
-    statusIcon.style.color = isTerminate ? '#b91c1c' : 'var(--primary-dark)';
-    statusIconWrap.style.background = isTerminate ? '#fee2e2' : 'var(--primary-soft)';
+    statusIcon.style.color = isTerminate ? 'var(--ui-danger)' : 'var(--primary-dark)';
+    statusIconWrap.style.background = isTerminate ? 'var(--ui-danger-bg)' : 'var(--primary-soft)';
     statusIconWrap.style.boxShadow = isTerminate ? '0 4px 14px rgba(220,38,38,.18)' : '0 4px 14px rgba(76,175,80,.2)';
   }
 
   if (lblKet) {
     if (isTerminate) {
-      lblKet.textContent = 'Peringatan: ujian dihentikan karena 3 kali pelanggaran dan nilai yang tampil telah dikunci oleh sistem. Temui admin dan guru mata pelajaran untuk melakukan ujian ulang.';
-      lblKet.style.color = '#dc2626';
+      lblKet.textContent = 'Ujian dihentikan karena 3 kali pelanggaran. Kirim tiket bantuan; setelah petugas piket mereset CBT, Anda dapat melanjutkan dengan jawaban sebelumnya.';
+      lblKet.style.color = 'var(--ui-danger)';
     } else if (hasil.is_remedial && hasil.score_cap !== null) {
       lblKet.textContent = `Ini adalah ujian ulang (remedial). Nilai maksimum yang dapat diraih adalah ${hasil.score_cap}.`;
       lblKet.style.color = 'var(--text-muted)';
@@ -331,24 +360,39 @@ function bukaModalSubmit() {
   document.getElementById('modalSubmitUjian').classList.add('show');
 }
 
-function prosesKumpulFinal() { submitUjianKeServer(); }
+function prosesKumpulFinal() { submitUjianKeServer(true); }
 
-function submitUjianKeServer() {
+function submitUjianKeServer(finalizeOnly = false) {
+  if (isSubmitting) return;
+  finalizeOnly = finalizeOnly || stTerminated || Date.now() + stClockOffset >= stDeadline;
   document.getElementById('modalSubmitUjian').classList.remove('show');
-  isSubmitting = true; isUjianJalan = false; clearInterval(tmrUjian);
-  showLoading('Menghitung nilai...');
+  isSubmitting = true;
+  showLoading(finalizeOnly ? 'Mengambil hasil jawaban yang diterima server...' : 'Mengirim jawaban sebelum menghitung nilai...');
+  const failed = error => {
+    hideLoading(); isSubmitting = false;
+    const expired = finalizeOnly || Date.now() + stClockOffset >= stDeadline;
+    isUjianJalan = !expired;
+    if (expired) {
+      clearInterval(tmrUjian);
+      document.getElementById('cbtSaveStatus').textContent = 'Hasil belum terkonfirmasi. Sistem akan mencoba lagi.';
+      clearTimeout(submitRetryTimer);
+      submitRetryTimer = setTimeout(() => submitUjianKeServer(true), 10000);
+    }
+    showCustomAlert('Pengiriman belum berhasil', error.message + (expired ? ' Hanya jawaban yang diterima server sebelum batas waktu yang dinilai.' : ' Jawaban lokal tetap disimpan. Periksa koneksi lalu coba kumpulkan lagi.'));
+  };
 
   cbtApi
     .withSuccessHandler(res => {
       hideLoading();
       if (res.success) {
         tampilHasilUjian(res.hasil, stTerminated);
+        if (res.unsent) showCustomAlert('Ada jawaban yang belum terkirim', `${res.unsent} perubahan tidak dikonfirmasi server. Nilai hanya memakai jawaban yang diterima server; antrean perangkat dipertahankan untuk pemeriksaan pengawas.`);
       } else {
-        showCustomAlert('Gagal Submit', res.message);
+        failed(new Error(res.message));
       }
     })
-    .withFailureHandler(err => { hideLoading(); showCustomAlert('Error', err.message); })
-    .submitUjian({ siswa_id: stSiswa.id, ujian_id: stUjian.id });
+    .withFailureHandler(failed)
+    .submitUjian({ siswa_id: stSiswa.id, ujian_id: stUjian.id, finalize_only: finalizeOnly });
 }
 
 /**
@@ -368,7 +412,8 @@ function submitUjianSilenKeServer(onDone) {
     .withFailureHandler(() => {
       setTimeout(() => {
         document.getElementById('modalPelanggaran').classList.remove('show');
-        switchView('viewHasilSiswa');
+        tampilHasilUjian({}, true);
+        document.getElementById('lblKeteranganHasil').textContent = 'Ujian dihentikan. Hasil belum dapat dikonfirmasi karena koneksi bermasalah. Minta bantuan petugas untuk memeriksa status ujian.';
       }, 5500);
     })
     .submitUjian({ siswa_id: stSiswa.id, ujian_id: stUjian.id });
@@ -380,17 +425,18 @@ function bukaModalReview() {
     .withSuccessHandler(res => {
       hideLoading();
       if (!res.success) { showCustomAlert('Gagal', res.message); return; }
-      const jawMap = {}; (res.jawaban||[]).forEach(j => { jawMap[j.soal_id] = String(j.jawaban).trim().toUpperCase(); });
+      if (!Array.isArray(res.soal) || res.soal.length === 0) {
+        showCustomAlert('Review belum tersedia', 'Data soal review kosong. Hubungi administrator untuk menjalankan upgrade database CBT.');
+        return;
+      }
 
       document.getElementById('listReviewContainer').innerHTML = res.soal.map((s, idx) => {
-        const jSiswa = jawMap[s.id] || '';
-        const kBenar = String(s.jawaban_benar || '').trim().toUpperCase();
-        let st = '<span style="color:var(--danger); font-weight:700;">[TIDAK DIJAWAB]</span>';
-        if (jSiswa) {
-          st = jSiswa === kBenar
-            ? '<span style="color:var(--success); font-weight:700;"><i class="fa-solid fa-check"></i> [BENAR]</span>'
-            : '<span style="color:var(--danger); font-weight:700;"><i class="fa-solid fa-xmark"></i> [SALAH]</span>';
-        }
+        const status = String(s.status || 'KOSONG').toUpperCase();
+        const st = status === 'BENAR'
+          ? '<span style="color:var(--success); font-weight:700;"><i class="fa-solid fa-check"></i> [BENAR]</span>'
+          : status === 'SALAH'
+            ? '<span style="color:var(--danger); font-weight:700;"><i class="fa-solid fa-xmark"></i> [SALAH]</span>'
+            : '<span style="color:var(--danger); font-weight:700;">[TIDAK DIJAWAB]</span>';
         return `<div style="background:var(--secondary-bg); border:1px solid var(--border); border-radius:8px; padding:14px; font-size:12px;"><div style="display:flex; justify-content:space-between; margin-bottom:6px;"><b style="color:var(--primary);">Soal No. ${idx + 1}</b><div>${st}</div></div><div>${s.pertanyaan}</div></div>`;
       }).join('');
       document.getElementById('modalReview').classList.add('show');

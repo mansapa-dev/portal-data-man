@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AcademicYear;
 use App\Models\AuditLog;
+use App\Models\Employee;
 use App\Models\ImportBatch;
 use App\Models\SchoolClass;
 use App\Models\Semester;
@@ -22,6 +23,7 @@ class DashboardController extends Controller
         return ApiResponse::success([
             'students' => Student::query()->where('status', 'ACTIVE')->count(),
             'teachers' => Teacher::query()->where('status', 'ACTIVE')->count(),
+            'employees' => Employee::query()->where('status', 'ACTIVE')->count(),
             'classes' => SchoolClass::query()->where('status', 'ACTIVE')->count(),
             'activeAcademicYear' => AcademicYear::query()->where('isActive', true)->first(),
             'activeSemester' => Semester::query()->where('isActive', true)->first(),

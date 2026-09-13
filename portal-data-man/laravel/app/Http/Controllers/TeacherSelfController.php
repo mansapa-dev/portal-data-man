@@ -20,27 +20,61 @@ class TeacherSelfController extends Controller
 
     public function profile(Request $request): JsonResponse
     {
-        $account = $request->user('teacher')->load('teacher');
+        $account = $request->user('teacher')->load(['teacher', 'employee']);
+        $person = $account->person();
+        abort_unless($person, 401, 'Identitas akun tidak tersedia.');
+        $employee = $account->employee;
         $teacher = $account->teacher;
 
-        return ApiResponse::success(['teacherPublicId' => $teacher->publicId, 'accountPublicId' => $account->publicId, 'username' => $account->username, 'email' => $account->email ?? $teacher->email, 'fullName' => $teacher->fullName, 'nip' => $teacher->nip, 'nuptk' => $teacher->nuptk, 'employeeNumber' => $teacher->employeeNumber, 'gender' => $teacher->gender, 'phone' => $teacher->phone, 'address' => $teacher->address, 'photoUrl' => $teacher->photoPath ? '/api/v1/teacher/profile/photo' : null, 'teacherStatus' => $teacher->status, 'accountStatus' => $account->status, 'lastLoginAt' => $account->lastLoginAt], 'Profil guru berhasil diambil.');
+        return ApiResponse::success([
+            'personPublicId' => $person->publicId,
+            'teacherPublicId' => $teacher?->publicId,
+            'employeePublicId' => $employee?->publicId,
+            'accountType' => $account->accountType(),
+            'accountPublicId' => $account->publicId,
+            'username' => $account->username,
+            'email' => $account->email ?? $teacher?->email,
+            'fullName' => $person->fullName,
+            'nip' => $person->nip,
+            'nuptk' => $person->nuptk,
+            'employeeNumber' => $teacher?->employeeNumber,
+            'gender' => $person->gender,
+            'phone' => $teacher?->phone,
+            'address' => $teacher?->address,
+            'employmentType' => $employee?->employmentType,
+            'position' => $employee?->position,
+            'rank' => $employee?->rank,
+            'education' => $employee?->education,
+            'grade' => $employee?->grade,
+            'photoUrl' => $teacher?->photoPath ? '/api/v1/teacher/profile/photo' : null,
+            'personStatus' => $person->status,
+            'teacherStatus' => $teacher?->status,
+            'accountStatus' => $account->status,
+            'lastLoginAt' => $account->lastLoginAt,
+        ], 'Profil akun berhasil diambil.');
     }
 
     public function updateProfile(Request $request): JsonResponse
     {
         $account = $request->user('teacher');
+        $person = $account->person();
+        abort_unless($person, 401, 'Identitas akun tidak tersedia.');
         $teacher = $account->teacher;
         $data = $request->validate([
             'fullName' => ['required', 'string', 'min:2', 'max:191'],
             'gender' => ['nullable', Rule::in(['MALE', 'FEMALE'])],
-            'email' => ['nullable', 'email', 'max:191', Rule::unique('Teacher', 'email')->ignore($teacher->id), Rule::unique('TeacherAccount', 'email')->ignore($account->id)],
+            'email' => ['nullable', 'email', 'max:191', Rule::unique('Teacher', 'email')->ignore($teacher?->id), Rule::unique('TeacherAccount', 'email')->ignore($account->id)],
             'phone' => ['nullable', 'string', 'max:30'],
             'address' => ['nullable', 'string', 'max:5000'],
         ]);
-        $old = $teacher->replicate();
-        $teacher->update(['fullName' => preg_replace('/\s+/u', ' ', trim($data['fullName'])), 'gender' => $data['gender'] ?? null, 'email' => isset($data['email']) ? strtolower($data['email']) : null, 'phone' => $data['phone'] ?? null, 'address' => $data['address'] ?? null]);
+        $old = $person->replicate();
+        $personData = ['fullName' => preg_replace('/\s+/u', ' ', trim($data['fullName'])), 'gender' => $data['gender'] ?? null];
+        if ($teacher) {
+            $personData += ['email' => isset($data['email']) ? strtolower($data['email']) : null, 'phone' => $data['phone'] ?? null, 'address' => $data['address'] ?? null];
+        }
+        $person->update($personData);
         $account->update(['email' => isset($data['email']) ? strtolower($data['email']) : null]);
-        $this->audit->write($request, 'TEACHER_PROFILE_UPDATED', 'Teacher', $teacher->publicId, $old, $teacher);
+        $this->audit->write($request, $teacher ? 'TEACHER_PROFILE_UPDATED' : 'EMPLOYEE_PROFILE_UPDATED', $teacher ? 'Teacher' : 'Employee', $person->publicId, $old, $person);
 
         return $this->profile($request);
     }
@@ -54,7 +88,7 @@ class TeacherSelfController extends Controller
         $current = $request->session()->get('portal_session_public_id');
         $account->update(['passwordHash' => Hash::make($data['newPassword']), 'initialPassword' => null, 'passwordChangedAt' => now(), 'mustChangePassword' => false]);
         $this->sessions->revokeTeacher($account, is_string($current) ? $current : null);
-        $this->audit->write($request, 'TEACHER_PASSWORD_CHANGED', 'TeacherAccount', $account->publicId);
+        $this->audit->write($request, $account->accountType().'_PASSWORD_CHANGED', 'TeacherAccount', $account->publicId);
 
         return ApiResponse::success(null, 'Password berhasil diubah dan session lain telah dicabut.');
     }
@@ -66,7 +100,10 @@ class TeacherSelfController extends Controller
 
     public function applications(Request $request): JsonResponse
     {
-        $access = $request->user('teacher')->teacher->applicationAccess()
+        $account = $request->user('teacher')->load(['teacher', 'employee']);
+        $person = $account->person();
+        abort_unless($person, 401, 'Identitas akun tidak tersedia.');
+        $access = $person->applicationAccess()
             ->with('application')
             ->where('status', 'ACTIVE')
             ->whereHas('application', fn ($query) => $query->where('status', 'ACTIVE'))
@@ -86,7 +123,7 @@ class TeacherSelfController extends Controller
             })
             ->values();
 
-        return ApiResponse::success($access, 'Daftar aplikasi guru berhasil diambil.');
+        return ApiResponse::success($access, 'Daftar aplikasi akun berhasil diambil.');
     }
 
     public function revokeSession(Request $request, string $publicId): JsonResponse
@@ -112,6 +149,7 @@ class TeacherSelfController extends Controller
     {
         $request->validate(['file' => ['required', 'file', 'max:2048']]);
         $teacher = $request->user('teacher')->teacher;
+        abort_unless($teacher, 404, 'Foto profil hanya tersedia untuk akun guru.');
         $result = $this->photos->store($teacher, $request->file('file'));
         $this->audit->write($request, 'UPDATE_PHOTO', 'Teacher', $teacher->publicId, null, ['actorType' => 'TEACHER', 'mimeType' => $result['mimeType']]);
 
@@ -120,7 +158,10 @@ class TeacherSelfController extends Controller
 
     public function photo(Request $request): StreamedResponse
     {
-        return $this->photos->response($request->user('teacher')->teacher);
+        $teacher = $request->user('teacher')->teacher;
+        abort_unless($teacher, 404, 'Foto profil hanya tersedia untuk akun guru.');
+
+        return $this->photos->response($teacher);
     }
 
     private function applicationOrigin(array $uris): ?string

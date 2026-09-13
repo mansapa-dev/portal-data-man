@@ -123,12 +123,36 @@
   }
 
   function render(section) {
+    window.CbtLiveSessions?.stop();
+    window.CbtSupportTickets?.stopStaff();
     activeSection = section;
+    content.classList.toggle('teacher-live',section === 'live');
     content.replaceChildren();
     document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.section === section));
-    const titles = { overview: 'Dashboard', exams: 'Ujian Diampu', results: 'Hasil Siswa', violations: 'Pelanggaran Ujian' };
+    const titles = { overview: 'Dashboard', exams: 'Ujian Diampu', results: 'Hasil Siswa', violations: 'Pelanggaran Ujian', support: 'Tiket Bantuan' };
     const pageTitle = document.getElementById('teacherPageTitle');
     if (pageTitle) pageTitle.textContent = titles[section] || 'Dashboard';
+    if (section === 'live') {
+      if (pageTitle) pageTitle.textContent = 'Sesi Berlangsung';
+      const assignedGrades=[...new Set(data.ujianList.map(exam=>String(exam.tingkat||'').trim()).filter(Boolean))];
+      const assignedClasses=[...new Set(data.ujianList.flatMap(exam=>String(exam.nama_kelas_target||'').split(',')).map(name=>name.trim()).filter(Boolean))];
+      window.CbtLiveSessions.mount(content, api, notice, {
+        title: 'Live Sessions Kelas Diampu',
+        description: 'Pilih tingkatan dan kelas dari ujian yang ditugaskan kepada Anda.',
+        enableFilters: true,
+        filterFields: ['grade', 'className'],
+        filterOptions: { grade: assignedGrades, className: assignedClasses },
+        groupByExam: true
+      });
+      return;
+    }
+    if(section==='support'){
+      const heading=panel('Tiket Bantuan Siswa','Hanya petugas piket yang ditugaskan pada ujian ini yang menerima tiket dan dapat mereset CBT siswa.');
+      const list=el('div',undefined,'teacher-support-list');heading.append(list);content.append(heading);
+      const client={list:async status=>(await api(`api/staff/support-tickets?status=${encodeURIComponent(status)}`)).data,update:async(id,status,note)=>(await api(`api/staff/support-tickets/${id}/status`,'POST',{status,note})).data,reset:async(id,reason)=>(await api(`api/staff/support-tickets/${id}/reset`,'POST',{reason})).data};
+      window.CbtSupportTickets.mountStaff(list,client,true,notice);
+      return;
+    }
 
     if (section === 'overview') {
       const metrics = el('section', undefined, 'teacher-metrics');
@@ -251,7 +275,7 @@
           (subject.value === 'ALL' || String(x.nama_mapel) === subject.value) &&
           (yearSel.value === 'ALL' || String(x.tahun_ajaran) === yearSel.value) &&
           (semesterSel.value === 'ALL' || String(x.semester) === semesterSel.value)
-        );
+        ).sort((a,b) => String(a.nama_siswa || '').localeCompare(String(b.nama_siswa || ''),'id',{sensitivity:'base',numeric:true}) || String(a.nomor_ujian || '').localeCompare(String(b.nomor_ujian || ''),'id',{numeric:true}));
 
         resultTable.replaceChildren(table(
           ['No. Peserta', 'Nama Siswa', 'Kelas', 'Tingkat', 'Mata Pelajaran', 'Nama Ujian', 'Nilai', 'Benar', 'Salah', 'Status', 'Waktu Selesai'],
@@ -301,9 +325,13 @@
           { wch: 35 }, { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 14 },
           { wch: 22 }, { wch: 18 }, { wch: 10 },
         ];
+        const centered = /^(no\.?|kelas|tingkat|nilai|benar|salah|status|waktu|tahun|semester)/i;
+        rows.forEach((_,rowIndex) => headers.forEach((header,columnIndex) => { const cell=sheet[XLSX.utils.encode_cell({r:rowIndex+1,c:columnIndex})];if(cell)cell.s={alignment:{horizontal:centered.test(header)?'center':'left',vertical:'center',wrapText:true}}; }));
+        headers.forEach((_,columnIndex) => { const cell=sheet[XLSX.utils.encode_cell({r:0,c:columnIndex})];if(cell)cell.s={alignment:{horizontal:'center',vertical:'center',wrapText:true},font:{bold:true}}; });
+        if(sheet['!ref'])sheet['!autofilter']={ref:sheet['!ref']};
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, sheet, 'Hasil Ujian');
-        XLSX.writeFile(workbook, `hasil_ujian_guru_${new Date().toISOString().slice(0, 10)}.xlsx`);
+        XLSX.writeFile(workbook, `hasil_ujian_guru_${new Date().toISOString().slice(0, 10)}.xlsx`, { cellStyles: true });
       });
 
       controls.append(
@@ -495,8 +523,10 @@
     document.getElementById('teacherName').textContent = teacherLabel;
     const sidebarName = document.getElementById('teacherSidebarName');
     const avatar = document.getElementById('teacherAvatar');
+    const welcomeName = document.getElementById('teacherWelcomeName');
     if (sidebarName) sidebarName.textContent = teacherLabel;
     if (avatar) avatar.textContent = teacherLabel.trim().charAt(0).toUpperCase() || 'G';
+    if (welcomeName) welcomeName.textContent = teacherLabel;
     data = (await api('api/teacher/dashboard')).data;
     render('overview');
   } catch (error) {
@@ -505,7 +535,6 @@
 
   const sidebar = document.getElementById('teacherSidebar');
   const menuButton = document.getElementById('menu');
-  const sidebarMenuButton = document.getElementById('sidebarMenu');
   const sidebarBackdrop = document.getElementById('teacherSidebarBackdrop');
   const mobileLayout = window.matchMedia('(max-width: 800px)');
 
@@ -538,18 +567,15 @@
     const active = sidebar.classList.toggle(className);
     menuButton.setAttribute('aria-expanded', String(laptopLayout ? active : !active));
   });
-  if (sidebarMenuButton) sidebarMenuButton.addEventListener('click', () => {
-    if (mobileLayout.matches) closeMobileSidebar();
-    else menuButton.click();
-  });
   if (sidebarBackdrop) sidebarBackdrop.addEventListener('click', closeMobileSidebar);
 
-  // Sinkronkan laporan aktif secara berkala tanpa perlu memuat ulang halaman.
+  // Sinkronkan seluruh menu guru secara berkala tanpa perlu memuat ulang halaman.
   setInterval(async () => {
-    if (!['results', 'violations'].includes(activeSection) || document.hidden) return;
+    if (document.hidden || document.querySelector('.modal.show')) return;
     try {
       const fresh = (await api('api/teacher/dashboard')).data;
-      const changed = JSON.stringify(fresh.hasilList) !== JSON.stringify(data.hasilList)
+      const changed = JSON.stringify(fresh.ujianList) !== JSON.stringify(data.ujianList)
+        || JSON.stringify(fresh.hasilList) !== JSON.stringify(data.hasilList)
         || JSON.stringify(fresh.pelanggaranList) !== JSON.stringify(data.pelanggaranList);
       data = fresh;
       if (changed) render(activeSection);
@@ -557,6 +583,15 @@
       // Pertahankan data terakhir ketika sinkronisasi latar belakang gagal.
     }
   }, 15000);
+
+  window.addEventListener('cbt:data-updated', async () => {
+    try {
+      data = (await api('api/teacher/dashboard')).data;
+      render(activeSection);
+    } catch (_) {
+      // Refresh berkala akan mencoba kembali.
+    }
+  });
 
   const handleLogout = async () => {
     try {
@@ -569,5 +604,5 @@
   const btnLogoutTop = document.getElementById('topbarLogoutGuru');
   if (btnLogoutTop) btnLogoutTop.addEventListener('click', handleLogout);
   const helpButton = document.getElementById('teacherHelpButton');
-  if (helpButton) helpButton.addEventListener('click', () => alert('Hubungi proktor ruang ujian atau administrator sistem jika terdapat kendala sesi, ujian, atau data peserta.'));
+  if (helpButton) helpButton.addEventListener('click', () => openSection('support'));
 })();

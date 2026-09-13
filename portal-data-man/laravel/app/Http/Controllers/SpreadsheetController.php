@@ -30,6 +30,12 @@ class SpreadsheetController extends Controller
 
     public function studentTemplate(Request $request): BinaryFileResponse
     {
+        // Keep employee template downloads working during rolling deployments
+        // where the server may still have the older route table cached.
+        if (strtoupper((string) $request->query('type')) === 'EMPLOYEE') {
+            return $this->employeeTemplate($request);
+        }
+
         $path = $this->exports->studentTemplate();
         $this->audit->write($request, 'TEMPLATE_DOWNLOADED', 'ImportTemplate', null, null, ['type' => 'STUDENT']);
 
@@ -52,12 +58,36 @@ class SpreadsheetController extends Controller
         return $this->download($path, 'export-guru-'.now()->format('Y-m-d-His').'.xlsx');
     }
 
+    public function employees(Request $request): BinaryFileResponse
+    {
+        [$path, $count] = $this->exports->employees($request);
+        $this->audit->write($request, 'EMPLOYEES_EXPORTED', 'Employee', null, null, ['totalRows' => $count]);
+
+        return $this->download($path, 'export-pegawai-'.now()->format('Y-m-d-His').'.xlsx');
+    }
+
+    public function employeeTemplate(Request $request): BinaryFileResponse
+    {
+        $path = $this->exports->employeeTemplate();
+        $this->audit->write($request, 'TEMPLATE_DOWNLOADED', 'ImportTemplate', null, null, ['type' => 'EMPLOYEE']);
+
+        return $this->download($path, 'template-import-pegawai.xlsx');
+    }
+
     public function teacherCredentials(Request $request): BinaryFileResponse
     {
         [$path, $count] = $this->exports->teacherCredentials($request);
         $this->audit->write($request, 'TEACHER_CREDENTIALS_EXPORTED', 'TeacherAccount', null, null, ['totalRows' => $count]);
 
         return $this->download($path, 'akun-guru-'.now()->format('Y-m-d-His').'.xlsx');
+    }
+
+    public function employeeCredentials(Request $request): BinaryFileResponse
+    {
+        [$path, $count] = $this->exports->employeeCredentials($request);
+        $this->audit->write($request, 'EMPLOYEE_CREDENTIALS_EXPORTED', 'TeacherAccount', null, null, ['totalRows' => $count]);
+
+        return $this->download($path, 'akun-pegawai-'.now()->format('Y-m-d-His').'.xlsx');
     }
 
     private function download(string $path, string $filename): BinaryFileResponse

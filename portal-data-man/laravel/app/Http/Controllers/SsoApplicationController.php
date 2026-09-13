@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ApplicationClient;
+use App\Models\Employee;
 use App\Models\Teacher;
 use App\Models\TeacherApplicationAccess;
 use App\Services\AuditService;
@@ -21,12 +22,13 @@ class SsoApplicationController extends Controller
     {
         $apps = ApplicationClient::query()->withCount('access')->orderBy('name')->get();
         $apps->each(fn (ApplicationClient $app) => $app->setAttribute('_count', ['access' => (int) $app->access_count]));
+
         return ApiResponse::success($apps, 'Aplikasi SSO berhasil diambil.');
     }
 
     public function show(ApplicationClient $applicationClient): JsonResponse
     {
-        return ApiResponse::success($applicationClient->load(['access.teacher']), 'Aplikasi SSO berhasil diambil.');
+        return ApiResponse::success($applicationClient->load(['access.teacher', 'access.employee']), 'Aplikasi SSO berhasil diambil.');
     }
 
     public function store(Request $request): JsonResponse
@@ -116,6 +118,40 @@ class SsoApplicationController extends Controller
         $this->audit->write($request, 'SSO_ACCESS_REVOKED', 'ApplicationClient', $applicationClient->publicId, null, ['teacherPublicId' => $teacherPublicId]);
 
         return ApiResponse::success(null, 'Akses guru berhasil dicabut.');
+    }
+
+    public function grantEmployeesBulk(Request $request, ApplicationClient $applicationClient): JsonResponse
+    {
+        abort_if($applicationClient->clientType === 'SERVICE', 422, 'Aplikasi service tidak menggunakan akses pengguna.');
+        $data = $request->validate([
+            'employeePublicIds' => ['required', 'array', 'min:1', 'max:500'],
+            'employeePublicIds.*' => ['required', 'string', 'size:26', 'distinct'],
+            'role' => ['required', 'regex:/^[A-Za-z0-9:_-]+$/', 'max:100'],
+        ]);
+        $employees = Employee::query()->whereIn('publicId', $data['employeePublicIds'])->where('status', 'ACTIVE')->get();
+        abort_unless($employees->count() === count($data['employeePublicIds']), 422, 'Satu atau lebih pegawai tidak ditemukan atau tidak aktif.');
+
+        DB::transaction(function () use ($request, $applicationClient, $employees, $data): void {
+            foreach ($employees as $employee) {
+                TeacherApplicationAccess::query()->updateOrCreate(
+                    ['employeeId' => $employee->id, 'applicationClientId' => $applicationClient->id],
+                    ['teacherId' => null, 'role' => $data['role'], 'status' => 'ACTIVE', 'grantedAt' => now(), 'grantedBy' => $request->user('admin')->publicId]
+                );
+            }
+            $this->audit->write($request, 'SSO_EMPLOYEE_ACCESS_BULK_GRANTED', 'ApplicationClient', $applicationClient->publicId, null, ['employeePublicIds' => $employees->pluck('publicId')->all(), 'role' => $data['role'], 'total' => $employees->count()]);
+        });
+
+        return $this->show($applicationClient);
+    }
+
+    public function revokeEmployee(Request $request, ApplicationClient $applicationClient, string $employeePublicId): JsonResponse
+    {
+        $employee = Employee::withTrashed()->where('publicId', $employeePublicId)->firstOrFail();
+        $count = TeacherApplicationAccess::query()->where('applicationClientId', $applicationClient->id)->where('employeeId', $employee->id)->update(['status' => 'INACTIVE']);
+        abort_unless($count, 404, 'Akses tidak ditemukan.');
+        $this->audit->write($request, 'SSO_EMPLOYEE_ACCESS_REVOKED', 'ApplicationClient', $applicationClient->publicId, null, ['employeePublicId' => $employeePublicId]);
+
+        return ApiResponse::success(null, 'Akses pegawai berhasil dicabut.');
     }
 
     public function rotateSecret(Request $request, ApplicationClient $applicationClient): JsonResponse

@@ -3,15 +3,15 @@
       <h3 style="font-size:18px; font-weight:800; color:var(--danger); margin-bottom:8px;"><i class="fa-solid fa-triangle-exclamation"></i> Hapus Siswa Per Tingkat</h3>
       <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">Pilih tingkat kelas yang siswanya ingin dihapus:</p>
       <div class="input-group">
-        <select id="selectTingkatHapus" style="width:100%; padding:10px; border-radius:8px; border:1.5px solid var(--border);">
+        <select id="selectTingkatHapus" aria-label="Tingkat yang akan dihapus" style="width:100%; padding:10px; border:1.5px solid var(--border)" class="ui-control">
           <option value="X">Tingkat X</option>
           <option value="XI">Tingkat XI</option>
           <option value="XII">Tingkat XII (Kelulusan)</option>
         </select>
       </div>
       <div style="display:flex; gap:12px; margin-top:12px;">
-        <button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById('modalHapusPertingkat').classList.remove('show')">Batal</button>
-        <button class="btn btn-danger" style="flex:1;" onclick="eksekusiHapusPertingkat()">Ya, Hapus</button>
+        <button class="ui-button btn btn-secondary" style="flex:1" onclick="document.getElementById('modalHapusPertingkat').classList.remove('show')">Batal</button>
+        <button class="ui-button btn btn-danger" style="flex:1" onclick="eksekusiHapusPertingkat()">Ya, Hapus</button>
       </div>
     </div>
   </div>

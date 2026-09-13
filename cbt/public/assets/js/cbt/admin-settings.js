@@ -71,7 +71,12 @@ function simpanPengaturanSistem() {
     .withSuccessHandler(res => {
       if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Simpan Pengaturan'; }
       if (res.success) {
-        showToastInfo('✅ Pengaturan berhasil disimpan.');
+        grades.forEach(g => {
+          const key = `remedial_score_cap_${g}`;
+          const verified = res.data?.[key]?.value;
+          sinkronNilaiCap(g, verified === undefined ? data[key] : verified);
+        });
+        showToastInfo(res.message || 'Pengaturan berhasil disimpan dan diverifikasi.');
       } else {
         showCustomAlert('Gagal', res.message);
       }

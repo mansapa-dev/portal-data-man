@@ -17,7 +17,7 @@ class TeacherAccount extends Model implements AuthenticatableContract
 
     protected $guarded = ['id'];
 
-    protected $hidden = ['id', 'teacherId', 'passwordHash', 'initialPassword'];
+    protected $hidden = ['id', 'teacherId', 'employeeId', 'passwordHash', 'initialPassword'];
 
     public const CREATED_AT = 'createdAt';
 
@@ -36,6 +36,21 @@ class TeacherAccount extends Model implements AuthenticatableContract
     public function teacher(): BelongsTo
     {
         return $this->belongsTo(Teacher::class, 'teacherId');
+    }
+
+    public function employee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'employeeId');
+    }
+
+    public function person(): Teacher|Employee|null
+    {
+        return $this->teacher ?? $this->employee;
+    }
+
+    public function accountType(): string
+    {
+        return $this->employeeId ? 'EMPLOYEE' : 'TEACHER';
     }
 
     public function sessions(): HasMany

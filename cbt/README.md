@@ -1,5 +1,9 @@
 # CBT MAN 1 Palembang
 
+Perubahan kesiapan ujian massal, panduan upgrade database dan cron finalisasi tersedia di [docs/mass-exam-readiness.md](docs/mass-exam-readiness.md). Upgrade database harus diterapkan sebelum frontend antrean jawaban digunakan.
+
+Gambar soal hasil upload atau gambar yang disisipkan ke Excel disimpan sebagai file di `public/assets/uploads/questions`. Folder tersebut harus writable oleh PHP. Format yang didukung: PNG, JPG, GIF, dan WebP dengan ukuran maksimal 2 MB per gambar. File Excel dengan banyak gambar dikirim ke server secara bertahap untuk menghindari batas ukuran request PHP.
+
 CBT berjalan dengan PHP Native 8.2+, PDO, dan MySQL/MariaDB. `index.html` dipertahankan sebagai spesifikasi visual; `public/assets/js/native-api-adapter.js` menghubungkan UI ke HTTP API PHP.
 
 Frontend utama dipisahkan berdasarkan domain di `public/assets/js/cbt/`. `core.js` harus dimuat pertama karena menyediakan state dan utilitas bersama, dilanjutkan modul siswa/ujian, modul pengelola, lalu fitur admin dan guru. Markup halaman berada di partial `resources/views/app/` dan dirakit dari directive `{{> nama-file.html}}` pada `index.html`. Tidak diperlukan build step Node.js untuk deployment shared hosting.
@@ -70,3 +74,5 @@ composer test
 ```
 
 Status test hanya boleh ditulis PASS setelah perintah benar-benar dijalankan. PHP 8.1 lokal dapat dipakai untuk lint awal, tetapi target deployment tetap PHP 8.2/8.3 sesuai `composer.json`.
+
+Pembaruan reset CBT khusus admin, sinkronisasi Portal otomatis, dan uji 1.300 peserta: [panduan penerapan](docs/reset-sync-capacity.md).

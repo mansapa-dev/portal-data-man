@@ -150,4 +150,15 @@ class TeacherAccountLifecycleTest extends TestCase
         $invalid = UploadedFile::fake()->createWithContent('fake.jpg', 'not an image');
         $this->post('/api/v1/teacher/profile/photo', ['file' => $invalid], ['Accept' => 'application/json'])->assertUnprocessable();
     }
+
+    public function test_teacher_logout_revokes_session_and_requires_a_new_login(): void
+    {
+        $teacher = Teacher::query()->create(['nip' => '001122334477', 'fullName' => 'Guru Logout', 'status' => 'ACTIVE']);
+        $account = $teacher->account()->create(['username' => 'guru.logout', 'passwordHash' => password_hash('PasswordGuru123', PASSWORD_ARGON2ID), 'status' => 'ACTIVE']);
+        $this->postJson('/api/v1/auth/teacher/login', ['username' => 'guru.logout', 'password' => 'PasswordGuru123'])->assertOk();
+
+        $this->postJson('/api/v1/auth/teacher/logout')->assertOk()->assertCookieExpired('portal_teacher_csrf');
+        $this->getJson('/api/v1/auth/teacher/me')->assertUnauthorized();
+        $this->assertDatabaseMissing('AuthSession', ['teacherAccountId' => $account->id, 'revokedAt' => null]);
+    }
 }

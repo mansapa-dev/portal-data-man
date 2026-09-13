@@ -9,6 +9,7 @@ final class AdminService
  public function __construct(private Database$db,private AdminRepository$repo){}
  public function dashboard():array{return$this->repo->dashboard();}
  public function adminLiveSessions():array{return$this->liveSessionPayload($this->repo->allExamIds());}
+ public function teacherLiveSessions(int $teacherId):array{return $this->liveSessionPayload($this->repo->teacherExamIds($teacherId));}
  public function references():array{return$this->repo->references();}
  public function exams():array{return$this->repo->exams();}
  public function saveExam(array$d,int$actor):void
@@ -25,31 +26,70 @@ final class AdminService
   $type=strtoupper((string)($d['type']??'SUSULAN'));if(!in_array($type,['SUSULAN','REMEDIAL'],true))throw new DomainException('Jenis ujian lanjutan tidak valid.',422);
   if($type==='REMEDIAL'&&!$this->repo->approvedRetakeCandidates($sourceId,$studentIds))throw new DomainException('Setujui kandidat ujian ulang terlebih dahulu.',422);
   $source=$this->repo->examForFollowUp($sourceId)??throw new DomainException('Ujian asal tidak ditemukan atau belum memiliki soal.',404);
-  $timezone=new \DateTimeZone('Asia/Jakarta');
-  try{$start=new \DateTimeImmutable(trim((string)$d['starts_at']),$timezone);$end=new \DateTimeImmutable(trim((string)$d['ends_at']),$timezone);}catch(\Throwable){throw new DomainException('Tanggal dan waktu jadwal tidak valid.',422);}
+  $start=\Cbt\Support\ExamWindow::parse((string)($d['starts_at']??''));$end=\Cbt\Support\ExamWindow::parse((string)($d['ends_at']??''));
   if($end<=$start)throw new DomainException('Waktu selesai harus setelah waktu mulai.',422);
-  $name=trim((string)($d['name']??''));if($name==='')$name=$type==='REMEDIAL'?'Remedial - '.$source['name']:'Susulan - '.$source['name'];
+  \Cbt\Support\ExamWindow::assertSameDay($start,$end);
   $utc=new \DateTimeZone('UTC');
+  $sourceEnds=new \DateTimeImmutable((string)$source['ends_at'],$utc);
+  if($start->setTimezone($utc)<$sourceEnds)throw new DomainException('Jadwal ujian lanjutan harus dimulai setelah ujian asal selesai.',422);
+  $name=trim((string)($d['name']??''));if($name==='')$name=$type==='REMEDIAL'?'Remedial - '.$source['name']:'Susulan - '.$source['name'];
   return $this->db->transaction(function()use($source,$sourceId,$studentIds,$name,$type,$start,$end,$utc,$actor,$d){$result=$this->repo->cloneFollowUpExam($source,$studentIds,$name,$type,$start->setTimezone($utc)->format('Y-m-d H:i:s'),$end->setTimezone($utc)->format('Y-m-d H:i:s'),$actor,filter_var($d['active']??true,FILTER_VALIDATE_BOOL),trim((string)($d['room']??'')),trim((string)($d['notes']??'')));$this->repo->copyTeacherAssignments($sourceId,(int)$result['id'],$actor);return$result;});
  }
  public function makeUpCandidates():array{return$this->repo->makeUpCandidates();}
  public function followUpCandidates():array{return$this->repo->followUpCandidates();}
  public function approveRetakeCandidates(array$studentIds,int$examId,int$actor):int{$ids=array_values(array_unique(array_filter(array_map('intval',$studentIds))));if(!$examId||!$ids)throw new DomainException('Pilih minimal satu kandidat ujian ulang.',422);return$this->db->transaction(fn()=>$this->repo->approveRetakeCandidates($examId,$ids,$actor));}
  public function followUpSchedules():array{return$this->repo->followUpSchedules();}
- public function setFollowUpStatus(int$id,bool$active):void{try{$this->repo->setFollowUpStatus($id,$active);}catch(\UnexpectedValueException$e){throw new DomainException($e->getMessage(),404);}}
- public function questions(?int$id):array{return$this->repo->questions($id);}
- public function saveQuestion(array$d):void{foreach(['ujian_id','pertanyaan','opsi_a','opsi_b','opsi_c','opsi_d','jawaban_benar']as$key)if(trim((string)($d[$key]??''))==='')throw new DomainException('Data soal belum lengkap.',422);$answer=strtoupper((string)$d['jawaban_benar']);if(!in_array($answer,['A','B','C','D','E'],true)||((float)($d['poin']??0))<=0)throw new DomainException('Jawaban benar atau poin tidak valid.',422);$d['jawaban_benar']=$answer;$this->repo->saveQuestion($d+['opsi_e'=>'','poin'=>1]);}
+ public function setFollowUpStatus(int$id,bool$active):void{try{$this->db->transaction(fn()=>$this->repo->setFollowUpStatus($id,$active));}catch(\UnexpectedValueException$e){throw new DomainException($e->getMessage(),404);}}
+ public function terminateStudentSession(string$publicId):array
+ {
+  if(!preg_match('/^[0-9A-HJKMNP-TV-Z]{26}$/',$publicId))throw new DomainException('Sesi siswa tidak valid.',422);
+  return$this->db->transaction(function()use($publicId){$attempt=$this->repo->activeAttemptByPublicId($publicId,true)??throw new DomainException('Sesi siswa sudah tidak aktif atau tidak ditemukan.',409);$this->repo->terminateAttempts([(int)$attempt['id']]);return$attempt;});
+ }
+ public function terminateExamSession(int$examId):array
+ {
+  if($examId<=0)throw new DomainException('Ujian tidak valid.',422);
+  return$this->db->transaction(function()use($examId){$attempts=$this->repo->activeAttemptsForExam($examId,true);if(!$this->repo->deactivateExam($examId)&&!$attempts)throw new DomainException('Ujian tidak ditemukan.',404);$this->repo->terminateAttempts(array_column($attempts,'id'));return$attempts;});
+ }
+ public function questions(?int$id):array{return array_map([\Cbt\Support\QuestionHtml::class,'row'],$this->repo->questions($id));}
+ public function saveQuestion(array$d):void
+ {
+  foreach(['ujian_id','pertanyaan','opsi_a','opsi_b','opsi_c','opsi_d','jawaban_benar']as$key)if(trim((string)($d[$key]??''))==='')throw new DomainException('Data soal belum lengkap.',422);
+  $answer=strtoupper((string)$d['jawaban_benar']);if(!in_array($answer,['A','B','C','D','E'],true)||((float)($d['poin']??0))<=0)throw new DomainException('Jawaban benar atau poin tidak valid.',422);
+  $d['jawaban_benar']=$answer;$d['pertanyaan']=\Cbt\Support\QuestionImage::persistInHtml((string)$d['pertanyaan']);$question=\Cbt\Support\QuestionHtml::row($d+['opsi_e'=>'','poin'=>1]);
+  $duplicate=$this->findDuplicateQuestion((int)$question['ujian_id'],(string)$question['pertanyaan'],!empty($question['id'])?(int)$question['id']:null);
+  if($duplicate!==null)throw new DomainException("Peringatan: soal duplikat dengan soal #{$duplicate} pada ujian yang sama.",409);
+  $this->repo->saveQuestion($question);
+ }
+ public function deleteQuestion(int$id):void{if($id<=0||!$this->repo->disableQuestion($id))throw new DomainException('Soal tidak ditemukan atau sudah dihapus.',404);}
  public function users():array{return$this->repo->users();}
  public function saveUser(array$d):void{if(!preg_match('/^[A-Za-z0-9._-]{4,100}$/',(string)($d['username']??'')))throw new DomainException('Username administrator tidak valid.',422);if(empty($d['id'])&&strlen((string)($d['password']??''))<12)throw new DomainException('Password akun baru minimal 12 karakter.',422);if(!empty($d['password'])&&strlen((string)$d['password'])<12)throw new DomainException('Password minimal 12 karakter.',422);$role=strtoupper((string)($d['role']??'ADMIN'));if($role!=='ADMIN')throw new DomainException('Akun guru dikelola Portal Data dan tidak dapat dibuat di CBT.',422);$d['role']='ADMIN';$d['status_aktif']=filter_var($d['status_aktif']??false,FILTER_VALIDATE_BOOL);try{$this->repo->saveUser($d);}catch(\UnexpectedValueException$e){throw new DomainException($e->getMessage(),422);}}
  public function assignments():array{return$this->repo->assignments();}
- public function saveAssignment(array$d,int$actor):void{try{$this->repo->saveAssignment(!empty($d['id'])?(int)$d['id']:null,(int)($d['guru_id']??0),(int)($d['ujian_id']??0),$actor);}catch(\PDOException$e){if($e->getCode()==='23000')throw new DomainException('Guru sudah ditugaskan pada ujian tersebut.',409);throw$e;}catch(\UnexpectedValueException$e){throw new DomainException($e->getMessage(),422);}}
+ public function saveAssignment(array$d,int$actor):void{$duty=strtoupper((string)($d['duty_role']??'TEACHER'));if(!in_array($duty,['TEACHER','PROCTOR'],true))throw new DomainException('Jenis penugasan tidak valid.',422);try{$this->repo->saveAssignment(!empty($d['id'])?(int)$d['id']:null,(int)($d['guru_id']??0),(int)($d['ujian_id']??0),$duty,$actor);}catch(\PDOException$e){if($e->getCode()==='23000')throw new DomainException('Guru sudah ditugaskan pada ujian tersebut.',409);throw$e;}catch(\UnexpectedValueException$e){throw new DomainException($e->getMessage(),422);}}
  public function deleteAssignment(int$id):void{$this->repo->deleteAssignment($id);}
  public function results():array{return$this->repo->results();}
  public function violations():array{return$this->repo->violations();}
  public function teacherDashboard(int$teacherId,int$userId,string$role):array{$resolvedTeacherId=$teacherId>0?$teacherId:$this->repo->teacherIdForUser($userId);$ids=$role==='ADMIN'?$this->repo->allExamIds():$this->repo->teacherExamIds($resolvedTeacherId);$all=$this->repo->exams();$list=array_values(array_filter($all,fn($e)=>in_array((int)$e['id'],$ids,true)));return['ujianList'=>$list,'hasilList'=>$this->repo->results($ids),'pelanggaranList'=>$this->repo->violations($ids),'syncedAt'=>gmdate(DATE_ATOM)];}
- private function liveSessionPayload(array$examIds):array{$sessions=$this->repo->liveSessions($examIds);return['sessions'=>$sessions,'summary'=>['active'=>count(array_filter($sessions,fn(array$s):bool=>$s['status']==='IN_PROGRESS')),'answered'=>array_sum(array_column($sessions,'answeredQuestions')),'violations'=>array_sum(array_column($sessions,'violationCount')),'total'=>count($sessions)],'serverTime'=>gmdate(DATE_ATOM),'refreshSeconds'=>10];}
- public function importQuestions(array$rows):array{$valid=[];$errors=[];foreach($rows as$i=>$row){try{$exam=(int)($row['ujian_id']??0);if(!$exam&&!empty($row['nama_ujian']))$exam=$this->repo->examIdByName((string)$row['nama_ujian'])??0;$row['ujian_id']=$exam;foreach(['ujian_id','pertanyaan','opsi_a','opsi_b','opsi_c','opsi_d','jawaban_benar']as$key)if(trim((string)($row[$key]??''))==='')throw new \InvalidArgumentException("Kolom {$key} kosong");$img=trim((string)($row['url_gambar']??$row['gambar_soal']??$row['gambar']??''));if($img!==''&&!str_contains((string)$row['pertanyaan'],'<img')){$row['pertanyaan'].="<br><img src=\"".htmlspecialchars($img,ENT_QUOTES,'UTF-8')."\" style=\"max-width:100%;max-height:280px;object-fit:contain;border-radius:8px;margin:8px 0;display:block;\">";}$row['jawaban_benar']=strtoupper((string)$row['jawaban_benar']);if(!in_array($row['jawaban_benar'],['A','B','C','D','E'],true))throw new \InvalidArgumentException('Jawaban benar harus A-E');$row['poin']=(float)($row['poin']??1);$row['opsi_e']=$row['opsi_e']??'';$valid[]=$row;}catch(\Throwable$e){$errors[]=['row'=>$i+2,'reason'=>$e->getMessage()];}}if(!$valid)throw new DomainException('Tidak ada soal valid untuk diimport.',422);$this->db->transaction(function()use($valid){foreach($valid as$row)$this->repo->saveQuestion($row);});return['total'=>count($rows),'inserted'=>count($valid),'failed'=>count($errors),'errors'=>$errors];}
+ private function liveSessionPayload(array$examIds):array{$sessions=$this->repo->liveSessions($examIds);return['sessions'=>$sessions,'summary'=>['active'=>count(array_filter($sessions,fn(array$s):bool=>$s['status']==='IN_PROGRESS')),'online'=>count(array_filter($sessions,fn(array$s):bool=>$s['status']==='IN_PROGRESS'&&$s['connectionState']==='ONLINE')),'terminated'=>count(array_filter($sessions,fn(array$s):bool=>$s['status']==='TERMINATED')),'total'=>count($sessions)],'serverTime'=>gmdate(DATE_ATOM),'refreshSeconds'=>10];}
+ public function importQuestions(array$rows):array
+ {
+  $valid=[];$errors=[];$seen=[];
+  foreach($rows as$i=>$row){try{
+   $exam=(int)($row['ujian_id']??0);if(!$exam&&!empty($row['nama_ujian']))$exam=$this->repo->examIdByName((string)$row['nama_ujian'])??0;$row['ujian_id']=$exam;
+   foreach(['ujian_id','pertanyaan','opsi_a','opsi_b','opsi_c','opsi_d','jawaban_benar']as$key)if(trim((string)($row[$key]??''))==='')throw new \InvalidArgumentException("Kolom {$key} kosong");
+   $img=trim((string)($row['url_gambar']??$row['gambar_soal']??$row['gambar']??''));if($img!==''&&!str_contains((string)$row['pertanyaan'],'<img'))$row['pertanyaan'].="<br><img src=\"".htmlspecialchars($img,ENT_QUOTES,'UTF-8')."\">";
+   $row['pertanyaan']=\Cbt\Support\QuestionImage::persistInHtml((string)$row['pertanyaan']);$row['jawaban_benar']=strtoupper((string)$row['jawaban_benar']);if(!in_array($row['jawaban_benar'],['A','B','C','D','E'],true))throw new \InvalidArgumentException('Jawaban benar harus A-E');
+   $row['poin']=(float)($row['poin']??1);if($row['poin']<=0)throw new \InvalidArgumentException('Poin harus lebih dari 0');$row['opsi_e']=$row['opsi_e']??'';$row=\Cbt\Support\QuestionHtml::row($row);
+   if(!isset($seen[$exam])){$seen[$exam]=[];foreach($this->repo->activeQuestionTexts($exam)as$existing)$seen[$exam][\Cbt\Support\QuestionFingerprint::fromHtml((string)$existing['pertanyaan'])]=['kind'=>'question','id'=>(int)$existing['id']];}
+   $fingerprint=\Cbt\Support\QuestionFingerprint::fromHtml((string)$row['pertanyaan']);$currentId=!empty($row['id'])?(int)$row['id']:null;$duplicate=$seen[$exam][$fingerprint]??null;
+   if($duplicate!==null&&!($duplicate['kind']==='question'&&$currentId!==null&&$duplicate['id']===$currentId)){$source=$duplicate['kind']==='question'?"soal #{$duplicate['id']}":"baris {$duplicate['row']}";throw new \InvalidArgumentException("Soal duplikat dengan {$source} pada ujian yang sama");}
+   if($currentId!==null)foreach($seen[$exam]as$key=>$entry)if($entry['kind']==='question'&&$entry['id']===$currentId)unset($seen[$exam][$key]);
+   $seen[$exam][$fingerprint]=['kind'=>'row','row'=>$i+2];$valid[]=$row;
+  }catch(\Throwable$e){$errors[]=['row'=>$i+2,'reason'=>$e->getMessage()];}}
+  if($valid)$this->db->transaction(function()use($valid){foreach($valid as$row)$this->repo->saveQuestion($row);});
+  return['total'=>count($rows),'inserted'=>count($valid),'failed'=>count($errors),'errors'=>$errors];
+ }
+ private function findDuplicateQuestion(int$examId,string$html,?int$ignoreId=null):?int{$fingerprint=\Cbt\Support\QuestionFingerprint::fromHtml($html);foreach($this->repo->activeQuestionTexts($examId)as$row)if((int)$row['id']!==$ignoreId&&\Cbt\Support\QuestionFingerprint::fromHtml((string)$row['pertanyaan'])===$fingerprint)return(int)$row['id'];return null;}
  public function importUsers(array$rows):array{$valid=[];$errors=[];foreach($rows as$i=>$row){try{$data=['username'=>trim((string)($row['username']??'')),'nama_lengkap'=>trim((string)($row['nama_lengkap']??'')),'password'=>(string)($row['password']??''),'role'=>'ADMIN','status_aktif'=>true];if(!preg_match('/^[A-Za-z0-9._-]{4,100}$/',$data['username'])||strlen($data['password'])<12)throw new \InvalidArgumentException('Username/password minimal 12 karakter tidak valid');$valid[]=$data;}catch(\Throwable$e){$errors[]=['row'=>$i+2,'reason'=>$e->getMessage()];}}if(!$valid)throw new DomainException('Tidak ada akun administrator valid untuk diimport.',422);$this->db->transaction(function()use($valid){foreach($valid as$row)$this->repo->saveUser($row);});return['total'=>count($rows),'inserted'=>count($valid),'failed'=>count($errors),'errors'=>$errors];}
  public function settings():array{return$this->repo->getSettings();}
- public function saveSettings(array$data):void{$allowed=['remedial_score_cap_X','remedial_score_cap_XI','remedial_score_cap_XII'];$filtered=[];foreach($allowed as$key){if(array_key_exists($key,$data)){$v=(float)$data[$key];if($v<0||$v>100)throw new DomainException("Nilai cap {$key} harus antara 0 dan 100.",422);$filtered[$key]=(string)round($v,2);}}if(!$filtered)throw new DomainException('Tidak ada pengaturan valid untuk disimpan.',422);$this->repo->saveSettings($filtered);}
+ public function saveSettings(array$data):array{$allowed=['remedial_score_cap_X','remedial_score_cap_XI','remedial_score_cap_XII'];$filtered=[];foreach($allowed as$key){if(array_key_exists($key,$data)){$v=(float)$data[$key];if($v<0||$v>100)throw new DomainException("Nilai cap {$key} harus antara 0 dan 100.",422);$filtered[$key]=(string)round($v,2);}}if(!$filtered)throw new DomainException('Tidak ada pengaturan valid untuk disimpan.',422);$this->repo->saveSettings($filtered);$saved=$this->repo->getSettings();foreach($filtered as$key=>$value){if(!isset($saved[$key])||(float)$saved[$key]['value']!==(float)$value)throw new DomainException('Pengaturan gagal diverifikasi setelah disimpan.',500);}return$saved;}
 }
