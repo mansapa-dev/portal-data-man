@@ -1,4 +1,13 @@
 {
+  "resources/css/dashboard-shell.css": {
+    "file": "assets/dashboard-shell-BRER9c2O.css",
+    "src": "resources/css/dashboard-shell.css",
+    "isEntry": true,
+    "name": "dashboard-shell",
+    "names": [
+      "dashboard-shell.css"
+    ]
+  },
   "resources/js/portal-react/main.tsx": {
     "file": "assets/main-CyMpialW.js",
     "name": "main",
