@@ -104,6 +104,7 @@ Route::prefix('api/v1')->group(function (): void {
         Route::get('students/{student}/enrollments', [EnrollmentController::class, 'history']);
         Route::middleware('role:SUPER_ADMIN,DATA_ADMIN,DATA_OPERATOR')->group(function (): void {
             Route::post('students', [StudentController::class, 'store']);
+            Route::post('students/sync-semester', [StudentController::class, 'syncSemester']);
             Route::patch('students/{student}', [StudentController::class, 'update']);
             Route::post('teachers', [TeacherController::class, 'store']);
             Route::patch('teachers/{teacher}', [TeacherController::class, 'update']);

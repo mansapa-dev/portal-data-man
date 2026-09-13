@@ -50,6 +50,26 @@ class StudentController extends Controller
         return ApiResponse::success(Student::query()->where('nisn', $nisn)->firstOrFail(), 'Siswa berhasil diambil.');
     }
 
+    public function syncSemester(Request $request): JsonResponse
+    {
+        $data = $request->validate(['sourceSemesterPublicId' => ['required', 'string', 'size:26'], 'targetSemesterPublicId' => ['required', 'string', 'size:26', 'different:sourceSemesterPublicId']]);
+        $source = Semester::query()->where('publicId', $data['sourceSemesterPublicId'])->firstOrFail();
+        $target = Semester::query()->where('publicId', $data['targetSemesterPublicId'])->firstOrFail();
+        abort_unless($source->academicYearId === $target->academicYearId, 422, 'Semester asal dan tujuan harus dalam tahun ajaran yang sama.');
+        $copied = DB::transaction(function () use ($source, $target): int {
+            $rows = ClassEnrollment::query()->where('semesterId', $source->id)->where('status', 'ACTIVE')->with(['student', 'schoolClass'])->get();
+            $count = 0;
+            foreach ($rows as $row) {
+                if (!$row->student || $row->student->status !== 'ACTIVE') continue;
+                ClassEnrollment::query()->updateOrCreate(['studentId' => $row->studentId, 'semesterId' => $target->id], ['schoolClassId' => $row->schoolClassId, 'academicYearId' => $target->academicYearId, 'attendanceNumber' => $row->attendanceNumber, 'activeEnrollmentKey' => "{$row->studentId}:{$target->id}", 'status' => 'ACTIVE', 'leftAt' => null]);
+                $count++;
+            }
+            return $count;
+        });
+        $this->audit->write($request, 'SYNC_STUDENTS_SEMESTER', 'Semester', $target->publicId, null, ['sourceSemesterPublicId' => $source->publicId, 'copied' => $copied]);
+        return ApiResponse::success(['copied' => $copied], "{$copied} siswa berhasil disinkronkan.");
+    }
+
     public function store(Request $request): JsonResponse
     {
         $data = $this->validated($request);
