@@ -523,6 +523,110 @@ body.agen-workspace {
 .agen-workspace .primary,
 .dashboard-body .primary { border-radius: 12px; }
 
+/* Desktop macOS-inspired controls: layered surfaces and tactile buttons. */
+@media (min-width: 861px) {
+  .dashboard-body .topbar,
+  .dashboard-body :is(.metric-card, .card, .welcome-card),
+  .agen-workspace .attendance-page > header,
+  .agen-workspace :is(.attendance-form, .filter-bar, .journal-list, .flow-steps, .summary, .scan-callout, .student-list, .journal-content, .document-panel, .report-table) {
+    border: 1px solid rgba(217, 231, 221, .95);
+    border-radius: 20px;
+    background: linear-gradient(155deg, #fff 48%, #f9fcfa 100%);
+    box-shadow: 0 12px 32px rgba(28, 65, 43, .075), 0 2px 5px rgba(28, 65, 43, .035), inset 0 1px 0 rgba(255, 255, 255, .95);
+  }
+  .dashboard-body .welcome-card,
+  .agen-workspace .attendance-page > header {
+    background: linear-gradient(120deg, #fff 58%, #edf8f1 100%);
+  }
+  .dashboard-body .metric-card {
+    min-height: 172px;
+    padding: 20px 22px;
+  }
+  .dashboard-body .metric-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 16px 36px rgba(28, 65, 43, .105), 0 2px 5px rgba(28, 65, 43, .045);
+  }
+  .dashboard-body .metric-card p { margin-top: 15px; }
+  .dashboard-body .quick-panel > a {
+    border-radius: 12px;
+    margin-inline: 12px;
+    padding-inline: 10px;
+  }
+  .dashboard-body .quick-panel > a:hover { background: #eff8f2; }
+  .dashboard-body .topbar { background: rgba(255, 255, 255, .92); backdrop-filter: blur(18px); }
+  .dashboard-body :is(.welcome-card > a, .recent-card .card-head > a, .empty-state a) {
+    display: inline-flex;
+    min-height: 34px;
+    align-items: center;
+    padding: 6px 11px;
+    border: 1px solid #d9e9df;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, .75);
+    color: #267b52;
+    box-shadow: 0 2px 5px rgba(28, 65, 43, .04);
+    font-weight: 750;
+    text-decoration: none;
+  }
+  .dashboard-body :is(.welcome-card > a, .recent-card .card-head > a, .empty-state a):hover { background: #ecf8f0; border-color: #b7d9c2; }
+  .dashboard-body .dashboard-main .primary,
+  .agen-workspace .attendance-page .primary {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 10px 18px;
+    border: 1px solid #278858;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #4db681, #278a5a);
+    color: #fff;
+    box-shadow: 0 5px 12px rgba(29, 115, 73, .2), inset 0 1px 0 rgba(255, 255, 255, .28);
+    font-size: .8rem;
+    font-weight: 750;
+    line-height: 1.25;
+    text-decoration: none;
+    transition: background .16s ease, box-shadow .16s ease, transform .16s ease;
+  }
+  .dashboard-body .dashboard-main .primary:hover,
+  .agen-workspace .attendance-page .primary:hover {
+    background: linear-gradient(180deg, #54bf89, #2b9361);
+    box-shadow: 0 7px 16px rgba(29, 115, 73, .24), inset 0 1px 0 rgba(255, 255, 255, .3);
+    transform: translateY(-1px);
+  }
+  .dashboard-body .dashboard-main .primary:active,
+  .agen-workspace .attendance-page .primary:active {
+    box-shadow: 0 2px 6px rgba(29, 115, 73, .18), inset 0 2px 4px rgba(12, 66, 39, .16);
+    transform: translateY(1px);
+  }
+  .agen-workspace .attendance-page :is(button:not(.primary), .form-actions a:not(.primary), .report-actions a:not(.primary), .journal-actions a:not(.primary)) {
+    border: 1px solid #d4e4d9;
+    border-radius: 11px;
+    background: linear-gradient(180deg, #fff, #f3f8f5);
+    color: #30533e;
+    box-shadow: 0 2px 5px rgba(28, 65, 43, .055), inset 0 1px 0 #fff;
+    text-decoration: none;
+  }
+  .agen-workspace .attendance-page :is(button:not(.primary), .form-actions a:not(.primary), .report-actions a:not(.primary), .journal-actions a:not(.primary)):hover {
+    background: #eaf5ed;
+    border-color: #b7d9c2;
+  }
+  .dashboard-body .dashboard-main .primary:focus-visible,
+  .agen-workspace .attendance-page :is(button, .primary, .form-actions a, .report-actions a, .journal-actions a):focus-visible {
+    outline: 3px solid rgba(57, 160, 103, .3);
+    outline-offset: 3px;
+  }
+  .dashboard-body .dashboard-main .primary:disabled,
+  .agen-workspace .attendance-page button:disabled { opacity: .52; box-shadow: none; transform: none; }
+}
+@media (min-width: 861px) and (prefers-reduced-motion: reduce) {
+  .dashboard-body .metric-card,
+  .dashboard-body .dashboard-main .primary,
+  .agen-workspace .attendance-page .primary { transition: none; }
+  .dashboard-body .metric-card:hover,
+  .dashboard-body .dashboard-main .primary:hover,
+  .agen-workspace .attendance-page .primary:hover { transform: none; }
+}
+
 .mobile-dock,
 .mobile-account-sheet { display: none; }
 @media (max-width: 860px) {
