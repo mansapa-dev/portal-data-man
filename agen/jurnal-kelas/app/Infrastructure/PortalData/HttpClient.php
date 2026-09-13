@@ -16,7 +16,10 @@ final class HttpClient
         curl_close($handle);
         if ($body === false || $error !== '') throw new RuntimeException('Portal Data tidak dapat dihubungi.');
         $decoded = json_decode($body, true);
-        if ($status < 200 || $status >= 300 || !is_array($decoded)) throw new RuntimeException('Respons Portal Data tidak valid (HTTP '.$status.').');
+        if ($status < 200 || $status >= 300 || !is_array($decoded)) {
+            $message = is_array($decoded) && is_string($decoded['message'] ?? null) ? $decoded['message'] : 'Respons Portal Data tidak valid (HTTP '.$status.').';
+            throw new RuntimeException($message);
+        }
         return $decoded;
     }
 }

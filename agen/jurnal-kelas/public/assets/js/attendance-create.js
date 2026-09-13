@@ -47,6 +47,9 @@ async function checkRoster() {
     }
 }
 classSelect.addEventListener('change', () => {
+    ++rosterRequest;
+    semesterSelect.replaceChildren(new Option('Pilih semester', ''));
+    rosterReady = false;
     const yearId = classSelect.selectedOptions[0]?.dataset.year;
     const semesters = periods.find(item => item.publicId === yearId)?.semesters || [];
     options(semesterSelect, 'Pilih semester', semesters, item => `${item.type === 'ODD' ? 'Ganjil' : 'Genap'}${item.isActive ? ' · Aktif' : ''}`);
