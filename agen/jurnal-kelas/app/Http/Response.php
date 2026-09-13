@@ -42,6 +42,42 @@ final class Response
             $html = preg_replace('/<nav class="page-nav"[^>]*>.*?<\/nav>/s', '', $html) ?? $html;
             $html = preg_replace('/<body([^>]*)>/', '<body$1 class="agen-workspace">'.$navigation, $html, 1) ?? $html;
         }
+        if (isset($_SESSION['user'])) {
+            $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
+            $selected = static fn (string $prefix): string => str_starts_with($path, $prefix) ? ' class="active" aria-current="page"' : '';
+            $user = $_SESSION['user'];
+            $name = e((string) ($user['name'] ?? 'Pengguna'));
+            $username = e((string) ($user['username'] ?? ''));
+            $initials = e(mb_strtoupper(mb_substr((string) ($user['name'] ?? 'A'), 0, 2)));
+            $csrf = e((string) ($_SESSION['csrf_token'] ?? ''));
+            $dockIcons = [
+                'dashboard' => '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM13 13h8v8h-8z"/></svg>',
+                'attendance' => '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v3m10-3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1Zm3 8h3v3H8z"/></svg>',
+                'journals' => '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h12a2 2 0 0 1 2 2v16H7a2 2 0 0 1-2-2V3Zm3 4h8M8 11h8M8 15h5"/></svg>',
+                'reports' => '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10m7 10V4m7 16v-7M3 20h18"/></svg>',
+                'account' => '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/></svg>',
+                'logout' => '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h5m4-4 4-4-4-4m4 4H9"/></svg>',
+                'audit' => '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 6v5c0 5 3.4 8.5 8 10 4.6-1.5 8-5 8-10V6l-8-3Z"/></svg>',
+            ];
+            $auditLink = in_array($user['role'] ?? null, ['ADMIN', 'AUDITOR'], true)
+                ? '<a class="account-sheet-link" href="/audit-logs">'.$dockIcons['audit'].'<span>Audit log</span><span aria-hidden="true">›</span></a>'
+                : '';
+            $dock = '<nav class="mobile-dock" aria-label="Navigasi mobile">'
+                .'<a'.$selected('/dashboard').' href="/dashboard">'.$dockIcons['dashboard'].'<span>Beranda</span></a>'
+                .'<a'.$selected('/attendance').' href="/attendance/create">'.$dockIcons['attendance'].'<span>Absensi</span></a>'
+                .'<a'.$selected('/journals').' href="/journals">'.$dockIcons['journals'].'<span>Jurnal</span></a>'
+                .'<a'.$selected('/reports').' href="/reports/monthly">'.$dockIcons['reports'].'<span>Laporan</span></a>'
+                .'<button id="mobile-account-trigger" type="button" aria-controls="mobile-account-sheet" aria-expanded="false">'.$dockIcons['account'].'<span>Akun</span></button></nav>'
+                .'<dialog id="mobile-account-sheet" class="mobile-account-sheet" aria-labelledby="mobile-account-title">'
+                .'<div class="account-sheet-handle" aria-hidden="true"></div><div class="account-sheet-head"><h2 id="mobile-account-title">Akun saya</h2><button class="account-sheet-close" type="button" aria-label="Tutup panel akun">×</button></div>'
+                .'<div class="account-sheet-identity"><span class="account-sheet-avatar">'.$initials.'</span><div><strong>'.$name.'</strong><small>@'.$username.'</small></div></div>'
+                .$auditLink
+                .'<form method="post" action="/logout"><input type="hidden" name="_token" value="'.$csrf.'"><button class="account-sheet-logout" type="submit">'.$dockIcons['logout'].'<span>Keluar dari akun</span></button></form>'
+                .'</dialog>';
+            $scriptPath = dirname(__DIR__, 2).'/public/assets/js/dashboard-shell.js';
+            $scriptVersion = is_file($scriptPath) ? substr((string) hash_file('sha256', $scriptPath), 0, 12) : 'dev';
+            $html = str_replace('</body>', $dock.'<script src="/assets/js/dashboard-shell.js?v='.$scriptVersion.'" defer></script></body>', $html);
+        }
         return new self($html, $status, ['Content-Type' => 'text/html; charset=utf-8', 'Cache-Control' => 'private, no-store', 'Pragma' => 'no-cache']);
     }
     public static function redirect(string $url, int $status = 302): self { return new self('', $status, ['Location' => $url, 'Cache-Control' => 'private, no-store', 'Pragma' => 'no-cache']); }

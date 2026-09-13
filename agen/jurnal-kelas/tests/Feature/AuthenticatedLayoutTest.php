@@ -26,10 +26,15 @@ final class AuthenticatedLayoutTest extends TestCase
         self::assertStringContainsString('class="active" href="/journals"', $html);
         self::assertStringContainsString('class="page-topbar"', $html);
         self::assertStringContainsString('class="page-nav-toggle"', $html);
-        self::assertSame(6, substr_count($html, '<svg viewBox="0 0 24 24"'));
+        self::assertSame(1, substr_count($html, 'class="mobile-dock"'));
+        self::assertStringContainsString('id="mobile-account-trigger"', $html);
+        self::assertStringContainsString('id="mobile-account-sheet"', $html);
+        self::assertStringContainsString('<button class="account-sheet-logout" type="submit"', $html);
+        self::assertStringContainsString('name="_token" value="csrf-test"', $html);
         self::assertStringContainsString('Guru Uji', $html);
         self::assertStringNotContainsString('href="/old"', $html);
         self::assertStringContainsString('/assets/js/session-guard.js', $html);
+        self::assertStringContainsString('/assets/js/dashboard-shell.js', $html);
     }
 
     public function test_audit_navigation_is_limited_to_authorized_roles(): void
@@ -41,6 +46,21 @@ final class AuthenticatedLayoutTest extends TestCase
 
         $_SESSION['user']['role'] = 'AUDITOR';
         self::assertStringContainsString('href="/audit-logs"', Response::html('<html><head></head><body></body></html>')->content());
+    }
+
+    public function test_dashboard_gets_mobile_account_and_logout_without_duplicate_sidebar(): void
+    {
+        $_SESSION['user'] = ['name' => 'Guru Uji', 'username' => 'guru.uji', 'role' => 'TEACHER'];
+        $_SESSION['csrf_token'] = 'csrf-dashboard';
+        $_SERVER['REQUEST_URI'] = '/dashboard';
+
+        $html = Response::html('<html><head></head><body class="dashboard-body"><div class="app-shell"></div></body></html>')->content();
+
+        self::assertSame(1, substr_count($html, 'class="mobile-dock"'));
+        self::assertStringContainsString('class="active" aria-current="page" href="/dashboard"', $html);
+        self::assertStringContainsString('action="/logout"', $html);
+        self::assertStringContainsString('name="_token" value="csrf-dashboard"', $html);
+        self::assertStringNotContainsString('class="page-nav"', $html);
     }
 
     public function test_html_and_redirect_responses_are_not_browser_cached(): void

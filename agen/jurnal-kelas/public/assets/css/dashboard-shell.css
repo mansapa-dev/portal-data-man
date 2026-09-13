@@ -433,3 +433,209 @@ body.agen-workspace {
   .dashboard-body .metric-card strong { font-size: 1.55rem; }
   .agen-workspace .journal-empty { padding: 24px 20px; }
 }
+
+/* iOS-inspired surfaces: soft squircle icons, precise type, light elevation. */
+.dashboard-body .metric-card,
+.dashboard-body .card,
+.dashboard-body .welcome-card,
+.agen-workspace .attendance-page > header,
+.agen-workspace .attendance-form,
+.agen-workspace .filter-bar,
+.agen-workspace .journal-list,
+.agen-workspace .flow-steps {
+  border-color: #e2ebe5;
+  border-radius: 20px;
+  box-shadow: 0 8px 28px rgba(33, 73, 52, .065), 0 1px 2px rgba(33, 73, 52, .035);
+}
+.dashboard-body .metric-card {
+  min-height: 166px;
+  padding: 18px 20px;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.dashboard-body .metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 13px 30px rgba(33, 73, 52, .11);
+}
+.dashboard-body .metric-icon,
+.dashboard-body .welcome-icon,
+.agen-workspace .journal-empty-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 15px;
+}
+.dashboard-body .metric-icon svg {
+  width: 21px;
+  height: 21px;
+  stroke-width: 2;
+}
+.dashboard-body .metric-icon.purple,
+.dashboard-body .welcome-icon { background: #e7f6ee; color: #218058; }
+.dashboard-body .metric-icon.orange { background: #fff4df; color: #bd7914; }
+.dashboard-body .metric-icon.cyan { background: #e8f4ff; color: #337db5; }
+.dashboard-body .metric-icon.green { background: #e9f8ed; color: #338846; }
+.dashboard-body .metric-card p { margin-top: 13px; color: #64776d; font-weight: 600; }
+.dashboard-body .metric-card strong { font-size: 1.85rem; font-weight: 760; letter-spacing: -.045em; }
+.dashboard-body .metric-card small { font-weight: 650; }
+.dashboard-body .quick-panel .metric-icon {
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  border-radius: 13px;
+}
+.dashboard-body .quick-panel > a,
+.agen-workspace .journal-list > a { transition: background-color .16s ease; }
+.agen-workspace .attendance-form input,
+.agen-workspace .attendance-form select,
+.agen-workspace .attendance-form textarea,
+.agen-workspace .filter-bar input,
+.agen-workspace .filter-bar select { border-radius: 12px; }
+.agen-workspace .primary,
+.dashboard-body .primary { border-radius: 12px; }
+
+.mobile-dock,
+.mobile-account-sheet { display: none; }
+@media (max-width: 860px) {
+  .dashboard-body .app-sidebar,
+  .agen-workspace .page-nav { display: none; }
+  .mobile-dock {
+    position: fixed;
+    z-index: 90;
+    right: 12px;
+    bottom: max(10px, env(safe-area-inset-bottom));
+    left: 12px;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 2px;
+    min-height: 72px;
+    padding: 7px;
+    border: 1px solid rgba(218, 230, 221, .9);
+    border-radius: 24px;
+    background: rgba(255, 255, 255, .93);
+    box-shadow: 0 14px 38px rgba(29, 63, 44, .18);
+    backdrop-filter: blur(22px) saturate(1.25);
+    -webkit-backdrop-filter: blur(22px) saturate(1.25);
+  }
+  .mobile-dock > a,
+  .mobile-dock > button {
+    display: flex;
+    min-width: 0;
+    min-height: 56px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 4px 2px;
+    border: 0;
+    border-radius: 17px;
+    background: transparent;
+    color: #708378;
+    box-shadow: none;
+    font-size: .62rem;
+    font-weight: 670;
+    line-height: 1;
+    text-align: center;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .mobile-dock > :is(a, button).active,
+  .mobile-dock > button[aria-expanded="true"] {
+    background: #e9f7ee;
+    color: #18754b;
+  }
+  .mobile-dock > :is(a, button):hover { background: #f2f8f4; color: #18754b; }
+  .mobile-dock svg {
+    width: 21px;
+    height: 21px;
+    stroke-width: 2;
+  }
+  .mobile-account-sheet[open] {
+    position: fixed;
+    z-index: 100;
+    top: auto;
+    right: 12px;
+    bottom: calc(92px + env(safe-area-inset-bottom));
+    left: 12px;
+    display: block;
+    width: min(430px, calc(100vw - 24px));
+    max-height: min(70svh, 520px);
+    margin: 0 auto;
+    padding: 18px;
+    overflow: auto;
+    border: 1px solid #dfeae2;
+    border-radius: 24px;
+    background: rgba(255,255,255,.98);
+    color: #213c2c;
+    box-shadow: 0 22px 58px rgba(16, 49, 31, .25);
+  }
+  .mobile-account-sheet::backdrop { background: rgba(21, 42, 29, .28); backdrop-filter: blur(3px); }
+  .account-sheet-handle { width: 36px; height: 4px; margin: 0 auto 15px; border-radius: 99px; background: #d8e4dc; }
+  .account-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .account-sheet-head h2 { margin: 0; color: #213c2c; font-size: 1.08rem; letter-spacing: -.02em; }
+  .account-sheet-close {
+    width: 32px;
+    min-height: 32px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: #eef3ef;
+    color: #5e7165;
+    font-size: 1.35rem;
+  }
+  .account-sheet-identity {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 18px 0;
+    padding: 14px;
+    border: 1px solid #e2ebe5;
+    border-radius: 18px;
+    background: #f8fbf9;
+  }
+  .account-sheet-avatar {
+    display: grid;
+    flex: 0 0 42px;
+    width: 42px;
+    height: 42px;
+    place-items: center;
+    border-radius: 15px;
+    background: #dff2e6;
+    color: #19754a;
+    font-size: .75rem;
+    font-weight: 800;
+  }
+  .account-sheet-identity > div { display: grid; min-width: 0; }
+  .account-sheet-identity strong,
+  .account-sheet-identity small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .account-sheet-identity strong { font-size: .86rem; }
+  .account-sheet-identity small { color: #718579; font-size: .72rem; }
+  .account-sheet-link,
+  .account-sheet-logout {
+    display: flex;
+    width: 100%;
+    min-height: 48px;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 0;
+    border-radius: 14px;
+    background: transparent;
+    font-size: .82rem;
+    font-weight: 700;
+    text-decoration: none;
+  }
+  .account-sheet-link { color: #2a6144; }
+  .account-sheet-link span:last-child { margin-left: auto; font-size: 1.3rem; }
+  .account-sheet-logout { margin-top: 6px; background: #fff1ef; color: #ae4338; }
+  .account-sheet-logout:hover { background: #ffe5e1; }
+  .account-sheet-link svg,
+  .account-sheet-logout svg { width: 20px; height: 20px; }
+  .mobile-account-sheet form { margin: 0; }
+  .dashboard-body .dashboard-main,
+  .agen-workspace .attendance-page { padding-bottom: 116px; }
+}
+@media (max-width: 390px) {
+  .mobile-dock { right: 8px; left: 8px; padding: 5px; }
+  .mobile-dock > a,
+  .mobile-dock > button { font-size: .58rem; }
+}
