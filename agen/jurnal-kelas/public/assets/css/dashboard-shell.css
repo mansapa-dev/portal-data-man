@@ -1,0 +1,32 @@
+/* Green compact dashboard navigation. Hover or keyboard focus expands it. */
+@media (min-width: 861px) {
+  .app-shell { grid-template-columns: 76px minmax(0,1fr); transition: grid-template-columns .22s ease; }
+  .app-shell:has(.app-sidebar:hover), .app-shell:has(.app-sidebar:focus-within) { grid-template-columns: 260px minmax(0,1fr); }
+  .app-sidebar { width: 76px; padding-inline: 14px; overflow: hidden; border-right: 0; background: #12372c; transition: width .22s ease; }
+  .app-sidebar:hover, .app-sidebar:focus-within { width: 260px; }
+  .app-sidebar .brand, .app-sidebar .nav-label, .app-sidebar .side-nav, .app-sidebar .sidebar-user { width: 232px; }
+  .app-sidebar .brand > span:last-child, .app-sidebar .nav-label, .app-sidebar .side-nav a span, .app-sidebar .side-nav a em, .app-sidebar .sidebar-user > div, .app-sidebar .sidebar-user form { opacity: 0; transition: opacity .12s ease; }
+  .app-sidebar:hover .brand > span:last-child, .app-sidebar:focus-within .brand > span:last-child, .app-sidebar:hover .nav-label, .app-sidebar:focus-within .nav-label, .app-sidebar:hover .side-nav a span, .app-sidebar:focus-within .side-nav a span, .app-sidebar:hover .side-nav a em, .app-sidebar:focus-within .side-nav a em, .app-sidebar:hover .sidebar-user > div, .app-sidebar:focus-within .sidebar-user > div, .app-sidebar:hover .sidebar-user form, .app-sidebar:focus-within .sidebar-user form { opacity: 1; }
+  .app-sidebar .side-nav a { color: #c8ddd3; }.app-sidebar .side-nav a.active { background: linear-gradient(135deg,#34845c,#56b983); color:#fff; }.app-sidebar .brand strong,.app-sidebar .sidebar-user strong { color:#fff; }.app-sidebar .brand small,.app-sidebar .sidebar-user small { color:#a9c5b7; }.app-sidebar .sidebar-user { border-color:rgba(255,255,255,.12); }.app-sidebar .avatar { background:rgba(255,255,255,.16); color:#fff; }
+}
+@media (max-width: 860px) {
+  .dashboard-body .app-shell { display:block; }.dashboard-body .app-sidebar { position:fixed; z-index:70; inset:auto 10px max(10px,env(safe-area-inset-bottom)); display:block; width:auto; height:66px; padding:7px 8px; border:1px solid rgba(255,255,255,.22); border-radius:22px; background:rgba(18,55,44,.96); box-shadow:0 12px 34px rgba(17,52,41,.28); transform:none; }.dashboard-body .app-sidebar .sidebar-top,.dashboard-body .app-sidebar .nav-label,.dashboard-body .app-sidebar .secondary-nav,.dashboard-body .app-sidebar .sidebar-user { display:none; }.dashboard-body .app-sidebar .side-nav { display:grid; grid-template-columns:repeat(4,1fr); gap:3px; margin:0; }.dashboard-body .app-sidebar .side-nav a { display:grid; min-width:0; min-height:50px; place-items:center; gap:1px; padding:3px; border-radius:14px; color:#c9dbd3; font-size:.58rem; line-height:1.05; text-align:center; }.dashboard-body .app-sidebar .side-nav a.active { background:#fff; color:#12372c; }.dashboard-body .app-sidebar .side-nav svg { width:19px; }.dashboard-body .sidebar-scrim,.dashboard-body .menu-toggle { display:none; }.dashboard-body .dashboard-main { padding-bottom:104px; }.dashboard-body .topbar { margin:0; border-radius:0; box-shadow:none; }
+}
+
+/* The server-injected Agen shell uses the exact same compact desktop rail and mobile tab bar. */
+@media (min-width: 861px) {
+  body.agen-workspace { padding-left: 76px; transition: padding-left .22s ease; }
+  body.agen-workspace:has(.page-nav:hover), body.agen-workspace:has(.page-nav:focus-within) { padding-left: 260px; }
+  .agen-workspace .page-nav { width: 76px; overflow: hidden; padding-inline: 14px; background:#12372c; transition:width .22s ease; }
+  .agen-workspace .page-nav:hover, .agen-workspace .page-nav:focus-within { width:260px; }
+  .agen-workspace .page-nav-head,.agen-workspace .page-nav-links,.agen-workspace .page-nav-user { width:232px; }
+  .agen-workspace .page-nav .brand > span:last-child,.agen-workspace .nav-caption,.agen-workspace .page-nav-links a span,.agen-workspace .page-nav-user > div,.agen-workspace .page-nav-user form { opacity:0; transition:opacity .12s ease; }
+  .agen-workspace .page-nav:hover .brand > span:last-child,.agen-workspace .page-nav:focus-within .brand > span:last-child,.agen-workspace .page-nav:hover .nav-caption,.agen-workspace .page-nav:focus-within .nav-caption,.agen-workspace .page-nav:hover .page-nav-links a span,.agen-workspace .page-nav:focus-within .page-nav-links a span,.agen-workspace .page-nav:hover .page-nav-user > div,.agen-workspace .page-nav:focus-within .page-nav-user > div,.agen-workspace .page-nav:hover .page-nav-user form,.agen-workspace .page-nav:focus-within .page-nav-user form { opacity:1; }
+  .agen-workspace .page-nav .brand strong,.agen-workspace .page-nav-user strong { color:#fff; }.agen-workspace .page-nav .brand small,.agen-workspace .page-nav-user small { color:#a9c5b7; }.agen-workspace .page-nav-links a { color:#c8ddd3; }.agen-workspace .page-nav-links a.active { background:linear-gradient(135deg,#34845c,#56b983); color:#fff; }.agen-workspace .page-nav-user { border-color:rgba(255,255,255,.12); }.agen-workspace .page-nav-user .avatar { background:rgba(255,255,255,.16); color:#fff; }
+}
+@media (max-width: 860px) {
+  .agen-workspace .page-nav { position:fixed; z-index:70; inset:auto 10px max(10px,env(safe-area-inset-bottom)); display:block; width:auto; height:66px; padding:7px 8px; border:1px solid rgba(255,255,255,.22); border-radius:22px; background:rgba(18,55,44,.96); box-shadow:0 12px 34px rgba(17,52,41,.28); transform:none; }
+  .agen-workspace .page-nav-head,.agen-workspace .page-nav .nav-caption,.agen-workspace .page-nav-user,.agen-workspace .page-nav-close,.agen-workspace .page-nav-scrim { display:none; }
+  .agen-workspace .page-nav-links { display:grid; grid-template-columns:repeat(5,1fr); gap:3px; margin:0; overflow:hidden; }.agen-workspace .page-nav-links a { display:grid; min-width:0; min-height:50px; place-items:center; gap:1px; padding:3px; border-radius:14px; color:#c9dbd3; font-size:.58rem; line-height:1.05; text-align:center; }.agen-workspace .page-nav-links a:nth-child(n+6) { display:none; }.agen-workspace .page-nav-links a.active { background:#fff; color:#12372c; }.agen-workspace .page-nav-links svg { width:19px; }
+  .agen-workspace .page-topbar { display:grid; }.agen-workspace .attendance-page { padding-bottom:104px; }.agen-workspace .page-nav-toggle,.agen-workspace .page-nav-scrim { display:none; }
+}
