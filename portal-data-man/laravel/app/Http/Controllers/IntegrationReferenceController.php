@@ -44,7 +44,7 @@ class IntegrationReferenceController extends Controller
             : Semester::query()->where('isActive', true)->firstOrFail();
         abort_unless($semester->academicYearId === $schoolClass->academicYearId, 422, 'Semester tidak sesuai dengan tahun ajaran kelas.');
         $rows = $schoolClass->enrollments()->with('student')
-            ->where('semesterId', $semester->id)->where('status', 'ACTIVE')->orderBy('attendanceNumber')->get()
+            ->where('semesterId', $semester->id)->orderBy('attendanceNumber')->get()
             ->map(fn ($row) => ['publicId' => $row->student->publicId, 'nisn' => $row->student->nisn, 'fullName' => $row->student->fullName, 'attendanceNumber' => $row->attendanceNumber, 'status' => $row->student->status]);
 
         return ApiResponse::success(['class' => ['publicId' => $schoolClass->publicId, 'code' => $schoolClass->code, 'name' => $schoolClass->name], 'academicYear' => ['publicId' => $schoolClass->academicYear->publicId, 'name' => $schoolClass->academicYear->name], 'semester' => ['publicId' => $semester->publicId, 'type' => $semester->type], 'students' => $rows], 'Anggota kelas aktif berhasil diambil.');

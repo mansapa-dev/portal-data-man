@@ -1,3 +1,4 @@
+<?php require_once __DIR__.'/app/bootstrap.php'; if (!sip_user()) { header('Location: index.php'); exit; } sip_require('sipintar','transactions.create'); ?>
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -12,6 +13,7 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
         body { font-family: 'Inter', sans-serif; }
     </style>
+<?php require __DIR__."/app/client.php"; ?>
 </head>
 <body class="bg-slate-100 min-h-screen text-slate-800 p-4 md:p-8">
 
@@ -102,10 +104,10 @@
             const tbody = document.getElementById('table-items-body');
             const tr = document.createElement('tr');
             tr.className = "border-b text-xs";
-            
+
             let options = '<option value="">-- Pilih Barang --</option>';
             masterBarangList.forEach(b => {
-                options += `<option value="${b.nama_barang}" data-satuan="${b.satuan}" data-stok="${b.stok}">${b.nama_barang} [Jenis: ${b.jenis_barang}] (Stok: ${b.stok} ${b.satuan})</option>`;
+                options += `<option value="${sipEscape(b.nama_barang)}" data-satuan="${sipEscape(b.satuan)}" data-stok="${b.stok}">${sipEscape(b.nama_barang)} [Jenis: ${sipEscape(b.jenis_barang)}] (Stok: ${b.stok} ${sipEscape(b.satuan)})</option>`;
             });
 
             tr.innerHTML = `

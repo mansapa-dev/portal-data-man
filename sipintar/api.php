@@ -1,334 +1,67 @@
 <?php
-header('Content-Type: application/json');
-error_reporting(0);
-
-$host = 'localhost';
-$user = 'root';
-$pass = '';
-$db   = 'sipintar_db';
-
-$conn = new mysqli($host, $user, $pass, $db);
-
-if ($conn->connect_error) {
-    echo json_encode(['success' => false, 'message' => 'Koneksi database gagal: ' . $conn->connect_error]);
-    exit;
-}
-
-// 0. AUTO-CREATE TABEL MASTER BARANG, TRANSAKSI, & DETAIL
-$conn->query("CREATE TABLE IF NOT EXISTS barang (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    nama_barang VARCHAR(150) NOT NULL,
-    jenis_barang VARCHAR(100) NOT NULL,
-    stok INT NOT NULL DEFAULT 0,
-    satuan VARCHAR(50) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)");
-
-$conn->query("CREATE TABLE IF NOT EXISTS transaksi (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    kode_transaksi VARCHAR(50) UNIQUE NOT NULL,
-    tanggal_pengambilan DATE NOT NULL,
-    nama_pengambil VARCHAR(100) NOT NULL,
-    jabatan_unit VARCHAR(100) NOT NULL,
-    keterangan TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)");
-
-$conn->query("CREATE TABLE IF NOT EXISTS transaksi_detail (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    kode_transaksi VARCHAR(50) NOT NULL,
-    nama_barang VARCHAR(150) NOT NULL,
-    jumlah INT NOT NULL,
-    satuan VARCHAR(50) NOT NULL,
-    FOREIGN KEY (kode_transaksi) REFERENCES transaksi(kode_transaksi) ON DELETE CASCADE
-)");
-
-$action = $_GET['action'] ?? '';
-
-// 1. LOGIN
-if ($action === 'login') {
-    $input = json_decode(file_get_contents('php://input'), true);
-    $username = $conn->real_escape_string($input['username'] ?? '');
-    $password = $conn->real_escape_string($input['password'] ?? '');
-
-    $sql = "SELECT * FROM users WHERE username = '$username' AND password = '$password'";
-    $res = $conn->query($sql);
-
-    if ($res && $res->num_rows > 0) {
-        $row = $res->fetch_assoc();
-        echo json_encode([
-            'success'  => true,
-            'id'       => (string)$row['id'],
-            'nama'     => $row['nama_lengkap'],
-            'username' => $row['username'],
-            'role'     => strtolower($row['role'] ?? 'pegawai')
-        ]);
-        exit;
+require __DIR__.'/app/bootstrap.php';
+require __DIR__.'/app/src/Inventory.php';
+header('Content-Type: application/json; charset=utf-8');
+$action=$_GET['action'] ?? '';
+$input=json_decode(file_get_contents('php://input'),true) ?? [];
+if (!is_array($input)) sip_fail(422,'Format permintaan tidak valid.');
+try {
+    if ($action==='login') {
+        sip_check_csrf(); $user=sip_login($input['username'] ?? '',$input['password'] ?? '');
+        if (!$user) sip_fail(401,'Username atau password salah.');
+        echo json_encode(['success'=>true,'id'=>(string)$user['id'],'nama'=>$user['name'],'username'=>$user['username'],'role'=>$user['superadmin_slot']?'superadmin':'pegawai','permissions'=>array_values(array_filter(\Sipintar\Identity::PERMISSIONS,fn($p)=>sip_identity()->allows($user,'sipintar',$p))),'csrf'=>sip_csrf()]); exit;
     }
-    
-    echo json_encode(['success' => false, 'message' => 'Username atau password salah!']);
-    exit;
-}
-
-// 2. KELOLA MASTER BARANG (GET, SAVE, SAVE BATCH TEMPLATE, HAPUS)
-if ($action === 'get_barang') {
-    $res = $conn->query("SELECT * FROM barang ORDER BY nama_barang ASC");
-    $data = [];
-    if ($res) {
-        while ($row = $res->fetch_assoc()) {
-            $data[] = $row;
-        }
-    }
-    echo json_encode(['success' => true, 'data' => $data]);
-    exit;
-}
-
-if ($action === 'save_barang') {
-    $input = json_decode(file_get_contents('php://input'), true);
-    $id    = (int)($input['id'] ?? 0);
-    $nama  = $conn->real_escape_string($input['nama_barang'] ?? '');
-    $jenis = $conn->real_escape_string($input['jenis_barang'] ?? '');
-    $stok  = (int)($input['stok'] ?? 0);
-    $satuan= $conn->real_escape_string($input['satuan'] ?? '');
-
-    if ($id > 0) {
-        $sql = "UPDATE barang SET nama_barang='$nama', jenis_barang='$jenis', stok=$stok, satuan='$satuan' WHERE id=$id";
-    } else {
-        $sql = "INSERT INTO barang (nama_barang, jenis_barang, stok, satuan) VALUES ('$nama', '$jenis', $stok, '$satuan')";
-    }
-
-    if ($conn->query($sql)) {
-        echo json_encode(['success' => true, 'message' => 'Data barang berhasil disimpan!']);
-    } else {
-        echo json_encode(['success' => false, 'message' => 'Gagal menyimpan barang: ' . $conn->error]);
-    }
-    exit;
-}
-
-// SIMPAN BATCH DARI TEMPLATE
-if ($action === 'save_template_barang') {
-    $input = json_decode(file_get_contents('php://input'), true);
-    $items = $input['items'] ?? [];
-
-    if (empty($items)) {
-        echo json_encode(['success' => false, 'message' => 'Tidak ada data template yang dikirim!']);
-        exit;
-    }
-
-    $conn->begin_transaction();
-    try {
-        foreach ($items as $item) {
-            $nama  = $conn->real_escape_string($item['nama_barang'] ?? '');
-            $jenis = $conn->real_escape_string($item['jenis_barang'] ?? '');
-            $stok  = (int)($item['stok'] ?? 0);
-            $satuan= $conn->real_escape_string($item['satuan'] ?? '');
-
-            $check = $conn->query("SELECT id, stok FROM barang WHERE nama_barang = '$nama'");
-            if ($check && $check->num_rows > 0) {
-                $row = $check->fetch_assoc();
-                $newStok = $row['stok'] + $stok;
-                $conn->query("UPDATE barang SET stok = $newStok, jenis_barang = '$jenis', satuan = '$satuan' WHERE id = " . $row['id']);
-            } else {
-                $conn->query("INSERT INTO barang (nama_barang, jenis_barang, stok, satuan) VALUES ('$nama', '$jenis', $stok, '$satuan')");
-            }
-        }
-        $conn->commit();
-        echo json_encode(['success' => true, 'message' => 'Template barang berhasil ditambahkan ke Master Data!']);
-    } catch (Exception $e) {
-        $conn->rollback();
-        echo json_encode(['success' => false, 'message' => 'Gagal memproses template: ' . $e->getMessage()]);
-    }
-    exit;
-}
-
-if ($action === 'hapus_barang') {
-    $input = json_decode(file_get_contents('php://input'), true);
-    $id = (int)($input['id'] ?? 0);
-    if ($conn->query("DELETE FROM barang WHERE id = $id")) {
-        echo json_encode(['success' => true, 'message' => 'Barang berhasil dihapus!']);
-    } else {
-        echo json_encode(['success' => false, 'message' => 'Gagal menghapus barang: ' . $conn->error]);
-    }
-    exit;
-}
-
-// 3. SIMPAN TRANSAKSI PENERIMAAN BARANG
-if ($action === 'simpan_transaksi') {
-    $input = json_decode(file_get_contents('php://input'), true);
-
-    $kode     = $conn->real_escape_string($input['kode_transaksi'] ?? '');
-    $tanggal  = $conn->real_escape_string($input['tanggal_pengambilan'] ?? '');
-    $pengambil= $conn->real_escape_string($input['nama_pengambil'] ?? '');
-    $jabatan  = $conn->real_escape_string($input['jabatan_unit'] ?? '');
-    $ket      = $conn->real_escape_string($input['keterangan'] ?? '');
-    $items    = $input['items'] ?? [];
-
-    if (empty($kode) || empty($tanggal) || empty($pengambil) || empty($items)) {
-        echo json_encode(['success' => false, 'message' => 'Data formulir tidak lengkap!']);
-        exit;
-    }
-
-    $conn->begin_transaction();
-
-    try {
-        $sqlHead = "INSERT INTO transaksi (kode_transaksi, tanggal_pengambilan, nama_pengambil, jabatan_unit, keterangan) 
-                    VALUES ('$kode', '$tanggal', '$pengambil', '$jabatan', '$ket')";
-        if (!$conn->query($sqlHead)) {
-            throw new Exception($conn->error);
-        }
-
-        foreach ($items as $item) {
-            $namaBrg = $conn->real_escape_string($item['nama_barang'] ?? '');
-            $jml     = (int)($item['jumlah'] ?? 1);
-            $satuan  = $conn->real_escape_string($item['satuan'] ?? '');
-
-            $sqlDet = "INSERT INTO transaksi_detail (kode_transaksi, nama_barang, jumlah, satuan) 
-                       VALUES ('$kode', '$namaBrg', $jml, '$satuan')";
-            if (!$conn->query($sqlDet)) {
-                throw new Exception($conn->error);
-            }
-
-            $conn->query("UPDATE barang SET stok = stok - $jml WHERE nama_barang = '$namaBrg'");
-        }
-
-        $conn->commit();
-        echo json_encode(['success' => true, 'message' => 'Transaksi penerimaan berhasil disimpan!']);
-    } catch (Exception $e) {
-        $conn->rollback();
-        echo json_encode(['success' => false, 'message' => 'Gagal menyimpan transaksi: ' . $e->getMessage()]);
-    }
-    exit;
-}
-
-// 4. GET / AMBIL SEMUA DATA TRANSAKSI
-if ($action === 'get_transaksi') {
-    $sqlHeader = "SELECT * FROM transaksi ORDER BY tanggal_pengambilan DESC, id DESC";
-    $resHeader = $conn->query($sqlHeader);
-
-    $data = [];
-    if ($resHeader) {
-        while ($head = $resHeader->fetch_assoc()) {
-            $kode = $conn->real_escape_string($head['kode_transaksi']);
-            
-            $sqlDetail = "SELECT nama_barang, jumlah, satuan FROM transaksi_detail WHERE kode_transaksi = '$kode'";
-            $resDetail = $conn->query($sqlDetail);
-            
-            $items = [];
-            if ($resDetail && $resDetail->num_rows > 0) {
-                while ($det = $resDetail->fetch_assoc()) {
-                    $items[] = [
-                        'nama_barang' => $det['nama_barang'],
-                        'jumlah'      => $det['jumlah'],
-                        'satuan'      => $det['satuan']
-                    ];
+    if ($action==='logout') { sip_check_csrf(); sip_logout(); echo json_encode(['success'=>true]); exit; }
+    $permissions=['get_barang'=>'inventory.read','save_barang'=>'inventory.manage','save_template_barang'=>'inventory.manage','hapus_barang'=>'inventory.manage','simpan_transaksi'=>'transactions.create','update_transaksi'=>'transactions.manage','get_transaksi'=>'transactions.read','hapus_transaksi'=>'transactions.manage'];
+    if (!isset($permissions[$action])) sip_fail(404,'Action tidak ditemukan.');
+    $user=sip_require('sipintar',$permissions[$action]);
+    if (!str_starts_with($action,'get_')) sip_check_csrf();
+    session_write_close();
+    $db=sip_db('sipintar'); $repo=new \Sipintar\Inventory($db);
+    switch($action) {
+        case 'get_barang': $result=['data'=>$db->query('SELECT * FROM barang ORDER BY nama_barang')->fetch_all(MYSQLI_ASSOC)]; break;
+        case 'get_transaksi': $result=$repo->transactions(max(1,(int)($_GET['page'] ?? 1)),min(200,max(1,(int)($_GET['per_page'] ?? 100)))); break;
+        case 'save_barang':
+            $id=(int)($input['id'] ?? 0); $stock=filter_var($input['stok'] ?? null,FILTER_VALIDATE_INT);
+            if ($stock===false || $stock<0 || trim($input['nama_barang'] ?? '')==='' || trim($input['satuan'] ?? '')==='') throw new RuntimeException('Nama, satuan, dan stok nonnegatif diperlukan.');
+            $values=[trim($input['nama_barang']),$input['jenis_barang'] ?? '',$stock,$input['satuan']];
+            if ($repo->query('SELECT id FROM barang WHERE nama_barang=? AND id<>?',[$values[0],$id])->get_result()->num_rows) throw new RuntimeException('Nama barang sudah digunakan.');
+            if ($id) {
+                $old=$repo->query('SELECT nama_barang FROM barang WHERE id=?',[$id])->get_result()->fetch_assoc();
+                if (!$old) throw new RuntimeException('Barang tidak ditemukan.');
+                if ($old['nama_barang']!==$values[0] && $repo->query('SELECT id FROM transaksi_detail WHERE nama_barang=? LIMIT 1',[$old['nama_barang']])->get_result()->num_rows) throw new RuntimeException('Nama barang dengan riwayat transaksi tidak dapat diubah.');
+                $repo->query('UPDATE barang SET nama_barang=?,jenis_barang=?,stok=?,satuan=? WHERE id=?',[...$values,$id]);
+            } else $repo->query('INSERT INTO barang (nama_barang,jenis_barang,stok,satuan) VALUES (?,?,?,?)',$values);
+            break;
+        case 'save_template_barang':
+            $items=$input['items'] ?? []; if (!$items || count($items)>200) throw new RuntimeException('Template harus berisi 1–200 barang.');
+            $db->begin_transaction();
+            try {
+                foreach($items as $item) {
+                    $name=trim($item['nama_barang'] ?? ''); $stock=filter_var($item['stok'] ?? null,FILTER_VALIDATE_INT);
+                    if ($name==='' || $stock===false || $stock<0 || empty($item['satuan'])) throw new RuntimeException('Data template tidak valid.');
+                    $existing=$repo->query('SELECT id FROM barang WHERE nama_barang=? FOR UPDATE',[$name])->get_result()->fetch_all(MYSQLI_ASSOC);
+                    if(count($existing)>1) throw new RuntimeException('Nama barang duplikat.');
+                    if($existing) $repo->query('UPDATE barang SET stok=stok+? WHERE id=?',[$stock,(int)$existing[0]['id']]);
+                    else $repo->query('INSERT INTO barang (nama_barang,jenis_barang,stok,satuan) VALUES (?,?,?,?)',[$name,$item['jenis_barang'] ?? '',$stock,$item['satuan']]);
                 }
+                $db->commit();
+            } catch(Throwable $e) { $db->rollback(); throw $e; } break;
+        case 'hapus_barang':
+            $id=(int)($input['id'] ?? 0);
+            if($repo->query('SELECT d.id FROM transaksi_detail d JOIN barang b ON b.nama_barang=d.nama_barang WHERE b.id=? LIMIT 1',[$id])->get_result()->num_rows) throw new RuntimeException('Barang masih memiliki riwayat transaksi.');
+            $repo->query('DELETE FROM barang WHERE id=?',[$id]); break;
+        case 'simpan_transaksi':
+        case 'update_transaksi':
+            if ($action==='simpan_transaksi') {
+                if (!sip_identity()->allows($user,'sipintar','transactions.manage')) $input['tipe']='KELUAR';
+                $employeeId=$input['employee_id'] ?? $user['employee_id'];
+                if (!sip_identity()->allows($user,'sipintar','transactions.manage')) $employeeId=$user['employee_id'];
+                $employee=sip_identity()->query('SELECT name FROM employees WHERE public_id=? AND active=1',[$employeeId])->fetchColumn();
+                $input['nama_pengambil']=$employee ?: $user['name'];
             }
-            
-            $head['items'] = $items;
-            $data[] = $head;
-        }
+            $repo->save($input,$action==='update_transaksi'); break;
+        case 'hapus_transaksi': $repo->delete($input['kodes'] ?? []); break;
     }
-
-    echo json_encode(['success' => true, 'data' => $data]);
-    exit;
-}
-
-// 5. HAPUS TRANSAKSI TERFILTER
-if ($action === 'hapus_transaksi') {
-    $input = json_decode(file_get_contents('php://input'), true);
-    $kodes = $input['kodes'] ?? [];
-
-    if (empty($kodes)) {
-        echo json_encode(['success' => false, 'message' => 'Tidak ada data yang dipilih untuk dihapus.']);
-        exit;
-    }
-
-    $escapedKodes = array_map(function($k) use ($conn) {
-        return "'" . $conn->real_escape_string($k) . "'";
-    }, $kodes);
-
-    $strKodes = implode(',', $escapedKodes);
-    $sql = "DELETE FROM transaksi WHERE kode_transaksi IN ($strKodes)";
-
-    if ($conn->query($sql)) {
-        echo json_encode(['success' => true, 'message' => 'Data transaksi terpilih berhasil dihapus!']);
-    } else {
-        echo json_encode(['success' => false, 'message' => 'Gagal menghapus transaksi: ' . $conn->error]);
-    }
-    exit;
-}
-
-// 6. GET PETUGAS
-if ($action === 'get_petugas') {
-    $sql = "SELECT id, nama_lengkap, username, role FROM users ORDER BY id ASC";
-    $res = $conn->query($sql);
-    $data = [];
-    if ($res) {
-        while ($row = $res->fetch_assoc()) {
-            $row['id'] = (string)$row['id'];
-            $row['role'] = strtolower($row['role'] ?? 'pegawai');
-            $data[] = $row;
-        }
-    }
-    echo json_encode(['success' => true, 'data' => $data]);
-    exit;
-}
-
-// 7. EDIT / SAVE PETUGAS
-if ($action === 'save_petugas') {
-    $input = json_decode(file_get_contents('php://input'), true);
-    
-    $currentUserId   = (string)($input['current_user_id'] ?? '');
-    $currentUserRole = strtolower($input['current_user_role'] ?? 'pegawai');
-
-    $id    = (int)($input['id'] ?? 0);
-    $nama  = $conn->real_escape_string($input['nama_lengkap'] ?? '');
-    $user  = $conn->real_escape_string($input['username'] ?? '');
-    $pass  = $conn->real_escape_string($input['password'] ?? '');
-    $role  = $conn->real_escape_string($input['role'] ?? 'pegawai');
-
-    if ($currentUserRole !== 'admin' && (string)$id !== $currentUserId) {
-        echo json_encode(['success' => false, 'message' => 'Ditolak: Anda hanya boleh mengedit akun sendiri!']);
-        exit;
-    }
-
-    if ($id > 0) {
-        if ($currentUserRole === 'admin') {
-            if (!empty($pass)) {
-                $sql = "UPDATE users SET nama_lengkap='$nama', username='$user', password='$pass', role='$role' WHERE id=$id";
-            } else {
-                $sql = "UPDATE users SET nama_lengkap='$nama', username='$user', role='$role' WHERE id=$id";
-            }
-        } else {
-            if (!empty($pass)) {
-                $sql = "UPDATE users SET nama_lengkap='$nama', username='$user', password='$pass' WHERE id=$id";
-            } else {
-                $sql = "UPDATE users SET nama_lengkap='$nama', username='$user' WHERE id=$id";
-            }
-        }
-    } else {
-        $sql = "INSERT INTO users (nama_lengkap, username, password, role) VALUES ('$nama', '$user', '$pass', '$role')";
-    }
-
-    if ($conn->query($sql)) {
-        echo json_encode(['success' => true, 'message' => 'Data akun berhasil disimpan!']);
-    } else {
-        echo json_encode(['success' => false, 'message' => 'Gagal menyimpan: ' . $conn->error]);
-    }
-    exit;
-}
-
-// 8. HAPUS PETUGAS
-if ($action === 'hapus_petugas') {
-    $input = json_decode(file_get_contents('php://input'), true);
-    $id = (int)($input['id'] ?? 0);
-
-    $sql = "DELETE FROM users WHERE id = $id";
-    if ($conn->query($sql)) {
-        echo json_encode(['success' => true, 'message' => 'Akun berhasil dihapus!']);
-    } else {
-        echo json_encode(['success' => false, 'message' => 'Gagal menghapus: ' . $conn->error]);
-    }
-    exit;
-}
-?>
+    echo json_encode(['success'=>true,'message'=>'Data berhasil diproses.',...($result ?? [])]);
+} catch (RuntimeException $e) { if ($e instanceof mysqli_sql_exception || $e instanceof PDOException) throw $e; sip_fail(422,$e->getMessage()); }

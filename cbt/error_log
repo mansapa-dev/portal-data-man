@@ -1,0 +1,40 @@
+[02-Sep-2026 10:28:32 Asia/Jakarta] PHP Fatal error:  Uncaught RuntimeException: Composer detected issues in your platform: Your Composer dependencies require a PHP version ">= 8.2.0". You are running 7.4.33. in /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/vendor/composer/platform_check.php:26
+Stack trace:
+#0 /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/vendor/composer/autoload_real.php(25): require()
+#1 /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/vendor/autoload.php(22): ComposerAutoloaderInit467c53e0b7335962630f2ce8dad6087e::getLoader()
+#2 /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/bootstrap.php(5): require('/home/rdme2495/...')
+#3 /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/database/migrate.php(3): require('/home/rdme2495/...')
+#4 {main}
+  thrown in /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/vendor/composer/platform_check.php on line 26
+[02-Sep-2026 10:28:32 Asia/Jakarta] PHP Fatal error:  Uncaught RuntimeException: Composer detected issues in your platform: Your Composer dependencies require a PHP version ">= 8.2.0". You are running 7.4.33. in /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/vendor/composer/platform_check.php:26
+Stack trace:
+#0 /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/vendor/composer/autoload_real.php(25): require()
+#1 /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/vendor/autoload.php(22): ComposerAutoloaderInit467c53e0b7335962630f2ce8dad6087e::getLoader()
+#2 /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/bootstrap.php(5): require('/home/rdme2495/...')
+#3 /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/scripts/preflight.php(3): require('/home/rdme2495/...')
+#4 {main}
+  thrown in /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/vendor/composer/platform_check.php on line 26
+[02-Sep-2026 10:29:11 Asia/Jakarta] PHP Fatal error:  Uncaught RuntimeException: Composer detected issues in your platform: Your Composer dependencies require a PHP version ">= 8.2.0". You are running 7.4.33. in /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/vendor/composer/platform_check.php:26
+Stack trace:
+#0 /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/vendor/composer/autoload_real.php(25): require()
+#1 /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/vendor/autoload.php(22): ComposerAutoloaderInit467c53e0b7335962630f2ce8dad6087e::getLoader()
+#2 /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/bootstrap.php(5): require('/home/rdme2495/...')
+#3 /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/database/migrate.php(3): require('/home/rdme2495/...')
+#4 {main}
+  thrown in /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/vendor/composer/platform_check.php on line 26
+[02-Sep-2026 10:29:11 Asia/Jakarta] PHP Fatal error:  Uncaught RuntimeException: Composer detected issues in your platform: Your Composer dependencies require a PHP version ">= 8.2.0". You are running 7.4.33. in /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/vendor/composer/platform_check.php:26
+Stack trace:
+#0 /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/vendor/composer/autoload_real.php(25): require()
+#1 /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/vendor/autoload.php(22): ComposerAutoloaderInit467c53e0b7335962630f2ce8dad6087e::getLoader()
+#2 /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/bootstrap.php(5): require('/home/rdme2495/...')
+#3 /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/scripts/preflight.php(3): require('/home/rdme2495/...')
+#4 {main}
+  thrown in /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/vendor/composer/platform_check.php on line 26
+[02-Sep-2026 12:57:53 Asia/Jakarta] PHP Fatal error:  Uncaught RuntimeException: Composer detected issues in your platform: Your Composer dependencies require a PHP version ">= 8.2.0". You are running 7.4.33. in /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/vendor/composer/platform_check.php:26
+Stack trace:
+#0 /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/vendor/composer/autoload_real.php(25): require()
+#1 /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/vendor/autoload.php(22): ComposerAutoloaderInit467c53e0b7335962630f2ce8dad6087e::getLoader()
+#2 /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/bootstrap.php(5): require('/home/rdme2495/...')
+#3 /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/database/migrate.php(3): require('/home/rdme2495/...')
+#4 {main}
+  thrown in /home/rdme2495/public_html/cbt.rdmman1plg.id/portal-data-man/cbt/vendor/composer/platform_check.php on line 26

@@ -1,62 +1,29 @@
 <?php
-// -----------------------------------------------------------------------------
-// 1. KONEKSI DATABASE & INISIALISASI SESSION
-// -----------------------------------------------------------------------------
-session_start();
-
-$db_host = "localhost";
-$db_user = "root";       
-$db_pass = "";           
-$db_name = "db_sarpras"; 
-
-$conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
-
-if ($conn->connect_error) {
-    die("Koneksi Database Gagal: " . $conn->connect_error);
-}
-
-// -----------------------------------------------------------------------------
-// 2. HANDLER PROSES LOGOUT
-// -----------------------------------------------------------------------------
-if (isset($_GET['action']) && $_GET['action'] == 'logout') {
-    session_destroy();
-    header("Location: index.php");
-    exit();
-}
-
-// -----------------------------------------------------------------------------
-// 3. HANDLER PROSES LOGIN
-// -----------------------------------------------------------------------------
+require __DIR__.'/app/bootstrap.php';
+require __DIR__.'/app/src/Borrowings.php';
+$conn = sip_db('multimedia');
 $login_error = '';
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['form_type']) && $_POST['form_type'] == 'login') {
-    $username = $conn->real_escape_string($_POST['username']);
-    $password = $_POST['password'];
-
-    $res = $conn->query("SELECT * FROM users WHERE username='$username'");
-    if ($res && $res->num_rows > 0) {
-        $user = $res->fetch_assoc();
-        if (password_verify($password, $user['password']) || $password === 'admin123') {
-            $new_hash = password_hash($password, PASSWORD_DEFAULT);
-            $conn->query("UPDATE users SET password='$new_hash' WHERE id=" . $user['id']);
-
-            $_SESSION['user_id'] = $user['id'];
-            $_SESSION['username'] = $user['username'];
-            $_SESSION['nama'] = $user['nama_lengkap'];
-            $_SESSION['role'] = $user['role'];
-            header("Location: index.php");
-            exit();
-        } else {
-            $login_error = 'Password yang Anda masukkan salah!';
-        }
-    } else {
-        $login_error = 'Username tidak terdaftar!';
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    sip_check_csrf();
+    if (($_POST['form_type'] ?? '') === 'logout') { sip_logout(); header('Location: index.php'); exit; }
+    if (($_POST['form_type'] ?? '') === 'login') {
+        try {
+            if (sip_login($_POST['username'] ?? '', $_POST['password'] ?? '')) { header('Location: index.php'); exit; }
+            $login_error = 'Username atau password salah.';
+        } catch (RuntimeException $e) { $login_error = $e->getMessage(); }
     }
 }
-
+$currentUser = sip_user();
+if ($currentUser) {
+    if (!sip_identity()->allows($currentUser, 'multimedia', 'borrowings.read') && sip_identity()->allows($currentUser, 'multimedia', 'borrowings.create')) { header('Location: peminjam.php'); exit; }
+    sip_require('multimedia', 'borrowings.read');
+    $_SESSION['nama']=$currentUser['name'];
+    $_SESSION['username']=$currentUser['username'];
+}
 // -----------------------------------------------------------------------------
 // TAMPILKAN HALAMAN LOGIN JIKA BELUM LOG IN
 // -----------------------------------------------------------------------------
-if (!isset($_SESSION['user_id'])): 
+if (!$currentUser):
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -66,6 +33,7 @@ if (!isset($_SESSION['user_id'])):
     <title>Login - SIPINTAR MULTIMEDIA</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+<?php require __DIR__."/app/client.php"; ?>
 </head>
 <body class="bg-emerald-950 min-h-screen flex items-center justify-center p-4 font-sans">
     <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-emerald-800">
@@ -75,12 +43,12 @@ if (!isset($_SESSION['user_id'])):
             <p class="text-xs text-emerald-200 mt-1">Sistem Peminjaman Inventaris Multimedia MAN 1 Palembang</p>
         </div>
 
-        <form method="POST" class="p-6 space-y-4 text-xs">
+        <form method="POST" class="p-6 space-y-4 text-xs"><input type="hidden" name="_csrf" value="<?= sip_e(sip_csrf()) ?>">
             <input type="hidden" name="form_type" value="login">
-            
+
             <?php if (!empty($login_error)): ?>
                 <div class="p-3 bg-red-100 border border-red-200 text-red-700 rounded-lg text-center font-medium">
-                    <?= $login_error ?>
+                    <?= sip_e($login_error) ?>
                 </div>
             <?php endif; ?>
 
@@ -108,158 +76,35 @@ if (!isset($_SESSION['user_id'])):
     <script>lucide.createIcons();</script>
 </body>
 </html>
-<?php 
-exit(); 
-endif; 
-
-// Fetch Data Akun Petugas yang sedang login
-$current_user_id = $_SESSION['user_id'];
-$current_user_res = $conn->query("SELECT * FROM users WHERE id=$current_user_id");
-$current_user_data = $current_user_res->fetch_assoc();
-$is_admin = ($current_user_data['role'] === 'admin');
+<?php
+exit();
+endif;
 
 // =============================================================================
 // JIKA SUDAH LOGIN: AREA UTAMA
 // =============================================================================
 
-// 4. HANDLER ACTION POST
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['form_type'])) {
-    
-    // Simpan Peminjaman Baru
-    if ($_POST['form_type'] == 'add_borrowing') {
-        $id = 'MAN1-' . date('Ymd') . '-' . rand(100, 999);
-        $date = $_POST['borrowDate'];
-        $time = date('H:i');
-        $name = $conn->real_escape_string($_POST['borrowerName']);
-        $type = $_POST['borrowerType'];
-        $id_num = $conn->real_escape_string($_POST['borrowerIdNum'] ?: '-');
-        $item = $conn->real_escape_string($_POST['itemNameCustom'] ?: $_POST['presetItemSelect']);
-        $qty = intval($_POST['itemQty']);
-        $purpose = $conn->real_escape_string($_POST['borrowPurpose']);
-        $expected = $_POST['expectedReturnDate'];
-        $condition = $conn->real_escape_string($_POST['initialCondition'] ?: 'Baik');
-
-        $sql = "INSERT INTO borrowings (id, date, time, name, type, id_num, item, qty, purpose, expected_return, `condition`) 
-                VALUES ('$id', '$date', '$time', '$name', '$type', '$id_num', '$item', $qty, '$purpose', '$expected', '$condition')";
-        $conn->query($sql);
-        header("Location: index.php");
-        exit();
-    }
-
-    // Update Profile / Password Akun Sendiri
-    if ($_POST['form_type'] == 'update_profile') {
-        $user_id = $_SESSION['user_id'];
-        $nama = $conn->real_escape_string($_POST['nama_lengkap']);
-        $username = $conn->real_escape_string($_POST['username']);
-        $new_pass = $_POST['password'];
-
-        if (!empty($new_pass)) {
-            $hashed = password_hash($new_pass, PASSWORD_DEFAULT);
-            $conn->query("UPDATE users SET nama_lengkap='$nama', username='$username', password='$hashed' WHERE id=$user_id");
-        } else {
-            $conn->query("UPDATE users SET nama_lengkap='$nama', username='$username' WHERE id=$user_id");
-        }
-
-        $_SESSION['nama'] = $nama;
-        $_SESSION['username'] = $username;
-
-        header("Location: index.php?view=account&updated=1");
-        exit();
-    }
-
-    // [ADMIN ONLY] Tambah Akun Pengguna Baru
-    if ($_POST['form_type'] == 'add_user' && $is_admin) {
-        $nama = $conn->real_escape_string($_POST['nama_lengkap']);
-        $username = $conn->real_escape_string($_POST['username']);
-        $role = $conn->real_escape_string($_POST['role']);
-        $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
-
-        $chk = $conn->query("SELECT id FROM users WHERE username='$username'");
-        if ($chk->num_rows > 0) {
-            header("Location: index.php?view=account&error=username_exists");
-        } else {
-            $conn->query("INSERT INTO users (nama_lengkap, username, password, role) VALUES ('$nama', '$username', '$password', '$role')");
-            header("Location: index.php?view=account&user_added=1");
-        }
-        exit();
-    }
-
-    // [ADMIN ONLY] Update Data Akun Pengguna Lain
-    if ($_POST['form_type'] == 'update_other_user' && $is_admin) {
-        $target_id = intval($_POST['target_user_id']);
-        $nama = $conn->real_escape_string($_POST['nama_lengkap']);
-        $username = $conn->real_escape_string($_POST['username']);
-        $role = $conn->real_escape_string($_POST['role']);
-        $new_pass = $_POST['password'];
-
-        if (!empty($new_pass)) {
-            $hashed = password_hash($new_pass, PASSWORD_DEFAULT);
-            $conn->query("UPDATE users SET nama_lengkap='$nama', username='$username', password='$hashed', role='$role' WHERE id=$target_id");
-        } else {
-            $conn->query("UPDATE users SET nama_lengkap='$nama', username='$username', role='$role' WHERE id=$target_id");
-        }
-
-        header("Location: index.php?view=account&user_updated=1");
-        exit();
-    }
+// Mutations are authorized on the server and require POST + CSRF.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_type'])) {
+    $action = $_POST['form_type'];
+    $permission = $action === 'add_borrowing' ? 'borrowings.create' : 'borrowings.manage';
+    $currentUser = sip_require('multimedia', $permission);
+    $service = new \Sipintar\Borrowings(new \Sipintar\Database($conn));
+    try {
+        if ($action === 'toggle_return') $service->returned($_POST['id'] ?? '', (int)($_POST['status'] ?? -1));
+        elseif (in_array($action, ['add_borrowing', 'edit_borrowing'], true)) {
+            $employee = sip_employee($currentUser, 'multimedia', $_POST);
+            if ($action === 'edit_borrowing' && empty($_POST['employee_id'])) {
+                $old = (new \Sipintar\Database($conn))->query('SELECT name,id_num FROM borrowings WHERE id=?', [$_POST['edit_id'] ?? ''])->get_result()->fetch_assoc();
+                if (!$old) throw new RuntimeException('Peminjaman tidak ditemukan.');
+                $employee = ['name'=>$old['name'], 'nip'=>$old['id_num']];
+            }
+            $service->save($_POST, $employee, $action === 'edit_borrowing');
+        } else sip_fail(404, 'Tindakan tidak ditemukan.');
+    } catch (RuntimeException $e) { if ($e instanceof mysqli_sql_exception) throw $e; sip_fail(422, $e->getMessage()); }
+    header('Location: index.php?view=data'); exit;
 }
-
-// Handler GET Action
-if (isset($_GET['action'])) {
-    if ($_GET['action'] == 'toggle_return') {
-        $id = $conn->real_escape_string($_GET['id']);
-        $status = intval($_GET['status']);
-        $actual = $status == 1 ? date('Y-m-d H:i') : '-';
-        $conn->query("UPDATE borrowings SET returned=$status, actual_return='$actual' WHERE id='$id'");
-        header("Location: index.php");
-        exit();
-    }
-
-    if ($_GET['action'] == 'delete_borrowing') {
-        $id = $conn->real_escape_string($_GET['id']);
-        $conn->query("DELETE FROM borrowings WHERE id='$id'");
-        header("Location: index.php");
-        exit();
-    }
-
-    // [ADMIN ONLY] Hapus Akun User Lain
-    if ($_GET['action'] == 'delete_user' && $is_admin) {
-        $delete_id = intval($_GET['id']);
-        if ($delete_id !== $current_user_id) {
-            $conn->query("DELETE FROM users WHERE id=$delete_id");
-            header("Location: index.php?view=account&user_deleted=1");
-        } else {
-            header("Location: index.php?view=account&error=cannot_delete_self");
-        }
-        exit();
-    }
-
-    // HAPUS SEKALIGUS BERDASARKAN FILTER
-    if ($_GET['action'] == 'delete_filtered') {
-        $where_clauses = ["1=1"];
-        if (!empty($_GET['search'])) {
-            $search = $conn->real_escape_string($_GET['search']);
-            $where_clauses[] = "(name LIKE '%$search%' OR item LIKE '%$search%' OR id LIKE '%$search%')";
-        }
-        if (!empty($_GET['month'])) {
-            $month = intval($_GET['month']);
-            $where_clauses[] = "MONTH(date) = $month";
-        }
-        if (!empty($_GET['year'])) {
-            $year = intval($_GET['year']);
-            $where_clauses[] = "YEAR(date) = $year";
-        }
-        if (isset($_GET['status_return']) && $_GET['status_return'] !== '') {
-            $st = intval($_GET['status_return']);
-            $where_clauses[] = "returned = $st";
-        }
-        
-        $where_sql = implode(" AND ", $where_clauses);
-        $conn->query("DELETE FROM borrowings WHERE $where_sql");
-        header("Location: index.php");
-        exit();
-    }
-}
+session_write_close();
 
 // -----------------------------------------------------------------------------
 // FILTER & SEARCH QUERY BUILDER
@@ -295,11 +140,11 @@ $where_sql = implode(" AND ", $where_conditions);
 // -----------------------------------------------------------------------------
 if (isset($_GET['export']) && $_GET['export'] == 'excel') {
     $export_data = $conn->query("SELECT * FROM borrowings WHERE $where_sql ORDER BY date DESC, time DESC");
-    
+
     $filename = "Laporan_SIPINTAR_MULTIMEDIA_" . date('Ymd_His') . ".xls";
     header("Content-Type: application/vnd.ms-excel");
     header("Content-Disposition: attachment; filename=\"$filename\"");
-    
+
     echo "<table border='1'>";
     echo "<tr>
             <th>No</th>
@@ -313,10 +158,11 @@ if (isset($_GET['export']) && $_GET['export'] == 'excel') {
             <th>Estimasi Kembali</th>
             <th>Status</th>
           </tr>";
-    
+
     $no = 1;
     while ($r = $export_data->fetch_assoc()) {
         $status_txt = $r['returned'] ? 'Sudah Kembali' : 'Belum Kembali';
+        $r = array_map('sip_e', $r);
         echo "<tr>";
         echo "<td>{$no}</td>";
         echo "<td>{$r['id']}</td>";
@@ -335,9 +181,19 @@ if (isset($_GET['export']) && $_GET['export'] == 'excel') {
     exit();
 }
 
-// Fetch Data Peminjaman
 $view = $_GET['view'] ?? 'dashboard';
-$borrowings = $conn->query("SELECT * FROM borrowings WHERE $where_sql ORDER BY date DESC, time DESC");
+
+// Fetch Data Statistik Dashboard
+$total_pinjam = $conn->query("SELECT COUNT(*) as total FROM borrowings")->fetch_assoc()['total'];
+$total_belum = $conn->query("SELECT COUNT(*) as total FROM borrowings WHERE returned=0")->fetch_assoc()['total'];
+$total_sudah = $conn->query("SELECT COUNT(*) as total FROM borrowings WHERE returned=1")->fetch_assoc()['total'];
+$total_user = sip_identity()->query("SELECT COUNT(*) FROM accounts a WHERE a.active=1 AND (a.superadmin_slot=1 OR EXISTS (SELECT 1 FROM grants g WHERE g.account_id=a.id ))")->fetchColumn();
+
+// Fetch Data Peminjaman untuk Tabel Data
+$page = max(1, (int)($_GET['page'] ?? 1));
+$offset = ($page - 1) * 50;
+$filtered_total = (int)$conn->query("SELECT COUNT(*) FROM borrowings WHERE $where_sql")->fetch_row()[0];
+$borrowings = $conn->query("SELECT * FROM borrowings WHERE $where_sql ORDER BY date DESC, time DESC, id DESC LIMIT 50 OFFSET $offset");
 
 $bulan_indo = [
     1 => 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -380,6 +236,7 @@ $bulan_indo = [
             th { background-color: #f2f2f2 !important; }
         }
     </style>
+<?php require __DIR__."/app/client.php"; ?>
 </head>
 <body class="bg-emerald-50/50 text-slate-800 font-sans min-h-screen flex flex-col">
 
@@ -393,19 +250,18 @@ $bulan_indo = [
                     <h1 class="text-sm font-medium text-emerald-100 mt-0.5">Sistem Peminjaman Inventaris Multimedia MAN 1 Palembang</h1>
                 </div>
             </div>
-            
+
             <div class="flex items-center gap-3 bg-manGreen-900/80 p-2.5 rounded-xl border border-emerald-600/50 text-xs">
                 <div>
-                    <span class="text-emerald-300">Petugas:</span>
+                    <span class="text-emerald-300">Pengguna:</span>
                     <div class="font-bold text-white flex items-center gap-1.5">
                         <?= htmlspecialchars($_SESSION['nama']) ?>
-                        <span class="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded uppercase font-extrabold"><?= htmlspecialchars($current_user_data['role']) ?></span>
                     </div>
                 </div>
                 <div class="flex items-center gap-2 border-l border-emerald-700 pl-3">
-                    <a href="index.php?view=dashboard" class="px-2.5 py-1 rounded bg-emerald-700 hover:bg-emerald-600 text-white font-medium">Data Pinjam</a>
-                    <a href="index.php?view=account" class="px-2.5 py-1 rounded bg-emerald-700 hover:bg-emerald-600 text-white font-medium">Kelola Akun</a>
-                    <a href="index.php?action=logout" class="px-2.5 py-1 rounded bg-red-600 hover:bg-red-500 text-white font-medium">Keluar</a>
+                    <a href="index.php?view=dashboard" class="px-2.5 py-1 rounded <?= $view == 'dashboard' ? 'bg-emerald-500 font-bold text-white' : 'bg-emerald-700 hover:bg-emerald-600 text-white' ?> font-medium">Dashboard</a>
+                    <a href="index.php?view=data" class="px-2.5 py-1 rounded <?= $view == 'data' ? 'bg-emerald-500 font-bold text-white' : 'bg-emerald-700 hover:bg-emerald-600 text-white' ?> font-medium">Data Pinjam</a>
+                    <form method="POST" class="inline"><input type="hidden" name="_csrf" value="<?= sip_e(sip_csrf()) ?>"><input type="hidden" name="form_type" value="logout"><button class="px-2.5 py-1 rounded bg-red-600 text-white">Keluar</button></form>
                 </div>
             </div>
         </div>
@@ -426,7 +282,7 @@ $bulan_indo = [
         <div class="text-center my-4">
             <h3 class="text-md font-bold uppercase underline">LAPORAN PEMINJAMAN INVENTARIS MULTIMEDIA</h3>
             <p class="text-xs">
-                <?= (!empty($month_param) ? "Bulan: " . $bulan_indo[intval($month_param)] : "") ?> 
+                <?= (!empty($month_param) ? "Bulan: " . $bulan_indo[intval($month_param)] : "") ?>
                 <?= (!empty($year_param) ? "Tahun: " . htmlspecialchars($year_param) : "Semua Periode") ?>
                 <?= ($status_param !== '' ? " | Status: " . ($status_param == '1' ? 'Sudah Kembali' : 'Belum Kembali') : "") ?>
             </p>
@@ -436,199 +292,111 @@ $bulan_indo = [
     <!-- MAIN CONTENT -->
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
 
-        <?php if ($view == 'account'): ?>
-        <!-- ================= HALAMAN KELOLA AKUN ================= -->
-        <div class="no-print space-y-6 max-w-5xl mx-auto">
-
-            <?php if (isset($_GET['updated'])): ?>
-                <div class="p-3 bg-emerald-100 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-semibold text-center">✓ Profil Anda berhasil diperbarui!</div>
-            <?php endif; ?>
-            <?php if (isset($_GET['user_added'])): ?>
-                <div class="p-3 bg-emerald-100 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-semibold text-center">✓ Akun pengguna baru berhasil ditambahkan!</div>
-            <?php endif; ?>
-            <?php if (isset($_GET['user_updated'])): ?>
-                <div class="p-3 bg-emerald-100 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-semibold text-center">✓ Data akun pengguna lain berhasil diperbarui!</div>
-            <?php endif; ?>
-            <?php if (isset($_GET['user_deleted'])): ?>
-                <div class="p-3 bg-emerald-100 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-semibold text-center">✓ Akun pengguna berhasil dihapus!</div>
-            <?php endif; ?>
-            <?php if (isset($_GET['error']) && $_GET['error'] === 'username_exists'): ?>
-                <div class="p-3 bg-red-100 border border-red-200 text-red-800 rounded-lg text-xs font-semibold text-center">⚠ Username sudah terpakai! Gunakan username lain.</div>
-            <?php endif; ?>
-
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <!-- FORM PROFILE DIRI SENDIRI -->
-                <div class="bg-white rounded-xl border border-emerald-200 p-6 shadow-sm">
-                    <h2 class="text-base font-bold text-emerald-800 mb-4 flex items-center gap-2 border-b pb-3 border-emerald-100">
-                        <i data-lucide="user" class="w-4 h-4"></i> Profil Saya
-                    </h2>
-                    <form method="POST" class="space-y-4 text-xs">
-                        <input type="hidden" name="form_type" value="update_profile">
-                        <div>
-                            <label class="block font-semibold mb-1 text-slate-700">Nama Lengkap</label>
-                            <input type="text" name="nama_lengkap" value="<?= htmlspecialchars($current_user_data['nama_lengkap']) ?>" required class="w-full p-2.5 bg-slate-50 border rounded-lg focus:ring-2 focus:ring-emerald-600 outline-none text-xs">
-                        </div>
-                        <div>
-                            <label class="block font-semibold mb-1 text-slate-700">Username</label>
-                            <input type="text" name="username" value="<?= htmlspecialchars($current_user_data['username']) ?>" required class="w-full p-2.5 bg-slate-50 border rounded-lg focus:ring-2 focus:ring-emerald-600 outline-none text-xs">
-                        </div>
-                        <div>
-                            <label class="block font-semibold mb-1 text-slate-700">Password Baru</label>
-                            <input type="password" name="password" placeholder="Isi jika mau ubah password" class="w-full p-2.5 bg-slate-50 border rounded-lg focus:ring-2 focus:ring-emerald-600 outline-none text-xs">
-                        </div>
-                        <button type="submit" class="w-full bg-manGreen-700 hover:bg-manGreen-800 text-white font-bold py-2.5 rounded-lg text-xs transition">Simpan Profil Saya</button>
-                    </form>
+        <?php if ($view == 'dashboard'): ?>
+        <!-- ================= HALAMAN DASHBOARD ================= -->
+        <div class="no-print space-y-6">
+            <!-- CARDS RINGKASAN STATISTIK -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-white p-5 rounded-xl border border-emerald-100 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold text-slate-500 uppercase">Total Peminjaman</p>
+                        <h3 class="text-2xl font-bold text-slate-800 mt-1"><?= $total_pinjam ?></h3>
+                    </div>
+                    <div class="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-xl flex items-center justify-center">
+                        <i data-lucide="archive" class="w-6 h-6"></i>
+                    </div>
                 </div>
 
-                <!-- [ADMIN ONLY] FORM TAMBAH AKUN BARU -->
-                <?php if ($is_admin): ?>
-                <div class="bg-white rounded-xl border border-emerald-200 p-6 shadow-sm md:col-span-2">
-                    <h2 class="text-base font-bold text-emerald-800 mb-4 flex items-center gap-2 border-b pb-3 border-emerald-100">
-                        <i data-lucide="user-plus" class="w-4 h-4"></i> Tambah Akun Pengguna Baru
-                    </h2>
-                    <form method="POST" class="space-y-4 text-xs">
-                        <input type="hidden" name="form_type" value="add_user">
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div>
-                                <label class="block font-semibold mb-1 text-slate-700">Nama Lengkap *</label>
-                                <input type="text" name="nama_lengkap" required placeholder="Contoh: Ahmad Subagja" class="w-full p-2.5 bg-slate-50 border rounded-lg focus:ring-2 focus:ring-emerald-600 outline-none text-xs">
-                            </div>
-                            <div>
-                                <label class="block font-semibold mb-1 text-slate-700">Username *</label>
-                                <input type="text" name="username" required placeholder="Contoh: ahmad123" class="w-full p-2.5 bg-slate-50 border rounded-lg focus:ring-2 focus:ring-emerald-600 outline-none text-xs">
-                            </div>
-                        </div>
-
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div>
-                                <label class="block font-semibold mb-1 text-slate-700">Password *</label>
-                                <input type="password" name="password" required placeholder="Password akun baru" class="w-full p-2.5 bg-slate-50 border rounded-lg focus:ring-2 focus:ring-emerald-600 outline-none text-xs">
-                            </div>
-                            <div>
-                                <label class="block font-semibold mb-1 text-slate-700">Role / Hak Akses *</label>
-                                <select name="role" required class="w-full p-2.5 bg-slate-50 border rounded-lg focus:ring-2 focus:ring-emerald-600 outline-none text-xs">
-                                    <option value="petugas">Petugas</option>
-                                    <option value="admin">Admin</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <button type="submit" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-4 py-2.5 rounded-lg text-xs transition shadow-md">
-                            + Tambahkan Akun
-                        </button>
-                    </form>
+                <div class="bg-white p-5 rounded-xl border border-amber-100 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold text-slate-500 uppercase">Sedang Dipinjam</p>
+                        <h3 class="text-2xl font-bold text-amber-600 mt-1"><?= $total_belum ?></h3>
+                    </div>
+                    <div class="w-12 h-12 bg-amber-100 text-amber-700 rounded-xl flex items-center justify-center">
+                        <i data-lucide="clock" class="w-6 h-6"></i>
+                    </div>
                 </div>
-                <?php endif; ?>
+
+                <div class="bg-white p-5 rounded-xl border border-emerald-100 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold text-slate-500 uppercase">Sudah Dikembalikan</p>
+                        <h3 class="text-2xl font-bold text-emerald-600 mt-1"><?= $total_sudah ?></h3>
+                    </div>
+                    <div class="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-xl flex items-center justify-center">
+                        <i data-lucide="check-circle" class="w-6 h-6"></i>
+                    </div>
+                </div>
+
+                <div class="bg-white p-5 rounded-xl border border-blue-100 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold text-slate-500 uppercase">Total Pengguna</p>
+                        <h3 class="text-2xl font-bold text-blue-600 mt-1"><?= $total_user ?></h3>
+                    </div>
+                    <div class="w-12 h-12 bg-blue-100 text-blue-700 rounded-xl flex items-center justify-center">
+                        <i data-lucide="users" class="w-6 h-6"></i>
+                    </div>
+                </div>
             </div>
 
-            <!-- [ADMIN ONLY] DAFTAR SEMUA AKUN & EDIT DAFTAR AKUN LAIN -->
-            <?php if ($is_admin): ?>
-            <div class="bg-white rounded-xl border border-emerald-200 shadow-sm overflow-hidden p-6">
-                <h2 class="text-base font-bold text-emerald-800 mb-4 flex items-center gap-2 border-b pb-3 border-emerald-100">
-                    <i data-lucide="users" class="w-4 h-4"></i> Kelola Daftar Akun Pengguna
-                </h2>
+            <!-- AKTIVITAS PEMINJAMAN TERBARU -->
+            <div class="bg-white rounded-xl border border-emerald-200 shadow-sm p-6">
+                <div class="flex items-center justify-between mb-4 border-b pb-3 border-slate-100">
+                    <h2 class="text-base font-bold text-emerald-800 flex items-center gap-2">
+                        <i data-lucide="activity" class="w-5 h-5"></i> Aktivitas Peminjaman Terbaru
+                    </h2>
+                    <a href="index.php?view=data" class="text-xs font-semibold text-emerald-700 hover:underline flex items-center gap-1">
+                        Lihat Semua Data <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+                    </a>
+                </div>
 
                 <div class="overflow-x-auto">
                     <table class="w-full text-left text-xs border-collapse">
                         <thead>
-                            <tr class="bg-manGreen-800 text-white uppercase text-[11px] font-semibold">
-                                <th class="p-3">ID</th>
-                                <th class="p-3">Nama Lengkap</th>
-                                <th class="p-3">Username</th>
-                                <th class="p-3">Role</th>
-                                <th class="p-3 text-center">Aksi</th>
+                            <tr class="bg-slate-100 text-slate-700 uppercase text-[11px] font-semibold">
+                                <th class="p-3">Kode</th>
+                                <th class="p-3">Peminjam</th>
+                                <th class="p-3">Barang</th>
+                                <th class="p-3">Tgl Pinjam</th>
+                                <th class="p-3">Est. Kembali</th>
+                                <th class="p-3 text-center">Status</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-emerald-100 text-slate-700">
-                            <?php 
-                            $all_users = $conn->query("SELECT * FROM users ORDER BY id ASC");
-                            while ($u = $all_users->fetch_assoc()):
+                        <tbody class="divide-y divide-slate-100 text-slate-700">
+                            <?php
+                            $recent = $conn->query("SELECT * FROM borrowings ORDER BY created_at DESC LIMIT 5");
+                            if ($recent->num_rows == 0):
                             ?>
-                            <tr class="hover:bg-emerald-50/50">
-                                <td class="p-3 text-slate-500 font-mono">#<?= $u['id'] ?></td>
-                                <td class="p-3 font-bold"><?= htmlspecialchars($u['nama_lengkap']) ?></td>
-                                <td class="p-3 font-mono"><?= htmlspecialchars($u['username']) ?></td>
-                                <td class="p-3">
-                                    <span class="px-2 py-0.5 text-[10px] font-bold rounded uppercase <?= $u['role'] === 'admin' ? 'bg-purple-100 text-purple-800 border border-purple-300' : 'bg-emerald-100 text-emerald-800 border border-emerald-300' ?>">
-                                        <?= htmlspecialchars($u['role']) ?>
-                                    </span>
-                                </td>
-                                <td class="p-3 text-center space-x-2">
-                                    <button onclick='openEditUserModal(<?= json_encode($u) ?>)' class="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded text-[11px] font-bold">
-                                        Edit
-                                    </button>
-                                    <?php if ($u['id'] !== $current_user_id): ?>
-                                        <a href="index.php?action=delete_user&id=<?= $u['id'] ?>" onclick="return confirm('Yakin ingin menghapus akun ini?')" class="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-[11px] font-bold">
-                                            Hapus
-                                        </a>
-                                    <?php else: ?>
-                                        <span class="text-[11px] text-slate-400 italic">(Akun Saya)</span>
-                                    <?php endif; ?>
-                                </td>
-                            </tr>
-                            <?php endwhile; ?>
+                                <tr><td colspan="6" class="text-center py-4 text-slate-400">Belum ada aktivitas transaksi.</td></tr>
+                            <?php else: ?>
+                                <?php while($r = $recent->fetch_assoc()): ?>
+                                <tr class="hover:bg-slate-50">
+                                    <td class="p-3 font-mono font-bold text-emerald-800"><?= htmlspecialchars($r['id']) ?></td>
+                                    <td class="p-3 font-semibold"><?= htmlspecialchars($r['name']) ?> (<?= htmlspecialchars($r['type']) ?>)</td>
+                                    <td class="p-3"><?= htmlspecialchars($r['item']) ?> (<?= $r['qty'] ?> Unit)</td>
+                                    <td class="p-3"><?= htmlspecialchars($r['date']) ?></td>
+                                    <td class="p-3"><?= htmlspecialchars($r['expected_return']) ?></td>
+                                    <td class="p-3 text-center">
+                                        <span class="px-2.5 py-1 rounded text-[10px] font-bold <?= $r['returned'] ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800' ?>">
+                                            <?= $r['returned'] ? 'Sudah Kembali' : 'Belum Kembali' ?>
+                                        </span>
+                                    </td>
+                                </tr>
+                                <?php endwhile; ?>
+                            <?php endif; ?>
                         </tbody>
                     </table>
                 </div>
             </div>
-            <?php endif; ?>
-
         </div>
-
-        <!-- MODAL EDIT AKUN PENGGUNA LAIN -->
-        <?php if ($is_admin): ?>
-        <div id="editUserModal" class="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 hidden no-print">
-            <div class="bg-white rounded-2xl border border-emerald-100 shadow-2xl max-w-md w-full overflow-hidden">
-                <div class="bg-manGreen-800 text-white px-5 py-4 flex items-center justify-between">
-                    <h3 class="font-bold text-sm">Edit Data & Role Akun</h3>
-                    <button onclick="closeEditUserModal()" class="text-emerald-200 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
-                </div>
-
-                <form method="POST" class="p-5 space-y-3 text-xs">
-                    <input type="hidden" name="form_type" value="update_other_user">
-                    <input type="hidden" id="edit_target_user_id" name="target_user_id">
-
-                    <div>
-                        <label class="block font-semibold mb-1 text-slate-700">Nama Lengkap *</label>
-                        <input type="text" id="edit_nama_lengkap" name="nama_lengkap" required class="w-full p-2.5 bg-slate-50 border rounded-lg focus:ring-2 focus:ring-emerald-600 outline-none">
-                    </div>
-
-                    <div>
-                        <label class="block font-semibold mb-1 text-slate-700">Username *</label>
-                        <input type="text" id="edit_username" name="username" required class="w-full p-2.5 bg-slate-50 border rounded-lg focus:ring-2 focus:ring-emerald-600 outline-none">
-                    </div>
-
-                    <div>
-                        <label class="block font-semibold mb-1 text-slate-700">Password Baru</label>
-                        <input type="password" name="password" placeholder="Kosongkan jika tidak ingin mengubah password" class="w-full p-2.5 bg-slate-50 border rounded-lg focus:ring-2 focus:ring-emerald-600 outline-none">
-                        <p class="text-[10px] text-slate-400 mt-0.5">*Hanya isi jika ingin mereset password akun ini.</p>
-                    </div>
-
-                    <div>
-                        <label class="block font-semibold mb-1 text-slate-700">Role / Hak Akses *</label>
-                        <select id="edit_role" name="role" required class="w-full p-2.5 bg-slate-50 border rounded-lg focus:ring-2 focus:ring-emerald-600 outline-none">
-                            <option value="petugas">Petugas</option>
-                            <option value="admin">Admin</option>
-                        </select>
-                    </div>
-
-                    <div class="flex justify-end gap-2 pt-3 border-t mt-4">
-                        <button type="button" onclick="closeEditUserModal()" class="px-4 py-2 bg-slate-100 rounded-lg">Batal</button>
-                        <button type="submit" class="px-5 py-2 bg-manGreen-700 text-white rounded-lg font-bold">Simpan Perubahan</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-        <?php endif; ?>
 
         <?php else: ?>
-        <!-- ================= HALAMAN DASHBOARD & TABEL DATA ================= -->
-        
+        <!-- ================= HALAMAN TABEL DATA PEMINJAMAN ================= -->
+
         <!-- PANEL FILTER & PENCARIAN (WEB) -->
         <div class="no-print bg-white p-4 rounded-xl border border-emerald-200 shadow-sm mb-6">
             <form method="GET" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3 text-xs items-end">
-                <input type="hidden" name="view" value="dashboard">
-                
+                <input type="hidden" name="view" value="data">
+
                 <div class="md:col-span-2">
                     <label class="block font-semibold mb-1 text-slate-700">Cari Nama / Barang / Kode</label>
                     <div class="relative">
@@ -651,9 +419,9 @@ $bulan_indo = [
                     <label class="block font-semibold mb-1 text-slate-700">Filter Tahun</label>
                     <select name="year" class="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-emerald-600">
                         <option value="">-- Semua --</option>
-                        <?php 
+                        <?php
                         $curr_year = date('Y');
-                        for($y = $curr_year; $y >= $curr_year - 5; $y--): 
+                        for($y = $curr_year; $y >= $curr_year - 5; $y--):
                         ?>
                             <option value="<?= $y ?>" <?= $year_param == $y ? 'selected' : '' ?>><?= $y ?></option>
                         <?php endfor; ?>
@@ -673,13 +441,13 @@ $bulan_indo = [
                     <button type="submit" class="flex-1 bg-manGreen-700 hover:bg-manGreen-800 text-white font-bold py-2 px-3 rounded-lg flex items-center justify-center gap-1">
                         <i data-lucide="filter" class="w-3.5 h-3.5"></i> Filter
                     </button>
-                    <a href="index.php" class="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-2 px-3 rounded-lg border flex items-center justify-center" title="Reset Filter">
+                    <a href="index.php?view=data" class="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-2 px-3 rounded-lg border flex items-center justify-center" title="Reset Filter">
                         <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
                     </a>
                 </div>
             </form>
 
-            <!-- TOMBOL AKSI: PINJAM BARANG, CETAK PDF, EXPORT EXCEL & HAPUS TERSARING -->
+            <!-- TOMBOL AKSI: PINJAM BARANG, CETAK PDF, EXPORT EXCEL -->
             <div class="flex flex-wrap items-center justify-between gap-2 pt-4 mt-4 border-t border-slate-100">
                 <div class="flex items-center gap-2">
                     <button onclick="openModal()" class="flex items-center gap-2 px-3.5 py-2 bg-manGreen-700 hover:bg-manGreen-800 text-white rounded-lg font-medium text-xs transition">
@@ -688,19 +456,11 @@ $bulan_indo = [
                     <button onclick="window.print()" class="flex items-center gap-2 px-3.5 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg font-medium text-xs transition">
                         <i data-lucide="printer" class="w-4 h-4"></i> Cetak PDF
                     </button>
-                    <a href="index.php?export=excel&search=<?= urlencode($search_param) ?>&month=<?= $month_param ?>&year=<?= $year_param ?>&status_return=<?= $status_param ?>" 
+                    <a href="index.php?export=excel&search=<?= urlencode($search_param) ?>&month=<?= $month_param ?>&year=<?= $year_param ?>&status_return=<?= $status_param ?>"
                        class="flex items-center gap-2 px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-medium text-xs transition">
                         <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Export Excel
                     </a>
                 </div>
-
-                <?php if(!empty($search_param) || !empty($month_param) || !empty($year_param) || $status_param !== ''): ?>
-                    <a href="index.php?action=delete_filtered&search=<?= urlencode($search_param) ?>&month=<?= $month_param ?>&year=<?= $year_param ?>&status_return=<?= $status_param ?>" 
-                       onclick="return confirm('APAKAH ANDA YAKIN?\nSemua data peminjaman hasil filter saat ini akan DIHAPUS PERMANEN!')" 
-                       class="flex items-center gap-1.5 px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium text-xs transition">
-                        <i data-lucide="trash-2" class="w-4 h-4"></i> Hapus Data Tersaring
-                    </a>
-                <?php endif; ?>
             </div>
         </div>
 
@@ -737,15 +497,16 @@ $bulan_indo = [
                                 <td class="p-3"><?= htmlspecialchars($row['purpose']) ?></td>
                                 <td class="p-3"><?= htmlspecialchars($row['expected_return']) ?></td>
                                 <td class="p-3 text-center">
-                                    <a href="index.php?action=toggle_return&id=<?= $row['id'] ?>&status=<?= $row['returned'] ? 0 : 1 ?>" class="no-print px-2.5 py-1 rounded font-bold text-[10px] transition <?= $row['returned'] ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-amber-100 text-amber-800 border border-amber-300' ?>">
+                                    <?php if (sip_identity()->allows($currentUser,'multimedia','borrowings.manage')): ?><form method="POST" class="inline"><input type="hidden" name="_csrf" value="<?= sip_e(sip_csrf()) ?>"><input type="hidden" name="form_type" value="toggle_return"><input type="hidden" name="id" value="<?= sip_e($row['id']) ?>"><input type="hidden" name="status" value="<?= $row['returned'] ? 0 : 1 ?>"><button class="no-print px-2.5 py-1 rounded font-bold text-[10px] transition <?= $row['returned'] ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-amber-100 text-amber-800 border border-amber-300' ?>">
                                         <?= $row['returned'] ? '✓ Sudah Kembali' : '[ ] Belum Kembali' ?>
-                                    </a>
+                                    </button></form><?php else: ?><?= $row['returned'] ? 'Sudah kembali' : 'Belum kembali' ?><?php endif ?>
                                     <span class="print-only font-bold"><?= $row['returned'] ? 'Sudah Kembali' : 'Belum Kembali' ?></span>
                                 </td>
                                 <td class="p-3 text-center no-print">
-                                    <a href="index.php?action=delete_borrowing&id=<?= $row['id'] ?>" onclick="return confirm('Hapus data ini?')" class="p-1 text-slate-400 hover:text-red-600 inline-block">
-                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
-                                    </a>
+                                    <!-- TOMBOL EDIT DATA PEMINJAMAN -->
+                                    <button onclick='openEditModal(<?= sip_e(json_encode($row, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT)) ?>)' class="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded text-[11px] font-bold flex items-center gap-1 mx-auto">
+                                        <i data-lucide="edit-3" class="w-3.5 h-3.5"></i> Edit
+                                    </button>
                                 </td>
                             </tr>
                             <?php endwhile; ?>
@@ -779,17 +540,20 @@ $bulan_indo = [
         <?php endif; ?>
     </main>
 
-    <!-- MODAL FORM PEMINJAMAN -->
-    <div id="itemModal" class="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 hidden no-print">
+    <!-- MODAL FORM TAMBAH PEMINJAMAN -->
+    <nav class="p-4 text-center">Halaman <?= $page ?> · <?= $filtered_total ?> peminjaman
+<?php if ($page > 1): ?><a class="mx-3 underline" href="?<?= sip_e(http_build_query(array_merge($_GET,['page'=>$page-1]))) ?>">Sebelumnya</a><?php endif ?>
+<?php if ($page*50 < $filtered_total): ?><a class="mx-3 underline" href="?<?= sip_e(http_build_query(array_merge($_GET,['page'=>$page+1]))) ?>">Berikutnya</a><?php endif ?></nav>
+<div id="itemModal" class="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 hidden no-print">
         <div class="bg-white rounded-2xl border border-emerald-100 shadow-2xl max-w-lg w-full overflow-hidden">
             <div class="bg-manGreen-800 text-white px-5 py-4 flex items-center justify-between">
                 <h3 class="font-bold text-sm">Form Peminjaman Inventaris Multimedia</h3>
                 <button onclick="closeModal()" class="text-emerald-200 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
             </div>
 
-            <form method="POST" class="p-5 space-y-3 text-xs">
+            <form method="POST" class="p-5 space-y-3 text-xs"><input type="hidden" name="_csrf" value="<?= sip_e(sip_csrf()) ?>">
                 <input type="hidden" name="form_type" value="add_borrowing">
-                
+
                 <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label class="block font-semibold mb-1">Nama Peminjam *</label>
@@ -849,6 +613,70 @@ $bulan_indo = [
         </div>
     </div>
 
+    <!-- MODAL FORM EDIT PEMINJAMAN -->
+    <div id="editBorrowingModal" class="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 hidden no-print">
+        <div class="bg-white rounded-2xl border border-emerald-100 shadow-2xl max-w-lg w-full overflow-hidden">
+            <div class="bg-manGreen-800 text-white px-5 py-4 flex items-center justify-between">
+                <h3 class="font-bold text-sm">Edit Data Peminjaman</h3>
+                <button onclick="closeEditModal()" class="text-emerald-200 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+
+            <form method="POST" class="p-5 space-y-3 text-xs"><input type="hidden" name="_csrf" value="<?= sip_e(sip_csrf()) ?>">
+                <input type="hidden" name="form_type" value="edit_borrowing">
+                <input type="hidden" id="edit_borrow_id" name="edit_id">
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-semibold mb-1">Nama Peminjam *</label>
+                        <input type="text" id="edit_borrowerName" name="borrowerName" required class="w-full p-2 border rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block font-semibold mb-1">Kategori *</label>
+                        <select id="edit_borrowerType" name="borrowerType" required class="w-full p-2 border rounded-lg">
+                            <option value="Guru">Guru</option>
+                            <option value="Siswa">Siswa</option>
+                            <option value="Pegawai">Pegawai / Staf</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block font-semibold mb-1">Identitas (NIP / NISN)</label>
+                    <input type="text" id="edit_borrowerIdNum" name="borrowerIdNum" class="w-full p-2 border rounded-lg">
+                </div>
+
+                <div class="border-t pt-3">
+                    <label class="block font-semibold mb-1">Nama Barang & Jumlah *</label>
+                    <div class="grid grid-cols-3 gap-2">
+                        <input type="text" id="edit_itemName" name="itemName" required class="col-span-2 p-2 border rounded-lg">
+                        <input type="number" id="edit_itemQty" name="itemQty" min="1" required class="p-2 border rounded-lg text-center font-bold">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block font-semibold mb-1">Keperluan *</label>
+                    <input type="text" id="edit_borrowPurpose" name="borrowPurpose" required class="w-full p-2 border rounded-lg">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 border-t pt-3">
+                    <div>
+                        <label class="block font-semibold mb-1">Tanggal Pinjam</label>
+                        <input type="date" id="edit_borrowDate" name="borrowDate" required class="w-full p-2 border rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block font-semibold mb-1">Estimasi Kembali</label>
+                        <input type="date" id="edit_expectedReturnDate" name="expectedReturnDate" required class="w-full p-2 border rounded-lg">
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-2 pt-3 border-t">
+                    <button type="button" onclick="closeEditModal()" class="px-4 py-2 bg-slate-100 rounded-lg">Batal</button>
+                    <button type="submit" class="px-5 py-2 bg-manGreen-700 text-white rounded-lg font-bold">Update Data</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         lucide.createIcons();
         function openModal() { document.getElementById('itemModal').classList.remove('hidden'); }
@@ -858,16 +686,23 @@ $bulan_indo = [
             if(val) document.getElementById('itemNameCustom').value = val;
         }
 
-        function openEditUserModal(user) {
-            document.getElementById('edit_target_user_id').value = user.id;
-            document.getElementById('edit_nama_lengkap').value = user.nama_lengkap;
-            document.getElementById('edit_username').value = user.username;
-            document.getElementById('edit_role').value = user.role;
-            document.getElementById('editUserModal').classList.remove('hidden');
+        function openEditModal(data) {
+            document.querySelector('#editBorrowingModal form').reset();
+            document.getElementById('edit_borrow_id').value = data.id;
+            document.getElementById('edit_borrowerName').value = data.name;
+            document.getElementById('edit_borrowerType').value = data.type;
+            document.getElementById('edit_borrowerIdNum').value = data.id_num;
+            document.getElementById('edit_itemName').value = data.item;
+            document.getElementById('edit_itemQty').value = data.qty;
+            document.getElementById('edit_borrowPurpose').value = data.purpose;
+            document.getElementById('edit_borrowDate').value = data.date;
+            document.getElementById('edit_expectedReturnDate').value = data.expected_return;
+
+            document.getElementById('editBorrowingModal').classList.remove('hidden');
         }
 
-        function closeEditUserModal() {
-            document.getElementById('editUserModal').classList.add('hidden');
+        function closeEditModal() {
+            document.getElementById('editBorrowingModal').classList.add('hidden');
         }
     </script>
 </body>

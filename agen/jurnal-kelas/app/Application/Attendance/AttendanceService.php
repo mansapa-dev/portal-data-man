@@ -25,7 +25,12 @@ final class AttendanceService
         $period=new LessonPeriod((int)($input['periodStart']??0),(int)($input['periodEnd']??0));
         foreach(['classPublicId','semesterPublicId','subjectPublicId'] as $field)if(!preg_match('/^[0-9A-HJKMNP-TV-Z]{26}$/',(string)($input[$field]??'')))throw new InvalidArgumentException('Referensi '.$field.' tidak valid.');
         $pdo=$this->database->pdo();$limit=(int)($pdo->query("SELECT setting_value FROM application_settings WHERE setting_key='journal_edit_hours' LIMIT 1")->fetchColumn()?:24);if($date<$today->modify('-'.$limit.' hours'))throw new InvalidArgumentException('Tanggal absensi melewati batas waktu yang diizinkan.');$subject=$pdo->prepare("SELECT id,public_id,name FROM subjects WHERE public_id=:id AND status='ACTIVE' AND deleted_at IS NULL");$subject->execute(['id'=>$input['subjectPublicId']]);$subject=$subject->fetch();if(!$subject)throw new InvalidArgumentException('Mata pelajaran aktif tidak ditemukan.');
-        $reference=$this->portal->classStudents($input['classPublicId'],$token,$input['semesterPublicId']); if(empty($reference['students']))throw new InvalidArgumentException('Kelas belum memiliki siswa aktif.');
+        $reference=$this->portal->classStudents($input['classPublicId'],$token,$input['semesterPublicId']);
+        if (!isset($reference['students']) || !is_array($reference['students'])) throw new RuntimeException('Daftar siswa dari Portal Data tidak valid.');
+        if ($reference['students'] === []) {
+            $semesterName = match ($reference['semester']['type'] ?? '') { 'ODD' => 'Ganjil', 'EVEN' => 'Genap', default => 'yang dipilih' };
+            throw new InvalidArgumentException(sprintf('Portal Data belum mengembalikan siswa untuk kelas %s, semester %s %s. Periksa penempatan siswa pada kelas dan semester tersebut di Portal Data.', $reference['class']['name'] ?? 'yang dipilih', $semesterName, $reference['academicYear']['name'] ?? ''));
+        }
         $sessionPublicId=Ulid::generate();$pdo->beginTransaction();
         try{
             $insert=$pdo->prepare("INSERT INTO attendance_sessions(public_id,attendance_date,class_public_id,class_name_snapshot,academic_year_public_id,academic_year_snapshot,semester_public_id,semester_snapshot,teacher_public_id,teacher_name_snapshot,subject_id,subject_name_snapshot,period_start,period_end,status,created_by) VALUES(:public_id,:date,:class_id,:class_name,:year_id,:year_name,:semester_id,:semester_name,:teacher_id,:teacher_name,:subject_id,:subject_name,:period_start,:period_end,'DRAFT',:created_by)");
