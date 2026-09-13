@@ -65,21 +65,21 @@
   .app-sidebar .side-nav a,
   .agen-workspace .page-nav-links a {
     display: grid;
-    grid-template-columns: 20px minmax(0, 1fr) auto;
+    grid-template-columns: 36px minmax(0, 1fr) auto;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     width: 48px;
-    min-height: 48px;
+    min-height: 54px;
     overflow: hidden;
-    padding: 12px 14px;
+    padding: 8px 6px;
     border: 0;
-    border-radius: 13px;
+    border-radius: 16px;
     background: transparent;
     color: var(--agen-rail-text);
     box-shadow: none;
     text-decoration: none;
     white-space: nowrap;
-    transition: width .2s ease, background-color .15s ease, color .15s ease;
+    transition: width .2s ease, background-color .15s ease, color .15s ease, transform .15s ease;
   }
   .app-sidebar:is(:hover, :focus-within) .side-nav a,
   .agen-workspace .page-nav:is(:hover, :focus-within) .page-nav-links a { width: 220px; }
@@ -87,12 +87,42 @@
   .agen-workspace .page-nav-links a:hover { background: rgba(255,255,255,.11); color: #fff; }
   .app-sidebar .side-nav a.active,
   .agen-workspace .page-nav-links a.active {
-    background: var(--agen-rail-active);
+    background: rgba(255,255,255,.13);
     color: #fff;
-    box-shadow: none;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.1);
   }
   .app-sidebar .side-nav a svg,
-  .agen-workspace .page-nav-links svg { width: 20px; height: 20px; flex: 0 0 20px; }
+  .agen-workspace .page-nav-links a svg {
+    box-sizing: border-box;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    padding: 8px;
+    border: 1px solid rgba(255,255,255,.24);
+    border-radius: 12px;
+    background: linear-gradient(150deg, #75cfa1, #348d63);
+    color: #fff;
+    box-shadow: 0 3px 8px rgba(0, 22, 12, .24), inset 0 1px 1px rgba(255,255,255,.32);
+    stroke: currentColor;
+    stroke-width: 1.9;
+    fill: none;
+    transition: transform .18s ease, box-shadow .18s ease;
+  }
+  .app-sidebar .side-nav a:nth-child(2) svg,
+  .agen-workspace .page-nav-links a:nth-child(2) svg { background: linear-gradient(150deg, #7dc8ed, #397aaf); }
+  .app-sidebar .side-nav a:nth-child(3) svg,
+  .agen-workspace .page-nav-links a:nth-child(3) svg { background: linear-gradient(150deg, #eab96d, #b87935); }
+  .app-sidebar .side-nav a:nth-child(4) svg,
+  .agen-workspace .page-nav-links a:nth-child(4) svg { background: linear-gradient(150deg, #adabe7, #6866a9); }
+  .agen-workspace .page-nav-links a:nth-child(5) svg,
+  .app-sidebar .secondary-nav a svg { background: linear-gradient(150deg, #a7b9b0, #607e6e); }
+  .app-sidebar .side-nav a:is(:hover, :focus-visible) svg,
+  .agen-workspace .page-nav-links a:is(:hover, :focus-visible) svg {
+    transform: translateY(-2px) scale(1.04);
+    box-shadow: 0 6px 12px rgba(0, 22, 12, .28), inset 0 1px 1px rgba(255,255,255,.36);
+  }
+  .app-sidebar .side-nav a:focus-visible,
+  .agen-workspace .page-nav-links a:focus-visible { outline: 2px solid #c5f1d9; outline-offset: 2px; }
   .app-sidebar .side-nav a span,
   .app-sidebar .side-nav a em,
   .agen-workspace .page-nav-links a span,
@@ -237,7 +267,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .app-sidebar, .agen-workspace .page-nav,
-  .app-sidebar .side-nav a, .agen-workspace .page-nav-links a { transition: none; }
+  .app-sidebar .side-nav a, .agen-workspace .page-nav-links a,
+  .app-sidebar .side-nav a svg, .agen-workspace .page-nav-links a svg { transition: none; }
 }
 
 /* Content system: one spacing scale and clear hierarchy across daily tasks. */
