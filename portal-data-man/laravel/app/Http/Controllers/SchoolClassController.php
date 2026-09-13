@@ -120,6 +120,26 @@ class SchoolClassController extends Controller
         return ApiResponse::success($rows, 'Anggota kelas berhasil diambil.');
     }
 
+    public function syncSemester(Request $request, SchoolClass $schoolClass): JsonResponse
+    {
+        $data = $request->validate(['sourceSemesterPublicId' => ['required', 'string', 'size:26'], 'targetSemesterPublicId' => ['required', 'string', 'size:26', 'different:sourceSemesterPublicId']]);
+        $source = Semester::query()->where('publicId', $data['sourceSemesterPublicId'])->firstOrFail();
+        $target = Semester::query()->where('publicId', $data['targetSemesterPublicId'])->firstOrFail();
+        abort_unless($source->academicYearId === $schoolClass->academicYearId && $target->academicYearId === $schoolClass->academicYearId, 422, 'Semester harus berada pada tahun ajaran kelas.');
+        $copied = DB::transaction(function () use ($schoolClass, $source, $target): int {
+            $rows = $schoolClass->enrollments()->where('semesterId', $source->id)->with('student')->get();
+            $count = 0;
+            foreach ($rows as $row) {
+                if (!$row->student || $row->student->status !== 'ACTIVE') continue;
+                ClassEnrollment::query()->updateOrCreate(['studentId' => $row->studentId, 'semesterId' => $target->id], ['schoolClassId' => $schoolClass->id, 'academicYearId' => $target->academicYearId, 'attendanceNumber' => $row->attendanceNumber, 'activeEnrollmentKey' => "{$row->studentId}:{$target->id}", 'status' => 'ACTIVE', 'leftAt' => null]);
+                $count++;
+            }
+            return $count;
+        });
+        $this->audit->write($request, 'SYNC_CLASS_SEMESTER', 'SchoolClass', $schoolClass->publicId, null, ['sourceSemesterPublicId' => $source->publicId, 'targetSemesterPublicId' => $target->publicId, 'copied' => $copied]);
+        return ApiResponse::success(['copied' => $copied], "{$copied} siswa berhasil disinkronkan ke semester tujuan.");
+    }
+
     public function statistics(SchoolClass $schoolClass): JsonResponse
     {
         $counts = $schoolClass->enrollments()->select('status', DB::raw('COUNT(*) as total'))->groupBy('status')->pluck('total', 'status');

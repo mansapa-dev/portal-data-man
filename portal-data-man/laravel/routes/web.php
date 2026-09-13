@@ -144,6 +144,7 @@ Route::prefix('api/v1')->group(function (): void {
             Route::post('classes', [SchoolClassController::class, 'store']);
             Route::patch('classes/{schoolClass}', [SchoolClassController::class, 'update']);
             Route::post('classes/{schoolClass}/students', [EnrollmentController::class, 'store']);
+            Route::post('classes/{schoolClass}/sync-semester', [SchoolClassController::class, 'syncSemester']);
             Route::delete('classes/{schoolClass}/students/{student}', [EnrollmentController::class, 'destroy']);
             Route::patch('enrollments/{classEnrollment}', [EnrollmentController::class, 'update']);
             Route::post('enrollments/{classEnrollment}/move', [EnrollmentController::class, 'move']);
