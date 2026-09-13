@@ -57,7 +57,7 @@ class StudentController extends Controller
         $target = Semester::query()->where('publicId', $data['targetSemesterPublicId'])->firstOrFail();
         abort_unless($source->academicYearId === $target->academicYearId, 422, 'Semester asal dan tujuan harus dalam tahun ajaran yang sama.');
         $copied = DB::transaction(function () use ($source, $target): int {
-            $rows = ClassEnrollment::query()->where('semesterId', $source->id)->where('status', 'ACTIVE')->with(['student', 'schoolClass'])->get();
+            $rows = ClassEnrollment::query()->where('semesterId', $source->id)->with(['student', 'schoolClass'])->orderBy('id')->get();
             $count = 0;
             foreach ($rows as $row) {
                 if (!$row->student || $row->student->status !== 'ACTIVE') continue;
