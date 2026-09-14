@@ -10,7 +10,8 @@ try {
             foreach (['pegawai'=>['borrowings.create'], 'petugas'=>\Sipintar\Identity::PERMISSIONS, 'pemantau'=>['borrowings.read']] as $name=>$permissions) {
                 if (!$identity->query('SELECT id FROM roles WHERE name=?',[$name])->fetchColumn()) $identity->saveRole($name,$permissions);
             }
-            echo "Skema identitas siap.\n"; break;
+            $imported = $identity->importLegacyUsers();
+            echo "Skema identitas siap. $imported akun lama diimpor.\n"; break;
         case 'superadmin':
             $password = getenv('SIPINTARMULTIMEDIA_ADMIN_PASSWORD') ?: '';
             if (strlen($password)<12 || empty($argv[2])) throw new RuntimeException('Isi SIPINTARMULTIMEDIA_ADMIN_PASSWORD (minimal 12 karakter) dan argumen username.');

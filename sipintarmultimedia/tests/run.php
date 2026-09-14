@@ -12,6 +12,13 @@ function freshIdentity(): \Sipintar\Identity {
     return new \Sipintar\Identity($db);
 }
 $i=freshIdentity(); $other=freshIdentity();
+$legacy=freshIdentity();
+$legacy->query('CREATE TABLE users (id INTEGER PRIMARY KEY, username VARCHAR(50), password VARCHAR(255), nama_lengkap VARCHAR(100), role VARCHAR(20))');
+$legacy->saveRole('petugas', \Sipintar\Identity::PERMISSIONS);
+$legacy->query('INSERT INTO users (username,password,nama_lengkap,role) VALUES (?,?,?,?)', ['admin-lama',password_hash('Legacy-password-123',PASSWORD_DEFAULT),'Admin Lama','petugas']);
+check($legacy->importLegacyUsers()===1 && $legacy->importLegacyUsers()===0,'legacy user migration is repeatable');
+$legacyUser=$legacy->login('admin-lama','Legacy-password-123','legacy-test');
+check($legacyUser!==null && $legacy->allows($legacyUser,'multimedia','borrowings.manage'),'legacy password hash and petugas access survive migration');
 $app=\Sipintar\Identity::APP;
 $create=$app==='sipintar'?'transactions.create':'borrowings.create';
 $read=$app==='sipintar'?'transactions.read':'borrowings.read';
