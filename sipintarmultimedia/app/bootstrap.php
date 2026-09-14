@@ -6,7 +6,8 @@ function sip_config(): array {
     static $config;
     if ($config === null) {
         $path = getenv('SIPINTARMULTIMEDIA_CONFIG');
-        if (!$path || !is_file($path)) throw new RuntimeException('Atur SIPINTARMULTIMEDIA_CONFIG ke file konfigurasi di luar document root.');
+        if (!$path) $path = dirname(__DIR__).'/config.php';
+        if (!is_file($path)) throw new RuntimeException('File konfigurasi tidak ditemukan. Atur SIPINTARMULTIMEDIA_CONFIG atau buat config.php di folder proyek.');
         $config = require $path;
     }
     return $config;
