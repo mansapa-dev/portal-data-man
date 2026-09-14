@@ -36,7 +36,7 @@ Memerlukan PHP 8.1+ dengan `pdo_mysql`, `mysqli`/mysqlnd, `curl`, serta MySQL 8.
 
 1. Siapkan database khusus proyek ini. Tabel akun/role/cache pegawai dan transaksi berada dalam database tersebut. Gunakan database berbeda untuk proyek yang lain.
 2. Untuk **instalasi baru**, impor `database/schema.sql`. Untuk database bisnis yang sudah berisi data, backup dan gunakan migrasi pada langkah berikut; jangan impor ulang skema baru. Dump lama berisi contoh data tidak diperlukan untuk instalasi baru.
-3. Salin `config.example.php` ke lokasi di luar document root, misalnya `/etc/sipintarmultimedia/config.php`, lalu isi koneksi database proyek ini dan konfigurasi Portal Data. Set `SIPINTARMULTIMEDIA_CONFIG` pada PHP-FPM/Apache serta CLI/cron. File harus dapat dibaca pengguna PHP. `cookie_secure=false` hanya untuk localhost HTTP.
+3. Salin `config.example.php` ke lokasi di luar document root, misalnya `/etc/sipintarmultimedia/config.php`, lalu isi koneksi database proyek ini dan konfigurasi Portal Data. Set `SIPINTARMULTIMEDIA_CONFIG` pada PHP-FPM/Apache serta CLI/cron. Jika hosting tidak menyediakan pengaturan environment untuk PHP, aplikasi juga membaca `config.php` di folder proyek saat variabel itu kosong. File lokal tersebut diabaikan Git dan diblokir oleh `.htaccess` Apache; pada Nginx, lindungi `config.php` dengan aturan setara. File harus dapat dibaca pengguna PHP. `cookie_secure=false` hanya untuk localhost HTTP.
 4. Dari folder proyek ini, jalankan:
 
 ```bash
