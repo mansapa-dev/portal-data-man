@@ -22,9 +22,11 @@ Constraint UNIQUE + CHECK pada `accounts.superadmin_slot` memastikan maksimal sa
 | pegawai | Buat peminjaman atas nama sendiri |
 | petugas | Kelola peminjaman, pengembalian, dan laporan |
 | pemantau | Lihat laporan peminjaman |
-| superadmin | Seluruh izin aplikasi dan pengaturan akun/role |
+| superadmin | Seluruh izin peminjaman |
 
 Superadmin dapat membuat role baru, mengubah izin, membuat akun pegawai, menonaktifkan akun, dan memilih “Tanpa akses”. Satu pegawai Portal dapat memiliki satu akun lokal pada proyek ini, dengan password dan role yang berbeda dari proyek lain. Perubahan role berlaku pada permintaan berikutnya.
+
+Panel pengelolaan akun dan role telah dinonaktifkan dari aplikasi, termasuk URL `admin.php`. Akun yang telah ada tetap aktif sesuai status dan role terakhirnya.
 
 Cookie sesi proyek ini bernama `SIPINTAR_MULTIMEDIA_SESSION`, dibatasi ke path pemasangan. Login/logout proyek lain tidak mengubah sesi di sini. Password disimpan sebagai hash; POST memerlukan CSRF. Percobaan login dibatasi. Tabel `users` dan password lama tidak digunakan untuk autentikasi baru.
 
