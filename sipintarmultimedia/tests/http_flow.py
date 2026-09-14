@@ -46,7 +46,7 @@ class Client:
 
 def flow():
     admin=Client(); admin.login('admin')
-    paths=['/','/index.php','/admin.php','/employees.php?q=Pegawai','/assets/client.js']
+    paths=['/','/index.php','/employees.php?q=Pegawai','/assets/client.js']
     paths+=['/pemantau.php','/pengunjung.php'] if APP=='sipintar' else ['/peminjam.php']
     for path in paths:
         status, body=admin.request(path)
@@ -54,8 +54,7 @@ def flow():
         if '<html' in body.lower():
             for script in re.findall(r'<script\b[^>]*>(.*?)</script>',body,re.S):
                 subprocess.run(['node','--check'],input=script,text=True,check=True,stdout=subprocess.DEVNULL)
-        if path=='/admin.php':
-            check('name="role_id"' in body and '_role"' not in body,'admin manages only one local project role')
+    check(admin.request('/admin.php')[0]==404,'account-management panel is unavailable')
     foreign=Client()
     # A valid session ID under the other project's cookie name must not authenticate here.
     for c in admin.jar:
@@ -65,9 +64,8 @@ def flow():
             other.name='SIPINTAR_MULTIMEDIA_SESSION' if APP=='sipintar' else 'SIPINTAR_INVENTORY_SESSION'
             foreign.jar.set_cookie(other)
     check(foreign.request('/employees.php')[0]==401,'other project cookie cannot reuse local session')
-    check(admin.request('/admin.php','action=role&name=forged',csrf=False)[0]==419,'admin mutation requires CSRF')
     employee=Client(); employee.login('pegawai')
-    check(employee.request('/admin.php')[0]==403,'pegawai cannot manage accounts')
+    check(employee.request('/admin.php')[0]==404,'account-management panel is unavailable to pegawai')
     status, body=employee.request('/')
     check(status==200 and ('form-pengambilan' if APP=='sipintar' else 'public_borrowing') in body,'root URL routes pegawai to own form')
     if APP=='sipintar':

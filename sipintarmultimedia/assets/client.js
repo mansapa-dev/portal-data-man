@@ -30,7 +30,6 @@ window.sipEscape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'
         const nav = document.createElement('nav');
         nav.style.cssText = 'padding:10px;text-align:center;background:#edf7f1;font:14px system-ui;color:#145339';
         const links = [['index.php', 'Beranda']];
-        if (session.user.superadmin) links.push(['admin.php', 'Kelola akun & role']);
         for (const [href, label] of links) { const a = document.createElement('a'); a.href = href; a.textContent = label; a.style.margin = '0 10px'; nav.append(a); }
         if (location.pathname.endsWith('/pengunjung.php')) {
             const button = document.createElement('button'); button.textContent = 'Keluar';
