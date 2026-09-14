@@ -26,4 +26,9 @@ final class Borrowings
         if(!in_array($status,[0,1],true)) throw new RuntimeException('Status tidak valid.');
         $this->repository->query('UPDATE borrowings SET returned=?,actual_return=? WHERE id=?',[$status,$status?date('Y-m-d H:i'):'-',$id]);
     }
+    public function delete(string $id): void {
+        if (!preg_match('/^MAN1-\d{8}-[a-f0-9]{16}$/', $id)) throw new RuntimeException('Kode peminjaman tidak valid.');
+        $result = $this->repository->query('DELETE FROM borrowings WHERE id=?', [$id]);
+        if ($result->affected_rows !== 1) throw new RuntimeException('Peminjaman tidak ditemukan.');
+    }
 }

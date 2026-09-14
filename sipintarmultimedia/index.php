@@ -92,6 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_type'])) {
     $service = new \Sipintar\Borrowings(new \Sipintar\Database($conn));
     try {
         if ($action === 'toggle_return') $service->returned($_POST['id'] ?? '', (int)($_POST['status'] ?? -1));
+        elseif ($action === 'delete_borrowing') $service->delete($_POST['id'] ?? '');
         elseif (in_array($action, ['add_borrowing', 'edit_borrowing'], true)) {
             $employee = sip_employee($currentUser, 'multimedia', $_POST);
             if ($action === 'edit_borrowing' && empty($_POST['employee_id'])) {
@@ -503,10 +504,23 @@ $bulan_indo = [
                                     <span class="print-only font-bold"><?= $row['returned'] ? 'Sudah Kembali' : 'Belum Kembali' ?></span>
                                 </td>
                                 <td class="p-3 text-center no-print">
-                                    <!-- TOMBOL EDIT DATA PEMINJAMAN -->
-                                    <button onclick='openEditModal(<?= sip_e(json_encode($row, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT)) ?>)' class="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded text-[11px] font-bold flex items-center gap-1 mx-auto">
-                                        <i data-lucide="edit-3" class="w-3.5 h-3.5"></i> Edit
-                                    </button>
+                                    <?php if (sip_identity()->allows($currentUser,'multimedia','borrowings.manage')): ?>
+                                    <div class="flex items-center justify-center gap-1">
+                                        <button type="button" onclick='openEditModal(<?= sip_e(json_encode($row, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT)) ?>)' class="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded text-[11px] font-bold flex items-center gap-1">
+                                            <i data-lucide="edit-3" class="w-3.5 h-3.5"></i> Edit
+                                        </button>
+                                        <form method="POST" onsubmit="return confirm('Hapus data peminjaman ini? Tindakan ini tidak dapat dibatalkan.');">
+                                            <input type="hidden" name="_csrf" value="<?= sip_e(sip_csrf()) ?>">
+                                            <input type="hidden" name="form_type" value="delete_borrowing">
+                                            <input type="hidden" name="id" value="<?= sip_e($row['id']) ?>">
+                                            <button type="submit" class="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-[11px] font-bold flex items-center gap-1" title="Hapus peminjaman">
+                                                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Hapus
+                                            </button>
+                                        </form>
+                                    </div>
+                                    <?php else: ?>
+                                        <span class="text-slate-400">-</span>
+                                    <?php endif; ?>
                                 </td>
                             </tr>
                             <?php endwhile; ?>
