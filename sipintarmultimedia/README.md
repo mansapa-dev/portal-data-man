@@ -28,7 +28,7 @@ Superadmin dapat membuat role baru, mengubah izin, membuat akun pegawai, menonak
 
 Panel pengelolaan akun dan role telah dinonaktifkan dari aplikasi, termasuk URL `admin.php`. Akun yang telah ada tetap aktif sesuai status dan role terakhirnya.
 
-Cookie sesi proyek ini bernama `SIPINTAR_MULTIMEDIA_SESSION`, dibatasi ke path pemasangan. Login/logout proyek lain tidak mengubah sesi di sini. Password disimpan sebagai hash; POST memerlukan CSRF. Percobaan login dibatasi. Tabel `users` dan password lama tidak digunakan untuk autentikasi baru.
+Cookie sesi proyek ini bernama `SIPINTAR_MULTIMEDIA_SESSION`, dibatasi ke path pemasangan. Login/logout proyek lain tidak mengubah sesi di sini. Password disimpan sebagai hash; POST memerlukan CSRF. Percobaan login dibatasi. Tabel `users` lama hanya dibaca saat migrasi; setelah itu login memakai `accounts` dengan hash password lama yang sama.
 
 ## Pemasangan
 
@@ -49,7 +49,7 @@ php bin/console.php superadmin superadmin
 unset SIPINTARMULTIMEDIA_ADMIN_PASSWORD
 ```
 
-Migrasi dapat dijalankan ulang. `migrate` membuat tabel akun lokal dan role awal; `migrate-business` hanya memigrasikan tabel bisnis proyek ini. Jalankan migrasi sebelum mengaktifkan kode baru. Database akun gabungan dari rancangan sebelumnya tidak digunakan: jika pernah mencoba rancangan itu, buat akun lokal melalui panel proyek ini berdasarkan pegawai Portal.
+Migrasi dapat dijalankan ulang. `migrate` membuat tabel akun lokal dan role awal, lalu mengimpor pengguna dari tabel `users` lama ke `accounts` tanpa mengubah password atau data peminjaman. Akun lama diberi izin `petugas` seperti akses pengelolaan sebelumnya; akun dengan username yang sudah ada di `accounts` dibiarkan utuh. `migrate-business` hanya memigrasikan tabel bisnis proyek ini. Jalankan migrasi sebelum mengaktifkan kode baru. Jika memakai dump `db_sarpras` lama, arahkan konfigurasi database ke database tersebut dan jalankan `php bin/console.php migrate` serta `php bin/console.php migrate-business`; tanpa tabel identitas baru, login akan gagal dengan HTTP 500. Database akun gabungan dari rancangan sebelumnya tidak digunakan: jika pernah mencoba rancangan itu, buat akun lokal melalui panel proyek ini berdasarkan pegawai Portal.
 
 5. Buka `admin.php` pada URL pemasangan, masuk sebagai superadmin proyek ini, sinkronkan pegawai, kemudian buat akun dan tetapkan role lokalnya.
 

@@ -55,6 +55,28 @@ final class Identity
         if ($id) $this->query('UPDATE roles SET name=?, permissions=? WHERE id=?', [$name, $json, $id]);
         else $this->query('INSERT INTO roles (name, permissions) VALUES (?,?)', [$name, $json]);
     }
+    public function importLegacyUsers(): int
+    {
+        if ($this->db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql') {
+            if (!$this->query("SHOW TABLES LIKE 'users'")->fetchColumn()) return 0;
+        } else {
+            if (!$this->query("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")->fetchColumn()) return 0;
+        }
+        $roleId = (int)$this->query("SELECT id FROM roles WHERE name='petugas'")->fetchColumn();
+        if (!$roleId) throw new RuntimeException('Role petugas belum tersedia. Jalankan migrasi identitas lebih dahulu.');
+        $count = 0;
+        foreach ($this->query('SELECT username,password,nama_lengkap,role FROM users')->fetchAll(PDO::FETCH_ASSOC) as $legacy) {
+            if ($this->query('SELECT id FROM accounts WHERE username=?', [$legacy['username']])->fetchColumn()) continue;
+            $this->db->beginTransaction();
+            try {
+                $this->query('INSERT INTO accounts (username,password_hash,name) VALUES (?,?,?)', [$legacy['username'],$legacy['password'],$legacy['nama_lengkap']]);
+                $this->query('INSERT INTO grants (account_id,role_id) VALUES (?,?)', [(int)$this->db->lastInsertId(), $roleId]);
+                $this->db->commit();
+                $count++;
+            } catch (\Throwable $e) { $this->db->rollBack(); throw $e; }
+        }
+        return $count;
+    }
     public function saveAccount(array $input): void
     {
         $this->permissionCache = [];
