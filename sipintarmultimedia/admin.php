@@ -1,7 +1,5 @@
 <?php
-// Pengelolaan akun tidak tersedia dalam SIPINTAR Multimedia.
-http_response_code(404);
-exit;
+require __DIR__.'/app/bootstrap.php';
 $identity = sip_identity(); $message = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     sip_check_csrf();
