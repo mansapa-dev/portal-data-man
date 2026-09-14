@@ -17,7 +17,10 @@ final class Borrowings
         $type=$input['borrowerType'] ?? 'Guru';
         if(!in_array($type,['Guru','Pegawai','Staf','Siswa','Lainnya','Tendik'],true)) throw new RuntimeException('Kategori peminjam tidak valid.');
         $id=$edit ? ($input['edit_id'] ?? '') : 'MAN1-'.date('Ymd').'-'.bin2hex(random_bytes(8));
-        $values=[$employee['name'],$type,$employee['nip'] ?: '-',$item,$qty,$purpose,$date,$expected];
+        $name=trim($input['borrowerName'] ?? '') ?: $employee['name'];
+        $idNum=trim($input['borrowerIdNum'] ?? '') ?: ($employee['nip'] ?: '-');
+        if (strlen($name)>100 || strlen($idNum)>50 || strlen($purpose)>65535) throw new RuntimeException('Data peminjam atau keperluan terlalu panjang.');
+        $values=[$name,$type,$idNum,$item,$qty,$purpose,$date,$expected];
         if($edit) $this->repository->query('UPDATE borrowings SET name=?,type=?,id_num=?,item=?,qty=?,purpose=?,date=?,expected_return=? WHERE id=?',[...$values,$id]);
         else $this->repository->query('INSERT INTO borrowings (name,type,id_num,item,qty,purpose,date,expected_return,id,time,`condition`) VALUES (?,?,?,?,?,?,?,?,?,?,?)',[...$values,$id,date('H:i:s'),$input['initialCondition'] ?? 'Baik']);
         return $id;

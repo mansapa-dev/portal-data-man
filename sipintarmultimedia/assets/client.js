@@ -30,6 +30,7 @@ window.sipEscape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'
         const nav = document.createElement('nav');
         nav.style.cssText = 'padding:10px;text-align:center;background:#edf7f1;font:14px system-ui;color:#145339';
         const links = [['index.php', 'Beranda']];
+        if (session.user.superadmin) links.push(['admin.php', 'Kelola Akun']);
         for (const [href, label] of links) { const a = document.createElement('a'); a.href = href; a.textContent = label; a.style.margin = '0 10px'; nav.append(a); }
         if (location.pathname.endsWith('/pengunjung.php')) {
             const button = document.createElement('button'); button.textContent = 'Keluar';
@@ -52,8 +53,6 @@ window.sipEscape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'
         for (const field of document.querySelectorAll('#nama_pengambil, #bm_petugas, [name="borrowerName"]')) {
             const form = field.closest('form'); if (!form) continue;
             const manager = can(session.app === 'multimedia' ? 'borrowings.manage' : 'transactions.manage');
-            field.readOnly = true;
-            if (!field.id.startsWith('edit_')) field.value = session.user.name;
             if (!manager) continue;
             const search = document.createElement('input'); search.type = 'search'; search.placeholder = 'Cari pegawai Portal Data'; search.className = field.className;
             const select = document.createElement('select'); select.className = field.className; select.add(new Option('Pilih pegawai (opsional)', ''));
