@@ -3,6 +3,12 @@ let cacheAdminSoalRows = [];
 let currentSelectedMapelName = null;
 let attachedGambarSoalBase64 = '';
 
+function escapeQuestionUiText(value) {
+  return String(value ?? '').replace(/[&<>'"]/g, character => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+  })[character]);
+}
+
 // Icons mapping for Indonesian school subjects
 const subjectIconMap = {
   'matematika': 'fa-calculator',
@@ -64,6 +70,18 @@ function loadDataAdminSoal() {
         applyFilterDetailSoal();
       } else {
         renderKatalogMapelGrid();
+      }
+    })
+    .withFailureHandler(error => {
+      cacheAdminSoalRows = [];
+      if (gridContainer) {
+        gridContainer.innerHTML = `
+          <div style="grid-column:1/-1; background:var(--surface); border:1px solid var(--danger); border-radius:12px; padding:24px; color:var(--text-main); text-align:center;">
+            <i class="fa-solid fa-triangle-exclamation" style="font-size:28px; color:var(--danger); margin-bottom:10px; display:block;"></i>
+            <h4 style="margin-bottom:5px;">Data soal gagal dimuat</h4>
+            <p style="color:var(--text-muted); margin-bottom:14px;">${escapeQuestionUiText(error?.message || 'Terjadi kesalahan saat mengambil bank soal.')}</p>
+            <button type="button" class="ui-button btn btn-secondary" onclick="loadDataAdminSoal()">Coba Lagi</button>
+          </div>`;
       }
     })
     .getAdminSoalList(stPengelola, null);
