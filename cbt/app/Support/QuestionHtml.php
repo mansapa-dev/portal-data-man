@@ -7,6 +7,7 @@ final class QuestionHtml
  public static function clean(?string $html): string
  {
   if ($html === null || $html === '') return '';
+  if (!class_exists(\DOMDocument::class)) return self::cleanWithoutDom($html);
   $document = new \DOMDocument('1.0', 'UTF-8');
   $previous = libxml_use_internal_errors(true);
   try { $document->loadHTML('<?xml encoding="UTF-8"><html><body>'.$html.'</body></html>', LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING); }
@@ -35,6 +36,18 @@ final class QuestionHtml
   $clean($body); $result = '';
   foreach ($body->childNodes as $node) $result .= $document->saveHTML($node);
   return $result;
+ }
+ private static function cleanWithoutDom(string $html): string
+ {
+  // Shared hosting may omit ext-dom. Escaped plain text keeps questions readable
+  // without ever allowing stored markup to execute in the browser.
+  $html = preg_replace('~<(script|style|iframe|object|embed)\b[^>]*>.*?</\1\s*>~is', '', $html) ?? '';
+  $html = preg_replace_callback('~<img\b[^>]*\balt\s*=\s*(["\'])(.*?)\1[^>]*>~is', static fn(array $match): string => ' '.html_entity_decode($match[2], ENT_QUOTES | ENT_HTML5, 'UTF-8').' ', $html) ?? $html;
+  $html = preg_replace('~<\s*(?:br\s*/?|/p|/div|/li|/tr)\s*>~i', "\n", $html) ?? $html;
+  $text = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+  $text = preg_replace("~[\t ]+~", ' ', $text) ?? $text;
+  $text = preg_replace("~\n{3,}~", "\n\n", $text) ?? $text;
+  return nl2br(htmlspecialchars(trim($text), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), false);
  }
  public static function row(array $row): array
  {
