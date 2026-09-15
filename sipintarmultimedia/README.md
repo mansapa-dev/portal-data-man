@@ -58,7 +58,7 @@ Migrasi dapat dijalankan ulang. `migrate` membuat tabel akun lokal dan role awal
 Di portal-data-man, siapkan application client **SERVICE**, status **ACTIVE**, grant `client_credentials`, scope `portal_data.read`. Isi konfigurasi:
 
 - `portal.token_url`: URL token Portal, biasanya `https://host-portal/oidc/token`.
-- `portal.teachers_url`: sumber pegawai yang sama untuk kedua proyek, saat ini `https://host-portal/api/v1/integration/cbt/teachers`.
+- `portal.employees_url`: sumber pegawai aktif yang sama untuk kedua proyek, yaitu `https://host-portal/api/v1/integration/cbt/employees`.
 - `portal.client_id` dan `portal.client_secret`: kredensial service client proyek ini. Sebaiknya setiap proyek memiliki service client sendiri agar pencabutan akses dapat dilakukan terpisah.
 
 Sesuaikan URL dengan subdirektori Portal bila ada. Jalankan sinkronisasi dari panel atau CLI:
@@ -69,7 +69,7 @@ php bin/console.php sync-employees
 
 Perintah bisa dijadwalkan lewat cron. Token diminta otomatis server ke server melalui HTTPS; secret tidak dikirim ke browser. Seluruh halaman respons diambil sebelum cache lokal diganti secara transaksional. Kegagalan/format tidak valid/snapshot kosong mempertahankan cache sebelumnya. Pegawai yang tidak lagi ada pada snapshot aktif kehilangan akses lokal setelah sinkronisasi; superadmin tetap dapat masuk.
 
-**Cakupan sumber:** endpoint yang tersedia dalam portal-data-man saat ini memakai `Teacher` (guru aktif). TU/non-guru yang belum tercatat di sana memerlukan endpoint pegawai yang lebih lengkap. Kontrak responsnya berupa `data.data`, `current_page`, `last_page`, dengan baris `id`, `name`, `nip`. Kedua proyek perlu diarahkan ke sumber master yang sama saat endpoint tersebut tersedia. Kode portal-data-man tidak diubah dalam pemisahan ini.
+Endpoint tersebut memakai data `Employee` aktif dari portal-data-man, termasuk PNS, PPPK, dan tenaga honorer. Kontrak responsnya berupa `data.data`, `current_page`, `last_page`, dengan baris `id`, `name`, `nip`, dan `position`. Konfigurasi lama `teachers_url` masih diterima sementara sebagai fallback, tetapi sebaiknya segera diganti ke `employees_url`.
 
 ## Kapasitas dan operasional
 

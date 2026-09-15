@@ -7,7 +7,10 @@ final class PortalClient
     public function __construct(private array $config) {}
     public function employees(): array
     {
-        $url = $this->config['teachers_url'] ?? '';
+        // employees_url is the canonical personnel source. Keep teachers_url as
+        // a temporary fallback so existing deployments do not break before
+        // their external config is updated.
+        $url = $this->config['employees_url'] ?? $this->config['teachers_url'] ?? '';
         if (parse_url($url, PHP_URL_SCHEME) !== 'https') throw new RuntimeException('URL HTTPS Portal Data diperlukan.');
         $token = $this->token();
         $all = []; $page = 1;
