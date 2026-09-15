@@ -11,8 +11,7 @@
         <div class="input-group"><label class="ui-label" for="inAkunPass">Password</label><div class="input-wrapper"><i class="fa-solid fa-lock left-icon"></i><input type="text" id="inAkunPass" required placeholder="Password akun" class="ui-control"></div></div>
         <input type="hidden" id="inAkunRole" value="admin">
         <div class="input-group"><label class="ui-label" for="inAkunStatus">Status Akun</label><div class="input-wrapper"><select id="inAkunStatus" class="ui-control"><option value="true">Aktif</option><option value="false">Nonaktif</option></select></div></div>
-        <button type="submit" class="ui-button btn btn-primary" style="width:100%; margin-top:8px">Simpan Akun</button>
+        <div class="modal-actions"><button type="button" class="ui-button btn btn-secondary" onclick="document.getElementById('modalAkun').classList.remove('show')">Batal</button><button type="submit" class="ui-button btn btn-primary">Simpan Akun</button></div>
       </form>
     </div>
   </div>
-

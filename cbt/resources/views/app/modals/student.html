@@ -11,7 +11,7 @@
         <div class="input-group"><label class="ui-label" for="inSiswaNama">Nama Lengkap</label><div class="input-wrapper"><input type="text" id="inSiswaNama" placeholder="Nama siswa" readonly style="background:var(--surface-subtle)" class="ui-control"></div></div>
         <div class="input-group"><label class="ui-label" for="inSiswaKelas">Kelas / Rombel</label><div class="input-wrapper"><input type="text" id="inSiswaKelas" placeholder="Kelas" readonly style="background:var(--surface-subtle)" class="ui-control"></div></div>
         <div class="input-group"><label class="ui-label" for="inSiswaPin">PIN CBT Siswa</label><div class="input-wrapper"><input type="text" id="inSiswaPin" maxlength="6" placeholder="Kosongkan untuk generate acak 4 digit" class="ui-control"></div></div>
-        <button type="submit" class="ui-button btn btn-primary" style="width:100%; margin-top:8px">Simpan PIN Siswa</button>
+        <div class="modal-actions"><button type="button" class="ui-button btn btn-secondary" onclick="document.getElementById('modalSiswaSatuan').classList.remove('show')">Batal</button><button type="submit" class="ui-button btn btn-primary">Simpan PIN Siswa</button></div>
       </form>
     </div>
   </div>

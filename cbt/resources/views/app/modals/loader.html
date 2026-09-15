@@ -1,5 +1,7 @@
   <div class="loader-overlay" id="loaderGlobal">
-    <div class="spinner"></div>
-    <div style="font-size:13px; font-weight:700; color:var(--primary);" id="loaderText">Memproses data...</div>
+    <div class="loader-dialog" role="status" aria-live="polite">
+      <div class="spinner"></div>
+      <div id="loaderText">Memproses data...</div>
+      <button type="button" class="ui-button btn btn-secondary loader-cancel hidden" id="btnCancelLoading">Batal</button>
+    </div>
   </div>
-

@@ -9,7 +9,7 @@
         <div class="input-group"><label class="ui-label" for="inGuruId" id="labelPersonel">Pilih Guru Mata Pelajaran</label><div class="input-wrapper"><select id="inGuruId" required class="ui-control"></select></div></div>
         <div class="input-group" id="examAssignmentField"><label class="ui-label" for="inUjianId">Pilih Ujian / Mapel</label><div class="input-wrapper"><select id="inUjianId" required class="ui-control"></select></div></div>
         <div class="input-group"><label class="ui-label" for="inDutyRole">Jenis Penugasan</label><div class="input-wrapper"><select id="inDutyRole" required class="ui-control"><option value="TEACHER">Guru Mata Pelajaran</option><option value="PROCTOR">Petugas Piket Ujian — menerima tiket & reset CBT</option></select></div></div>
-        <button type="submit" class="ui-button btn btn-primary" style="width:100%; margin-top:8px">Simpan Penugasan</button>
+        <div class="modal-actions"><button type="button" class="ui-button btn btn-secondary" onclick="document.getElementById('modalGuruUjian').classList.remove('show')">Batal</button><button type="submit" class="ui-button btn btn-primary">Simpan Penugasan</button></div>
       </form>
     </div>
   </div>

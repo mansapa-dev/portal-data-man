@@ -15,13 +15,30 @@ let cacheSiswaGlobal = [];
 let portalReferences = { teachers: [], subjects: [], classes: [], academic_years: [], semesters: [] };
 let portalReferencesLoaded = false;
 
-function showLoading(msg = 'Memuat...') {
+let cancelLoadingHandler = null;
+
+function showLoading(msg = 'Memuat...', onCancel = null) {
   document.getElementById('loaderText').textContent = msg;
+  const cancelButton = document.getElementById('btnCancelLoading');
+  cancelLoadingHandler = typeof onCancel === 'function' ? onCancel : null;
+  if (cancelButton) {
+    cancelButton.classList.toggle('hidden', !cancelLoadingHandler);
+    cancelButton.disabled = false;
+    cancelButton.textContent = 'Batal';
+  }
   document.getElementById('loaderGlobal').classList.add('show');
 }
 function hideLoading() {
   document.getElementById('loaderGlobal').classList.remove('show');
+  cancelLoadingHandler = null;
 }
+
+document.getElementById('btnCancelLoading')?.addEventListener('click', event => {
+  if (!cancelLoadingHandler) return;
+  event.currentTarget.disabled = true;
+  event.currentTarget.textContent = 'Menghentikan...';
+  cancelLoadingHandler();
+});
 
 function showCustomAlert(title, message, type = 'auto') {
   const elTitle = document.getElementById('alertTitle');

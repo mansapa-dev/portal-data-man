@@ -275,7 +275,24 @@ function jalankanGeneratePinMassal(targetGrade, targetClass) {
   let totalUpdated = 0;
   const generatedCredentials = [];
   let cursor = 0;
-  showLoading('Menyiapkan generate PIN otomatis...');
+  let cancelRequested = false;
+  const requestCancel = () => {
+    cancelRequested = true;
+    document.getElementById('loaderText').textContent = 'Menghentikan setelah batch saat ini selesai...';
+  };
+  showLoading('Menyiapkan generate PIN otomatis...', requestCancel);
+
+  const finishCancelled = () => {
+      hideLoading();
+      document.getElementById('modalGeneratePinMassal').classList.remove('show');
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.innerHTML = '<i class="fa-solid fa-bolt"></i> Mulai Generate PIN';
+      }
+      downloadGeneratedPinCsv(generatedCredentials);
+      loadDataAdminSiswa();
+      showCustomAlert('Generate PIN Dibatalkan', `Proses dihentikan. ${totalUpdated} PIN yang sudah dibuat tetap diunduh dalam CSV.`, 'warning');
+  };
 
   const finish = () => {
       hideLoading();
@@ -313,9 +330,10 @@ function jalankanGeneratePinMassal(targetGrade, targetClass) {
         if (Array.isArray(res.credentials)) generatedCredentials.push(...res.credentials);
         cursor = Number(res.next_cursor) || cursor;
         const total = Number(res.total) || totalUpdated;
-        showLoading(`Membuat PIN otomatis: ${Math.min(totalUpdated, total)} dari ${total} siswa...`);
-        if (res.done) finish();
-        else setTimeout(processNextBatch, 50);
+        if (cancelRequested) finishCancelled();
+        else if (res.done) finish();
+        else showLoading(`Membuat PIN otomatis: ${Math.min(totalUpdated, total)} dari ${total} siswa...`, requestCancel);
+        if (!cancelRequested && !res.done) setTimeout(processNextBatch, 50);
       })
       .withFailureHandler(fail)
       .generatePinsBatchAdmin(stPengelola, {

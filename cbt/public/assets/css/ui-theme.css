@@ -72,7 +72,12 @@
   .generate-pin-modal .ui-control{background:var(--surface)!important;color:var(--text-main)!important;-webkit-text-fill-color:var(--text-main);color-scheme:light dark}
   .generate-pin-modal .ui-control option{background:var(--surface);color:var(--text-main)}
   .generate-pin-modal .generate-pin-target{background:var(--primary-soft)!important;border:1px solid var(--primary-soft-border)!important;color:var(--primary-dark)!important;-webkit-text-fill-color:var(--primary-dark)}
-  .loader-overlay{background:#08150eb3;backdrop-filter:blur(4px)}
+  .loader-overlay{background:#08150ecc;backdrop-filter:blur(4px)}
+  .loader-dialog{display:flex;flex-direction:column;align-items:center;width:min(360px,calc(100vw - 32px));padding:24px;border:1px solid var(--border);border-radius:18px;background:var(--surface);color:var(--text-main);box-shadow:var(--shadow-lg);text-align:center}
+  .loader-dialog #loaderText{color:var(--text-main)!important;font-size:13px;font-weight:800;line-height:1.5;-webkit-text-fill-color:var(--text-main)}
+  .loader-dialog .loader-cancel{width:100%;margin-top:16px;color:var(--text-main)!important;background:var(--surface-subtle)!important;border-color:var(--border)!important}
+  .modal-content :is(h1,h2,h3,h4,h5,h6,p,label,small,strong,b,span){text-shadow:none}
+  .modal-actions{display:flex;gap:8px;margin-top:8px}.modal-actions .btn{flex:1}
   .spinner{border-color:var(--border);border-top-color:var(--primary)}
   .alert{border-radius:14px;line-height:1.6}
   .auth-card{box-shadow:var(--shadow-md)}

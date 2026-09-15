@@ -19,8 +19,7 @@
             <button type="button" class="toggle-pw" onclick="const x=document.getElementById('inPassPengelola'); x.type=x.type==='password'?'text':'password'; this.querySelector('i').classList.toggle('fa-eye'); this.querySelector('i').classList.toggle('fa-eye-slash');"><i class="fa-regular fa-eye"></i></button>
           </div>
         </div>
-        <button type="submit" class="ui-button btn btn-primary" style="width:100%">Verifikasi & Masuk</button>
+        <div class="modal-actions"><button type="button" class="ui-button btn btn-secondary" onclick="document.getElementById('modalLoginPengelola').classList.remove('show')">Batal</button><button type="submit" class="ui-button btn btn-primary">Verifikasi & Masuk</button></div>
       </form>
     </div>
   </div>
-
