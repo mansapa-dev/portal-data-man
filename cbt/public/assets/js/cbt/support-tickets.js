@@ -25,7 +25,7 @@
   function closeStudentModal(){document.getElementById('modalSupportTicket')?.classList.remove('show');clearTimeout(studentTimer);}
   const form=document.getElementById('formSupportTicket');
   if(form){
-    document.getElementById('btnCloseSupportTicket')?.addEventListener('click',closeStudentModal);document.getElementById('btnCancelSupportTicket')?.addEventListener('click',closeStudentModal);
+    document.getElementById('btnCancelSupportTicket')?.addEventListener('click',closeStudentModal);
     form.addEventListener('submit',async event=>{event.preventDefault();const button=document.getElementById('btnSendSupportTicket'),feedback=document.getElementById('supportTicketFeedback'),modal=document.getElementById('modalSupportTicket');button.disabled=true;feedback.className='alert';feedback.textContent='Mengirim permintaan…';
       try{const payload={nisn:document.getElementById('supportNisn').value,category:document.getElementById('supportCategory').value,message:document.getElementById('supportMessage').value,exam_id:document.getElementById('supportExam').value||modal.dataset.examId||null};const result=await runCbt('createSupportTicket',payload);feedback.className='alert success';feedback.textContent=result.message||'Tiket sudah diterima petugas.';document.getElementById('supportMessage').value='';if(typeof stSiswa!=='undefined'&&stSiswa?.id)loadStudentTickets();}
       catch(error){feedback.className='alert error';feedback.textContent=error.message;}
