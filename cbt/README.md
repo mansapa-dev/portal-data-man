@@ -50,7 +50,7 @@ Daftarkan aplikasi bertipe **Sinkronisasi CBT** di Portal Data. Simpan Client ID
 
 ## Guru mapel dan piket ujian
 
-Guru mata pelajaran dan petugas piket dikelola sebagai dua jenis penugasan. Guru mapel selalu dipilih dari referensi guru Portal Data. Kandidat piket berasal dari pegawai aktif Portal Data; guru hanya muncul sebagai kandidat piket setelah admin CBT mencentang izin **Guru yang Boleh Menjadi Piket**. Mencabut izin tersebut sekaligus menghapus penugasan piket aktif milik guru, tanpa mengubah penugasan guru mapelnya.
+Guru mata pelajaran dan petugas piket dikelola sebagai dua jenis penugasan. Guru mapel selalu dipilih dari referensi guru Portal Data dan ditugaskan per ujian. Kandidat piket berasal dari pegawai aktif Portal Data; guru hanya muncul sebagai kandidat piket setelah admin CBT mencentang izin **Guru yang Boleh Menjadi Piket**. Piket berlaku global tanpa memilih ujian dan menerima semua tiket siswa. Mencabut izin tersebut sekaligus menghapus tugas piket guru, tanpa mengubah penugasan guru mapelnya.
 
 Jalankan `php scripts/upgrade-exam-proctors.php`, lalu sinkronkan Portal Data agar referensi `EMPLOYEES` terisi. Pegawai dan guru piket masuk melalui SSO Portal Data dan hanya dapat mengakses ujian yang ditugaskan.
 

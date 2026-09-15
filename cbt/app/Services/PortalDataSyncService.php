@@ -29,6 +29,7 @@ final class PortalDataSyncService
  {
   if(!method_exists($this->portal,'revisions'))return null;
   $revisions=$this->portal->revisions();$value=$revisions[$type]??null;
+  if($type==='EMPLOYEES'&&$value===null)return null;
   if(!is_string($value)||!preg_match('/^[a-f0-9]{64}$/',$value))throw new \UnexpectedValueException('Revisi Portal Data tidak valid.');
   return $value;
  }

@@ -19,7 +19,7 @@ final class AttemptResetService
             $staff->execute([$actor]);$staff=$staff->fetch();
             if(!$staff)throw new DomainException('Akun petugas tidak aktif.',403);
             $authorized=$staff['role']==='ADMIN';
-            if(!$authorized&&in_array($staff['role'],['TEACHER','EMPLOYEE'],true)){$assignment=$pdo->prepare("SELECT id FROM teacher_exam_assignments WHERE exam_id=:exam AND duty_role='PROCTOR' AND ((:teacher>0 AND teacher_id=:teacher_match) OR (:employee>0 AND employee_id=:employee_match))");$assignment->execute(['exam'=>$examId,'teacher'=>(int)$staff['teacher_id'],'teacher_match'=>(int)$staff['teacher_id'],'employee'=>(int)$staff['employee_id'],'employee_match'=>(int)$staff['employee_id']]);$authorized=(bool)$assignment->fetchColumn();}
+            if(!$authorized&&in_array($staff['role'],['TEACHER','EMPLOYEE'],true)){$assignment=$pdo->prepare("SELECT id FROM teacher_exam_assignments WHERE exam_id IS NULL AND duty_role='PROCTOR' AND ((:teacher>0 AND teacher_id=:teacher_match) OR (:employee>0 AND employee_id=:employee_match))");$assignment->execute(['teacher'=>(int)$staff['teacher_id'],'teacher_match'=>(int)$staff['teacher_id'],'employee'=>(int)$staff['employee_id'],'employee_match'=>(int)$staff['employee_id']]);$authorized=(bool)$assignment->fetchColumn();}
             if(!$authorized)throw new DomainException('Reset CBT hanya dapat dilakukan petugas piket yang ditugaskan pada ujian ini.',403);
             $attempts = new AttemptRepository($pdo);
             $attempt = $attempts->find($studentId, $examId, true);

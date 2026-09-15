@@ -64,7 +64,7 @@ final class SupportTicketService
         $role=(string)($auth['role']??'');$params=[];$where=[];
         if(in_array($role,['TEACHER','EMPLOYEE'],true)){
             $userId=(int)($auth['user_id']??0);if($userId<1)throw new DomainException('Identitas personel tidak tersedia.',403);
-            $where[]="EXISTS(SELECT 1 FROM teacher_exam_assignments tea JOIN users au ON (au.teacher_id IS NOT NULL AND au.teacher_id=tea.teacher_id) OR (au.employee_id IS NOT NULL AND au.employee_id=tea.employee_id) JOIN exams duty_exam ON duty_exam.id=tea.exam_id WHERE au.id=:assigned_user AND tea.duty_role='PROCTOR' AND (tea.exam_id=t.exam_id OR (t.exam_id IS NULL AND DATE(CONVERT_TZ(duty_exam.starts_at,'+00:00','+07:00'))=DATE(CONVERT_TZ(UTC_TIMESTAMP(3),'+00:00','+07:00')))))";$params['assigned_user']=$userId;
+            $where[]="EXISTS(SELECT 1 FROM teacher_exam_assignments tea JOIN users au ON (au.teacher_id IS NOT NULL AND au.teacher_id=tea.teacher_id) OR (au.employee_id IS NOT NULL AND au.employee_id=tea.employee_id) WHERE au.id=:assigned_user AND tea.duty_role='PROCTOR' AND tea.exam_id IS NULL)";$params['assigned_user']=$userId;
         }elseif($role!=='ADMIN')throw new DomainException('Akses petugas ditolak.',403);
         $status=$status!==null?strtoupper(trim($status)):null;
         if($status&&$status!=='ALL'){if(!in_array($status,self::STATUSES,true))throw new DomainException('Filter status tidak valid.',422);$where[]='t.status=:status';$params['status']=$status;}
@@ -100,7 +100,7 @@ final class SupportTicketService
     private function accessibleTicket(PDO $pdo,string $publicId,array $auth,bool $lock):array
     {
         $sql='SELECT t.* FROM support_tickets t WHERE t.public_id=:public';$params=['public'=>$publicId];
-        if(in_array(($auth['role']??''),['TEACHER','EMPLOYEE'],true)){$sql.=" AND EXISTS(SELECT 1 FROM teacher_exam_assignments tea JOIN users au ON (au.teacher_id IS NOT NULL AND au.teacher_id=tea.teacher_id) OR (au.employee_id IS NOT NULL AND au.employee_id=tea.employee_id) JOIN exams duty_exam ON duty_exam.id=tea.exam_id WHERE au.id=:assigned_user AND tea.duty_role='PROCTOR' AND (tea.exam_id=t.exam_id OR (t.exam_id IS NULL AND DATE(CONVERT_TZ(duty_exam.starts_at,'+00:00','+07:00'))=DATE(CONVERT_TZ(UTC_TIMESTAMP(3),'+00:00','+07:00')))))";$params['assigned_user']=(int)($auth['user_id']??0);}
+        if(in_array(($auth['role']??''),['TEACHER','EMPLOYEE'],true)){$sql.=" AND EXISTS(SELECT 1 FROM teacher_exam_assignments tea JOIN users au ON (au.teacher_id IS NOT NULL AND au.teacher_id=tea.teacher_id) OR (au.employee_id IS NOT NULL AND au.employee_id=tea.employee_id) WHERE au.id=:assigned_user AND tea.duty_role='PROCTOR' AND tea.exam_id IS NULL)";$params['assigned_user']=(int)($auth['user_id']??0);}
         elseif(($auth['role']??'')!=='ADMIN')throw new DomainException('Akses petugas ditolak.',403);
         if($lock)$sql.=' FOR UPDATE';$q=$pdo->prepare($sql);$q->execute($params);return$q->fetch()?:throw new DomainException('Tiket tidak ditemukan atau bukan penugasan Anda.',404);
     }
@@ -113,7 +113,7 @@ final class SupportTicketService
     private function accessibleDetailed(PDO $pdo,string $publicId,array $auth):array
     {
         $where=' WHERE t.public_id=:public';$params=['public'=>$publicId];
-        if(in_array(($auth['role']??''),['TEACHER','EMPLOYEE'],true)){$where.=" AND EXISTS(SELECT 1 FROM teacher_exam_assignments tea JOIN users au ON (au.teacher_id IS NOT NULL AND au.teacher_id=tea.teacher_id) OR (au.employee_id IS NOT NULL AND au.employee_id=tea.employee_id) JOIN exams duty_exam ON duty_exam.id=tea.exam_id WHERE au.id=:assigned_user AND tea.duty_role='PROCTOR' AND (tea.exam_id=t.exam_id OR (t.exam_id IS NULL AND DATE(CONVERT_TZ(duty_exam.starts_at,'+00:00','+07:00'))=DATE(CONVERT_TZ(UTC_TIMESTAMP(3),'+00:00','+07:00')))))";$params['assigned_user']=(int)($auth['user_id']??0);}
+        if(in_array(($auth['role']??''),['TEACHER','EMPLOYEE'],true)){$where.=" AND EXISTS(SELECT 1 FROM teacher_exam_assignments tea JOIN users au ON (au.teacher_id IS NOT NULL AND au.teacher_id=tea.teacher_id) OR (au.employee_id IS NOT NULL AND au.employee_id=tea.employee_id) WHERE au.id=:assigned_user AND tea.duty_role='PROCTOR' AND tea.exam_id IS NULL)";$params['assigned_user']=(int)($auth['user_id']??0);}
         $q=$pdo->prepare($this->selectSql().$where);$q->execute($params);return$q->fetch()?:throw new DomainException('Tiket tidak ditemukan.',404);
     }
     private function selectSql():string

@@ -75,7 +75,7 @@ document.getElementById('formGuruUjian').addEventListener('submit', function(e){
     id: document.getElementById('editGuruUjianId').value || null,
     person_id: document.getElementById('inGuruId').value,
     person_type: document.getElementById('inGuruId').selectedOptions[0]?.dataset.type || 'TEACHER',
-    ujian_id: document.getElementById('inUjianId').value,
+    ujian_id: document.getElementById('inDutyRole').value === 'TEACHER' ? document.getElementById('inUjianId').value : null,
     duty_role: document.getElementById('inDutyRole').value
   };
   showLoading('Menyimpan penugasan...');
@@ -98,6 +98,8 @@ document.getElementById('inDutyRole').addEventListener('change', () => refreshPe
 function refreshPersonnelOptions(selectedType, selectedId) {
   const duty = document.getElementById('inDutyRole').value;
   const select = document.getElementById('inGuruId');
+  const examField = document.getElementById('examAssignmentField');
+  const examSelect = document.getElementById('inUjianId');
   const teachers = (window.cacheGuruList || []).filter(g => duty === 'TEACHER' || Number(g.proctor_eligible) === 1)
     .map(g => ({...g, person_type:'TEACHER', suffix:duty === 'PROCTOR' ? 'Guru diizinkan' : 'Guru mapel'}));
   const people = duty === 'TEACHER' ? teachers : [
@@ -105,6 +107,8 @@ function refreshPersonnelOptions(selectedType, selectedId) {
     ...teachers
   ];
   document.getElementById('labelPersonel').textContent = duty === 'TEACHER' ? 'Pilih Guru Mata Pelajaran' : 'Pilih Petugas Piket';
+  examField.hidden = duty === 'PROCTOR';
+  examSelect.required = duty === 'TEACHER';
   select.innerHTML = people.map(p => `<option value="${p.id}" data-type="${p.person_type}">${p.nama_lengkap || p.username} — ${p.suffix}</option>`).join('');
   if(selectedId) select.value = String(selectedId);
 }

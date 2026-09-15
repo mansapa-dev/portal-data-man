@@ -274,7 +274,7 @@ CREATE TABLE IF NOT EXISTS violations (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS teacher_exam_assignments (
- id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, teacher_id BIGINT UNSIGNED NULL, employee_id BIGINT UNSIGNED NULL, exam_id BIGINT UNSIGNED NOT NULL,
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, teacher_id BIGINT UNSIGNED NULL, employee_id BIGINT UNSIGNED NULL, exam_id BIGINT UNSIGNED NULL,
  duty_role ENUM('TEACHER','PROCTOR') NOT NULL DEFAULT 'TEACHER',
  created_by BIGINT UNSIGNED NOT NULL, created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
  UNIQUE KEY uq_teacher_exam (teacher_id,exam_id), UNIQUE KEY uq_employee_exam (employee_id,exam_id), KEY idx_assignment_exam (exam_id),

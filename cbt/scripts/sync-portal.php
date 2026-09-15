@@ -24,12 +24,12 @@ try {
             // Employees are independent from teacher reconciliation. Run them
             // first so a duplicate teacher identifier cannot hide proctor data.
             foreach (['ACADEMIC_YEARS', 'SEMESTERS', 'CLASSES', 'EMPLOYEES', 'TEACHERS', 'STUDENTS'] as $type) {
-                if (!isset($current[$type]) || !is_string($current[$type]) || !preg_match('/^[a-f0-9]{64}$/', $current[$type])) {
+                if ($type !== 'EMPLOYEES' && (!isset($current[$type]) || !is_string($current[$type]) || !preg_match('/^[a-f0-9]{64}$/', $current[$type]))) {
                     throw new RuntimeException('Versi Portal Data tidak valid: '.$type);
                 }
-                if ($full || ($versions[$type] ?? null) !== $current[$type]) {
+                if ($type === 'EMPLOYEES' || $full || ($versions[$type] ?? null) !== $current[$type]) {
                     $result = $sync->sync($type, null);
-                    $versions[$type] = $current[$type];
+                    $versions[$type] = $current[$type] ?? null;
                     fwrite(STDOUT, gmdate(DATE_ATOM).' '.$type.' '.json_encode($result).PHP_EOL);
                 }
             }
