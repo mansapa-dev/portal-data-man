@@ -369,7 +369,7 @@ document.getElementById('inTahunAjaran').addEventListener('change', () => { refr
 document.getElementById('inTingkatUjian').addEventListener('change', () => refreshClassOptions());
 
 function sinkronkanSemuaPortalData() {
-  const types = ['academic_years', 'semesters', 'classes', 'students', 'teachers', 'employees'];
+  const types = ['academic_years', 'semesters', 'classes', 'employees', 'students', 'teachers'];
   const summaries = [];
   showLoading('Sinkronisasi referensi Portal Data...');
   const next = index => {

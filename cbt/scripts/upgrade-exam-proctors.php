@@ -11,5 +11,10 @@ session_write_close();
 $path = dirname(__DIR__).'/database/migrations/20260915_separate_exam_proctors.sql';
 $sql = file_get_contents($path);
 if ($sql === false) throw new RuntimeException('Migration piket ujian tidak ditemukan.');
-(new Database())->pdo()->exec($sql);
-fwrite(STDOUT, "Pemisahan guru mapel dan petugas piket berhasil diterapkan.\n");
+try {
+    (new Database())->pdo()->exec($sql);
+    fwrite(STDOUT, "Pemisahan guru mapel dan petugas piket berhasil diterapkan.\n");
+} catch (Throwable $error) {
+    fwrite(STDERR, "Upgrade piket gagal: {$error->getMessage()}\n");
+    exit(1);
+}

@@ -21,7 +21,9 @@ try {
         try {
             $current = $portal->revisions();
             $full = time() - $lastFull >= 300;
-            foreach (['ACADEMIC_YEARS', 'SEMESTERS', 'CLASSES', 'TEACHERS', 'EMPLOYEES', 'STUDENTS'] as $type) {
+            // Employees are independent from teacher reconciliation. Run them
+            // first so a duplicate teacher identifier cannot hide proctor data.
+            foreach (['ACADEMIC_YEARS', 'SEMESTERS', 'CLASSES', 'EMPLOYEES', 'TEACHERS', 'STUDENTS'] as $type) {
                 if (!isset($current[$type]) || !is_string($current[$type]) || !preg_match('/^[a-f0-9]{64}$/', $current[$type])) {
                     throw new RuntimeException('Versi Portal Data tidak valid: '.$type);
                 }
