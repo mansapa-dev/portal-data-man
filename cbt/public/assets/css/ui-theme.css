@@ -66,6 +66,12 @@
   .stat-card-modern:first-child .stat-trend{background:#ffffff20;color:#e2f3e4}
   .modal{background:#08150eb3;backdrop-filter:blur(4px);padding:20px}
   .modal-content{background:var(--surface);color:var(--text-main);border:1px solid var(--border);border-radius:24px;box-shadow:var(--shadow-lg);max-height:calc(100dvh - 40px);overflow-y:auto}
+  .generate-pin-modal,.generate-pin-modal h3,.generate-pin-modal .ui-label{color:var(--text-main)!important}
+  .generate-pin-modal .generate-pin-subtitle{color:var(--text-muted)!important}
+  .generate-pin-modal .generate-pin-info{background:var(--surface-subtle)!important;border:1px solid var(--border)!important;color:var(--text-main)!important}
+  .generate-pin-modal .ui-control{background:var(--surface)!important;color:var(--text-main)!important;-webkit-text-fill-color:var(--text-main);color-scheme:light dark}
+  .generate-pin-modal .ui-control option{background:var(--surface);color:var(--text-main)}
+  .generate-pin-modal .generate-pin-target{background:var(--primary-soft)!important;border:1px solid var(--primary-soft-border)!important;color:var(--primary-dark)!important;-webkit-text-fill-color:var(--primary-dark)}
   .loader-overlay{background:#08150eb3;backdrop-filter:blur(4px)}
   .spinner{border-color:var(--border);border-top-color:var(--primary)}
   .alert{border-radius:14px;line-height:1.6}
