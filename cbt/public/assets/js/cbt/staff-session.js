@@ -238,7 +238,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
     const staff = payload.data.staff;
     const student = payload.data.student;
-    if (staff?.role === 'TEACHER') { window.location.replace('guru/dashboard'); return; }
+    if (['TEACHER','EMPLOYEE'].includes(staff?.role)) { window.location.replace('guru/dashboard'); return; }
     if (staff?.role === 'ADMIN') {
       stPengelola = { userId: staff.id, id: staff.id, role: 'ADMIN', nama: staff.nama, username: staff.username };
       initDashboardPengelola(staff.nama, 'admin');
@@ -369,7 +369,7 @@ document.getElementById('inTahunAjaran').addEventListener('change', () => { refr
 document.getElementById('inTingkatUjian').addEventListener('change', () => refreshClassOptions());
 
 function sinkronkanSemuaPortalData() {
-  const types = ['academic_years', 'semesters', 'classes', 'students', 'teachers'];
+  const types = ['academic_years', 'semesters', 'classes', 'students', 'teachers', 'employees'];
   const summaries = [];
   showLoading('Sinkronisasi referensi Portal Data...');
   const next = index => {

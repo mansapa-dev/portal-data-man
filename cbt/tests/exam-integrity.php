@@ -157,10 +157,11 @@ try {
  $portal=new class implements \Cbt\Integrations\PortalData\PortalDataClientInterface {
   public bool $changing=false;
   private int $revisionCalls=0;
-  public function revisions():array{$value=hash('sha256',$this->changing?(string)++$this->revisionCalls:'stable');return array_fill_keys(['STUDENTS','TEACHERS','CLASSES','ACADEMIC_YEARS','SEMESTERS'],$value);}
+  public function revisions():array{$value=hash('sha256',$this->changing?(string)++$this->revisionCalls:'stable');return array_fill_keys(['STUDENTS','TEACHERS','EMPLOYEES','CLASSES','ACADEMIC_YEARS','SEMESTERS'],$value);}
   public array $rows=[['id'=>'test-student','nisn'=>'0000000001','name'=>'Updated Student','grade'=>'10','is_active'=>true],['id'=>'inactive-remote','nisn'=>'0000000003','name'=>'Inactive','is_active'=>false]];
   public function students(int $page,int $limit):array{return ['items'=>$this->rows,'has_more'=>false];}
   public function teachers(int $page,int $limit):array{return ['items'=>[],'has_more'=>false];}
+  public function employees(int $page,int $limit):array{return ['items'=>[],'has_more'=>false];}
   public function classes(int $page,int $limit):array{return ['items'=>[],'has_more'=>false];}
   public function academicYears():array{return ['items'=>[],'has_more'=>false];}
   public function semesters(?string $academicYearId=null):array{return ['items'=>[],'has_more'=>false];}

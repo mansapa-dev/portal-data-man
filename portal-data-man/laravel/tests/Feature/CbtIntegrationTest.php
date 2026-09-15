@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Http\Controllers\CbtIntegrationController;
-use App\Models\{AcademicYear, ClassEnrollment, SchoolClass, Semester, Student, Teacher};
+use App\Models\{AcademicYear, ClassEnrollment, Employee, SchoolClass, Semester, Student, Teacher};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -15,6 +15,7 @@ class CbtIntegrationTest extends TestCase
         parent::setUp();
         $this->assertSame(':memory:', config('database.connections.sqlite.database'));
         (require database_path('migrations/2026_08_30_000000_create_portal_data_schema.php'))->up();
+        (require database_path('migrations/2026_09_08_000001_create_employees_table.php'))->up();
     }
 
     private function revisions(): array
@@ -25,6 +26,7 @@ class CbtIntegrationTest extends TestCase
     public function test_revision_endpoint_requires_a_service_token(): void
     {
         $this->getJson('/api/v1/integration/cbt/revisions')->assertUnauthorized();
+        $this->getJson('/api/v1/integration/cbt/employees')->assertUnauthorized();
     }
 
     public function test_bulk_edits_and_deletions_change_revisions_without_model_events(): void
@@ -44,7 +46,7 @@ class CbtIntegrationTest extends TestCase
         $this->assertNotSame($after['STUDENTS'], $this->revisions()['STUDENTS']);
     }
 
-    public function test_only_active_students_and_teachers_are_exported(): void
+    public function test_only_active_students_teachers_and_employees_are_exported(): void
     {
         foreach (['ACTIVE', 'INACTIVE', 'GRADUATED', 'TRANSFERRED', 'DROPPED_OUT'] as $i=>$status) {
             Student::create(['nisn'=>str_pad((string)$i,10,'0',STR_PAD_LEFT), 'fullName'=>$status, 'status'=>$status]);
@@ -53,12 +55,18 @@ class CbtIntegrationTest extends TestCase
         $deleted->delete();
         Teacher::create(['fullName'=>'Active Teacher', 'status'=>'ACTIVE']);
         Teacher::create(['fullName'=>'Inactive Teacher', 'status'=>'INACTIVE']);
+        Employee::create(['employmentType'=>'PNS', 'fullName'=>'Active Employee', 'nip'=>'198001', 'position'=>'TU', 'status'=>'ACTIVE']);
+        Employee::create(['employmentType'=>'HONORER', 'fullName'=>'Inactive Employee', 'nip'=>'198002', 'position'=>'Teknisi', 'status'=>'INACTIVE']);
         $controller = app(CbtIntegrationController::class);
         $students = $controller->students(Request::create('/'))->getData(true)['data'];
         $teachers = $controller->teachers(Request::create('/'))->getData(true)['data'];
+        $employees = $controller->employees(Request::create('/'))->getData(true)['data'];
         $this->assertSame(1, $students['total']);
         $this->assertSame('ACTIVE', $students['data'][0]['status']);
         $this->assertSame(1, $teachers['total']);
+        $this->assertSame(1, $employees['total']);
+        $this->assertSame('Active Employee', $employees['data'][0]['name']);
+        $this->assertSame('TU', $employees['data'][0]['position']);
         $this->assertArrayNotHasKey('parentPhone', $students['data'][0]);
     }
 

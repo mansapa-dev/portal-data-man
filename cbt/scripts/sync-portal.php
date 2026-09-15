@@ -21,7 +21,7 @@ try {
         try {
             $current = $portal->revisions();
             $full = time() - $lastFull >= 300;
-            foreach (['ACADEMIC_YEARS', 'SEMESTERS', 'CLASSES', 'TEACHERS', 'STUDENTS'] as $type) {
+            foreach (['ACADEMIC_YEARS', 'SEMESTERS', 'CLASSES', 'TEACHERS', 'EMPLOYEES', 'STUDENTS'] as $type) {
                 if (!isset($current[$type]) || !is_string($current[$type]) || !preg_match('/^[a-f0-9]{64}$/', $current[$type])) {
                     throw new RuntimeException('Versi Portal Data tidak valid: '.$type);
                 }

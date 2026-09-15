@@ -125,6 +125,7 @@
     async getAdminGuruUjianList() { const r=await api('api/admin/teacher-assignments');return {success:true,...r.data}; },
     async simpanGuruUjianAdmin(session,data) { await api('api/admin/teacher-assignments','POST',data);return {success:true,message:'Penugasan berhasil disimpan.'}; },
     async hapusGuruUjianAdmin(session,id) { await api(`api/admin/teacher-assignments/${id}`,'DELETE');return {success:true,message:'Penugasan berhasil dihapus.'}; },
+    async setTeacherProctorEligibility(session,id,eligible) { await api(`api/admin/teachers/${id}/proctor-eligibility`,'POST',{eligible});return {success:true}; },
     async getAdminHasilGlobal() { const r=await api('api/admin/results');return {success:true,data:r.data}; },
     async getAdminLogPelanggaran() { const r=await api('api/admin/violations');return {success:true,data:r.data}; },
     async getGuruExamResults() { const r=await api('api/teacher/dashboard');return {success:true,...r.data}; },

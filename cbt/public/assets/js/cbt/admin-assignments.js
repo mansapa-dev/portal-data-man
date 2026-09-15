@@ -6,12 +6,16 @@ function loadDataAdminGuruUjian() {
       if(!res.success || !res.data || res.data.length === 0) {
         tb.innerHTML = `<tr><td colspan="5" align="center">Belum ada penugasan guru / piket ujian.</td></tr>`;
         window.cacheGuruList = res.guruList || [];
+        window.cachePegawaiList = res.pegawaiList || [];
         window.cacheUjianList = res.ujianList || [];
+        renderTeacherProctorEligibility();
         return;
       }
       window.cacheGuruList = res.guruList || [];
+      window.cachePegawaiList = res.pegawaiList || [];
       window.cacheUjianList = res.ujianList || [];
       window.cacheGuruUjianData = res.data;
+      renderTeacherProctorEligibility();
       
       tb.innerHTML = res.data.map(r => `
         <tr>
@@ -37,7 +41,7 @@ function bukaModalGuruUjian() {
   const selGuru = document.getElementById('inGuruId');
   const selUjian = document.getElementById('inUjianId');
   
-  selGuru.innerHTML = (window.cacheGuruList || []).map(g => `<option value="${g.id}">${g.nama_lengkap || g.username}</option>`).join('');
+  refreshPersonnelOptions();
   selUjian.innerHTML = (window.cacheUjianList || []).map(u => `<option value="${u.id}">${u.nama_mapel || 'Mapel'} — ${u.nama_ujian} (Sesi ${u.sesi || 1}) - Tingkat ${u.tingkat}</option>`).join('');
   
   document.getElementById('modalGuruUjian').classList.add('show');
@@ -56,12 +60,11 @@ function editGuruUjian(r) {
   const selGuru = document.getElementById('inGuruId');
   const selUjian = document.getElementById('inUjianId');
   
-  selGuru.innerHTML = (window.cacheGuruList || []).map(g => `<option value="${g.id}">${g.nama_lengkap || g.username}</option>`).join('');
+  document.getElementById('inDutyRole').value = r.duty_role || 'TEACHER';
+  refreshPersonnelOptions(r.person_type || 'TEACHER', r.employee_id || r.guru_id);
   selUjian.innerHTML = (window.cacheUjianList || []).map(u => `<option value="${u.id}">${u.nama_mapel || 'Mapel'} — ${u.nama_ujian} (Sesi ${u.sesi || 1}) - Tingkat ${u.tingkat}</option>`).join('');
   
-  selGuru.value = r.guru_id;
   selUjian.value = r.ujian_id;
-  document.getElementById('inDutyRole').value = r.duty_role || 'TEACHER';
   
   document.getElementById('modalGuruUjian').classList.add('show');
 }
@@ -70,7 +73,8 @@ document.getElementById('formGuruUjian').addEventListener('submit', function(e){
   e.preventDefault();
   const payload = {
     id: document.getElementById('editGuruUjianId').value || null,
-    guru_id: document.getElementById('inGuruId').value,
+    person_id: document.getElementById('inGuruId').value,
+    person_type: document.getElementById('inGuruId').selectedOptions[0]?.dataset.type || 'TEACHER',
     ujian_id: document.getElementById('inUjianId').value,
     duty_role: document.getElementById('inDutyRole').value
   };
@@ -88,6 +92,34 @@ document.getElementById('formGuruUjian').addEventListener('submit', function(e){
     .withFailureHandler(err => { hideLoading(); showCustomAlert('Error', err.message); })
     .simpanGuruUjianAdmin(stPengelola, payload);
 });
+
+document.getElementById('inDutyRole').addEventListener('change', () => refreshPersonnelOptions());
+
+function refreshPersonnelOptions(selectedType, selectedId) {
+  const duty = document.getElementById('inDutyRole').value;
+  const select = document.getElementById('inGuruId');
+  const teachers = (window.cacheGuruList || []).filter(g => duty === 'TEACHER' || Number(g.proctor_eligible) === 1)
+    .map(g => ({...g, person_type:'TEACHER', suffix:duty === 'PROCTOR' ? 'Guru diizinkan' : 'Guru mapel'}));
+  const people = duty === 'TEACHER' ? teachers : [
+    ...(window.cachePegawaiList || []).map(p => ({...p, person_type:'EMPLOYEE', suffix:p.jabatan || 'Pegawai'})),
+    ...teachers
+  ];
+  document.getElementById('labelPersonel').textContent = duty === 'TEACHER' ? 'Pilih Guru Mata Pelajaran' : 'Pilih Petugas Piket';
+  select.innerHTML = people.map(p => `<option value="${p.id}" data-type="${p.person_type}">${p.nama_lengkap || p.username} — ${p.suffix}</option>`).join('');
+  if(selectedId) select.value = String(selectedId);
+}
+
+function renderTeacherProctorEligibility() {
+  const root = document.getElementById('teacherProctorEligibility');
+  if(!root) return;
+  const teachers = window.cacheGuruList || [];
+  root.innerHTML = `<h4 style="margin-bottom:8px">Guru yang Boleh Menjadi Piket</h4><p style="margin-bottom:10px">Centang hanya guru yang memang mendapat tugas piket. Mencabut izin juga menghapus penugasan piket guru tersebut.</p>` +
+    (teachers.length ? teachers.map(g => `<label style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" ${Number(g.proctor_eligible)===1?'checked':''} onchange="setTeacherProctorEligibility(${g.id},this.checked)"> ${g.nama_lengkap}</label>`).join('') : '<p>Sinkronkan data guru terlebih dahulu.</p>');
+}
+
+function setTeacherProctorEligibility(id, eligible) {
+  cbtApi.withSuccessHandler(() => loadDataAdminGuruUjian()).withFailureHandler(err => { showCustomAlert('Error',err.message); loadDataAdminGuruUjian(); }).setTeacherProctorEligibility(stPengelola,id,eligible);
+}
 
 function hapusGuruUjian(id) {
   showCustomConfirm("Hapus Penugasan", "Hapus penugasan guru ini?", () => {

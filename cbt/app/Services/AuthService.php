@@ -22,7 +22,7 @@ final class AuthService
     {
         $user=$this->users->findActiveByUsername(trim($username));
         if(!$user || $user['role']!=='ADMIN' || !password_verify($password,$user['password_hash'])) throw new DomainException('Username atau password administrator salah.',401);
-        Session::regenerate();unset($_SESSION['student']);$_SESSION['auth']=['user_id'=>(int)$user['id'],'teacher_id'=>$user['teacher_id']?(int)$user['teacher_id']:null,'role'=>$user['role']];
+        Session::regenerate();unset($_SESSION['student']);$_SESSION['auth']=['user_id'=>(int)$user['id'],'teacher_id'=>$user['teacher_id']?(int)$user['teacher_id']:null,'employee_id'=>$user['employee_id']?(int)$user['employee_id']:null,'role'=>$user['role']];
         $this->users->touchLogin((int)$user['id']);
         return ['id'=>(int)$user['id'],'nama'=>$user['name'],'username'=>$user['username'],'role'=>strtolower($user['role'])];
     }

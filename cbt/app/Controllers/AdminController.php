@@ -27,6 +27,7 @@ final class AdminController
  public function assignments(Request$r):Response{return Response::json($this->admin->assignments());}
  public function saveAssignment(Request$r):Response{$this->admin->saveAssignment($r->json(),(int)$_SESSION['auth']['user_id']);return Response::json(null,'Penugasan berhasil disimpan.');}
  public function deleteAssignment(Request$r):Response{$this->admin->deleteAssignment((int)$r->attributes['id']);return Response::json(null,'Penugasan berhasil dihapus.');}
+ public function setTeacherProctorEligibility(Request$r):Response{$this->admin->setTeacherProctorEligibility((int)$r->attributes['id'],filter_var($r->json()['eligible']??false,FILTER_VALIDATE_BOOL));return Response::json(null,'Izin piket guru berhasil diperbarui.');}
  public function results(Request$r):Response{return Response::json($this->admin->results());}
  public function violations(Request$r):Response{return Response::json($this->admin->violations());}
  public function importQuestions(Request$r):Response{$summary=$this->admin->importQuestions((array)$r->input('rows',[]));return Response::json($summary,"Import selesai: {$summary['inserted']} berhasil, {$summary['failed']} gagal.");}

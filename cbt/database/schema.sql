@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS teachers (
  nuptk VARCHAR(50) NULL,
  name_snapshot VARCHAR(191) NOT NULL,
  status ENUM('ACTIVE','INACTIVE') NOT NULL DEFAULT 'ACTIVE',
+ proctor_eligible TINYINT(1) NOT NULL DEFAULT 0,
  last_synced_at DATETIME(3) NULL,
  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
@@ -40,21 +41,39 @@ CREATE TABLE IF NOT EXISTS teachers (
  KEY idx_teachers_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS employees (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ portal_employee_id VARCHAR(64) NOT NULL,
+ nip VARCHAR(50) NULL,
+ name_snapshot VARCHAR(191) NOT NULL,
+ position_snapshot VARCHAR(191) NULL,
+ status ENUM('ACTIVE','INACTIVE') NOT NULL DEFAULT 'ACTIVE',
+ last_synced_at DATETIME(3) NULL,
+ created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+ updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+ UNIQUE KEY uq_employees_portal (portal_employee_id),
+ UNIQUE KEY uq_employees_nip (nip),
+ KEY idx_employees_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS users (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
  teacher_id BIGINT UNSIGNED NULL,
+ employee_id BIGINT UNSIGNED NULL,
  username VARCHAR(100) NOT NULL,
  password_hash VARCHAR(255) NOT NULL,
  name VARCHAR(191) NOT NULL,
- role ENUM('ADMIN','TEACHER') NOT NULL,
+ role ENUM('ADMIN','TEACHER','EMPLOYEE') NOT NULL,
  status ENUM('ACTIVE','DISABLED') NOT NULL DEFAULT 'ACTIVE',
  last_login_at DATETIME(3) NULL,
  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
  UNIQUE KEY uq_users_username (username),
  UNIQUE KEY uq_users_teacher (teacher_id),
+ UNIQUE KEY uq_users_employee (employee_id),
  KEY idx_users_role_status (role,status),
- CONSTRAINT fk_users_teacher FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON DELETE SET NULL
+ CONSTRAINT fk_users_teacher FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON DELETE SET NULL,
+ CONSTRAINT fk_users_employee FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS portal_classes (
@@ -255,11 +274,12 @@ CREATE TABLE IF NOT EXISTS violations (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS teacher_exam_assignments (
- id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, teacher_id BIGINT UNSIGNED NOT NULL, exam_id BIGINT UNSIGNED NOT NULL,
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, teacher_id BIGINT UNSIGNED NULL, employee_id BIGINT UNSIGNED NULL, exam_id BIGINT UNSIGNED NOT NULL,
  duty_role ENUM('TEACHER','PROCTOR') NOT NULL DEFAULT 'TEACHER',
  created_by BIGINT UNSIGNED NOT NULL, created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
- UNIQUE KEY uq_teacher_exam (teacher_id,exam_id), KEY idx_assignment_exam (exam_id),
+ UNIQUE KEY uq_teacher_exam (teacher_id,exam_id), UNIQUE KEY uq_employee_exam (employee_id,exam_id), KEY idx_assignment_exam (exam_id),
  CONSTRAINT fk_assignment_teacher FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON DELETE RESTRICT,
+ CONSTRAINT fk_assignment_employee FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE RESTRICT,
  CONSTRAINT fk_assignment_exam FOREIGN KEY (exam_id) REFERENCES exams(id) ON DELETE CASCADE,
  CONSTRAINT fk_assignment_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

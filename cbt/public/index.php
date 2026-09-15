@@ -21,7 +21,7 @@ if($request->path==='/'||$request->path==='/index.php'){
 }
 if($request->path==='/guru')Response::html((string)include dirname(__DIR__).'/resources/views/teacher/login.php')->send();
 if($request->path==='/guru/dashboard'){
- if(($_SESSION['auth']['role']??null)!=='TEACHER'){header('Location: ./');exit;}
+ if(!in_array(($_SESSION['auth']['role']??null),['TEACHER','EMPLOYEE'],true)){header('Location: ./');exit;}
  Response::html((string)include dirname(__DIR__).'/resources/views/teacher/dashboard.php')->send();
 }
 if($request->path==='/health'){
@@ -43,7 +43,7 @@ $csrf=new CsrfMiddleware();$studentAuth=new AuthMiddleware('student',null,$pdo);
 $studentSupportAuth=new AuthMiddleware('student',null,$pdo,true);
 $adminAuth=new AuthMiddleware('auth','ADMIN',$pdo);
 $staffAuth=new AuthMiddleware('auth',null,$pdo);
-$teacherAuth=new AuthMiddleware('auth','TEACHER',$pdo);
+$teacherAuth=new AuthMiddleware('auth','PERSONNEL',$pdo);
 $studentLoginRate=new RateLimitMiddleware($pdo,'student-login',8,300);$staffLoginRate=new RateLimitMiddleware($pdo,'staff-login',6,300);$violationRate=new RateLimitMiddleware($pdo,'violation',20,60);$submitRate=new RateLimitMiddleware($pdo,'submit',8,60);
 $supportTicketRate=new RateLimitMiddleware($pdo,'support-ticket',5,300);
 $audit=fn(string$action,?string$type=null)=>new AuditMiddleware($pdo,$action,$type);
@@ -94,6 +94,7 @@ $router->post('/api/admin/users/import',[$admin,'importUsers'],[$adminAuth,$csrf
 $router->get('/api/admin/teacher-assignments',[$admin,'assignments'],[$adminAuth]);
 $router->post('/api/admin/teacher-assignments',[$admin,'saveAssignment'],[$adminAuth,$csrf,$audit('TEACHER_ASSIGNMENT_SAVED','TeacherExamAssignment')]);
 $router->delete('/api/admin/teacher-assignments/{id}',[$admin,'deleteAssignment'],[$adminAuth,$csrf,$audit('TEACHER_ASSIGNMENT_DELETED','TeacherExamAssignment')]);
+$router->post('/api/admin/teachers/{id}/proctor-eligibility',[$admin,'setTeacherProctorEligibility'],[$adminAuth,$csrf,$audit('TEACHER_PROCTOR_ELIGIBILITY_UPDATED','Teacher')]);
 $router->get('/api/admin/results',[$admin,'results'],[$adminAuth]);
 $router->get('/api/admin/violations',[$admin,'violations'],[$adminAuth]);
 $router->get('/api/admin/settings',[$admin,'settings'],[$adminAuth]);

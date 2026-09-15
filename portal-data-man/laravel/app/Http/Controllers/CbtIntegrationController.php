@@ -6,6 +6,7 @@ use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\Teacher;
 use App\Models\AcademicYear;
+use App\Models\Employee;
 use App\Models\Semester;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -21,6 +22,7 @@ class CbtIntegrationController extends Controller
         $tables = [
             'Student' => ['id', 'publicId', 'nisn', 'fullName', 'status', 'deletedAt'],
             'Teacher' => ['id', 'publicId', 'nip', 'nuptk', 'fullName', 'status', 'deletedAt'],
+            'Employee' => ['id', 'publicId', 'nip', 'fullName', 'position', 'status', 'deletedAt'],
             'ClassEnrollment' => ['id', 'studentId', 'schoolClassId', 'academicYearId', 'semesterId', 'status', 'enrolledAt'],
             'SchoolClass' => ['id', 'publicId', 'code', 'name', 'gradeLevel', 'academicYearId', 'status', 'deletedAt'],
             'AcademicYear' => ['id', 'publicId', 'name', 'isActive', 'startDate'],
@@ -37,6 +39,7 @@ class CbtIntegrationController extends Controller
         return ApiResponse::success([
             'STUDENTS' => hash('sha256', implode('', array_intersect_key($hashes, array_flip(['Student', 'ClassEnrollment', 'SchoolClass', 'AcademicYear', 'Semester'])))),
             'TEACHERS' => $hashes['Teacher'],
+            'EMPLOYEES' => $hashes['Employee'],
             'CLASSES' => hash('sha256', $hashes['SchoolClass'].$hashes['AcademicYear']),
             'ACADEMIC_YEARS' => $hashes['AcademicYear'],
             'SEMESTERS' => hash('sha256', $hashes['Semester'].$hashes['AcademicYear']),
@@ -92,6 +95,22 @@ class CbtIntegrationController extends Controller
             'status' => $teacher->status, 'is_active' => $teacher->status === 'ACTIVE']);
 
         return ApiResponse::success($page, 'Referensi guru CBT berhasil diambil.');
+    }
+
+    public function employees(Request $request): JsonResponse
+    {
+        $limit = min(max((int) $request->query('per_page', 100), 1), 200);
+        $page = Employee::query()->where('status', 'ACTIVE')->orderBy('id')->paginate($limit);
+        $page->getCollection()->transform(fn (Employee $employee): array => [
+            'id' => $employee->publicId,
+            'nip' => $employee->nip,
+            'name' => $employee->fullName,
+            'position' => $employee->position,
+            'status' => $employee->status,
+            'is_active' => true,
+        ]);
+
+        return ApiResponse::success($page, 'Referensi pegawai aktif berhasil diambil.');
     }
 
     public function classes(Request $request): JsonResponse

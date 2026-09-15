@@ -57,6 +57,7 @@ Route::prefix('api/v1/integration/cbt')->middleware(['throttle:120,1', 'cbt.inte
     Route::get('semesters', [CbtIntegrationController::class, 'semesters']);
     Route::get('students', [CbtIntegrationController::class, 'students']);
     Route::get('teachers', [CbtIntegrationController::class, 'teachers']);
+    Route::get('employees', [CbtIntegrationController::class, 'employees']);
     Route::get('classes', [CbtIntegrationController::class, 'classes']);
 });
 

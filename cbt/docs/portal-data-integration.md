@@ -1,6 +1,6 @@
 # Integrasi CBT dengan Portal Data
 
-CBT mengambil guru, siswa, kelas, tahun ajaran, dan semester melalui HTTP API backend. Portal Data tetap menjadi sumber kebenaran; CBT menyimpan snapshot lokal agar ujian tetap berjalan ketika Portal sementara tidak tersedia.
+CBT mengambil guru, pegawai, siswa, kelas, tahun ajaran, dan semester melalui HTTP API backend. Portal Data tetap menjadi sumber kebenaran; CBT menyimpan snapshot lokal agar ujian tetap berjalan ketika Portal sementara tidak tersedia.
 
 ## Registrasi client sinkronisasi
 
@@ -58,8 +58,8 @@ CBT melakukan pertukaran token dan refresh otomatis; administrator tidak perlu m
 
 Referensi lokal yang tidak lagi muncul akan dinonaktifkan hanya setelah satu jenis sinkronisasi selesai tanpa kegagalan. Riwayat tersedia melalui `GET /api/admin/portal-data/sync/status?limit=20`.
 
-## SSO guru
+## SSO guru dan pegawai piket
 
-Login guru memakai aplikasi terpisah bertipe **SSO Guru — Authorization Code + PKCE**. Daftarkan redirect URI `https://cbt.example.sch.id/auth/sso/callback`, post logout URI `https://cbt.example.sch.id/guru`, lalu isi `PORTAL_DATA_OIDC_CLIENT_ID` di CBT dan berikan akses kepada guru.
+Login personel memakai aplikasi terpisah bertipe **SSO Personel — Authorization Code + PKCE**. Daftarkan redirect URI `https://cbt.example.sch.id/auth/sso/callback`, post logout URI `https://cbt.example.sch.id/guru`, lalu isi `PORTAL_DATA_OIDC_CLIENT_ID` di CBT dan berikan akses kepada guru atau pegawai yang bertugas. Admin CBT tetap menentukan guru mana yang boleh menjadi piket; guru lain hanya tersedia untuk penugasan mata pelajaran.
 
 Jangan memakai client sinkronisasi sebagai client SSO. Jangan memasukkan Client Secret ke JavaScript, HTML, URL, Git, screenshot, atau tiket support. Bila bocor, gunakan tombol **Buat ulang client secret** pada detail aplikasi; secret lama langsung tidak berlaku.

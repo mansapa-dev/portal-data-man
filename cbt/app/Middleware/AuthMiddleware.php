@@ -9,7 +9,7 @@ final class AuthMiddleware
  {
   $auth=$_SESSION[$this->type]??null;
   if(!$auth)return Response::error('Silakan login terlebih dahulu.',401);
-  if($this->role!==null&&($auth['role']??null)!==$this->role)return Response::error('Akses ditolak.',403);
+  if($this->role!==null&&($this->role==='PERSONNEL'?!in_array(($auth['role']??null),['TEACHER','EMPLOYEE'],true):($auth['role']??null)!==$this->role))return Response::error('Akses ditolak.',403);
   if($this->db){
    $student=$this->type==='student';
    $studentSql=$this->allowBlockedStudent?'SELECT id FROM students WHERE id=:id AND is_active=1':"SELECT id FROM students WHERE id=:id AND is_active=1 AND cbt_status='ACTIVE'";
@@ -19,6 +19,9 @@ final class AuthMiddleware
    $valid=(bool)$s->fetchColumn();
    if($valid&&!$student&&($auth['role']??'')==='TEACHER'){
     $teacher=$this->db->prepare("SELECT t.id FROM teachers t JOIN users u ON u.teacher_id=t.id WHERE u.id=? AND t.status='ACTIVE'");$teacher->execute([$auth['user_id']]);$valid=(bool)$teacher->fetchColumn();
+   }
+   if($valid&&!$student&&($auth['role']??'')==='EMPLOYEE'){
+    $employee=$this->db->prepare("SELECT p.id FROM employees p JOIN users u ON u.employee_id=p.id WHERE u.id=? AND p.status='ACTIVE'");$employee->execute([$auth['user_id']]);$valid=(bool)$employee->fetchColumn();
    }
    if(!$valid){unset($_SESSION[$this->type]);return Response::error('Akun sudah tidak aktif. Silakan hubungi pengawas.',401);}
   }

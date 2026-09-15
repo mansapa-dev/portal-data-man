@@ -514,7 +514,7 @@
 
   try {
     const me = await fetch('../api/auth/me', { credentials: 'same-origin' }).then((r) => r.json());
-    if (me.data.staff?.role !== 'TEACHER') {
+    if (!['TEACHER','EMPLOYEE'].includes(me.data.staff?.role)) {
       location.href = '../guru';
       return;
     }

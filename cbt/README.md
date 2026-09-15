@@ -42,11 +42,17 @@ Daftarkan aplikasi bertipe **Sinkronisasi CBT** di Portal Data. Simpan Client ID
 
 ## Portal Guru
 
-- Login guru: `/guru`
+- Login guru dan petugas piket: `/guru`
 - Dashboard guru: `/guru/dashboard`
 - Guru masuk menggunakan NIP aktif hasil sinkronisasi Portal Data dan password credential CBT.
 - Akun guru yang dibuat admin wajib menggunakan NIP sebagai username agar otomatis direlasikan dengan `teachers.id` lokal.
 - Dashboard guru adalah view terpisah dari login, portal siswa, dan dashboard administrator.
+
+## Guru mapel dan piket ujian
+
+Guru mata pelajaran dan petugas piket dikelola sebagai dua jenis penugasan. Guru mapel selalu dipilih dari referensi guru Portal Data. Kandidat piket berasal dari pegawai aktif Portal Data; guru hanya muncul sebagai kandidat piket setelah admin CBT mencentang izin **Guru yang Boleh Menjadi Piket**. Mencabut izin tersebut sekaligus menghapus penugasan piket aktif milik guru, tanpa mengubah penugasan guru mapelnya.
+
+Jalankan `php scripts/upgrade-exam-proctors.php`, lalu sinkronkan Portal Data agar referensi `EMPLOYEES` terisi. Pegawai dan guru piket masuk melalui SSO Portal Data dan hanya dapat mengakses ujian yang ditugaskan.
 
 ## Keamanan dan runtime ujian
 
