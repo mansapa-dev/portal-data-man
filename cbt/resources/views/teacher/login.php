@@ -7,7 +7,7 @@ ob_start();
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Login Guru - CBT MAN 1 Palembang</title>
+  <title>Login Personel - CBT MAN 1 Palembang</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="assets/css/teacher.css">
   <link rel="stylesheet" href="assets/css/ui-theme.css?v=20260911-3">
@@ -18,14 +18,14 @@ ob_start();
   <main class="auth-card">
     <section class="auth-visual">
       <div class="school-mark"><i class="fa-solid fa-graduation-cap"></i></div>
-      <h1>Portal Guru CBT</h1>
-      <p>Monitoring pelaksanaan ujian, rekapitulasi nilai peserta, dan rekam jejak integritas ujian MAN 1 Palembang.</p>
+      <h1>Portal Personel CBT</h1>
+      <p>Ruang kerja guru mata pelajaran dan petugas piket ujian MAN 1 Palembang.</p>
     </section>
     <section class="auth-form">
       <div>
         <span class="eyebrow">CBT MAN 1 PALEMBANG</span>
         <h2>Selamat Datang</h2>
-        <p>Gunakan akun guru Portal Data yang terdaftar untuk masuk ke sistem.</p>
+        <p>Gunakan username dan password akun Portal Data milik guru atau pegawai.</p>
       </div>
       <a class="sso-button" href="../auth/sso/start">
         <i class="fa-solid fa-right-to-bracket"></i> Masuk dengan Portal Data SSO

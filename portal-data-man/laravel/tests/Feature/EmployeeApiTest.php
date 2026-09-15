@@ -210,6 +210,16 @@ class EmployeeApiTest extends TestCase
         $this->getJson('/api/v1/auth/teacher/me')->assertOk()->assertJsonPath('data.accountType', 'EMPLOYEE');
     }
 
+    public function test_employee_credential_export_keeps_accounts_after_initial_password_was_changed(): void
+    {
+        $admin = AdminUser::query()->create(['name' => 'Admin', 'email' => 'admin-export-account@example.test', 'passwordHash' => 'hash', 'role' => 'DATA_ADMIN', 'status' => 'ACTIVE']);
+        $employee = Employee::query()->create(['employmentType' => 'PNS', 'fullName' => 'Pegawai Password Baru', 'nip' => '199001012026211088', 'position' => 'Tata Usaha', 'status' => 'ACTIVE']);
+        $employee->account()->create(['username' => $employee->nip, 'passwordHash' => password_hash('Password-baru-123', PASSWORD_DEFAULT), 'initialPassword' => null, 'status' => 'ACTIVE', 'mustChangePassword' => false, 'activatedAt' => now()]);
+
+        $this->actingAs($admin, 'admin')->get('/api/v1/exports/employee-credentials')->assertOk()->assertDownload();
+        $this->assertDatabaseHas('AuditLog', ['action' => 'EMPLOYEE_CREDENTIALS_EXPORTED']);
+    }
+
     public function test_generated_employee_workbook_can_be_uploaded_and_validated(): void
     {
         Storage::fake('local');

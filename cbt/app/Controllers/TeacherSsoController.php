@@ -127,7 +127,7 @@ final class TeacherSsoController
     }
     private function post(string$url,array$data):array{$curl=curl_init($url);curl_setopt_array($curl,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>http_build_query($data),CURLOPT_HTTPHEADER=>['Accept: application/json','Content-Type: application/x-www-form-urlencoded'],CURLOPT_TIMEOUT=>10]);$body=curl_exec($curl);$status=(int)curl_getinfo($curl,CURLINFO_HTTP_CODE);curl_close($curl);$json=is_string($body)?json_decode($body,true):null;return$status>=200&&$status<300&&is_array($json)?$json:[];}
     private function userinfo(string$url,string$token):array{$curl=curl_init($url);$headers=['Accept: application/json'];if($token!=='')$headers[]='Authorization: Bearer '.$token;curl_setopt_array($curl,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_HTTPHEADER=>$headers,CURLOPT_TIMEOUT=>10]);$body=curl_exec($curl);$status=(int)curl_getinfo($curl,CURLINFO_HTTP_CODE);curl_close($curl);$json=is_string($body)?json_decode($body,true):null;return$status>=200&&$status<300&&is_array($json)?$json:[];}
-    private function required(string$key):string{$value=(string)Config::get($key,'');if($value==='')Response::error('Konfigurasi SSO guru belum lengkap.',503)->send();return rtrim($value,'/');}
+    private function required(string$key):string{$value=(string)Config::get($key,'');if($value==='')Response::error('Konfigurasi SSO personel belum lengkap.',503)->send();return rtrim($value,'/');}
     private function https(string$url):void{if(parse_url($url,PHP_URL_SCHEME)!=='https'&&!in_array(parse_url($url,PHP_URL_HOST),['localhost','127.0.0.1'],true))Response::error('Redirect SSO wajib HTTPS.',503)->send();}
     private function b64(string$value):string{return rtrim(strtr(base64_encode($value),'+/','-_'),'=');}
 }
