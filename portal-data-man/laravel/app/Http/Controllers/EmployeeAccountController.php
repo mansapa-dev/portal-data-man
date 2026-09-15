@@ -45,6 +45,23 @@ class EmployeeAccountController extends Controller
         return ApiResponse::success(['account' => $account, 'defaultPassword' => $defaultPassword, 'passwordSetupUrl' => $setupUrl, 'mailStatus' => $this->mail($account, $setupUrl)], 'Akun pegawai aktif dengan password awal dan tautan aktivasi berhasil dibuat.', 201);
     }
 
+    public function provisionMissing(Request $request): JsonResponse
+    {
+        $created = 0; $skipped = 0;
+        Employee::query()->where('status', 'ACTIVE')->whereDoesntHave('account')->orderBy('id')->chunkById(100, function ($employees) use (&$created, &$skipped): void {
+            foreach ($employees as $employee) {
+                $username = $this->username($employee);
+                if ($username === null) { $skipped++; continue; }
+                $password = 'Pegawai#'.Str::upper(Str::random(8)).random_int(10, 99);
+                $employee->account()->create(['publicId' => (string) Str::ulid(), 'username' => $username, 'passwordHash' => Hash::make($password), 'initialPassword' => $password, 'status' => 'ACTIVE', 'mustChangePassword' => true, 'activatedAt' => now()]);
+                $created++;
+            }
+        });
+        $this->audit->write($request, 'EMPLOYEE_ACCOUNTS_BULK_PROVISIONED', 'TeacherAccount', null, null, ['created' => $created, 'skipped' => $skipped]);
+
+        return ApiResponse::success(['created' => $created, 'skipped' => $skipped], "{$created} akun pegawai dibuat; {$skipped} dilewati.");
+    }
+
     public function regenerate(Request $request, Employee $employee): JsonResponse
     {
         $account = $employee->account;
@@ -102,13 +119,16 @@ class EmployeeAccountController extends Controller
 
     private function availableUsername(Employee $employee): string
     {
-        foreach ([$employee->nip, $employee->nuptk] as $value) {
+        return $this->username($employee) ?? abort(409, 'NIP, NUPTK, atau nomor pegawai belum tersedia atau sudah digunakan akun lain.');
+    }
+
+    private function username(Employee $employee): ?string
+    {
+        foreach ([$employee->nip, $employee->nuptk, $employee->employeeNumber] as $value) {
             $username = strtolower(trim((string) $value));
-            if ($username !== '' && ! TeacherAccount::query()->where('username', $username)->exists()) {
-                return $username;
-            }
+            if ($username !== '' && ! TeacherAccount::query()->where('username', $username)->exists()) return $username;
         }
-        abort(409, 'NIP atau NUPTK belum tersedia atau sudah digunakan akun lain.');
+        return null;
     }
 
     private function mail(TeacherAccount $account, string $url): string

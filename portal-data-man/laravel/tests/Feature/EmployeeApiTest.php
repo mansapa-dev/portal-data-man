@@ -38,8 +38,9 @@ class EmployeeApiTest extends TestCase
             $table->string('publicId', 26)->unique();
             $table->string('employmentType');
             $table->string('fullName');
-            $table->string('nip')->unique();
+            $table->string('nip')->nullable()->unique();
             $table->string('nuptk')->nullable()->unique();
+            $table->string('employeeNumber')->nullable()->unique();
             $table->string('position');
             $table->string('rank')->nullable();
             $table->string('gender')->nullable();
@@ -210,6 +211,17 @@ class EmployeeApiTest extends TestCase
         $this->getJson('/api/v1/auth/teacher/me')->assertOk()->assertJsonPath('data.accountType', 'EMPLOYEE');
     }
 
+    public function test_admin_can_bulk_provision_honorer_account_from_employee_number(): void
+    {
+        $admin = AdminUser::query()->create(['name' => 'Admin', 'email' => 'admin-bulk@example.test', 'passwordHash' => 'hash', 'role' => 'DATA_ADMIN', 'status' => 'ACTIVE']);
+        $employee = Employee::query()->create(['employmentType' => 'HONORER', 'fullName' => 'Pegawai Honorer', 'nip' => null, 'nuptk' => null, 'employeeNumber' => 'HON-008', 'position' => 'Petugas', 'status' => 'ACTIVE']);
+
+        $this->actingAs($admin, 'admin')->postJson('/api/v1/employees/accounts/provision-missing')
+            ->assertOk()->assertJsonPath('data.created', 1)->assertJsonPath('data.skipped', 0);
+        $this->assertDatabaseHas('TeacherAccount', ['employeeId' => $employee->id, 'username' => 'hon-008', 'mustChangePassword' => true]);
+        $this->actingAs($admin, 'admin')->get('/api/v1/exports/employee-credentials')->assertOk()->assertDownload();
+    }
+
     public function test_employee_credential_export_keeps_accounts_after_initial_password_was_changed(): void
     {
         $admin = AdminUser::query()->create(['name' => 'Admin', 'email' => 'admin-export-account@example.test', 'passwordHash' => 'hash', 'role' => 'DATA_ADMIN', 'status' => 'ACTIVE']);
@@ -233,7 +245,7 @@ class EmployeeApiTest extends TestCase
 
             $response->assertCreated()
                 ->assertJsonPath('data.status', 'READY')
-                ->assertJsonPath('data.summary.totalRows', 3)
+                ->assertJsonPath('data.summary.totalRows', 4)
                 ->assertJsonPath('data.summary.failedRows', 0);
             $this->assertDatabaseHas('ImportBatch', ['type' => 'EMPLOYEE', 'status' => 'READY', 'totalRows' => 3]);
         } finally {

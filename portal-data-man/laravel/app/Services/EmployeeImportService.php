@@ -208,13 +208,16 @@ class EmployeeImportService
     private function matches(array $data)
     {
         $query = Employee::withTrashed();
-        if ($data['nip'] || $data['nuptk']) {
+        if (($data['nip'] ?? null) || ($data['nuptk'] ?? null) || ($data['employeeNumber'] ?? null)) {
             return $query->where(function ($nested) use ($data): void {
                 if ($data['nip']) {
                     $nested->orWhere('nip', $data['nip']);
                 }
                 if ($data['nuptk']) {
                     $nested->orWhere('nuptk', $data['nuptk']);
+                }
+                if ($data['employeeNumber'] ?? null) {
+                    $nested->orWhere('employeeNumber', $data['employeeNumber']);
                 }
             })->get();
         }
@@ -224,7 +227,7 @@ class EmployeeImportService
 
     private function provisionAccount(Employee $employee): TeacherAccount
     {
-        $username = collect([$employee->nip, $employee->nuptk])
+        $username = collect([$employee->nip, $employee->nuptk, $employee->employeeNumber])
             ->map(fn ($value) => strtolower(trim((string) $value)))
             ->first(fn ($value) => $value !== '' && ! TeacherAccount::query()->where('username', $value)->exists());
         if (! $username) {
@@ -241,7 +244,7 @@ class EmployeeImportService
             return $error->getMessage();
         }
         if ($error instanceof QueryException && (string) $error->getCode() === '23000') {
-            return 'NIP atau NUPTK sudah digunakan pegawai lain.';
+            return 'NIP, NUPTK, atau nomor pegawai sudah digunakan pegawai lain.';
         }
         report($error);
 

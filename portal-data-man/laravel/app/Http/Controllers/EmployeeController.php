@@ -30,6 +30,7 @@ class EmployeeController extends Controller
                 ->where('fullName', 'like', "%{$value}%")
                 ->orWhere('nip', 'like', "%{$value}%")
                 ->orWhere('nuptk', 'like', "%{$value}%")
+                ->orWhere('employeeNumber', 'like', "%{$value}%")
                 ->orWhere('position', 'like', "%{$value}%")))
             ->when($data['employmentType'] ?? null, fn ($query, $value) => $query->where('employmentType', $value))
             ->when($data['status'] ?? null, fn ($query, $value) => $query->where('status', $value))
@@ -123,8 +124,9 @@ class EmployeeController extends Controller
         return $request->validate([
             'employmentType' => [$required, Rule::in(['PNS', 'PPPK', 'HONORER'])],
             'fullName' => [$required, 'string', 'min:2', 'max:191'],
-            'nip' => [$required, 'string', 'max:50', Rule::unique('Employee', 'nip')->ignore($employee?->id)],
+            'nip' => ['nullable', 'string', 'max:50', Rule::unique('Employee', 'nip')->ignore($employee?->id), 'required_without_all:nuptk,employeeNumber'],
             'nuptk' => ['nullable', 'string', 'max:50', Rule::unique('Employee', 'nuptk')->ignore($employee?->id)],
+            'employeeNumber' => ['nullable', 'string', 'max:50', Rule::unique('Employee', 'employeeNumber')->ignore($employee?->id), 'required_without_all:nip,nuptk'],
             'position' => [$required, 'string', 'max:191'],
             'rank' => ['nullable', 'string', 'max:100'],
             'gender' => ['nullable', Rule::in(['MALE', 'FEMALE'])],
@@ -134,14 +136,14 @@ class EmployeeController extends Controller
         ], [
             'employmentType.required' => 'Jenis pegawai wajib dipilih.',
             'fullName.required' => 'Nama pegawai wajib diisi.',
-            'nip.required' => 'NIP wajib diisi.',
+            'nip.required_without_all' => 'Minimal NIP, NUPTK, atau nomor pegawai wajib diisi.',
             'position.required' => 'Jabatan wajib diisi.',
         ]);
     }
 
     private function normalize(array $data): array
     {
-        foreach (['fullName', 'nip', 'nuptk', 'position', 'rank', 'education', 'grade'] as $field) {
+        foreach (['fullName', 'nip', 'nuptk', 'employeeNumber', 'position', 'rank', 'education', 'grade'] as $field) {
             if (array_key_exists($field, $data)) {
                 $value = preg_replace('/\s+/u', ' ', trim((string) $data[$field]));
                 $data[$field] = $value === '' ? null : $value;
@@ -154,7 +156,7 @@ class EmployeeController extends Controller
     private function handleDuplicate(QueryException $error): never
     {
         if ((string) $error->getCode() === '23000') {
-            abort(409, 'NIP atau NUPTK sudah digunakan pegawai lain.');
+            abort(409, 'NIP, NUPTK, atau nomor pegawai sudah digunakan pegawai lain.');
         }
         throw $error;
     }

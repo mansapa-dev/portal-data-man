@@ -112,6 +112,7 @@ Route::prefix('api/v1')->group(function (): void {
             Route::post('employees', [EmployeeController::class, 'store']);
             Route::patch('employees/{employee}', [EmployeeController::class, 'update']);
             Route::post('employees/{employee}/account', [EmployeeAccountController::class, 'store']);
+            Route::post('employees/accounts/provision-missing', [EmployeeAccountController::class, 'provisionMissing']);
             Route::post('employees/{employee}/account/setup-token', [EmployeeAccountController::class, 'regenerate']);
             Route::post('employees/{employee}/account/disable', [EmployeeAccountController::class, 'disable']);
             Route::post('employees/{employee}/account/enable', [EmployeeAccountController::class, 'enable']);

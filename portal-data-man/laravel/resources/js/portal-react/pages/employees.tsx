@@ -14,6 +14,7 @@ type Employee = {
   fullName: string;
   nip?: string;
   nuptk?: string;
+  employeeNumber?: string;
   position: string;
   rank?: string;
   gender?: 'MALE' | 'FEMALE';
@@ -26,8 +27,9 @@ type Employee = {
 export const employeeSchema = z.object({
   employmentType: z.enum(['PNS', 'PPPK', 'HONORER']),
   fullName: z.string().min(2, 'Nama minimal 2 karakter.'),
-  nip: z.string().min(1, 'NIP wajib diisi.'),
+  nip: z.string().optional(),
   nuptk: z.string().optional(),
+  employeeNumber: z.string().optional(),
   position: z.string().min(1, 'Jabatan wajib diisi.'),
   rank: z.string().optional(),
   gender: z.enum(['', 'MALE', 'FEMALE']),
@@ -40,6 +42,8 @@ type Values = z.infer<typeof employeeSchema>;
 export function EmployeesPage() {
   const [params, setParams] = useSearchParams();
   const [search, setSearch] = useState(params.get('search') ?? '');
+  const toast = useToast();
+  const provision = useMutation({ mutationFn: () => api<{ created: number; skipped: number }>('/employees/accounts/provision-missing', { method: 'POST', body: '{}' }), onSuccess: response => { toast(response.message); window.location.assign(`/api/v1/exports/employee-credentials?search=${encodeURIComponent(search)}`); }, onError: error => toast((error as Error).message, 'error') });
   useEffect(() => {
     const timer = setTimeout(() => {
       const next = new URLSearchParams(params);
@@ -60,7 +64,7 @@ export function EmployeesPage() {
   return <div className="page">
     <PageHeader title="Data Pegawai" description="Data PNS, PPPK, dan tenaga honorer" action={<div className="actions">
       <a className="button" href={`/api/v1/exports/employees?${params}`}>Export</a>
-      <a className="button" href={`/api/v1/exports/employee-credentials?search=${encodeURIComponent(search)}`}>Export akun & password</a>
+      <button className="button" disabled={provision.isPending} onClick={() => provision.mutate()}>{provision.isPending ? 'Menyiapkan akun…' : 'Siapkan & export akun'}</button>
       <Link className="button" to="/imports/employees">Import pegawai</Link>
       <Link className="button primary" to="/employees/new">Tambah pegawai</Link>
     </div>} />
@@ -71,8 +75,8 @@ export function EmployeesPage() {
       <button onClick={() => { setSearch(''); setParams({ page: '1' }); }}>Reset</button>
     </div>
     {query.isPending ? <LoadingSkeleton /> : query.isError ? <ErrorState retry={() => query.refetch()} /> : query.data.data.length === 0 ? <EmptyState title="Pegawai tidak ditemukan" /> : <>
-      <div className="tablewrap"><table><thead><tr><th>Nama</th><th>Jenis</th><th>NIP/NUPTK</th><th>Jabatan</th><th>Golongan</th><th>Pendidikan</th><th>Grade</th><th>Status</th><th>Aksi</th></tr></thead><tbody>
-        {query.data.data.map(employee => <tr key={employee.publicId}><td><strong>{employee.fullName}</strong></td><td>{humanizeStatus(employee.employmentType)}</td><td>{employee.nip ?? employee.nuptk ?? '—'}</td><td>{employee.position}</td><td>{employee.rank ?? '—'}</td><td>{employee.education ?? '—'}</td><td>{employee.grade ?? '—'}</td><td><StatusBadge value={employee.status} /></td><td><Link to={`/employees/${employee.publicId}`}>Detail</Link> · <Link to={`/employees/${employee.publicId}/edit`}>Edit</Link></td></tr>)}
+      <div className="tablewrap"><table><thead><tr><th>Nama</th><th>Jenis</th><th>NIP/NUPTK/Nomor Pegawai</th><th>Jabatan</th><th>Golongan</th><th>Pendidikan</th><th>Grade</th><th>Status</th><th>Aksi</th></tr></thead><tbody>
+        {query.data.data.map(employee => <tr key={employee.publicId}><td><strong>{employee.fullName}</strong></td><td>{humanizeStatus(employee.employmentType)}</td><td>{employee.nip ?? employee.nuptk ?? employee.employeeNumber ?? '—'}</td><td>{employee.position}</td><td>{employee.rank ?? '—'}</td><td>{employee.education ?? '—'}</td><td>{employee.grade ?? '—'}</td><td><StatusBadge value={employee.status} /></td><td><Link to={`/employees/${employee.publicId}`}>Detail</Link> · <Link to={`/employees/${employee.publicId}/edit`}>Edit</Link></td></tr>)}
       </tbody></table></div>
       <ServerPagination meta={query.data.meta} onPage={page => { const next = new URLSearchParams(params); next.set('page', String(page)); setParams(next); }} />
     </>}
@@ -102,8 +106,9 @@ export function EmployeeFormPage() {
     <form className="formcard" onSubmit={handleSubmit(values => save.mutate(values))}>
       <FormField label="Jenis pegawai" required error={errors.employmentType?.message}><select {...register('employmentType')}><option value="PNS">PNS</option><option value="PPPK">PPPK</option><option value="HONORER">Honorer</option></select></FormField>
       <FormField label="Nama" required error={errors.fullName?.message}><input {...register('fullName')} /></FormField>
-      <FormField label="NIP" required error={errors.nip?.message}><input {...register('nip')} /></FormField>
+      <FormField label="NIP" helper="Isi salah satu: NIP, NUPTK, atau nomor pegawai" error={errors.nip?.message}><input {...register('nip')} /></FormField>
       <FormField label="NUPTK" helper="Boleh kosong untuk tenaga honorer"><input {...register('nuptk')} /></FormField>
+      <FormField label="Nomor Pegawai" helper="Contoh tenaga honorer: HON-008"><input {...register('employeeNumber')} /></FormField>
       <FormField label="Jabatan" required error={errors.position?.message}><input {...register('position')} /></FormField>
       <FormField label="Golongan" helper="Boleh kosong untuk tenaga honorer"><input {...register('rank')} /></FormField>
       <FormField label="Jenis kelamin"><select {...register('gender')}><option value="">Belum diisi</option><option value="MALE">Laki-laki</option><option value="FEMALE">Perempuan</option></select></FormField>
@@ -138,7 +143,7 @@ export function EmployeeDetailPage() {
     <div id="portal-account"><EmployeeAccountPanel employeeId={id!} /></div>
     <section className="details">
       <DetailItem label="Jenis pegawai" value={humanizeStatus(employee.employmentType)} /><DetailItem label="Status" value={<StatusBadge value={employee.status} />} />
-      <DetailItem label="NIP" value={employee.nip} /><DetailItem label="NUPTK" value={employee.nuptk} /><DetailItem label="Jabatan" value={employee.position} />
+      <DetailItem label="NIP" value={employee.nip} /><DetailItem label="NUPTK" value={employee.nuptk} /><DetailItem label="Nomor Pegawai" value={employee.employeeNumber} /><DetailItem label="Jabatan" value={employee.position} />
       <DetailItem label="Golongan" value={employee.rank} /><DetailItem label="Jenis kelamin" value={employee.gender === 'MALE' ? 'Laki-laki' : employee.gender === 'FEMALE' ? 'Perempuan' : undefined} />
       <DetailItem label="Pendidikan" value={employee.education} /><DetailItem label="Grade" value={employee.grade} />
     </section>

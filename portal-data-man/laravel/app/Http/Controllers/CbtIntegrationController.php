@@ -22,7 +22,7 @@ class CbtIntegrationController extends Controller
         $tables = [
             'Student' => ['id', 'publicId', 'nisn', 'fullName', 'status', 'deletedAt'],
             'Teacher' => ['id', 'publicId', 'nip', 'nuptk', 'fullName', 'status', 'deletedAt'],
-            'Employee' => ['id', 'publicId', 'nip', 'fullName', 'position', 'status', 'deletedAt'],
+            'Employee' => ['id', 'publicId', 'nip', 'nuptk', 'employeeNumber', 'fullName', 'position', 'status', 'deletedAt'],
             'ClassEnrollment' => ['id', 'studentId', 'schoolClassId', 'academicYearId', 'semesterId', 'status', 'enrolledAt'],
             'SchoolClass' => ['id', 'publicId', 'code', 'name', 'gradeLevel', 'academicYearId', 'status', 'deletedAt'],
             'AcademicYear' => ['id', 'publicId', 'name', 'isActive', 'startDate'],
@@ -104,6 +104,7 @@ class CbtIntegrationController extends Controller
         $page->getCollection()->transform(fn (Employee $employee): array => [
             'id' => $employee->publicId,
             'nip' => $employee->nip,
+            'employee_number' => $employee->employeeNumber,
             'name' => $employee->fullName,
             'position' => $employee->position,
             'status' => $employee->status,

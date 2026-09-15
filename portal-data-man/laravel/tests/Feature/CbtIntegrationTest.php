@@ -16,6 +16,7 @@ class CbtIntegrationTest extends TestCase
         $this->assertSame(':memory:', config('database.connections.sqlite.database'));
         (require database_path('migrations/2026_08_30_000000_create_portal_data_schema.php'))->up();
         (require database_path('migrations/2026_09_08_000001_create_employees_table.php'))->up();
+        (require database_path('migrations/2026_09_15_000001_add_employee_number.php'))->up();
     }
 
     private function revisions(): array

@@ -6,7 +6,7 @@ use InvalidArgumentException;
 
 class EmployeeImportNormalizer
 {
-    public const HEADERS = ['Jenis Pegawai', 'Nama', 'NIP', 'NUPTK', 'Jabatan', 'Golongan', 'Jenis Kelamin', 'Pendidikan', 'Grade'];
+    public const HEADERS = ['Jenis Pegawai', 'Nama', 'NIP', 'NUPTK', 'Nomor Pegawai', 'Jabatan', 'Golongan', 'Jenis Kelamin', 'Pendidikan', 'Grade'];
 
     public function normalize(array $values): array
     {
@@ -30,16 +30,17 @@ class EmployeeImportNormalizer
         }
 
         $nip = $this->nullable($values['NIP'] ?? null, 50, 'NIP');
-        if ($nip === null) {
-            throw new InvalidArgumentException('NIP pegawai wajib diisi.');
-        }
         $nuptk = $this->nullable($values['NUPTK'] ?? null, 50, 'NUPTK');
+        $employeeNumber = $this->nullable($values['Nomor Pegawai'] ?? null, 50, 'Nomor Pegawai');
+        if ($nip === null && $nuptk === null && $employeeNumber === null) {
+            throw new InvalidArgumentException('Minimal NIP, NUPTK, atau nomor pegawai wajib diisi.');
+        }
         $rank = $this->nullable($values['Golongan'] ?? null, 100, 'Golongan');
         $education = $this->nullable($values['Pendidikan'] ?? null, 191, 'Pendidikan');
         $grade = $this->nullable($values['Grade'] ?? null, 100, 'Grade');
         $gender = $this->gender($values['Jenis Kelamin'] ?? null, $warnings);
 
-        return compact('employmentType', 'fullName', 'nip', 'nuptk', 'position', 'rank', 'gender', 'education', 'grade') + [
+        return compact('employmentType', 'fullName', 'nip', 'nuptk', 'employeeNumber', 'position', 'rank', 'gender', 'education', 'grade') + [
             'status' => 'ACTIVE',
             'warnings' => $warnings,
         ];

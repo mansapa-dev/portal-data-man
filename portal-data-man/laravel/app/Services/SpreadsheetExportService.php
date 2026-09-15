@@ -84,6 +84,7 @@ class SpreadsheetExportService
                 ->where('fullName', 'like', "%{$value}%")
                 ->orWhere('nip', 'like', "%{$value}%")
                 ->orWhere('nuptk', 'like', "%{$value}%")
+                ->orWhere('employeeNumber', 'like', "%{$value}%")
                 ->orWhere('position', 'like', "%{$value}%")))
             ->orderBy('fullName')->limit(config('exports.max_rows') + 1)->get();
         abort_if($rows->count() > config('exports.max_rows'), 422, 'Jumlah data melebihi batas export. Persempit filter.');
@@ -93,6 +94,7 @@ class SpreadsheetExportService
             $employee->fullName,
             $employee->nip ?? '',
             $employee->nuptk ?? '',
+            $employee->employeeNumber ?? '',
             $employee->position,
             $employee->rank ?? '',
             $employee->gender === 'MALE' ? 'LAKI_LAKI' : ($employee->gender === 'FEMALE' ? 'PEREMPUAN' : ''),
@@ -108,11 +110,11 @@ class SpreadsheetExportService
         $filters = $request->validate(['search' => ['nullable', 'string']]);
         $rows = Employee::query()->with('account')
             ->whereHas('account')
-            ->when($filters['search'] ?? null, fn ($query, $value) => $query->where(fn ($nested) => $nested->where('fullName', 'like', "%{$value}%")->orWhere('nip', 'like', "%{$value}%")->orWhereHas('account', fn ($account) => $account->where('username', 'like', "%{$value}%"))))
+            ->when($filters['search'] ?? null, fn ($query, $value) => $query->where(fn ($nested) => $nested->where('fullName', 'like', "%{$value}%")->orWhere('nip', 'like', "%{$value}%")->orWhere('nuptk', 'like', "%{$value}%")->orWhere('employeeNumber', 'like', "%{$value}%")->orWhereHas('account', fn ($account) => $account->where('username', 'like', "%{$value}%"))))
             ->orderBy('fullName')->limit(config('exports.max_rows') + 1)->get();
         abort_if($rows->count() > config('exports.max_rows'), 422, 'Jumlah data melebihi batas export. Persempit pencarian.');
 
-        return [$this->write('Akun Pegawai', ['Nama Pegawai', 'NIP/NUPTK', 'Username', 'Password Awal', 'Status Akun', 'Wajib Ganti Password'], $rows->map(fn (Employee $employee) => [$employee->fullName, $employee->nip ?? $employee->nuptk ?? '', $employee->account->username, $employee->account->initialPassword ?? 'SUDAH DIGANTI', $employee->account->status, $employee->account->mustChangePassword ? 'YA' : 'TIDAK'])), $rows->count()];
+        return [$this->write('Akun Pegawai', ['Nama Pegawai', 'NIP/NUPTK/Nomor Pegawai', 'Username', 'Password Awal', 'Status Akun', 'Wajib Ganti Password'], $rows->map(fn (Employee $employee) => [$employee->fullName, $employee->nip ?? $employee->nuptk ?? $employee->employeeNumber ?? '', $employee->account->username, $employee->account->initialPassword ?? 'SUDAH DIGANTI', $employee->account->status, $employee->account->mustChangePassword ? 'YA' : 'TIDAK'])), $rows->count()];
     }
 
     public function teacherCredentials(Request $request): array
@@ -140,9 +142,10 @@ class SpreadsheetExportService
     public function employeeTemplate(): string
     {
         return $this->write('Data Pegawai', EmployeeImportNormalizer::HEADERS, collect([
-            ['PNS', 'Contoh Pegawai PNS', '198001012010011001', '1234567890123450', 'Analis Kepegawaian', 'III/b', 'LAKI_LAKI', 'S1 Administrasi', '7'],
-            ['PPPK', 'Contoh Pegawai PPPK', '199001012026211001', '1234567890123456', 'Tenaga Administrasi', 'IX', 'LAKI_LAKI', 'S1 Administrasi', '9'],
-            ['HONORER', 'Contoh Pegawai Honorer', 'HON-001', '', 'Petugas Perpustakaan', '', 'PEREMPUAN', 'SMA', ''],
+            ['PNS', 'Contoh Pegawai PNS', '198001012010011001', '1234567890123450', '', 'Analis Kepegawaian', 'III/b', 'LAKI_LAKI', 'S1 Administrasi', '7'],
+            ['HONORER', 'Contoh Pegawai Honorer', '', '', 'HON-008', 'Petugas Administrasi', '', 'PEREMPUAN', 'SMA', ''],
+            ['PPPK', 'Contoh Pegawai PPPK', '199001012026211001', '1234567890123456', '', 'Tenaga Administrasi', 'IX', 'LAKI_LAKI', 'S1 Administrasi', '9'],
+            ['HONORER', 'Contoh Pegawai Honorer Lain', '', '', 'HON-001', 'Petugas Perpustakaan', '', 'PEREMPUAN', 'SMA', ''],
         ]));
     }
 
