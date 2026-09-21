@@ -194,6 +194,7 @@ CREATE TABLE IF NOT EXISTS questions (
  option_a TEXT NOT NULL, option_b TEXT NOT NULL, option_c TEXT NOT NULL, option_d TEXT NOT NULL, option_e TEXT NULL,
  correct_answer ENUM('A','B','C','D','E') NOT NULL,
  points DECIMAL(8,2) NOT NULL DEFAULT 1,
+ explanation TEXT NULL,
  status ENUM('ACTIVE','DISABLED') NOT NULL DEFAULT 'ACTIVE',
  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
@@ -353,6 +354,7 @@ CREATE TABLE IF NOT EXISTS attempt_questions (
  question_text TEXT NOT NULL,
  option_a TEXT NOT NULL, option_b TEXT NOT NULL, option_c TEXT NOT NULL, option_d TEXT NOT NULL, option_e TEXT NULL,
  correct_answer CHAR(1) NOT NULL,
+ explanation TEXT NULL,
  points DECIMAL(8,2) NOT NULL,
  PRIMARY KEY (attempt_id,question_id),
  CONSTRAINT fk_attempt_questions_attempt FOREIGN KEY (attempt_id) REFERENCES exam_attempts(id) ON DELETE CASCADE

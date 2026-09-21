@@ -121,6 +121,7 @@ function renderSoal() {
       <div class="opt-char">${visualLabel}</div><div class="opt-text">${opt.text}</div>
     </div>`;
   }).join('');
+  typesetQuestionMath([document.getElementById('cbtSoalText'), document.getElementById('cbtOptionList')]);
 }
 
 function simpanJawaban(soalId, originalKey, nomorSoal) {
@@ -437,9 +438,10 @@ function bukaModalReview() {
           : status === 'SALAH'
             ? '<span style="color:var(--danger); font-weight:700;"><i class="fa-solid fa-xmark"></i> [SALAH]</span>'
             : '<span style="color:var(--danger); font-weight:700;">[TIDAK DIJAWAB]</span>';
-        return `<div style="background:var(--secondary-bg); border:1px solid var(--border); border-radius:8px; padding:14px; font-size:12px;"><div style="display:flex; justify-content:space-between; margin-bottom:6px;"><b style="color:var(--primary);">Soal No. ${idx + 1}</b><div>${st}</div></div><div>${s.pertanyaan}</div></div>`;
+        return `<div style="background:var(--secondary-bg); border:1px solid var(--border); border-radius:8px; padding:14px; font-size:12px;"><div style="display:flex; justify-content:space-between; margin-bottom:6px;"><b style="color:var(--primary);">Soal No. ${idx + 1}</b><div>${st}</div></div><div>${s.pertanyaan}</div>${s.pembahasan?`<details style="margin-top:10px"><summary><b>Pembahasan</b></summary><div style="margin-top:8px">${s.pembahasan}</div></details>`:''}</div>`;
       }).join('');
       document.getElementById('modalReview').classList.add('show');
+      typesetQuestionMath(document.getElementById('listReviewContainer'));
     })
     .withFailureHandler(err => { hideLoading(); showCustomAlert('Error', err.message); })
     .getReviewUjianServer(stSiswa.id, stUjian.id);

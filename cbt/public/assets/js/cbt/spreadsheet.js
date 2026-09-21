@@ -24,36 +24,92 @@ function downloadTemplateSiswa() {
   exportToExcel('template_siswa.xlsx', 'Template Siswa', headers, sampleData);
 }
 
-function downloadTemplateSoal(namaMapel = '') {
-  let headers = ['nama_ujian', 'pertanyaan', 'opsi_a', 'opsi_b', 'opsi_c', 'opsi_d', 'opsi_e', 'jawaban_benar', 'poin', 'gambar_keterangan'];
+function downloadTemplateSoal(namaMapel = '', ujianList = []) {
+  let headers = ['ujian_id', 'nama_ujian', 'no', 'tipe_soal', 'pertanyaan', 'gambar_soal', 'opsi_a', 'gambar_a', 'opsi_b', 'gambar_b', 'opsi_c', 'gambar_c', 'opsi_d', 'gambar_d', 'opsi_e', 'gambar_e', 'jawaban_benar', 'poin', 'pembahasan', 'gambar_pembahasan'];
+  const selectedExam = Array.isArray(ujianList) && ujianList.length ? ujianList[0] : null;
   let sampleData = [
     [
-      namaMapel ? `${namaMapel} Kelas X` : 'Kimia Kelas XII',
-      'Perhatikan gambar di samping. Apakah nama struktur senyawa pada soal ini?',
+      selectedExam?.id || '',
+      selectedExam?.nama_ujian || (namaMapel ? '' : 'Kimia Kelas XII'),
+      1,
+      'PILIHAN_GANDA',
+      'Nilai dari \\(x^2 + H_2O\\) adalah ... (gambar dapat ditempel langsung pada cell ini)',
+      '',
       'Etanol',
+      '',
       'Metanol',
+      '',
       'Propanol',
+      '',
       'Butanol',
+      '',
       'Pentanol',
+      '',
       'A',
       1,
-      '(Opsional: Anda bisa langsung Insert -> Picture gambar ke baris ini di Excel)'
+      'Pembahasan dapat berisi equation \\(x^2\\).',
+      ''
     ],
     [
-      namaMapel ? `${namaMapel} Kelas X` : 'Biologi Kelas X',
-      'Organel sel yang berfungsi sebagai tempat respirasi aerob dan penghasil energi ATP adalah...',
+      selectedExam?.id || '',
+      selectedExam?.nama_ujian || (namaMapel ? '' : 'Biologi Kelas X'),
+      2,
+      'PILIHAN_GANDA',
+      'Tuliskan pangkat dengan <sup>2</sup>, indeks dengan <sub>2</sub>, atau equation \\(E=mc^2\\).',
+      '',
       'Mitokondria',
+      '',
       'Ribosom',
+      '',
       'Lisosom',
+      '',
       'Badan Golgi',
+      '',
       'Kloroplas',
+      '',
       'A',
       1,
-      '(Kosongkan jika soal teks biasa tanpa gambar)'
+      '',
+      ''
     ]
   ];
   const filename = namaMapel ? `template_soal_${namaMapel.toLowerCase().replace(/\s+/g, '_')}.xlsx` : 'template_soal.xlsx';
-  exportToExcel(filename, 'Template Soal', headers, sampleData);
+  const workbook = XLSX.utils.book_new();
+  const templateSheet = XLSX.utils.aoa_to_sheet([headers, ...sampleData]);
+  templateSheet['!cols'] = headers.map(header => ({ wch: header === 'pertanyaan' ? 48 : Math.max(14, header.length + 2) }));
+  templateSheet['!rows'] = [{ hpt: 28 }, ...sampleData.map(() => ({ hpt: 72 }))];
+  templateSheet['!autofilter'] = { ref: `A1:${XLSX.utils.encode_col(headers.length - 1)}${sampleData.length + 1}` };
+  templateSheet['!freeze'] = { xSplit: 0, ySplit: 1 };
+  XLSX.utils.book_append_sheet(workbook, templateSheet, 'Template Soal');
+
+  if (selectedExam) {
+    const referenceHeaders = ['ujian_id', 'nama_ujian', 'mata_pelajaran', 'tingkat', 'sesi', 'tahun_ajaran', 'semester'];
+    const referenceRows = ujianList.map(ujian => [ujian.id, ujian.nama_ujian, ujian.nama_mapel || namaMapel, ujian.tingkat, ujian.sesi, ujian.tahun_ajaran, ujian.semester]);
+    const referenceSheet = XLSX.utils.aoa_to_sheet([referenceHeaders, ...referenceRows]);
+    referenceSheet['!cols'] = referenceHeaders.map((header, index) => ({ wch: Math.min(42, Math.max(header.length + 2, ...referenceRows.map(row => String(row[index] ?? '').length + 2))) }));
+    XLSX.utils.book_append_sheet(workbook, referenceSheet, 'Referensi Ujian');
+  }
+  const guideRows = [
+    ['Equation inline', '\\(x^2 + H_2O\\)'],
+    ['Equation blok', '\\[\\frac{a}{b}\\]'],
+    ['Superscript', 'x<sup>2</sup>'],
+    ['Subscript', 'H<sub>2</sub>O'],
+    ['Pangkat', '\\(x^2\\), \\(x^{10}\\), \\(10^{-3}\\)'],
+    ['Indeks', '\\(x_1\\), \\(V_{out}\\), \\(x_1^2\\)'],
+    ['Pecahan', '\\(\\frac{1}{2}\\)'],
+    ['Akar', '\\(\\sqrt{144}\\)'],
+    ['Integral', '\\(\\int_0^1 x^2\\,dx\\)'],
+    ['Limit', '\\(\\lim_{x \\to 0}\\frac{\\sin x}{x}\\)'],
+    ['Summation', '\\(\\sum_{i=1}^{n} i\\)'],
+    ['Matriks', '\\[\\begin{bmatrix}1 & 2 \\\\ 3 & 4\\end{bmatrix}\\]'],
+    ['Kimia', '\\(H_2SO_4\\), \\(Ca^{2+}\\)'],
+    ['Fisika', '\\(E=mc^2\\), \\(v=\\frac{s}{t}\\)'],
+    ['Gambar', 'Insert -> Picture, kemudian letakkan anchor kiri atas gambar di cell pertanyaan atau opsi yang dituju. Gunakan format XLSX.'],
+  ];
+  const guideSheet = XLSX.utils.aoa_to_sheet([['Fitur', 'Cara Penulisan'], ...guideRows]);
+  guideSheet['!cols'] = [{ wch: 20 }, { wch: 90 }];
+  XLSX.utils.book_append_sheet(workbook, guideSheet, 'Petunjuk Format');
+  XLSX.writeFile(workbook, filename, { cellStyles: true });
 }
 
 function downloadTemplateAkun() {
@@ -70,70 +126,66 @@ async function extractImagesFromExcel(file) {
   try {
     const zip = await JSZip.loadAsync(file);
 
-    // Look for drawings XML and relationship files
-    const drawingFiles = zip.file(/^xl\/drawings\/drawing\d+\.xml$/i);
-    const relsFiles = zip.file(/^xl\/drawings\/_rels\/drawing\d+\.xml\.rels$/i);
-
-    if (drawingFiles.length === 0 || relsFiles.length === 0) {
-      // Fallback: Check if there are any media files inside the archive
-      const mediaFiles = zip.file(/^xl\/media\/.+$/i);
-      if (mediaFiles && mediaFiles.length > 0) {
-        for (let i = 0; i < mediaFiles.length; i++) {
-          const mFile = mediaFiles[i];
-          const ext = mFile.name.split('.').pop().toLowerCase();
-          const mime = ext === 'png' ? 'image/png' : (ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : (ext === 'webp' ? 'image/webp' : 'image/png'));
-          const base64 = await mFile.async('base64');
-          rowImages[i] = `data:${mime};base64,${base64}`;
-        }
-      }
-      return rowImages;
-    }
-
-    const drawingXmlStr = await drawingFiles[0].async('string');
-    const drawingRelsStr = await relsFiles[0].async('string');
-
-    // Parse relationships (rId -> image target path)
+    // Resolve only drawings connected to the first worksheet; drawings on other
+    // sheets must never be assigned to question rows with matching coordinates.
     const parser = new DOMParser();
-    const relsDoc = parser.parseFromString(drawingRelsStr, 'text/xml');
-    const rels = {};
-    const relElements = relsDoc.getElementsByTagName('Relationship');
-    for (let i = 0; i < relElements.length; i++) {
-      const el = relElements[i];
-      const id = el.getAttribute('Id');
-      let target = el.getAttribute('Target') || '';
-      target = target.replace('../', 'xl/');
-      rels[id] = target;
-    }
-
-    // Parse drawing cell anchors (mapping to row)
-    const drawDoc = parser.parseFromString(drawingXmlStr, 'text/xml');
-    const anchors = Array.from(drawDoc.getElementsByTagNameNS('*', 'twoCellAnchor'))
-      .concat(Array.from(drawDoc.getElementsByTagNameNS('*', 'oneCellAnchor')))
-      .concat(Array.from(drawDoc.getElementsByTagName('xdr:twoCellAnchor')))
-      .concat(Array.from(drawDoc.getElementsByTagName('xdr:oneCellAnchor')));
-
-    for (let i = 0; i < anchors.length; i++) {
-      const anchor = anchors[i];
-      const fromEl = anchor.getElementsByTagNameNS('*', 'from')[0] || anchor.getElementsByTagName('xdr:from')[0];
-      const blipEl = anchor.getElementsByTagNameNS('*', 'blip')[0] || anchor.getElementsByTagName('a:blip')[0];
-
-      if (fromEl && blipEl) {
-        const rowEl = fromEl.getElementsByTagNameNS('*', 'row')[0] || fromEl.getElementsByTagName('xdr:row')[0];
-        const rEmbed = blipEl.getAttribute('r:embed') || blipEl.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'embed') || blipEl.getAttribute('embed');
-
-        if (rowEl && rEmbed && rels[rEmbed]) {
-          const excelRowIndex = parseInt(rowEl.textContent, 10);
-          const dataRowIndex = excelRowIndex >= 1 ? excelRowIndex - 1 : excelRowIndex;
-          const mediaPath = rels[rEmbed];
-          const mediaFile = zip.file(mediaPath) || zip.file(new RegExp(mediaPath.split('/').pop() + '$', 'i'))[0];
-
-          if (mediaFile) {
-            const ext = mediaFile.name.split('.').pop().toLowerCase();
-            const mime = ext === 'png' ? 'image/png' : (ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : (ext === 'webp' ? 'image/webp' : 'image/png'));
-            const base64 = await mediaFile.async('base64');
-            rowImages[dataRowIndex] = `data:${mime};base64,${base64}`;
-          }
-        }
+    const resolveZipPath = (baseFile, target) => {
+      if (target.startsWith('/')) return target.replace(/^\//, '');
+      const parts = `${baseFile.slice(0, baseFile.lastIndexOf('/') + 1)}${target}`.split('/');
+      const resolved = [];
+      parts.forEach(part => { if (part === '..') resolved.pop(); else if (part !== '.') resolved.push(part); });
+      return resolved.join('/');
+    };
+    const workbookFile = zip.file('xl/workbook.xml');
+    const workbookRelsFile = zip.file('xl/_rels/workbook.xml.rels');
+    if (!workbookFile || !workbookRelsFile) return rowImages;
+    const workbookDoc = parser.parseFromString(await workbookFile.async('string'), 'text/xml');
+    const firstSheet = workbookDoc.getElementsByTagNameNS('*', 'sheet')[0];
+    const sheetRelationshipId = firstSheet?.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id') || firstSheet?.getAttribute('r:id');
+    const workbookRelsDoc = parser.parseFromString(await workbookRelsFile.async('string'), 'text/xml');
+    const sheetRelationship = Array.from(workbookRelsDoc.getElementsByTagName('Relationship')).find(item => item.getAttribute('Id') === sheetRelationshipId);
+    const worksheetPath = sheetRelationship ? resolveZipPath('xl/workbook.xml', sheetRelationship.getAttribute('Target') || '') : '';
+    const worksheetName = worksheetPath.split('/').pop();
+    const worksheetRelsFile = worksheetName ? zip.file(`${worksheetPath.slice(0, worksheetPath.lastIndexOf('/'))}/_rels/${worksheetName}.rels`) : null;
+    if (!worksheetRelsFile) return rowImages;
+    const worksheetRelsDoc = parser.parseFromString(await worksheetRelsFile.async('string'), 'text/xml');
+    const drawingPaths = new Set(Array.from(worksheetRelsDoc.getElementsByTagName('Relationship'))
+      .filter(item => /\/drawing$/i.test(item.getAttribute('Type') || ''))
+      .map(item => resolveZipPath(worksheetPath, item.getAttribute('Target') || '')));
+    const drawingFiles = zip.file(/^xl\/drawings\/drawing\d+\.xml$/i).filter(item => drawingPaths.has(item.name));
+    if (drawingFiles.length === 0) return rowImages;
+    for (const drawingFile of drawingFiles) {
+      const number = drawingFile.name.match(/drawing(\d+)\.xml$/i)?.[1];
+      const relsFile = number ? zip.file(`xl/drawings/_rels/drawing${number}.xml.rels`) : null;
+      if (!relsFile) continue;
+      const relsDoc = parser.parseFromString(await relsFile.async('string'), 'text/xml');
+      const rels = {};
+      Array.from(relsDoc.getElementsByTagName('Relationship')).forEach(element => {
+        const target = resolveZipPath(drawingFile.name, element.getAttribute('Target') || '');
+        rels[element.getAttribute('Id')] = target;
+      });
+      const drawDoc = parser.parseFromString(await drawingFile.async('string'), 'text/xml');
+      const anchors = Array.from(drawDoc.getElementsByTagNameNS('*', 'twoCellAnchor')).concat(Array.from(drawDoc.getElementsByTagNameNS('*', 'oneCellAnchor')));
+      for (const anchor of anchors) {
+        const from = anchor.getElementsByTagNameNS('*', 'from')[0];
+        const row = from?.getElementsByTagNameNS('*', 'row')[0];
+        const column = from?.getElementsByTagNameNS('*', 'col')[0];
+        const blip = anchor.getElementsByTagNameNS('*', 'blip')[0];
+        const relationshipId = blip?.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'embed') || blip?.getAttribute('r:embed');
+        if (!row || !column || !relationshipId || !rels[relationshipId]) continue;
+        const excelRow = Number(row.textContent);
+        const columnIndex = Number(column.textContent);
+        if (!Number.isInteger(excelRow) || excelRow < 1 || !Number.isInteger(columnIndex)) continue;
+        const mediaPath = rels[relationshipId];
+        const mediaFile = zip.file(mediaPath) || zip.file(new RegExp(mediaPath.split('/').pop().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i'))[0];
+        if (!mediaFile) continue;
+        const ext = mediaFile.name.split('.').pop().toLowerCase();
+        const mime = ext === 'png' ? 'image/png' : (ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : (ext === 'gif' ? 'image/gif' : (ext === 'webp' ? 'image/webp' : '')));
+        if (!mime) continue;
+        const base64 = await mediaFile.async('base64');
+        const dataRowIndex = excelRow - 1;
+        if (!rowImages[dataRowIndex]) rowImages[dataRowIndex] = {};
+        rowImages[dataRowIndex][columnIndex] = `data:${mime};base64,${base64}`;
       }
     }
   } catch (err) {
@@ -159,12 +211,22 @@ async function handleExcelUpload(input, callback) {
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
         const json = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+        const matrix = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+        const headers = (matrix[0] || []).map(value => String(value || '').trim());
 
-        // Merge extracted images into question rows
+        // Merge each drawing into the exact row and content column containing its anchor.
+        const imageTargets = { gambar_soal:'pertanyaan', gambar_a:'opsi_a', gambar_b:'opsi_b', gambar_c:'opsi_c', gambar_d:'opsi_d', gambar_e:'opsi_e', gambar_pembahasan:'pembahasan' };
         json.forEach((row, idx) => {
-          if (embeddedImages[idx] && !row.url_gambar && !row.gambar_soal) {
-            row.url_gambar = embeddedImages[idx];
-          }
+          Object.entries(embeddedImages[idx] || {}).forEach(([columnIndex, image]) => {
+            const key = headers[Number(columnIndex)];
+            const target = imageTargets[key];
+            if (!target) {
+              if (!row.__image_warnings) row.__image_warnings = [];
+              row.__image_warnings.push(`Gambar ditemukan pada kolom ${key || Number(columnIndex) + 1}; pindahkan ke kolom GAMBAR yang sesuai.`);
+              return;
+            }
+            row[target] = `${String(row[target] || '').trim()}${String(row[target] || '').trim() ? '<br>' : ''}<img src="${image}">`;
+          });
         });
 
         callback(json);

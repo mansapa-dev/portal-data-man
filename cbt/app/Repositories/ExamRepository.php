@@ -84,7 +84,7 @@ final class ExamRepository
     public function questions(int $examId, bool $includeAnswers = false): array
     {
         $columns = 'id, public_id, question_text, option_a, option_b, option_c, option_d, option_e, points';
-        if ($includeAnswers) $columns .= ', correct_answer';
+        if ($includeAnswers) $columns .= ', correct_answer, explanation';
         $statement = $this->db->prepare("SELECT {$columns} FROM questions WHERE exam_id=:exam_id AND status='ACTIVE'");
         $statement->execute(['exam_id' => $examId]);
         return $statement->fetchAll();

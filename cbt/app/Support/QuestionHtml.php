@@ -51,7 +51,7 @@ final class QuestionHtml
  }
  public static function row(array $row): array
  {
-  foreach (['pertanyaan','opsi_a','opsi_b','opsi_c','opsi_d','opsi_e'] as $key) if (isset($row[$key])) $row[$key] = self::clean((string)$row[$key]);
+  foreach (['pertanyaan','opsi_a','opsi_b','opsi_c','opsi_d','opsi_e','pembahasan'] as $key) if (isset($row[$key])) $row[$key] = self::clean((string)$row[$key]);
   return $row;
  }
 }

@@ -2,6 +2,14 @@
 let stSiswa = { id: null, nama: '', kelas: '', no: '' };
 let stUjian = { id: null, nama: '', durasi: 0 };
 let stSoal = [];
+
+function typesetQuestionMath(elements) {
+  if (!window.MathJax?.typesetPromise) return;
+  const targets = (Array.isArray(elements) ? elements : [elements]).filter(Boolean);
+  if (!targets.length) return;
+  if (window.MathJax.typesetClear) window.MathJax.typesetClear(targets);
+  window.MathJax.typesetPromise(targets).catch(error => console.warn('Equation rendering failed:', error));
+}
 let stJawab = {};
 let stRagu = {};
 let stIdx = 0;

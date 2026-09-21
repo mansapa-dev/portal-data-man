@@ -17,6 +17,7 @@
           <div class="input-wrapper">
             <textarea id="inPertanyaan" rows="3" required style="padding:10px 12px" placeholder="Tulis teks pertanyaan di sini..." class="ui-control"></textarea>
           </div>
+          <div class="question-format-toolbar" aria-label="Format pertanyaan"><button type="button" title="Equation inline" onclick="insertQuestionEquation('inPertanyaan')">Inline</button><button type="button" title="Equation blok" onclick="insertQuestionSnippet('inPertanyaan','\\[\\n x^2 \\n\\]')">Block</button><button type="button" title="Pangkat" onclick="insertQuestionSnippet('inPertanyaan','^{ }')">x²</button><button type="button" title="Subscript" onclick="insertQuestionSnippet('inPertanyaan','_{ }')">x₁</button><button type="button" title="Pecahan" onclick="insertQuestionSnippet('inPertanyaan','\\(\\frac{ }{ }\\)')">½</button><button type="button" title="Akar" onclick="insertQuestionSnippet('inPertanyaan','\\(\\sqrt{ }\\)')">√</button><button type="button" title="Integral" onclick="insertQuestionSnippet('inPertanyaan','\\(\\int_{ }^{ } \\,dx\\)')">∫</button><button type="button" title="Matriks" onclick="insertQuestionSnippet('inPertanyaan','\\[\\begin{bmatrix} a & b \\\\ c & d \\end{bmatrix}\\]')">Matriks</button></div>
         </div>
 
         <!-- LAMPIRAN GAMBAR SOAL -->
@@ -50,28 +51,39 @@
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
           <div class="input-group">
             <label class="ui-label" for="inOpsiA">Opsi A</label>
-            <div class="input-wrapper"><input type="text" id="inOpsiA" required placeholder="Jawaban A" style="padding-left:12px" class="ui-control"></div>
+            <div class="input-wrapper"><textarea id="inOpsiA" rows="2" required placeholder="Jawaban A" class="ui-control"></textarea></div>
+            <div class="question-format-toolbar"><button type="button" onclick="wrapQuestionContent('inOpsiA','<sup>','</sup>','2')">x<sup>2</sup></button><button type="button" onclick="wrapQuestionContent('inOpsiA','<sub>','</sub>','2')">x<sub>2</sub></button><button type="button" onclick="insertQuestionEquation('inOpsiA')">Equation</button><button type="button" aria-label="Tambah gambar opsi A" onclick="document.getElementById('inOpsiAImage').click()"><i class="fa-solid fa-image"></i></button><input type="file" id="inOpsiAImage" accept="image/png,image/jpeg,image/gif,image/webp" hidden onchange="handleQuestionContentImage(this,'inOpsiA')"></div>
           </div>
           <div class="input-group">
             <label class="ui-label" for="inOpsiB">Opsi B</label>
-            <div class="input-wrapper"><input type="text" id="inOpsiB" required placeholder="Jawaban B" style="padding-left:12px" class="ui-control"></div>
+            <div class="input-wrapper"><textarea id="inOpsiB" rows="2" required placeholder="Jawaban B" class="ui-control"></textarea></div>
+            <div class="question-format-toolbar"><button type="button" onclick="wrapQuestionContent('inOpsiB','<sup>','</sup>','2')">x<sup>2</sup></button><button type="button" onclick="wrapQuestionContent('inOpsiB','<sub>','</sub>','2')">x<sub>2</sub></button><button type="button" onclick="insertQuestionEquation('inOpsiB')">Equation</button><button type="button" aria-label="Tambah gambar opsi B" onclick="document.getElementById('inOpsiBImage').click()"><i class="fa-solid fa-image"></i></button><input type="file" id="inOpsiBImage" accept="image/png,image/jpeg,image/gif,image/webp" hidden onchange="handleQuestionContentImage(this,'inOpsiB')"></div>
           </div>
         </div>
 
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
           <div class="input-group">
             <label class="ui-label" for="inOpsiC">Opsi C</label>
-            <div class="input-wrapper"><input type="text" id="inOpsiC" required placeholder="Jawaban C" style="padding-left:12px" class="ui-control"></div>
+            <div class="input-wrapper"><textarea id="inOpsiC" rows="2" required placeholder="Jawaban C" class="ui-control"></textarea></div>
+            <div class="question-format-toolbar"><button type="button" onclick="wrapQuestionContent('inOpsiC','<sup>','</sup>','2')">x<sup>2</sup></button><button type="button" onclick="wrapQuestionContent('inOpsiC','<sub>','</sub>','2')">x<sub>2</sub></button><button type="button" onclick="insertQuestionEquation('inOpsiC')">Equation</button><button type="button" aria-label="Tambah gambar opsi C" onclick="document.getElementById('inOpsiCImage').click()"><i class="fa-solid fa-image"></i></button><input type="file" id="inOpsiCImage" accept="image/png,image/jpeg,image/gif,image/webp" hidden onchange="handleQuestionContentImage(this,'inOpsiC')"></div>
           </div>
           <div class="input-group">
             <label class="ui-label" for="inOpsiD">Opsi D</label>
-            <div class="input-wrapper"><input type="text" id="inOpsiD" required placeholder="Jawaban D" style="padding-left:12px" class="ui-control"></div>
+            <div class="input-wrapper"><textarea id="inOpsiD" rows="2" required placeholder="Jawaban D" class="ui-control"></textarea></div>
+            <div class="question-format-toolbar"><button type="button" onclick="wrapQuestionContent('inOpsiD','<sup>','</sup>','2')">x<sup>2</sup></button><button type="button" onclick="wrapQuestionContent('inOpsiD','<sub>','</sub>','2')">x<sub>2</sub></button><button type="button" onclick="insertQuestionEquation('inOpsiD')">Equation</button><button type="button" aria-label="Tambah gambar opsi D" onclick="document.getElementById('inOpsiDImage').click()"><i class="fa-solid fa-image"></i></button><input type="file" id="inOpsiDImage" accept="image/png,image/jpeg,image/gif,image/webp" hidden onchange="handleQuestionContentImage(this,'inOpsiD')"></div>
           </div>
         </div>
 
         <div class="input-group">
           <label class="ui-label" for="inOpsiE">Opsi E (Opsional)</label>
-          <div class="input-wrapper"><input type="text" id="inOpsiE" placeholder="Jawaban E" style="padding-left:12px" class="ui-control"></div>
+          <div class="input-wrapper"><textarea id="inOpsiE" rows="2" placeholder="Jawaban E" class="ui-control"></textarea></div>
+          <div class="question-format-toolbar"><button type="button" onclick="wrapQuestionContent('inOpsiE','<sup>','</sup>','2')">x<sup>2</sup></button><button type="button" onclick="wrapQuestionContent('inOpsiE','<sub>','</sub>','2')">x<sub>2</sub></button><button type="button" onclick="insertQuestionEquation('inOpsiE')">Equation</button><button type="button" aria-label="Tambah gambar opsi E" onclick="document.getElementById('inOpsiEImage').click()"><i class="fa-solid fa-image"></i></button><input type="file" id="inOpsiEImage" accept="image/png,image/jpeg,image/gif,image/webp" hidden onchange="handleQuestionContentImage(this,'inOpsiE')"></div>
+        </div>
+
+        <div class="input-group">
+          <label class="ui-label" for="inPembahasan">Pembahasan (Opsional)</label>
+          <div class="input-wrapper"><textarea id="inPembahasan" rows="3" placeholder="Tulis pembahasan, equation, atau tambahkan gambar" class="ui-control"></textarea></div>
+          <div class="question-format-toolbar"><button type="button" title="Pangkat" onclick="wrapQuestionContent('inPembahasan','^{','}','2')">x²</button><button type="button" title="Subscript" onclick="wrapQuestionContent('inPembahasan','_{','}','1')">x₁</button><button type="button" title="Equation inline" onclick="insertQuestionEquation('inPembahasan')">Inline</button><button type="button" title="Pecahan" onclick="wrapQuestionContent('inPembahasan','\\(\\frac{','}{}\\)','1')">½</button><button type="button" title="Tambah gambar" aria-label="Tambah gambar pembahasan" onclick="document.getElementById('inPembahasanImage').click()"><i class="fa-solid fa-image"></i></button><input type="file" id="inPembahasanImage" accept="image/png,image/jpeg,image/gif,image/webp" hidden onchange="handleQuestionContentImage(this,'inPembahasan')"></div>
         </div>
 
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
@@ -85,6 +97,7 @@
           </div>
         </div>
 
+        <details open class="question-form-preview"><summary><b>Preview Soal</b></summary><div id="questionFormPreview" class="question-import-card"></div></details>
         <div class="modal-actions"><button type="button" class="ui-button btn btn-secondary" onclick="document.getElementById('modalSoal').classList.remove('show')">Batal</button><button type="submit" class="ui-button btn btn-primary">Simpan Soal</button></div>
       </form>
     </div>
