@@ -492,15 +492,16 @@ function handleGambarSoalFile(input) {
     return;
   }
 
-  if (file.size > 2 * 1024 * 1024) {
-    showCustomAlert('File Terlalu Besar', 'Maksimal ukuran file gambar adalah 2MB.');
+  if (file.size > 10 * 1024 * 1024) {
+    showCustomAlert('File Terlalu Besar', 'Maksimal ukuran sumber gambar adalah 10 MB.');
     input.value = '';
     return;
   }
 
   const reader = new FileReader();
-  reader.onload = function (e) {
-    attachedGambarSoalBase64 = e.target.result;
+  reader.onload = async function (e) {
+    try { attachedGambarSoalBase64 = await optimizeQuestionImageDataUrl(e.target.result); }
+    catch (error) { input.value = ''; return showCustomAlert('Gambar Gagal Diproses', error.message, 'error'); }
     document.getElementById('inGambarSoalUrl').value = '';
     const previewContainer = document.getElementById('previewGambarContainer');
     const previewImg = document.getElementById('imgPreviewElement');
@@ -541,6 +542,7 @@ function hapusGambarSoalModal() {
 
 function bukaModalSoal(data = null, preselectedExamId = null) {
   document.getElementById('formSoal').reset();
+  clearQuestionEditors();
   hapusGambarSoalModal();
   showLoading('Memuat daftar jadwal ujian...');
 
@@ -574,12 +576,12 @@ function bukaModalSoal(data = null, preselectedExamId = null) {
           rawPertanyaan = rawPertanyaan.replace(/<br\s*\/?>\s*<img[^>]*>/gi, '').replace(/<img[^>]*>/gi, '').trim();
         }
 
-        document.getElementById('inPertanyaan').value = rawPertanyaan;
-        document.getElementById('inOpsiA').value = data.opsi_a;
-        document.getElementById('inOpsiB').value = data.opsi_b;
-        document.getElementById('inOpsiC').value = data.opsi_c;
-        document.getElementById('inOpsiD').value = data.opsi_d;
-        document.getElementById('inOpsiE').value = data.opsi_e || '';
+        setQuestionEditorValue('inPertanyaan', rawPertanyaan);
+        setQuestionEditorValue('inOpsiA', data.opsi_a);
+        setQuestionEditorValue('inOpsiB', data.opsi_b);
+        setQuestionEditorValue('inOpsiC', data.opsi_c);
+        setQuestionEditorValue('inOpsiD', data.opsi_d);
+        setQuestionEditorValue('inOpsiE', data.opsi_e || '');
         document.getElementById('inJawabanBenar').value = data.jawaban_benar;
         document.getElementById('inPoinSoal').value = data.poin || 1;
       } else {
@@ -597,13 +599,18 @@ function editSoal(s) {
 }
 
 let questionPreviewTimer=null;
-function renderQuestionFormPreview(){const root=document.getElementById('questionFormPreview');if(!root)return;const question=safeQuestionPreviewHtml(document.getElementById('inPertanyaan').value),options=['A','B','C','D','E'].map(letter=>[letter,safeQuestionPreviewHtml(document.getElementById(`inOpsi${letter}`).value)]).filter(([,value])=>value);root.innerHTML=`<div class="question-rich-content">${question||'<span class="text-muted">Preview pertanyaan</span>'}</div><div class="question-import-options">${options.map(([letter,value])=>`<div><b>${letter}.</b> <span>${value}</span></div>`).join('')}</div>`;typesetQuestionMath(root);}
+function renderQuestionFormPreview(){const root=document.getElementById('questionFormPreview');if(!root)return;const question=safeQuestionPreviewHtml(questionEditorValue('inPertanyaan')),options=['A','B','C','D','E'].map(letter=>[letter,safeQuestionPreviewHtml(questionEditorValue(`inOpsi${letter}`))]).filter(([,value])=>value);root.innerHTML=`<div class="question-rich-content">${question||'<span class="text-muted">Preview pertanyaan</span>'}</div><div class="question-import-options">${options.map(([letter,value])=>`<div><b>${letter}.</b> <span>${value}</span></div>`).join('')}</div>`;typesetQuestionMath(root);}
 ['inPertanyaan','inOpsiA','inOpsiB','inOpsiC','inOpsiD','inOpsiE'].forEach(id=>document.getElementById(id)?.addEventListener('input',()=>{clearTimeout(questionPreviewTimer);questionPreviewTimer=setTimeout(renderQuestionFormPreview,180);}));
 document.getElementById('formSoal').addEventListener('submit', function (e) {
   e.preventDefault();
-  let pertanyaanText = document.getElementById('inPertanyaan').value.trim();
+  let pertanyaanText = questionEditorValue('inPertanyaan');
   const gambarUrl = document.getElementById('inGambarSoalUrl').value.trim();
   const activeImage = attachedGambarSoalBase64 || gambarUrl;
+
+  const requiredEditors=['inPertanyaan','inOpsiA','inOpsiB','inOpsiC','inOpsiD'];
+  if(requiredEditors.some(id=>!(id==='inPertanyaan'&&activeImage)&&!document.getElementById(id)?.textContent.trim()&&!document.getElementById(id)?.querySelector('img,math'))){
+    return showCustomAlert('Data Belum Lengkap','Pertanyaan dan pilihan A sampai D wajib diisi.','warning');
+  }
 
   if (activeImage && !pertanyaanText.includes('<img')) {
     pertanyaanText += `<br><img src="${activeImage}" style="max-width:100%; max-height:280px; object-fit:contain; border-radius:8px; margin:8px 0; display:block;" />`;
@@ -613,11 +620,11 @@ document.getElementById('formSoal').addEventListener('submit', function (e) {
     id: document.getElementById('editSoalId').value || null,
     ujian_id: document.getElementById('inSoalUjianId').value,
     pertanyaan: pertanyaanText,
-    opsi_a: document.getElementById('inOpsiA').value,
-    opsi_b: document.getElementById('inOpsiB').value,
-    opsi_c: document.getElementById('inOpsiC').value,
-    opsi_d: document.getElementById('inOpsiD').value,
-    opsi_e: document.getElementById('inOpsiE').value,
+    opsi_a: questionEditorValue('inOpsiA'),
+    opsi_b: questionEditorValue('inOpsiB'),
+    opsi_c: questionEditorValue('inOpsiC'),
+    opsi_d: questionEditorValue('inOpsiD'),
+    opsi_e: questionEditorValue('inOpsiE'),
     jawaban_benar: document.getElementById('inJawabanBenar').value,
     poin: document.getElementById('inPoinSoal').value
   };
@@ -641,8 +648,6 @@ document.getElementById('formSoal').addEventListener('submit', function (e) {
 });
 
 function handleImportSoal(input){handleExcelUpload(input,rows=>{if(!rows.length)return showCustomAlert('Peringatan','File Excel soal kosong atau tidak valid.');showQuestionImportPreview(rows,input);});}
-
-function safeQuestionPreviewHtml(value){const template=document.createElement('template');template.innerHTML=String(value||'');const allowed=new Set(['BR','SUP','SUB','B','STRONG','I','EM','U','P','DIV','SPAN','IMG']);Array.from(template.content.querySelectorAll('*')).forEach(element=>{if(!allowed.has(element.tagName)){element.replaceWith(document.createTextNode(element.textContent||''));return;}const src=element.tagName==='IMG'?element.getAttribute('src')||'':'';Array.from(element.attributes).forEach(attribute=>element.removeAttribute(attribute.name));const safeImage=/^data:image\/(?:png|jpeg|gif|webp);base64,/i.test(src)||/^(?![/\\]{2})(?:\/?[A-Za-z0-9_-])[A-Za-z0-9_./?=&%+#-]*$/.test(src);if(element.tagName==='IMG'&&safeImage){element.setAttribute('src',src);element.setAttribute('alt','Gambar soal');}else if(element.tagName==='IMG')element.remove();});return template.innerHTML;}
 
 function validateQuestionImportRow(row,index){const errors=[],warnings=[...(row.__image_warnings||[])];if(String(row.no??'').trim()==='')errors.push('Nomor soal kosong');['pertanyaan','opsi_a','opsi_b','opsi_c','opsi_d'].forEach(key=>{if(!String(row[key]||'').trim())errors.push(`${key} kosong`);});const answer=String(row.jawaban_benar||'').trim().toUpperCase();if(!['A','B','C','D','E'].includes(answer))errors.push('Kunci jawaban harus A/B/C/D/E');else if(!String(row[`opsi_${answer.toLowerCase()}`]||'').trim())errors.push(`Pilihan ${answer} kosong tetapi dipilih sebagai kunci`);if(!(Number(row.poin??1)>0))errors.push('Bobot harus lebih dari 0');return{row:index+2,errors,warnings,status:errors.length?'ERROR':warnings.length?'WARNING':'VALID'};}
 

@@ -138,6 +138,21 @@ function escapeMathMlText(value) {
   })[character]);
 }
 
+async function optimizeQuestionImageDataUrl(dataUrl) {
+  const source = String(dataUrl || '');
+  const estimatedBytes = Math.ceil((source.split(',')[1] || '').length * 0.75);
+  const browserSafe = /^data:image\/(?:png|jpeg|gif|webp);base64,/i.test(source);
+  if (browserSafe && estimatedBytes <= 750000) return source;
+  const image = new Image();
+  await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = () => reject(new Error('Format gambar Excel tidak dapat dikonversi.')); image.src = source; });
+  const scale = Math.min(1, 1600 / Math.max(image.naturalWidth || 1, image.naturalHeight || 1));
+  const canvas = document.createElement('canvas');canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const context = canvas.getContext('2d');context.fillStyle = '#fff';context.fillRect(0, 0, canvas.width, canvas.height);context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  let quality = .88, result = canvas.toDataURL('image/jpeg', quality);
+  while (Math.ceil((result.split(',')[1] || '').length * .75) > 1200000 && quality > .48) { quality -= .1; result = canvas.toDataURL('image/jpeg', quality); }
+  return result;
+}
+
 // Convert the Office Math (OMML) stored by Excel's Insert -> Equation menu to
 // browser-native MathML. This deliberately happens during import; authors do
 // not need to type or understand LaTeX.
@@ -248,22 +263,21 @@ async function extractImagesFromExcel(file) {
     const workbookRelsDoc = parser.parseFromString(await workbookRelsFile.async('string'), 'text/xml');
     const sheetRelationship = Array.from(workbookRelsDoc.getElementsByTagName('Relationship')).find(item => item.getAttribute('Id') === sheetRelationshipId);
     const worksheetPath = sheetRelationship ? resolveZipPath('xl/workbook.xml', sheetRelationship.getAttribute('Target') || '') : '';
+    const worksheetFile = worksheetPath ? zip.file(worksheetPath) : null;
+    const worksheetDoc = worksheetFile ? parser.parseFromString(await worksheetFile.async('string'), 'text/xml') : null;
     const worksheetName = worksheetPath.split('/').pop();
     const worksheetRelsFile = worksheetName ? zip.file(`${worksheetPath.slice(0, worksheetPath.lastIndexOf('/'))}/_rels/${worksheetName}.rels`) : null;
-    if (!worksheetRelsFile) return rowImages;
-    const worksheetRelsDoc = parser.parseFromString(await worksheetRelsFile.async('string'), 'text/xml');
-    const drawingPaths = new Set(Array.from(worksheetRelsDoc.getElementsByTagName('Relationship'))
+    const worksheetRelsDoc = worksheetRelsFile ? parser.parseFromString(await worksheetRelsFile.async('string'), 'text/xml') : null;
+    const drawingPaths = new Set(Array.from(worksheetRelsDoc?.getElementsByTagName('Relationship') || [])
       .filter(item => /\/drawing$/i.test(item.getAttribute('Type') || ''))
       .map(item => resolveZipPath(worksheetPath, item.getAttribute('Target') || '')));
     const drawingFiles = zip.file(/^xl\/drawings\/drawing\d+\.xml$/i).filter(item => drawingPaths.has(item.name));
-    if (drawingFiles.length === 0) return rowImages;
     for (const drawingFile of drawingFiles) {
       const number = drawingFile.name.match(/drawing(\d+)\.xml$/i)?.[1];
       const relsFile = number ? zip.file(`xl/drawings/_rels/drawing${number}.xml.rels`) : null;
-      if (!relsFile) continue;
-      const relsDoc = parser.parseFromString(await relsFile.async('string'), 'text/xml');
+      const relsDoc = relsFile ? parser.parseFromString(await relsFile.async('string'), 'text/xml') : null;
       const rels = {};
-      Array.from(relsDoc.getElementsByTagName('Relationship')).forEach(element => {
+      Array.from(relsDoc?.getElementsByTagName('Relationship') || []).forEach(element => {
         const target = resolveZipPath(drawingFile.name, element.getAttribute('Target') || '');
         rels[element.getAttribute('Id')] = target;
       });
@@ -292,12 +306,51 @@ async function extractImagesFromExcel(file) {
           const mediaFile = zip.file(mediaPath) || zip.file(new RegExp(mediaPath.split('/').pop().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i'))[0];
           if (mediaFile) {
             const ext = mediaFile.name.split('.').pop().toLowerCase();
-            const mime = ext === 'png' ? 'image/png' : (ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : (ext === 'gif' ? 'image/gif' : (ext === 'webp' ? 'image/webp' : '')));
-            if (mime) fragments.push(`<img src="data:${mime};base64,${await mediaFile.async('base64')}">`);
+            const mime = ext === 'png' ? 'image/png' : (ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : (ext === 'gif' ? 'image/gif' : (ext === 'webp' ? 'image/webp' : (ext === 'svg' ? 'image/svg+xml' : (ext === 'bmp' ? 'image/bmp' : '')))));
+            if (mime) fragments.push(`<img src="${await optimizeQuestionImageDataUrl(`data:${mime};base64,${await mediaFile.async('base64')}`)}">`);
           }
         }
         if (fragments.length) rowImages[dataRowIndex][columnIndex] = `${rowImages[dataRowIndex][columnIndex] || ''}${fragments.join('<br>')}`;
       }
+    }
+
+    // Excel 365 can store Insert -> Pictures -> Place in Cell images in
+    // xl/cellimages.xml and reference them with DISPIMG formulas instead of a
+    // worksheet drawing anchor. Resolve that newer representation as well.
+    const cellImagesFile = zip.file('xl/cellimages.xml');
+    const cellImagesRelsFile = zip.file('xl/_rels/cellimages.xml.rels');
+    if (worksheetDoc && cellImagesFile && cellImagesRelsFile) {
+      const cellImagesDoc = parser.parseFromString(await cellImagesFile.async('string'), 'text/xml');
+      const cellImagesRelsDoc = parser.parseFromString(await cellImagesRelsFile.async('string'), 'text/xml');
+      const cellImageRels = {};
+      Array.from(cellImagesRelsDoc.getElementsByTagName('Relationship')).forEach(element => {
+        cellImageRels[element.getAttribute('Id')] = resolveZipPath('xl/cellimages.xml', element.getAttribute('Target') || '');
+      });
+      const imagesById = {};
+      for (const picture of Array.from(cellImagesDoc.getElementsByTagNameNS('*', 'pic'))) {
+        const properties = picture.getElementsByTagNameNS('*', 'cNvPr')[0];
+        const imageId = properties?.getAttribute('name') || properties?.getAttribute('descr') || '';
+        const blip = picture.getElementsByTagNameNS('*', 'blip')[0];
+        const relationshipId = blip?.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'embed') || blip?.getAttribute('r:embed');
+        const mediaPath = relationshipId ? cellImageRels[relationshipId] : '';
+        const mediaFile = mediaPath ? (zip.file(mediaPath) || zip.file(new RegExp(mediaPath.split('/').pop().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i'))[0]) : null;
+        if (!imageId || !mediaFile) continue;
+        const ext = mediaFile.name.split('.').pop().toLowerCase();
+        const mime = ext === 'png' ? 'image/png' : (ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : (ext === 'gif' ? 'image/gif' : (ext === 'webp' ? 'image/webp' : (ext === 'svg' ? 'image/svg+xml' : (ext === 'bmp' ? 'image/bmp' : '')))));
+        if (mime) imagesById[imageId] = `<img src="${await optimizeQuestionImageDataUrl(`data:${mime};base64,${await mediaFile.async('base64')}`)}">`;
+      }
+      Array.from(worksheetDoc.getElementsByTagNameNS('*', 'c')).forEach(cell => {
+        const formula = cell.getElementsByTagNameNS('*', 'f')[0]?.textContent || '';
+        const imageId = formula.match(/DISPIMG\(\s*"([^"]+)"/i)?.[1];
+        const coordinate = cell.getAttribute('r') || '';
+        const match = coordinate.match(/^([A-Z]+)(\d+)$/i);
+        if (!imageId || !imagesById[imageId] || !match) return;
+        const columnIndex = match[1].toUpperCase().split('').reduce((value, character) => value * 26 + character.charCodeAt(0) - 64, 0) - 1;
+        const dataRowIndex = Number(match[2]) - 2;
+        if (dataRowIndex < 0) return;
+        if (!rowImages[dataRowIndex]) rowImages[dataRowIndex] = {};
+        rowImages[dataRowIndex][columnIndex] = `${rowImages[dataRowIndex][columnIndex] || ''}${imagesById[imageId]}`;
+      });
     }
   } catch (err) {
     console.warn('Excel image extraction notice:', err);
@@ -332,7 +385,7 @@ async function handleExcelUpload(input, callback) {
             const key = headers[Number(columnIndex)];
             if (!contentColumns.has(key)) {
               if (!row.__image_warnings) row.__image_warnings = [];
-              row.__image_warnings.push(`Gambar ditemukan pada kolom ${key || Number(columnIndex) + 1}; pindahkan langsung ke cell pertanyaan atau pilihan.`);
+              row.__image_warnings.push(`Gambar/equation ditemukan pada kolom ${key || Number(columnIndex) + 1}; pindahkan langsung ke cell pertanyaan atau pilihan.`);
               return;
             }
             row[key] = `${String(row[key] || '').trim()}${String(row[key] || '').trim() ? '<br>' : ''}${embeddedContent}`;
