@@ -579,7 +579,6 @@ function bukaModalSoal(data = null, preselectedExamId = null) {
         document.getElementById('inOpsiC').value = data.opsi_c;
         document.getElementById('inOpsiD').value = data.opsi_d;
         document.getElementById('inOpsiE').value = data.opsi_e || '';
-        document.getElementById('inPembahasan').value = data.pembahasan || '';
         document.getElementById('inJawabanBenar').value = data.jawaban_benar;
         document.getElementById('inPoinSoal').value = data.poin || 1;
       } else {
@@ -597,8 +596,8 @@ function editSoal(s) {
 }
 
 let questionPreviewTimer=null;
-function renderQuestionFormPreview(){const root=document.getElementById('questionFormPreview');if(!root)return;const question=safeQuestionPreviewHtml(document.getElementById('inPertanyaan').value),options=['A','B','C','D','E'].map(letter=>[letter,safeQuestionPreviewHtml(document.getElementById(`inOpsi${letter}`).value)]).filter(([,value])=>value),explanation=safeQuestionPreviewHtml(document.getElementById('inPembahasan').value);root.innerHTML=`<div class="question-rich-content">${question||'<span class="text-muted">Preview pertanyaan</span>'}</div><div class="question-import-options">${options.map(([letter,value])=>`<div><b>${letter}.</b> <span>${value}</span></div>`).join('')}</div>${explanation?`<details><summary>Pembahasan</summary><div>${explanation}</div></details>`:''}`;typesetQuestionMath(root);}
-['inPertanyaan','inOpsiA','inOpsiB','inOpsiC','inOpsiD','inOpsiE','inPembahasan'].forEach(id=>document.getElementById(id)?.addEventListener('input',()=>{clearTimeout(questionPreviewTimer);questionPreviewTimer=setTimeout(renderQuestionFormPreview,180);}));
+function renderQuestionFormPreview(){const root=document.getElementById('questionFormPreview');if(!root)return;const question=safeQuestionPreviewHtml(document.getElementById('inPertanyaan').value),options=['A','B','C','D','E'].map(letter=>[letter,safeQuestionPreviewHtml(document.getElementById(`inOpsi${letter}`).value)]).filter(([,value])=>value);root.innerHTML=`<div class="question-rich-content">${question||'<span class="text-muted">Preview pertanyaan</span>'}</div><div class="question-import-options">${options.map(([letter,value])=>`<div><b>${letter}.</b> <span>${value}</span></div>`).join('')}</div>`;typesetQuestionMath(root);}
+['inPertanyaan','inOpsiA','inOpsiB','inOpsiC','inOpsiD','inOpsiE'].forEach(id=>document.getElementById(id)?.addEventListener('input',()=>{clearTimeout(questionPreviewTimer);questionPreviewTimer=setTimeout(renderQuestionFormPreview,180);}));
 document.getElementById('formSoal').addEventListener('submit', function (e) {
   e.preventDefault();
   let pertanyaanText = document.getElementById('inPertanyaan').value.trim();
@@ -618,7 +617,6 @@ document.getElementById('formSoal').addEventListener('submit', function (e) {
     opsi_c: document.getElementById('inOpsiC').value,
     opsi_d: document.getElementById('inOpsiD').value,
     opsi_e: document.getElementById('inOpsiE').value,
-    pembahasan: document.getElementById('inPembahasan').value,
     jawaban_benar: document.getElementById('inJawabanBenar').value,
     poin: document.getElementById('inPoinSoal').value
   };
@@ -645,7 +643,7 @@ function handleImportSoal(input){handleExcelUpload(input,rows=>{if(!rows.length)
 
 function safeQuestionPreviewHtml(value){const template=document.createElement('template');template.innerHTML=String(value||'');const allowed=new Set(['BR','SUP','SUB','B','STRONG','I','EM','U','P','DIV','SPAN','IMG']);Array.from(template.content.querySelectorAll('*')).forEach(element=>{if(!allowed.has(element.tagName)){element.replaceWith(document.createTextNode(element.textContent||''));return;}const src=element.tagName==='IMG'?element.getAttribute('src')||'':'';Array.from(element.attributes).forEach(attribute=>element.removeAttribute(attribute.name));const safeImage=/^data:image\/(?:png|jpeg|gif|webp);base64,/i.test(src)||/^(?![/\\]{2})(?:\/?[A-Za-z0-9_-])[A-Za-z0-9_./?=&%+#-]*$/.test(src);if(element.tagName==='IMG'&&safeImage){element.setAttribute('src',src);element.setAttribute('alt','Gambar soal');}else if(element.tagName==='IMG')element.remove();});return template.innerHTML;}
 
-function validateQuestionImportRow(row,index){const errors=[],warnings=[...(row.__image_warnings||[])];if(String(row.no??'').trim()==='')errors.push('Nomor soal kosong');if(String(row.tipe_soal||'PILIHAN_GANDA').toUpperCase()!=='PILIHAN_GANDA')errors.push('Tipe soal harus PILIHAN_GANDA');['pertanyaan','opsi_a','opsi_b','opsi_c','opsi_d'].forEach(key=>{if(!String(row[key]||'').trim())errors.push(`${key} kosong`);});const answer=String(row.jawaban_benar||'').trim().toUpperCase();if(!['A','B','C','D','E'].includes(answer))errors.push('Kunci jawaban harus A/B/C/D/E');else if(!String(row[`opsi_${answer.toLowerCase()}`]||'').trim())errors.push(`Pilihan ${answer} kosong tetapi dipilih sebagai kunci`);if(!(Number(row.poin??1)>0))errors.push('Bobot harus lebih dari 0');return{row:index+2,errors,warnings,status:errors.length?'ERROR':warnings.length?'WARNING':'VALID'};}
+function validateQuestionImportRow(row,index){const errors=[],warnings=[...(row.__image_warnings||[])];if(String(row.no??'').trim()==='')errors.push('Nomor soal kosong');['pertanyaan','opsi_a','opsi_b','opsi_c','opsi_d'].forEach(key=>{if(!String(row[key]||'').trim())errors.push(`${key} kosong`);});const answer=String(row.jawaban_benar||'').trim().toUpperCase();if(!['A','B','C','D','E'].includes(answer))errors.push('Kunci jawaban harus A/B/C/D/E');else if(!String(row[`opsi_${answer.toLowerCase()}`]||'').trim())errors.push(`Pilihan ${answer} kosong tetapi dipilih sebagai kunci`);if(!(Number(row.poin??1)>0))errors.push('Bobot harus lebih dari 0');return{row:index+2,errors,warnings,status:errors.length?'ERROR':warnings.length?'WARNING':'VALID'};}
 
 function showQuestionImportPreview(rows, input) {
   const validation = rows.map(validateQuestionImportRow);
@@ -665,7 +663,7 @@ function showQuestionImportPreview(rows, input) {
   modal.querySelector('#questionImportPreviewList').innerHTML = rows.map((row,index) => {
     const result=validation[index], options=['a','b','c','d','e'].filter(key=>String(row[`opsi_${key}`]||'').trim());
     const notes=[...result.errors,...result.warnings].map(note=>`<li>${escapeQuestionUiText(note)}</li>`).join('');
-    return `<article class="question-import-card"><header><b>Soal ${escapeQuestionUiText(row.no || index+1)}</b><span class="badge ${result.status==='ERROR'?'bg-red':result.status==='WARNING'?'bg-yellow':'bg-green'}">${result.status}</span></header><div class="question-rich-content">${safeQuestionPreviewHtml(row.pertanyaan)}</div><div class="question-import-options">${options.map(key=>`<div><b>${key.toUpperCase()}.</b> <span>${safeQuestionPreviewHtml(row[`opsi_${key}`])}</span></div>`).join('')}</div><small>Kunci: ${escapeQuestionUiText(row.jawaban_benar)} · Bobot: ${escapeQuestionUiText(row.poin || 1)}</small>${row.pembahasan?`<details><summary>Pembahasan</summary><div>${safeQuestionPreviewHtml(row.pembahasan)}</div></details>`:''}${notes?`<ul>${notes}</ul>`:''}</article>`;
+    return `<article class="question-import-card"><header><b>Soal ${escapeQuestionUiText(row.no || index+1)}</b><span class="badge ${result.status==='ERROR'?'bg-red':result.status==='WARNING'?'bg-yellow':'bg-green'}">${result.status}</span></header><div class="question-rich-content">${safeQuestionPreviewHtml(row.pertanyaan)}</div><div class="question-import-options">${options.map(key=>`<div><b>${key.toUpperCase()}.</b> <span>${safeQuestionPreviewHtml(row[`opsi_${key}`])}</span></div>`).join('')}</div><small>Kunci: ${escapeQuestionUiText(row.jawaban_benar)} · Bobot: ${escapeQuestionUiText(row.poin || 1)}</small>${notes?`<ul>${notes}</ul>`:''}</article>`;
   }).join('');
   modal.classList.add('show'); typesetQuestionMath(modal.querySelector('#questionImportPreviewList'));
 }

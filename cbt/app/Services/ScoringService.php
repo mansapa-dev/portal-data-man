@@ -118,7 +118,7 @@ final class ScoringService
   $attempt=$this->attempts->find($studentId,$examId)??throw new DomainException('Sesi ujian tidak ditemukan.',404);
   if($attempt['status']!=='COMPLETED')throw new DomainException('Review hanya tersedia untuk ujian yang diselesaikan.',403);
   $this->ensureAttemptQuestions($attempt);
-  $sql='SELECT q.question_id id,q.question_text,q.correct_answer,q.explanation,a.answer FROM attempt_questions q LEFT JOIN student_answers a ON a.question_id=q.question_id AND a.attempt_id=q.attempt_id WHERE q.attempt_id=:attempt';
+  $sql='SELECT q.question_id id,q.question_text,q.correct_answer,a.answer FROM attempt_questions q LEFT JOIN student_answers a ON a.question_id=q.question_id AND a.attempt_id=q.attempt_id WHERE q.attempt_id=:attempt';
   $s=$this->db->pdo()->prepare($sql);$s->execute(['attempt'=>$attempt['id']]);$rows=$s->fetchAll();
   if(!$rows)throw new DomainException('Data soal untuk review tidak tersedia. Jalankan upgrade database atau pulihkan bank soal ujian ini.',409);
   $byId=[];foreach($rows as$row)$byId[(int)$row['id']]=$row;$ordered=[];
@@ -126,7 +126,7 @@ final class ScoringService
    $questions=[];
    foreach($ordered as$row){
     $status=$row['answer']===null?'KOSONG':(hash_equals((string)$row['correct_answer'],(string)$row['answer'])?'BENAR':'SALAH');
-    $questions[]=['id'=>(int)$row['id'],'pertanyaan'=>\Cbt\Support\QuestionHtml::clean($row['question_text']),'pembahasan'=>\Cbt\Support\QuestionHtml::clean($row['explanation']??''),'status'=>$status];
+    $questions[]=['id'=>(int)$row['id'],'pertanyaan'=>\Cbt\Support\QuestionHtml::clean($row['question_text']),'status'=>$status];
    }
    return['soal'=>$questions];
  }
@@ -138,7 +138,7 @@ final class ScoringService
   if((int)$count->fetchColumn()>0)return;
   // Compatibility for attempts created before question snapshots existed. Current
   // bank contents are the only recoverable source for these legacy attempts.
-  $insert=$this->db->pdo()->prepare("INSERT IGNORE INTO attempt_questions(attempt_id,question_id,question_text,option_a,option_b,option_c,option_d,option_e,correct_answer,points,explanation) SELECT :attempt,q.id,q.question_text,q.option_a,q.option_b,q.option_c,q.option_d,q.option_e,q.correct_answer,q.points,q.explanation FROM questions q WHERE q.exam_id=:exam AND JSON_CONTAINS(:question_order,CAST(q.id AS CHAR))");
+  $insert=$this->db->pdo()->prepare("INSERT IGNORE INTO attempt_questions(attempt_id,question_id,question_text,option_a,option_b,option_c,option_d,option_e,correct_answer,points) SELECT :attempt,q.id,q.question_text,q.option_a,q.option_b,q.option_c,q.option_d,q.option_e,q.correct_answer,q.points FROM questions q WHERE q.exam_id=:exam AND JSON_CONTAINS(:question_order,CAST(q.id AS CHAR))");
   $insert->execute(['attempt'=>$attempt['id'],'exam'=>$attempt['exam_id'],'question_order'=>$attempt['question_order']]);
  }
 }

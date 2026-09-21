@@ -25,52 +25,34 @@ function downloadTemplateSiswa() {
 }
 
 function downloadTemplateSoal(namaMapel = '', ujianList = []) {
-  let headers = ['ujian_id', 'nama_ujian', 'no', 'tipe_soal', 'pertanyaan', 'gambar_soal', 'opsi_a', 'gambar_a', 'opsi_b', 'gambar_b', 'opsi_c', 'gambar_c', 'opsi_d', 'gambar_d', 'opsi_e', 'gambar_e', 'jawaban_benar', 'poin', 'pembahasan', 'gambar_pembahasan'];
+  let headers = ['ujian_id', 'nama_ujian', 'no', 'pertanyaan', 'opsi_a', 'opsi_b', 'opsi_c', 'opsi_d', 'opsi_e', 'jawaban_benar', 'poin'];
   const selectedExam = Array.isArray(ujianList) && ujianList.length ? ujianList[0] : null;
   let sampleData = [
     [
       selectedExam?.id || '',
       selectedExam?.nama_ujian || (namaMapel ? '' : 'Kimia Kelas XII'),
       1,
-      'PILIHAN_GANDA',
-      'Nilai dari \\(x^2 + H_2O\\) adalah ... (gambar dapat ditempel langsung pada cell ini)',
-      '',
+      'Nilai dari persamaan berikut adalah ... (buat melalui Insert -> Equation di cell ini)',
       'Etanol',
-      '',
       'Metanol',
-      '',
       'Propanol',
-      '',
       'Butanol',
-      '',
       'Pentanol',
-      '',
       'A',
-      1,
-      'Pembahasan dapat berisi equation \\(x^2\\).',
-      ''
+      1
     ],
     [
       selectedExam?.id || '',
       selectedExam?.nama_ujian || (namaMapel ? '' : 'Biologi Kelas X'),
       2,
-      'PILIHAN_GANDA',
-      'Tuliskan pangkat dengan <sup>2</sup>, indeks dengan <sub>2</sub>, atau equation \\(E=mc^2\\).',
-      '',
+      'Pilih jawaban yang benar. Equation/simbol dapat dibuat melalui menu Insert -> Equation.',
       'Mitokondria',
-      '',
       'Ribosom',
-      '',
       'Lisosom',
-      '',
       'Badan Golgi',
-      '',
       'Kloroplas',
-      '',
       'A',
-      1,
-      '',
-      ''
+      1
     ]
   ];
   const filename = namaMapel ? `template_soal_${namaMapel.toLowerCase().replace(/\s+/g, '_')}.xlsx` : 'template_soal.xlsx';
@@ -90,21 +72,12 @@ function downloadTemplateSoal(namaMapel = '', ujianList = []) {
     XLSX.utils.book_append_sheet(workbook, referenceSheet, 'Referensi Ujian');
   }
   const guideRows = [
-    ['Equation inline', '\\(x^2 + H_2O\\)'],
-    ['Equation blok', '\\[\\frac{a}{b}\\]'],
-    ['Superscript', 'x<sup>2</sup>'],
-    ['Subscript', 'H<sub>2</sub>O'],
-    ['Pangkat', '\\(x^2\\), \\(x^{10}\\), \\(10^{-3}\\)'],
-    ['Indeks', '\\(x_1\\), \\(V_{out}\\), \\(x_1^2\\)'],
-    ['Pecahan', '\\(\\frac{1}{2}\\)'],
-    ['Akar', '\\(\\sqrt{144}\\)'],
-    ['Integral', '\\(\\int_0^1 x^2\\,dx\\)'],
-    ['Limit', '\\(\\lim_{x \\to 0}\\frac{\\sin x}{x}\\)'],
-    ['Summation', '\\(\\sum_{i=1}^{n} i\\)'],
-    ['Matriks', '\\[\\begin{bmatrix}1 & 2 \\\\ 3 & 4\\end{bmatrix}\\]'],
-    ['Kimia', '\\(H_2SO_4\\), \\(Ca^{2+}\\)'],
-    ['Fisika', '\\(E=mc^2\\), \\(v=\\frac{s}{t}\\)'],
-    ['Gambar', 'Insert -> Picture, kemudian letakkan anchor kiri atas gambar di cell pertanyaan atau opsi yang dituju. Gunakan format XLSX.'],
+    ['Equation & simbol', 'Klik cell pertanyaan/jawaban, pilih Insert -> Equation, lalu susun equation dari menu Excel. Tidak perlu menulis LaTeX.'],
+    ['Posisi equation', 'Letakkan seluruh kotak equation di dalam cell tujuan. Cell pada sudut kiri atas objek menentukan pertanyaan/jawaban pemiliknya.'],
+    ['Properti equation', 'Buka Format Object -> Size & Properties -> Properties, lalu pilih Move and size with cells.'],
+    ['Superscript & subscript', 'Gunakan struktur Script pada menu Equation, atau format Superscript/Subscript bawaan Excel.'],
+    ['Gambar', 'Pilih Insert -> Pictures langsung pada cell pertanyaan atau opsi_a sampai opsi_e, lalu pilih Move and size with cells.'],
+    ['Kolom yang didukung', 'Objek hanya boleh ditempel pada pertanyaan, opsi_a, opsi_b, opsi_c, opsi_d, atau opsi_e.'],
   ];
   const guideSheet = XLSX.utils.aoa_to_sheet([['Fitur', 'Cara Penulisan'], ...guideRows]);
   guideSheet['!cols'] = [{ wch: 20 }, { wch: 90 }];
@@ -118,7 +91,96 @@ function downloadTemplateAkun() {
   exportToExcel('template_akun_pengguna.xlsx', 'Template Akun', headers, sampleData);
 }
 
-// EXTRACT EMBEDDED IMAGES DIRECTLY INSERTED INSIDE EXCEL (.XLSX)
+function escapeMathMlText(value) {
+  return String(value ?? '').replace(/[&<>"']/g, character => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;'
+  })[character]);
+}
+
+// Convert the Office Math (OMML) stored by Excel's Insert -> Equation menu to
+// browser-native MathML. This deliberately happens during import; authors do
+// not need to type or understand LaTeX.
+function officeMathToMathMl(root) {
+  const elements = node => Array.from(node?.childNodes || []).filter(child => child.nodeType === 1);
+  const name = node => String(node?.localName || node?.nodeName || '').replace(/^.*:/, '');
+  const direct = (node, wanted) => elements(node).find(child => name(child) === wanted);
+  const descendants = (node, wanted) => Array.from(node?.getElementsByTagNameNS?.('*', wanted) || []);
+  const propertyNames = new Set(['oMathParaPr','ctrlPr','rPr','fPr','radPr','dPr','naryPr','accPr','barPr','groupChrPr','limLowPr','limUppPr','funcPr','sSubPr','sSupPr','sSubSupPr','mPr','eqArrPr','borderBoxPr','boxPr','phantPr']);
+  const attributeValue = (node, childName, fallback = '') => {
+    const child = direct(node, childName) || descendants(node, childName)[0];
+    return child?.getAttribute('val') || child?.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/math', 'val') || child?.getAttribute('m:val') || fallback;
+  };
+  const content = node => elements(node).filter(child => !propertyNames.has(name(child))).map(convert).join('');
+  const slot = (node, slotName) => content(direct(node, slotName));
+  const row = value => `<mrow>${value || '<mtext></mtext>'}</mrow>`;
+  const tokenise = value => {
+    const chunks = String(value || '').match(/[0-9]+(?:[.,][0-9]+)?|[A-Za-z\u00C0-\uFFFF]+|\s+|./gu) || [];
+    return chunks.map(chunk => {
+      if (/^\s+$/u.test(chunk)) return '<mspace width="0.25em"></mspace>';
+      if (/^[0-9]/u.test(chunk)) return `<mn>${escapeMathMlText(chunk)}</mn>`;
+      if (/^[A-Za-z\u00C0-\uFFFF]/u.test(chunk)) return `<mi>${escapeMathMlText(chunk)}</mi>`;
+      return `<mo>${escapeMathMlText(chunk)}</mo>`;
+    }).join('');
+  };
+  const convert = node => {
+    if (!node) return '';
+    const local = name(node);
+    if (propertyNames.has(local)) return '';
+    if (local === 'r') return tokenise(descendants(node, 't').map(item => item.textContent || '').join(''));
+    if (local === 't') return tokenise(node.textContent || '');
+    if (local === 'f') {
+      const fractionType = attributeValue(node, 'type', 'bar');
+      if (fractionType === 'lin') return `<mrow>${slot(node, 'num')}<mo>/</mo>${slot(node, 'den')}</mrow>`;
+      const attributes = fractionType === 'noBar' ? ' linethickness="0"' : (fractionType === 'skw' ? ' bevelled="true"' : '');
+      return `<mfrac${attributes}>${row(slot(node, 'num'))}${row(slot(node, 'den'))}</mfrac>`;
+    }
+    if (local === 'sSup') return `<msup>${row(slot(node, 'e'))}${row(slot(node, 'sup'))}</msup>`;
+    if (local === 'sSub') return `<msub>${row(slot(node, 'e'))}${row(slot(node, 'sub'))}</msub>`;
+    if (local === 'sSubSup') return `<msubsup>${row(slot(node, 'e'))}${row(slot(node, 'sub'))}${row(slot(node, 'sup'))}</msubsup>`;
+    if (local === 'sPre') return `<mmultiscripts>${row(slot(node, 'e'))}<mprescripts></mprescripts>${row(slot(node, 'sub'))}${row(slot(node, 'sup'))}</mmultiscripts>`;
+    if (local === 'rad') {
+      const degree = slot(node, 'deg');
+      return degree ? `<mroot>${row(slot(node, 'e'))}${row(degree)}</mroot>` : `<msqrt>${slot(node, 'e')}</msqrt>`;
+    }
+    if (local === 'd') {
+      const start = attributeValue(node, 'begChr', '(');
+      const end = attributeValue(node, 'endChr', ')');
+      return `<mrow><mo>${escapeMathMlText(start)}</mo>${slot(node, 'e')}<mo>${escapeMathMlText(end)}</mo></mrow>`;
+    }
+    if (local === 'nary') {
+      const operator = attributeValue(node, 'chr', '∫');
+      const base = `<mo>${escapeMathMlText(operator)}</mo>`;
+      const sub = slot(node, 'sub');
+      const sup = slot(node, 'sup');
+      const scripted = sub && sup ? `<munderover>${base}${row(sub)}${row(sup)}</munderover>` : (sub ? `<munder>${base}${row(sub)}</munder>` : (sup ? `<mover>${base}${row(sup)}</mover>` : base));
+      return `<mrow>${scripted}${slot(node, 'e')}</mrow>`;
+    }
+    if (local === 'limLow') return `<munder>${row(slot(node, 'e'))}${row(slot(node, 'lim'))}</munder>`;
+    if (local === 'limUpp') return `<mover>${row(slot(node, 'e'))}${row(slot(node, 'lim'))}</mover>`;
+    if (local === 'acc' || local === 'bar' || local === 'groupChr') {
+      const mark = attributeValue(node, 'chr', local === 'acc' ? '\u0302' : '\u00AF');
+      const position = attributeValue(node, 'pos', 'top');
+      return position === 'bot'
+        ? `<munder accentunder="true">${row(slot(node, 'e'))}<mo>${escapeMathMlText(mark)}</mo></munder>`
+        : `<mover accent="true">${row(slot(node, 'e'))}<mo>${escapeMathMlText(mark)}</mo></mover>`;
+    }
+    if (local === 'func') return `<mrow>${slot(node, 'fName')}<mo>\u2061</mo>${slot(node, 'e')}</mrow>`;
+    if (local === 'borderBox') return `<menclose notation="box">${slot(node, 'e')}</menclose>`;
+    if (local === 'box') return `<mpadded>${slot(node, 'e')}</mpadded>`;
+    if (local === 'phant') return `<mphantom>${slot(node, 'e')}</mphantom>`;
+    if (local === 'm') {
+      const rows = elements(node).filter(child => name(child) === 'mr');
+      return `<mtable>${rows.map(matrixRow => `<mtr>${elements(matrixRow).filter(cell => name(cell) === 'e').map(cell => `<mtd>${content(cell)}</mtd>`).join('')}</mtr>`).join('')}</mtable>`;
+    }
+    if (local === 'eqArr') return `<mtable>${elements(node).filter(child => name(child) === 'e').map(item => `<mtr><mtd>${content(item)}</mtd></mtr>`).join('')}</mtable>`;
+    return content(node);
+  };
+
+  const converted = content(root);
+  return converted ? `<math xmlns="http://www.w3.org/1998/Math/MathML" display="block">${converted}</math>` : '';
+}
+
+// EXTRACT IMAGES AND NATIVE EXCEL EQUATIONS INSERTED INSIDE .XLSX
 async function extractImagesFromExcel(file) {
   const rowImages = {};
   if (typeof JSZip === 'undefined') return rowImages;
@@ -170,22 +232,30 @@ async function extractImagesFromExcel(file) {
         const from = anchor.getElementsByTagNameNS('*', 'from')[0];
         const row = from?.getElementsByTagNameNS('*', 'row')[0];
         const column = from?.getElementsByTagNameNS('*', 'col')[0];
-        const blip = anchor.getElementsByTagNameNS('*', 'blip')[0];
-        const relationshipId = blip?.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'embed') || blip?.getAttribute('r:embed');
-        if (!row || !column || !relationshipId || !rels[relationshipId]) continue;
+        if (!row || !column) continue;
         const excelRow = Number(row.textContent);
         const columnIndex = Number(column.textContent);
         if (!Number.isInteger(excelRow) || excelRow < 1 || !Number.isInteger(columnIndex)) continue;
-        const mediaPath = rels[relationshipId];
-        const mediaFile = zip.file(mediaPath) || zip.file(new RegExp(mediaPath.split('/').pop().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i'))[0];
-        if (!mediaFile) continue;
-        const ext = mediaFile.name.split('.').pop().toLowerCase();
-        const mime = ext === 'png' ? 'image/png' : (ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : (ext === 'gif' ? 'image/gif' : (ext === 'webp' ? 'image/webp' : '')));
-        if (!mime) continue;
-        const base64 = await mediaFile.async('base64');
         const dataRowIndex = excelRow - 1;
         if (!rowImages[dataRowIndex]) rowImages[dataRowIndex] = {};
-        rowImages[dataRowIndex][columnIndex] = `data:${mime};base64,${base64}`;
+        const fragments = [];
+        const officeMath = anchor.getElementsByTagNameNS('*', 'oMathPara')[0] || anchor.getElementsByTagNameNS('*', 'oMath')[0];
+        if (officeMath) {
+          const mathMl = officeMathToMathMl(officeMath);
+          if (mathMl) fragments.push(mathMl);
+        }
+        const blip = anchor.getElementsByTagNameNS('*', 'blip')[0];
+        const relationshipId = blip?.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'embed') || blip?.getAttribute('r:embed');
+        if (relationshipId && rels[relationshipId]) {
+          const mediaPath = rels[relationshipId];
+          const mediaFile = zip.file(mediaPath) || zip.file(new RegExp(mediaPath.split('/').pop().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i'))[0];
+          if (mediaFile) {
+            const ext = mediaFile.name.split('.').pop().toLowerCase();
+            const mime = ext === 'png' ? 'image/png' : (ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : (ext === 'gif' ? 'image/gif' : (ext === 'webp' ? 'image/webp' : '')));
+            if (mime) fragments.push(`<img src="data:${mime};base64,${await mediaFile.async('base64')}">`);
+          }
+        }
+        if (fragments.length) rowImages[dataRowIndex][columnIndex] = `${rowImages[dataRowIndex][columnIndex] || ''}${fragments.join('<br>')}`;
       }
     }
   } catch (err) {
@@ -215,17 +285,16 @@ async function handleExcelUpload(input, callback) {
         const headers = (matrix[0] || []).map(value => String(value || '').trim());
 
         // Merge each drawing into the exact row and content column containing its anchor.
-        const imageTargets = { gambar_soal:'pertanyaan', gambar_a:'opsi_a', gambar_b:'opsi_b', gambar_c:'opsi_c', gambar_d:'opsi_d', gambar_e:'opsi_e', gambar_pembahasan:'pembahasan' };
+        const contentColumns = new Set(['pertanyaan','opsi_a','opsi_b','opsi_c','opsi_d','opsi_e']);
         json.forEach((row, idx) => {
-          Object.entries(embeddedImages[idx] || {}).forEach(([columnIndex, image]) => {
+          Object.entries(embeddedImages[idx] || {}).forEach(([columnIndex, embeddedContent]) => {
             const key = headers[Number(columnIndex)];
-            const target = imageTargets[key];
-            if (!target) {
+            if (!contentColumns.has(key)) {
               if (!row.__image_warnings) row.__image_warnings = [];
-              row.__image_warnings.push(`Gambar ditemukan pada kolom ${key || Number(columnIndex) + 1}; pindahkan ke kolom GAMBAR yang sesuai.`);
+              row.__image_warnings.push(`Gambar ditemukan pada kolom ${key || Number(columnIndex) + 1}; pindahkan langsung ke cell pertanyaan atau pilihan.`);
               return;
             }
-            row[target] = `${String(row[target] || '').trim()}${String(row[target] || '').trim() ? '<br>' : ''}<img src="${image}">`;
+            row[key] = `${String(row[key] || '').trim()}${String(row[key] || '').trim() ? '<br>' : ''}${embeddedContent}`;
           });
         });
 

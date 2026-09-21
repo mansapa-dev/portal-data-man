@@ -23,8 +23,8 @@ final class AttemptRepository
         // Batch snapshots to avoid one database round trip per question at mass start.
         foreach (array_chunk($questions, 100) as $batch) {
             $values = [];
-            foreach ($batch as $q) array_push($values, $attempt['id'], $q['id'], $q['question_text'], $q['option_a'], $q['option_b'], $q['option_c'], $q['option_d'], $q['option_e'], $q['correct_answer'], $q['points'], $q['explanation'] ?? null);
-            $sql = 'INSERT INTO attempt_questions(attempt_id,question_id,question_text,option_a,option_b,option_c,option_d,option_e,correct_answer,points,explanation) VALUES '.implode(',', array_fill(0, count($batch), '(?,?,?,?,?,?,?,?,?,?,?)'));
+            foreach ($batch as $q) array_push($values, $attempt['id'], $q['id'], $q['question_text'], $q['option_a'], $q['option_b'], $q['option_c'], $q['option_d'], $q['option_e'], $q['correct_answer'], $q['points']);
+            $sql = 'INSERT INTO attempt_questions(attempt_id,question_id,question_text,option_a,option_b,option_c,option_d,option_e,correct_answer,points) VALUES '.implode(',', array_fill(0, count($batch), '(?,?,?,?,?,?,?,?,?,?)'));
             $this->db->prepare($sql)->execute($values);
         }
         return $attempt;

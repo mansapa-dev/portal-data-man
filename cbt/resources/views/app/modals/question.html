@@ -80,12 +80,6 @@
           <div class="question-format-toolbar"><button type="button" onclick="wrapQuestionContent('inOpsiE','<sup>','</sup>','2')">x<sup>2</sup></button><button type="button" onclick="wrapQuestionContent('inOpsiE','<sub>','</sub>','2')">x<sub>2</sub></button><button type="button" onclick="insertQuestionEquation('inOpsiE')">Equation</button><button type="button" aria-label="Tambah gambar opsi E" onclick="document.getElementById('inOpsiEImage').click()"><i class="fa-solid fa-image"></i></button><input type="file" id="inOpsiEImage" accept="image/png,image/jpeg,image/gif,image/webp" hidden onchange="handleQuestionContentImage(this,'inOpsiE')"></div>
         </div>
 
-        <div class="input-group">
-          <label class="ui-label" for="inPembahasan">Pembahasan (Opsional)</label>
-          <div class="input-wrapper"><textarea id="inPembahasan" rows="3" placeholder="Tulis pembahasan, equation, atau tambahkan gambar" class="ui-control"></textarea></div>
-          <div class="question-format-toolbar"><button type="button" title="Pangkat" onclick="wrapQuestionContent('inPembahasan','^{','}','2')">x²</button><button type="button" title="Subscript" onclick="wrapQuestionContent('inPembahasan','_{','}','1')">x₁</button><button type="button" title="Equation inline" onclick="insertQuestionEquation('inPembahasan')">Inline</button><button type="button" title="Pecahan" onclick="wrapQuestionContent('inPembahasan','\\(\\frac{','}{}\\)','1')">½</button><button type="button" title="Tambah gambar" aria-label="Tambah gambar pembahasan" onclick="document.getElementById('inPembahasanImage').click()"><i class="fa-solid fa-image"></i></button><input type="file" id="inPembahasanImage" accept="image/png,image/jpeg,image/gif,image/webp" hidden onchange="handleQuestionContentImage(this,'inPembahasan')"></div>
-        </div>
-
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
           <div class="input-group">
             <label class="ui-label" for="inJawabanBenar">Kunci Jawaban</label>

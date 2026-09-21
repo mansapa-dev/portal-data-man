@@ -56,7 +56,7 @@ final class AdminService
   foreach(['ujian_id','pertanyaan','opsi_a','opsi_b','opsi_c','opsi_d','jawaban_benar']as$key)if(trim((string)($d[$key]??''))==='')throw new DomainException('Data soal belum lengkap.',422);
   $answer=strtoupper((string)$d['jawaban_benar']);if(!in_array($answer,['A','B','C','D','E'],true)||((float)($d['poin']??0))<=0)throw new DomainException('Jawaban benar atau poin tidak valid.',422);
   if($answer==='E'&&trim((string)($d['opsi_e']??''))==='')throw new DomainException('Opsi E wajib diisi jika dipilih sebagai jawaban benar.',422);
-  $d['jawaban_benar']=$answer;foreach(['pertanyaan','opsi_a','opsi_b','opsi_c','opsi_d','opsi_e','pembahasan']as$key)$d[$key]=\Cbt\Support\QuestionImage::persistInHtml((string)($d[$key]??''));$question=\Cbt\Support\QuestionHtml::row($d+['opsi_e'=>'','pembahasan'=>'','poin'=>1]);
+  $d['jawaban_benar']=$answer;foreach(['pertanyaan','opsi_a','opsi_b','opsi_c','opsi_d','opsi_e']as$key)$d[$key]=\Cbt\Support\QuestionImage::persistInHtml((string)($d[$key]??''));$question=\Cbt\Support\QuestionHtml::row($d+['opsi_e'=>'','poin'=>1]);
   $duplicate=$this->findDuplicateQuestion((int)$question['ujian_id'],(string)$question['pertanyaan'],!empty($question['id'])?(int)$question['id']:null);
   if($duplicate!==null)throw new DomainException("Peringatan: soal duplikat dengan soal #{$duplicate} pada ujian yang sama.",409);
   $this->repo->saveQuestion($question);
@@ -80,7 +80,7 @@ final class AdminService
    if($exam<=0||!$this->repo->examExists($exam))throw new \InvalidArgumentException('Ujian tidak ditemukan. Isi ujian_id yang valid dari daftar jadwal ujian.');$row['ujian_id']=$exam;
    foreach(['ujian_id','pertanyaan','opsi_a','opsi_b','opsi_c','opsi_d','jawaban_benar']as$key)if(trim((string)($row[$key]??''))==='')throw new \InvalidArgumentException("Kolom {$key} kosong");
    $img=trim((string)($row['url_gambar']??$row['gambar_soal']??$row['gambar']??''));if($img!==''&&!str_contains((string)$row['pertanyaan'],'<img'))$row['pertanyaan'].="<br><img src=\"".htmlspecialchars($img,ENT_QUOTES,'UTF-8')."\">";
-    foreach(['pertanyaan','opsi_a','opsi_b','opsi_c','opsi_d','opsi_e','pembahasan']as$key)$row[$key]=\Cbt\Support\QuestionImage::persistInHtml((string)($row[$key]??''));$row['jawaban_benar']=strtoupper((string)$row['jawaban_benar']);if(!in_array($row['jawaban_benar'],['A','B','C','D','E'],true))throw new \InvalidArgumentException('Jawaban benar harus A-E');
+    foreach(['pertanyaan','opsi_a','opsi_b','opsi_c','opsi_d','opsi_e']as$key)$row[$key]=\Cbt\Support\QuestionImage::persistInHtml((string)($row[$key]??''));$row['jawaban_benar']=strtoupper((string)$row['jawaban_benar']);if(!in_array($row['jawaban_benar'],['A','B','C','D','E'],true))throw new \InvalidArgumentException('Jawaban benar harus A-E');
     if($row['jawaban_benar']==='E'&&trim((string)($row['opsi_e']??''))==='')throw new \InvalidArgumentException('Opsi E wajib diisi jika dipilih sebagai jawaban benar');
    $row['poin']=(float)($row['poin']??1);if($row['poin']<=0)throw new \InvalidArgumentException('Poin harus lebih dari 0');$row['opsi_e']=$row['opsi_e']??'';$row=\Cbt\Support\QuestionHtml::row($row);
    if(!isset($seen[$exam])){$seen[$exam]=[];foreach($this->repo->activeQuestionTexts($exam)as$existing)$seen[$exam][\Cbt\Support\QuestionFingerprint::fromHtml((string)$existing['pertanyaan'])]=['kind'=>'question','id'=>(int)$existing['id']];}

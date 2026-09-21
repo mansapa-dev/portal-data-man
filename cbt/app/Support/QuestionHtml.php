@@ -19,9 +19,12 @@ final class QuestionHtml
     if ($node instanceof \DOMText) continue;
     if (!$node instanceof \DOMElement) { $parent->removeChild($node); continue; }
     $tag = strtolower($node->tagName);
-    if (!in_array($tag, ['p','br','b','strong','i','em','u','s','sub','sup','ul','ol','li','table','thead','tbody','tr','td','th','span','div','img'], true)) { $parent->removeChild($node); continue; }
+    $mathTags=['math','mrow','mi','mn','mo','mtext','mspace','mfrac','msqrt','mroot','msub','msup','msubsup','munder','mover','munderover','mmultiscripts','mprescripts','none','mtable','mtr','mtd','menclose','mpadded','mphantom'];
+    if (!in_array($tag, array_merge(['p','br','b','strong','i','em','u','s','sub','sup','ul','ol','li','table','thead','tbody','tr','td','th','span','div','img'],$mathTags), true)) { $parent->removeChild($node); continue; }
     $src = $tag === 'img' ? $node->getAttribute('src') : '';
     $alt = $node->getAttribute('alt');
+    $safeMathAttributes=[];
+    if(in_array($tag,$mathTags,true))foreach(['display','xmlns','width','accent','accentunder','notation','linethickness','bevelled']as$attributeName)if($node->hasAttribute($attributeName))$safeMathAttributes[$attributeName]=$node->getAttribute($attributeName);
     foreach (iterator_to_array($node->attributes) as $attribute) $node->removeAttributeNode($attribute);
     if ($tag === 'img') {
      $relative = preg_match('~^(?![/\\\\]{2})(?:/?[A-Za-z0-9_-])[A-Za-z0-9_./?=&%+#-]*$~D', $src) === 1;
@@ -30,6 +33,7 @@ final class QuestionHtml
      $node->setAttribute('src', $src); $node->setAttribute('alt', $alt);
      $node->setAttribute('style', 'max-width:100%;max-height:280px;object-fit:contain');
     }
+    foreach($safeMathAttributes as$attributeName=>$attributeValue)$node->setAttribute($attributeName,$attributeValue);
     $clean($node);
    }
   };
@@ -51,7 +55,7 @@ final class QuestionHtml
  }
  public static function row(array $row): array
  {
-  foreach (['pertanyaan','opsi_a','opsi_b','opsi_c','opsi_d','opsi_e','pembahasan'] as $key) if (isset($row[$key])) $row[$key] = self::clean((string)$row[$key]);
+  foreach (['pertanyaan','opsi_a','opsi_b','opsi_c','opsi_d','opsi_e'] as $key) if (isset($row[$key])) $row[$key] = self::clean((string)$row[$key]);
   return $row;
  }
 }
