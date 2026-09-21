@@ -219,7 +219,8 @@ function downloadTemplateSoalMapelAktif() {
       const selectedName = currentSelectedMapelName.trim().toLowerCase();
       const exams = (ujianList || []).filter(ujian => String(ujian.nama_mapel || '').trim().toLowerCase() === selectedName);
       if (!exams.length) return showCustomAlert('Jadwal Ujian Belum Ada', `Buat jadwal ujian untuk ${currentSelectedMapelName} sebelum mengunduh template.`, 'warning');
-      downloadTemplateSoal(currentSelectedMapelName, exams);
+      const questions = cacheAdminSoalRows.filter(question => String(question.nama_mapel || '').trim().toLowerCase() === selectedName);
+      downloadTemplateSoal(currentSelectedMapelName, exams, questions);
     })
     .withFailureHandler(error => {
       hideLoading();

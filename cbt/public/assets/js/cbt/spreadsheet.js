@@ -24,11 +24,12 @@ function downloadTemplateSiswa() {
   exportToExcel('template_siswa.xlsx', 'Template Siswa', headers, sampleData);
 }
 
-function downloadTemplateSoal(namaMapel = '', ujianList = []) {
-  let headers = ['ujian_id', 'nama_ujian', 'no', 'pertanyaan', 'opsi_a', 'opsi_b', 'opsi_c', 'opsi_d', 'opsi_e', 'jawaban_benar', 'poin'];
+function downloadTemplateSoal(namaMapel = '', ujianList = [], existingQuestions = []) {
+  let headers = ['id_soal', 'ujian_id', 'nama_ujian', 'no', 'pertanyaan', 'opsi_a', 'opsi_b', 'opsi_c', 'opsi_d', 'opsi_e', 'jawaban_benar', 'poin'];
   const selectedExam = Array.isArray(ujianList) && ujianList.length ? ujianList[0] : null;
   let sampleData = [
     [
+      '',
       selectedExam?.id || '',
       selectedExam?.nama_ujian || (namaMapel ? '' : 'Kimia Kelas XII'),
       1,
@@ -42,6 +43,7 @@ function downloadTemplateSoal(namaMapel = '', ujianList = []) {
       1
     ],
     [
+      '',
       selectedExam?.id || '',
       selectedExam?.nama_ujian || (namaMapel ? '' : 'Biologi Kelas X'),
       2,
@@ -55,12 +57,36 @@ function downloadTemplateSoal(namaMapel = '', ujianList = []) {
       1
     ]
   ];
+  const examNumbers = new Map();
+  const existingData = (Array.isArray(existingQuestions) ? existingQuestions : [])
+    .slice()
+    .sort((a, b) => Number(a.exam_id || a.ujian_id || 0) - Number(b.exam_id || b.ujian_id || 0) || Number(a.id || 0) - Number(b.id || 0))
+    .map(question => {
+      const examId = question.exam_id || question.ujian_id || '';
+      const number = (examNumbers.get(String(examId)) || 0) + 1;
+      examNumbers.set(String(examId), number);
+      return [
+        question.id || '',
+        examId,
+        question.nama_ujian || '',
+        number,
+        question.pertanyaan || '',
+        question.opsi_a || '',
+        question.opsi_b || '',
+        question.opsi_c || '',
+        question.opsi_d || '',
+        question.opsi_e || '',
+        String(question.jawaban_benar || '').toUpperCase(),
+        question.poin || 1
+      ];
+    });
+  const templateRows = existingData.length ? existingData : sampleData;
   const filename = namaMapel ? `template_soal_${namaMapel.toLowerCase().replace(/\s+/g, '_')}.xlsx` : 'template_soal.xlsx';
   const workbook = XLSX.utils.book_new();
-  const templateSheet = XLSX.utils.aoa_to_sheet([headers, ...sampleData]);
+  const templateSheet = XLSX.utils.aoa_to_sheet([headers, ...templateRows]);
   templateSheet['!cols'] = headers.map(header => ({ wch: header === 'pertanyaan' ? 48 : Math.max(14, header.length + 2) }));
-  templateSheet['!rows'] = [{ hpt: 28 }, ...sampleData.map(() => ({ hpt: 72 }))];
-  templateSheet['!autofilter'] = { ref: `A1:${XLSX.utils.encode_col(headers.length - 1)}${sampleData.length + 1}` };
+  templateSheet['!rows'] = [{ hpt: 28 }, ...templateRows.map(() => ({ hpt: 72 }))];
+  templateSheet['!autofilter'] = { ref: `A1:${XLSX.utils.encode_col(headers.length - 1)}${templateRows.length + 1}` };
   templateSheet['!freeze'] = { xSplit: 0, ySplit: 1 };
   XLSX.utils.book_append_sheet(workbook, templateSheet, 'Template Soal');
 
@@ -72,6 +98,7 @@ function downloadTemplateSoal(namaMapel = '', ujianList = []) {
     XLSX.utils.book_append_sheet(workbook, referenceSheet, 'Referensi Ujian');
   }
   const guideRows = [
+    ['Soal yang sudah ada', 'Jika bank soal sudah berisi data, template otomatis memuat seluruh soal aktif. Jangan mengubah id_soal jika baris tersebut hendak diperbarui. Kosongkan id_soal hanya untuk soal baru.'],
     ['Equation & simbol', 'Klik cell pertanyaan/jawaban, pilih Insert -> Equation, lalu susun equation dari menu Excel. Tidak perlu menulis LaTeX.'],
     ['Posisi equation', 'Letakkan seluruh kotak equation di dalam cell tujuan. Cell pada sudut kiri atas objek menentukan pertanyaan/jawaban pemiliknya.'],
     ['Properti equation', 'Buka Format Object -> Size & Properties -> Properties, lalu pilih Move and size with cells.'],
@@ -83,6 +110,20 @@ function downloadTemplateSoal(namaMapel = '', ujianList = []) {
   guideSheet['!cols'] = [{ wch: 20 }, { wch: 90 }];
   XLSX.utils.book_append_sheet(workbook, guideSheet, 'Petunjuk Format');
   XLSX.writeFile(workbook, filename, { cellStyles: true });
+}
+
+function downloadTemplateSoalDenganData() {
+  showLoading('Menyiapkan template beserta soal yang sudah ada...');
+  cbtApi
+    .withSuccessHandler(ujianList => {
+      hideLoading();
+      downloadTemplateSoal('', ujianList || [], cacheAdminSoalRows);
+    })
+    .withFailureHandler(error => {
+      hideLoading();
+      showCustomAlert('Template Gagal Dibuat', error?.message || 'Daftar jadwal ujian tidak dapat dimuat.', 'error');
+    })
+    .getAdminUjianList(stPengelola);
 }
 
 function downloadTemplateAkun() {

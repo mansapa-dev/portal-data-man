@@ -76,7 +76,7 @@ final class AdminService
  {
   $valid=[];$errors=[];$seen=[];
   foreach($rows as$i=>$row){try{
-   $exam=(int)($row['ujian_id']??0);if(!$exam&&!empty($row['nama_ujian']))$exam=$this->repo->examIdByName((string)$row['nama_ujian'])??0;
+   if(empty($row['id'])&&!empty($row['id_soal']))$row['id']=$row['id_soal'];$exam=(int)($row['ujian_id']??0);if(!$exam&&!empty($row['nama_ujian']))$exam=$this->repo->examIdByName((string)$row['nama_ujian'])??0;
    if($exam<=0||!$this->repo->examExists($exam))throw new \InvalidArgumentException('Ujian tidak ditemukan. Isi ujian_id yang valid dari daftar jadwal ujian.');$row['ujian_id']=$exam;
    foreach(['ujian_id','pertanyaan','opsi_a','opsi_b','opsi_c','opsi_d','jawaban_benar']as$key)if(trim((string)($row[$key]??''))==='')throw new \InvalidArgumentException("Kolom {$key} kosong");
    $img=trim((string)($row['url_gambar']??$row['gambar_soal']??$row['gambar']??''));if($img!==''&&!str_contains((string)$row['pertanyaan'],'<img'))$row['pertanyaan'].="<br><img src=\"".htmlspecialchars($img,ENT_QUOTES,'UTF-8')."\">";
