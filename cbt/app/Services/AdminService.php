@@ -87,8 +87,8 @@ final class AdminService
    $fingerprint=\Cbt\Support\QuestionFingerprint::fromHtml((string)$row['pertanyaan']);$currentId=!empty($row['id'])?(int)$row['id']:null;$duplicate=$seen[$exam][$fingerprint]??null;
    if($duplicate!==null&&!($duplicate['kind']==='question'&&$currentId!==null&&$duplicate['id']===$currentId)){$source=$duplicate['kind']==='question'?"soal #{$duplicate['id']}":"baris {$duplicate['row']}";throw new \InvalidArgumentException("Soal duplikat dengan {$source} pada ujian yang sama");}
    if($currentId!==null)foreach($seen[$exam]as$key=>$entry)if($entry['kind']==='question'&&$entry['id']===$currentId)unset($seen[$exam][$key]);
-   $seen[$exam][$fingerprint]=['kind'=>'row','row'=>$i+2];$valid[]=$row;
-  }catch(\Throwable$e){$errors[]=['row'=>$i+2,'reason'=>$e->getMessage()];}}
+   $seen[$exam][$fingerprint]=['kind'=>'row','row'=>(int)($row['__excel_row']??($i+2))];$valid[]=$row;
+  }catch(\Throwable$e){$errors[]=['row'=>(int)($row['__excel_row']??($i+2)),'reason'=>$e->getMessage()];}}
   if($valid)$this->db->transaction(function()use($valid){foreach($valid as$row)$this->repo->saveQuestion($row);});
   return['total'=>count($rows),'inserted'=>count($valid),'failed'=>count($errors),'errors'=>$errors];
  }

@@ -60,7 +60,7 @@
     try { await csrfPromise; } catch (_) { csrfPromise = refreshCsrf(); await csrfPromise; }
     const controller = new AbortController();
     // Login/start can queue during a mass arrival; accepted answers keep a short retry window.
-    const timeoutMs = /auth\/student\/login|student\/exams\/\d+\/start/.test(path) ? 120000 : /student\/exams\/\d+\/submit/.test(path) ? 60000 : 15000;
+    const timeoutMs = /auth\/student\/login|student\/exams\/\d+\/start/.test(path) ? 120000 : /student\/exams\/\d+\/submit|admin\/questions(?:\/import)?$/.test(path) && method === 'POST' ? 60000 : 15000;
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     let response, payload;
     try {
@@ -151,7 +151,7 @@
       for(const rowsBatch of batches){
         const r=await api('api/admin/questions/import','POST',{rows:rowsBatch});
         summary.total+=Number(r.data.total||0);summary.inserted+=Number(r.data.inserted||0);summary.failed+=Number(r.data.failed||0);
-        for(const error of r.data.errors||[])summary.errors.push({...error,row:Number(error.row||2)+offset});
+        for(const error of r.data.errors||[])summary.errors.push({...error,row:rowsBatch.some(row=>Number(row.__excel_row)===Number(error.row))?Number(error.row):Number(error.row||2)+offset});
         offset+=rowsBatch.length;
       }
       return {success:true,message:`Import selesai: ${summary.inserted} berhasil, ${summary.failed} gagal.`,summary};

@@ -34,6 +34,7 @@ final class QuestionHtml
      $node->setAttribute('style', 'max-width:100%;max-height:280px;object-fit:contain');
     }
     foreach($safeMathAttributes as$attributeName=>$attributeValue)$node->setAttribute($attributeName,$attributeValue);
+    if($tag==='math')$node->setAttribute('display','inline');
     $clean($node);
    }
   };
@@ -43,15 +44,25 @@ final class QuestionHtml
  }
  private static function cleanWithoutDom(string $html): string
  {
-  // Shared hosting may omit ext-dom. Escaped plain text keeps questions readable
-  // without ever allowing stored markup to execute in the browser.
+  // Keep only images already saved into our controlled upload directory when
+  // shared hosting lacks ext-dom. All other markup still becomes plain text.
+  $images=[];
+  $html=preg_replace_callback('~<img\b[^>]*>~i',static function(array $match)use(&$images):string{
+   $fallback=preg_match('~\balt\s*=\s*(["\'])(.*?)\1~is',$match[0],$description)?' '.html_entity_decode($description[2],ENT_QUOTES|ENT_HTML5,'UTF-8').' ':'';
+   if(!preg_match('~\bsrc\s*=\s*(["\'])(.*?)\1~is',$match[0],$source))return $fallback;
+   $src=html_entity_decode($source[2],ENT_QUOTES|ENT_HTML5,'UTF-8');
+   if(!preg_match('~^assets/uploads/questions/[a-f0-9]{64}\.(?:png|jpg|gif|webp)$~D',$src))return $fallback;
+   $placeholder='CBT_SAFE_IMAGE_'.count($images).'_END';
+   $images[$placeholder]='<img src="'.htmlspecialchars($src,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8').'" alt="Gambar soal" style="max-width:100%;max-height:280px;object-fit:contain">';
+   return $placeholder;
+  },$html)??$html;
   $html = preg_replace('~<(script|style|iframe|object|embed)\b[^>]*>.*?</\1\s*>~is', '', $html) ?? '';
   $html = preg_replace_callback('~<img\b[^>]*\balt\s*=\s*(["\'])(.*?)\1[^>]*>~is', static fn(array $match): string => ' '.html_entity_decode($match[2], ENT_QUOTES | ENT_HTML5, 'UTF-8').' ', $html) ?? $html;
   $html = preg_replace('~<\s*(?:br\s*/?|/p|/div|/li|/tr)\s*>~i', "\n", $html) ?? $html;
   $text = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
   $text = preg_replace("~[\t ]+~", ' ', $text) ?? $text;
   $text = preg_replace("~\n{3,}~", "\n\n", $text) ?? $text;
-  return nl2br(htmlspecialchars(trim($text), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), false);
+  return strtr(nl2br(htmlspecialchars(trim($text), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), false),$images);
  }
  public static function row(array $row): array
  {

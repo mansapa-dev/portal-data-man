@@ -141,16 +141,62 @@ function escapeMathMlText(value) {
 async function optimizeQuestionImageDataUrl(dataUrl) {
   const source = String(dataUrl || '');
   const estimatedBytes = Math.ceil((source.split(',')[1] || '').length * 0.75);
+  if (!/^data:image\/[a-z0-9.+-]+;base64,/i.test(source) || !estimatedBytes) throw new Error('File bukan gambar yang valid.');
+  if (estimatedBytes > 20 * 1024 * 1024) throw new Error('Ukuran sumber gambar maksimal 20 MB.');
   const browserSafe = /^data:image\/(?:png|jpeg|gif|webp);base64,/i.test(source);
   if (browserSafe && estimatedBytes <= 750000) return source;
   const image = new Image();
-  await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = () => reject(new Error('Format gambar Excel tidak dapat dikonversi.')); image.src = source; });
-  const scale = Math.min(1, 1600 / Math.max(image.naturalWidth || 1, image.naturalHeight || 1));
-  const canvas = document.createElement('canvas');canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
-  const context = canvas.getContext('2d');context.fillStyle = '#fff';context.fillRect(0, 0, canvas.width, canvas.height);context.drawImage(image, 0, 0, canvas.width, canvas.height);
-  let quality = .88, result = canvas.toDataURL('image/jpeg', quality);
-  while (Math.ceil((result.split(',')[1] || '').length * .75) > 1200000 && quality > .48) { quality -= .1; result = canvas.toDataURL('image/jpeg', quality); }
+  await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = () => reject(new Error('Format gambar tidak dapat dibaca browser. Simpan ulang sebagai PNG, JPG, WebP, GIF, BMP, atau SVG.')); image.src = source; });
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  let scale = Math.min(1, 1600 / Math.max(image.naturalWidth || 1, image.naturalHeight || 1));
+  let result = '';
+  for (let attempt = 0; attempt < 7; attempt++) {
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    context.fillStyle = '#fff';context.fillRect(0, 0, canvas.width, canvas.height);context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    for (const quality of [.88, .72, .56, .42]) {
+      result = canvas.toDataURL('image/jpeg', quality);
+      if (Math.ceil((result.split(',')[1] || '').length * .75) <= 1200000) return result;
+    }
+    scale *= .75;
+  }
+  if (Math.ceil((result.split(',')[1] || '').length * .75) > 1200000) throw new Error('Gambar terlalu besar setelah dikompresi.');
   return result;
+}
+
+function excelImageMimeFromFilename(filename) {
+  const ext = String(filename || '').split('.').pop().toLowerCase();
+  if (ext === 'png') return 'image/png';
+  if (['jpg', 'jpeg', 'jpe', 'jfif'].includes(ext)) return 'image/jpeg';
+  if (ext === 'gif') return 'image/gif';
+  if (ext === 'webp') return 'image/webp';
+  if (ext === 'svg' || ext === 'svgz') return 'image/svg+xml';
+  if (ext === 'bmp' || ext === 'dib') return 'image/bmp';
+  if (ext === 'avif') return 'image/avif';
+  if (ext === 'apng') return 'image/apng';
+  if (ext === 'ico') return 'image/x-icon';
+  if (ext === 'tif' || ext === 'tiff') return 'image/tiff';
+  if (ext === 'heic' || ext === 'heif') return `image/${ext}`;
+  return /^[a-z0-9]{2,10}$/.test(ext) ? `image/${ext}` : '';
+}
+
+function questionImageSourceDataUrl(file, dataUrl) {
+  const mime = String(file?.type || '').startsWith('image/') ? file.type : excelImageMimeFromFilename(file?.name);
+  const encoded = String(dataUrl || '').match(/^data:[^,]*;base64,([A-Za-z0-9+/=]+)$/i)?.[1];
+  if (!mime || !encoded) throw new Error('File bukan gambar yang valid.');
+  return `data:${mime};base64,${encoded}`;
+}
+
+async function excelImageHtml(mediaFile) {
+  const mime = excelImageMimeFromFilename(mediaFile.name);
+  if (!mime) throw new Error(`Jenis gambar ${mediaFile.name} tidak dikenali.`);
+  try {
+    const dataUrl = `data:${mime};base64,${await mediaFile.async('base64')}`;
+    return `<img src="${await optimizeQuestionImageDataUrl(dataUrl)}">`;
+  } catch (error) {
+    throw new Error(`Gambar ${mediaFile.name} tidak dapat diproses: ${error.message}`);
+  }
 }
 
 // Convert the Office Math (OMML) stored by Excel's Insert -> Equation menu to
@@ -233,13 +279,13 @@ function officeMathToMathMl(root) {
   };
 
   const converted = content(root);
-  return converted ? `<math xmlns="http://www.w3.org/1998/Math/MathML" display="block">${converted}</math>` : '';
+  return converted ? `<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">${converted}</math>` : '';
 }
 
 // EXTRACT IMAGES AND NATIVE EXCEL EQUATIONS INSERTED INSIDE .XLSX
 async function extractImagesFromExcel(file) {
   const rowImages = {};
-  if (typeof JSZip === 'undefined') return rowImages;
+  if (typeof JSZip === 'undefined') throw new Error('Pembaca gambar Excel (JSZip) gagal dimuat. Periksa koneksi internet lalu muat ulang halaman. Impor dibatalkan agar gambar tidak hilang.');
 
   try {
     const zip = await JSZip.loadAsync(file);
@@ -257,7 +303,7 @@ async function extractImagesFromExcel(file) {
     };
     const workbookFile = zip.file('xl/workbook.xml');
     const workbookRelsFile = zip.file('xl/_rels/workbook.xml.rels');
-    if (!workbookFile || !workbookRelsFile) return rowImages;
+    if (!workbookFile || !workbookRelsFile) throw new Error('Struktur workbook Excel tidak lengkap; gambar tidak aman untuk diimpor.');
     const workbookDoc = parser.parseFromString(await workbookFile.async('string'), 'text/xml');
     const firstSheet = workbookDoc.getElementsByTagNameNS('*', 'sheet')[0];
     const sheetRelationshipId = firstSheet?.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id') || firstSheet?.getAttribute('r:id');
@@ -308,10 +354,8 @@ async function extractImagesFromExcel(file) {
           const mediaPath = rels[relationshipId];
           const mediaFile = zip.file(mediaPath) || zip.file(new RegExp(mediaPath.split('/').pop().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i'))[0];
           if (mediaFile) {
-            const ext = mediaFile.name.split('.').pop().toLowerCase();
-            const mime = ext === 'png' ? 'image/png' : (ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : (ext === 'gif' ? 'image/gif' : (ext === 'webp' ? 'image/webp' : (ext === 'svg' ? 'image/svg+xml' : (ext === 'bmp' ? 'image/bmp' : '')))));
-            if (mime) { fragments.push(`<img src="${await optimizeQuestionImageDataUrl(`data:${mime};base64,${await mediaFile.async('base64')}`)}">`); diagnostics.mappedImages++; }
-            else diagnostics.unsupportedObjects++;
+            fragments.push(await excelImageHtml(mediaFile));
+            diagnostics.mappedImages++;
           }
         }
         if (fragments.length) rowImages[dataRowIndex][columnIndex] = `${rowImages[dataRowIndex][columnIndex] || ''}${fragments.join('<br>')}`;
@@ -340,10 +384,7 @@ async function extractImagesFromExcel(file) {
         const mediaFile = mediaPath ? (zip.file(mediaPath) || zip.file(new RegExp(mediaPath.split('/').pop().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i'))[0]) : null;
         if (!imageId || !mediaFile) continue;
         diagnostics.referencedImages++;
-        const ext = mediaFile.name.split('.').pop().toLowerCase();
-        const mime = ext === 'png' ? 'image/png' : (ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : (ext === 'gif' ? 'image/gif' : (ext === 'webp' ? 'image/webp' : (ext === 'svg' ? 'image/svg+xml' : (ext === 'bmp' ? 'image/bmp' : '')))));
-        if (mime) imagesById[imageId] = `<img src="${await optimizeQuestionImageDataUrl(`data:${mime};base64,${await mediaFile.async('base64')}`)}">`;
-        else diagnostics.unsupportedObjects++;
+        imagesById[imageId] = await excelImageHtml(mediaFile);
       }
       Array.from(worksheetDoc.getElementsByTagNameNS('*', 'c')).forEach(cell => {
         const formula = cell.getElementsByTagNameNS('*', 'f')[0]?.textContent || '';
@@ -402,8 +443,11 @@ async function extractImagesFromExcel(file) {
       rowImages.__formattedCells = formattedCells;
     }
     rowImages.__diagnostics = diagnostics;
+    if (zip.file(/^xl\/media\//i).length && diagnostics.referencedImages === 0) {
+      throw new Error('File Excel berisi gambar, tetapi tidak ada gambar yang terhubung ke sheet soal pertama. Pastikan gambar berada di sheet soal dan simpan ulang sebagai .xlsx.');
+    }
   } catch (err) {
-    console.warn('Excel image extraction notice:', err);
+    throw new Error(`Gambar Excel tidak dapat dibaca: ${err.message}`);
   }
   return rowImages;
 }
@@ -428,32 +472,37 @@ async function handleExcelUpload(input, callback) {
         const workbook = XLSX.read(data, { type: 'array' });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
-        const json = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
-        const matrix = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+        const matrix = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "", blankrows: true });
         const headers = (matrix[0] || []).map(value => String(value || '').trim());
         const formattedCells = embeddedImages.__formattedCells || {};
         const diagnostics = embeddedImages.__diagnostics || {};
+        if (Number(diagnostics.unsupportedObjects || 0) > 0 || Number(diagnostics.referencedImages || 0) !== Number(diagnostics.mappedImages || 0)) {
+          throw new Error('Ada gambar/objek Excel yang tidak bisa dibaca. Simpan gambar yang bermasalah sebagai PNG atau JPG pada cell pertanyaan/pilihan, lalu simpan ulang .xlsx. Impor dibatalkan agar gambar tidak hilang.');
+        }
 
         // Restore rich-text scripts before merging drawings into their exact cells.
         const contentColumns = new Set(['pertanyaan','opsi_a','opsi_b','opsi_c','opsi_d','opsi_e']);
-        json.forEach((row, idx) => {
-          Object.entries(formattedCells[idx] || {}).forEach(([columnIndex, formatted]) => {
+        const json = [];
+        const lastImageRow = Math.max(-1, ...Object.keys(embeddedImages).filter(key => /^\d+$/.test(key)).map(Number));
+        for (let sheetRowIndex = 1; sheetRowIndex < Math.max(matrix.length, lastImageRow + 2); sheetRowIndex++) {
+          const values = matrix[sheetRowIndex] || [];
+          const row = { __excel_row: sheetRowIndex + 1 };
+          headers.forEach((key, columnIndex) => { if (key) row[key] = values[columnIndex] ?? ''; });
+          const dataRowIndex = sheetRowIndex - 1;
+          Object.entries(formattedCells[dataRowIndex] || {}).forEach(([columnIndex, formatted]) => {
             const key = headers[Number(columnIndex)];
             if (contentColumns.has(key)) row[key] = formatted;
           });
-          Object.entries(embeddedImages[idx] || {}).forEach(([columnIndex, embeddedContent]) => {
+          Object.entries(embeddedImages[dataRowIndex] || {}).forEach(([columnIndex, embeddedContent]) => {
             const key = headers[Number(columnIndex)];
             if (!contentColumns.has(key)) {
-              if (!row.__image_warnings) row.__image_warnings = [];
-              row.__image_warnings.push(`Gambar/equation ditemukan pada kolom ${key || Number(columnIndex) + 1}; pindahkan langsung ke cell pertanyaan atau pilihan.`);
+              if (!row.__image_errors) row.__image_errors = [];
+              row.__image_errors.push(`Gambar/equation ditemukan pada kolom ${key || Number(columnIndex) + 1}; pindahkan langsung ke cell pertanyaan atau pilihan.`);
               return;
             }
             row[key] = `${String(row[key] || '').trim()}${String(row[key] || '').trim() ? '<br>' : ''}${embeddedContent}`;
           });
-        });
-        if (json.length && (Number(diagnostics.unsupportedObjects || 0) > 0 || Number(diagnostics.referencedImages || 0) > Number(diagnostics.mappedImages || 0))) {
-          if (!json[0].__image_warnings) json[0].__image_warnings = [];
-          json[0].__image_warnings.push('Ada objek gambar Excel yang tidak dapat dipetakan. Gunakan PNG/JPG dan pastikan sudut kiri atas gambar berada di cell pertanyaan/opsi dengan properti Move and size with cells.');
+          if (Object.entries(row).some(([key, value]) => key !== '__excel_row' && value !== '' && value !== null)) json.push(row);
         }
 
         callback(json);

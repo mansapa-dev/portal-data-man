@@ -486,21 +486,15 @@ function handleGambarSoalFile(input) {
   const file = input.files[0];
   if (!file) return;
 
-  if (!['image/png','image/jpeg','image/gif','image/webp'].includes(file.type)) {
-    showCustomAlert('Format Tidak Didukung', 'Gunakan gambar PNG, JPG, GIF, atau WebP.');
-    input.value = '';
-    return;
-  }
-
-  if (file.size > 10 * 1024 * 1024) {
-    showCustomAlert('File Terlalu Besar', 'Maksimal ukuran sumber gambar adalah 10 MB.');
+  if (file.size > 20 * 1024 * 1024) {
+    showCustomAlert('File Terlalu Besar', 'Maksimal ukuran sumber gambar adalah 20 MB.');
     input.value = '';
     return;
   }
 
   const reader = new FileReader();
   reader.onload = async function (e) {
-    try { attachedGambarSoalBase64 = await optimizeQuestionImageDataUrl(e.target.result); }
+    try { attachedGambarSoalBase64 = await optimizeQuestionImageDataUrl(questionImageSourceDataUrl(file,e.target.result)); }
     catch (error) { input.value = ''; return showCustomAlert('Gambar Gagal Diproses', error.message, 'error'); }
     document.getElementById('inGambarSoalUrl').value = '';
     const previewContainer = document.getElementById('previewGambarContainer');
@@ -510,6 +504,7 @@ function handleGambarSoalFile(input) {
       previewContainer.classList.remove('hidden');
     }
   };
+  reader.onerror = () => { input.value = ''; showCustomAlert('Gambar Gagal Dibaca', 'File gambar tidak dapat dibaca.', 'error'); };
   reader.readAsDataURL(file);
 }
 
@@ -566,17 +561,9 @@ function bukaModalSoal(data = null, preselectedExamId = null) {
         document.getElementById('editSoalId').value = data.id;
         sel.value = data.exam_id || data.ujian_id;
 
-        // Extract image tag if present
-        let rawPertanyaan = data.pertanyaan || '';
-        const imgMatch = rawPertanyaan.match(/<img[^>]+src=["']([^"']+)["']/i);
-        if (imgMatch && imgMatch[1]) {
-          const imgSrc = imgMatch[1];
-          handleGambarSoalUrlInput(imgSrc);
-          document.getElementById('inGambarSoalUrl').value = imgSrc;
-          rawPertanyaan = rawPertanyaan.replace(/<br\s*\/?>\s*<img[^>]*>/gi, '').replace(/<img[^>]*>/gi, '').trim();
-        }
-
-        setQuestionEditorValue('inPertanyaan', rawPertanyaan);
+        // Keep every inline image in its original position when an existing
+        // question is edited; extracting only the first image lost the rest.
+        setQuestionEditorValue('inPertanyaan', data.pertanyaan || '');
         setQuestionEditorValue('inOpsiA', data.opsi_a);
         setQuestionEditorValue('inOpsiB', data.opsi_b);
         setQuestionEditorValue('inOpsiC', data.opsi_c);
@@ -649,7 +636,7 @@ document.getElementById('formSoal').addEventListener('submit', function (e) {
 
 function handleImportSoal(input){handleExcelUpload(input,rows=>{if(!rows.length)return showCustomAlert('Peringatan','File Excel soal kosong atau tidak valid.');showQuestionImportPreview(rows,input);});}
 
-function validateQuestionImportRow(row,index){const errors=[],warnings=[...(row.__image_warnings||[])];if(String(row.no??'').trim()==='')errors.push('Nomor soal kosong');['pertanyaan','opsi_a','opsi_b','opsi_c','opsi_d'].forEach(key=>{if(!String(row[key]||'').trim())errors.push(`${key} kosong`);});const answer=String(row.jawaban_benar||'').trim().toUpperCase();if(!['A','B','C','D','E'].includes(answer))errors.push('Kunci jawaban harus A/B/C/D/E');else if(!String(row[`opsi_${answer.toLowerCase()}`]||'').trim())errors.push(`Pilihan ${answer} kosong tetapi dipilih sebagai kunci`);if(!(Number(row.poin??1)>0))errors.push('Bobot harus lebih dari 0');return{row:index+2,errors,warnings,status:errors.length?'ERROR':warnings.length?'WARNING':'VALID'};}
+function validateQuestionImportRow(row,index){const errors=[...(row.__image_errors||[])],warnings=[...(row.__image_warnings||[])];if(String(row.no??'').trim()==='')errors.push('Nomor soal kosong');['pertanyaan','opsi_a','opsi_b','opsi_c','opsi_d'].forEach(key=>{if(!String(row[key]||'').trim())errors.push(`${key} kosong`);});const answer=String(row.jawaban_benar||'').trim().toUpperCase();if(!['A','B','C','D','E'].includes(answer))errors.push('Kunci jawaban harus A/B/C/D/E');else if(!String(row[`opsi_${answer.toLowerCase()}`]||'').trim())errors.push(`Pilihan ${answer} kosong tetapi dipilih sebagai kunci`);if(!(Number(row.poin??1)>0))errors.push('Bobot harus lebih dari 0');return{row:Number(row.__excel_row)||index+2,errors,warnings,status:errors.length?'ERROR':warnings.length?'WARNING':'VALID'};}
 
 function showQuestionImportPreview(rows, input) {
   const validation = rows.map(validateQuestionImportRow);
