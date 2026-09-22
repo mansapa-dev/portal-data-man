@@ -147,14 +147,16 @@
         batch.push(row);bytes+=rowBytes;
       }
       if(batch.length)batches.push(batch);
-      const summary={total:0,inserted:0,failed:0,errors:[]};let offset=0;
+      const summary={total:0,inserted:0,created:0,updated:0,recreated:0,failed:0,errors:[],saved_questions:[]};let offset=0;
       for(const rowsBatch of batches){
         const r=await api('api/admin/questions/import','POST',{rows:rowsBatch});
-        summary.total+=Number(r.data.total||0);summary.inserted+=Number(r.data.inserted||0);summary.failed+=Number(r.data.failed||0);
+        summary.total+=Number(r.data.total||0);summary.inserted+=Number(r.data.inserted||0);summary.created+=Number(r.data.created||0);summary.updated+=Number(r.data.updated||0);summary.recreated+=Number(r.data.recreated||0);summary.failed+=Number(r.data.failed||0);
+        summary.saved_questions.push(...(r.data.saved_questions||[]));
         for(const error of r.data.errors||[])summary.errors.push({...error,row:rowsBatch.some(row=>Number(row.__excel_row)===Number(error.row))?Number(error.row):Number(error.row||2)+offset});
         offset+=rowsBatch.length;
       }
-      return {success:true,message:`Import selesai: ${summary.inserted} berhasil, ${summary.failed} gagal.`,summary};
+        const restored=summary.recreated ? ` ${summary.recreated} ID soal lama tidak ditemukan dan dibuat sebagai soal baru.` : '';
+        return {success:true,message:`Import selesai: ${summary.inserted} disimpan (${summary.created} baru, ${summary.updated} diperbarui), ${summary.failed} gagal.${restored}`,summary};
     },
     async importAkunBulk(session,rows) { const r=await api('api/admin/users/import','POST',{rows});return {success:true,message:r.message,summary:r.data}; },
     async getAdminSettings() { const r=await api('api/admin/settings');return {success:true,data:r.data}; },

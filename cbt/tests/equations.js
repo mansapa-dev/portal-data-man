@@ -78,4 +78,34 @@ assert.match(imported5, /display="inline"/);
 const prescript = omml('oMath', [omml('sPre', [omml('e', [textRun('C')]), omml('sub', [textRun('12')]), omml('sup', [textRun('17')])])]);
 assert.match(context.officeMathToMathMl(prescript), /<mmultiscripts>/);
 
-console.log('Equation editor and Excel conversion: 25 checks passed.');
+const inserted = [];
+let caretMarker = null;
+const range = {
+  commonAncestorContainer: { isConnected: true },
+  cloneRange() { return this; },
+  deleteContents() {},
+  createContextualFragment() { return { lastChild: { parentElement: null } }; },
+  insertNode(node) { inserted.push(node); },
+  setStartAfter() {},
+  setStart(node, offset) { caretMarker = node; assert.equal(offset, 1); },
+  collapse() {}
+};
+const selection = { rangeCount: 1, getRangeAt: () => range, toString: () => '', removeAllRanges() {}, addRange() {} };
+const editor = {
+  innerHTML: 'H<sub>2</sub>\u200BO',
+  focus() {}, contains: () => true, dispatchEvent() {}
+};
+document.getElementById = id => id === 'inPertanyaan' ? editor : modal;
+document.createTextNode = text => ({ textContent: text, length: text.length });
+context.window = { getSelection: () => selection };
+context.Event = function Event() {};
+context.wrapQuestionContent('inPertanyaan', '<sub>', '</sub>', '2');
+assert.equal(caretMarker.textContent, '\u200B');
+assert.equal(inserted.at(-1), caretMarker);
+assert.equal(context.questionEditorValue('inPertanyaan'), 'H<sub>2</sub>O');
+context.wrapQuestionContent('inPertanyaan', '<sup>', '</sup>', '2');
+assert.equal(inserted.at(-1).textContent, '\u200B');
+editor.innerHTML = 'x<sup>2</sup>&#8203; + H<sub>2</sub>&ZeroWidthSpace;O';
+assert.equal(context.questionEditorValue('inPertanyaan'), 'x<sup>2</sup> + H<sub>2</sub>O');
+
+console.log('Equation editor, Excel conversion, and caret reset: 30 checks passed.');

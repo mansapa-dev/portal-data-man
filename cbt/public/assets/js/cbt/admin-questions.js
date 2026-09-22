@@ -45,7 +45,7 @@ function getSubjectIcon(name) {
   return 'fa-book-open';
 }
 
-function loadDataAdminSoal() {
+function loadDataAdminSoal(onLoaded = null, onFailure = null) {
   loadPortalReferences(() => {
     if (currentSelectedMapelName) {
       applyFilterDetailSoal();
@@ -72,6 +72,7 @@ function loadDataAdminSoal() {
       } else {
         renderKatalogMapelGrid();
       }
+      if (typeof onLoaded === 'function') onLoaded(cacheAdminSoalRows);
     })
     .withFailureHandler(error => {
       cacheAdminSoalRows = [];
@@ -84,6 +85,7 @@ function loadDataAdminSoal() {
             <button type="button" class="ui-button btn btn-secondary" onclick="loadDataAdminSoal()">Coba Lagi</button>
           </div>`;
       }
+      if (typeof onFailure === 'function') onFailure(error);
     })
     .getAdminSoalList(stPengelola, null);
 }
@@ -376,7 +378,7 @@ function applyFilterDetailSoal() {
 
   tb.innerHTML = filtered.map((s, num) => {
     return `
-      <tr>
+      <tr data-question-id="${s.id}">
         <td style="font-weight:700; color:var(--text-muted); text-align:center;">${num + 1}</td>
         <td style="max-width:380px;">
           <div style="font-size:13px; color:var(--text-main); line-height:1.5;">
@@ -580,11 +582,9 @@ function bukaModalSoal(data = null, preselectedExamId = null) {
     })
     .getAdminUjianList(stPengelola);
 }
-
 function editSoal(s) {
   bukaModalSoal(s);
 }
-
 let questionPreviewTimer=null;
 function renderQuestionFormPreview(){const root=document.getElementById('questionFormPreview');if(!root)return;const question=safeQuestionPreviewHtml(questionEditorValue('inPertanyaan')),options=['A','B','C','D','E'].map(letter=>[letter,safeQuestionPreviewHtml(questionEditorValue(`inOpsi${letter}`))]).filter(([,value])=>value);root.innerHTML=`<div class="question-rich-content">${question||'<span class="text-muted">Preview pertanyaan</span>'}</div><div class="question-import-options">${options.map(([letter,value])=>`<div><b>${letter}.</b> <span>${value}</span></div>`).join('')}</div>`;typesetQuestionMath(root);}
 ['inPertanyaan','inOpsiA','inOpsiB','inOpsiC','inOpsiD','inOpsiE'].forEach(id=>document.getElementById(id)?.addEventListener('input',()=>{clearTimeout(questionPreviewTimer);questionPreviewTimer=setTimeout(renderQuestionFormPreview,180);}));
@@ -595,7 +595,7 @@ document.getElementById('formSoal').addEventListener('submit', function (e) {
   const activeImage = attachedGambarSoalBase64 || gambarUrl;
 
   const requiredEditors=['inPertanyaan','inOpsiA','inOpsiB','inOpsiC','inOpsiD'];
-  if(requiredEditors.some(id=>!(id==='inPertanyaan'&&activeImage)&&!document.getElementById(id)?.textContent.trim()&&!document.getElementById(id)?.querySelector('img,math'))){
+  if(requiredEditors.some(id=>!(id==='inPertanyaan'&&activeImage)&&!document.getElementById(id)?.textContent.replace(/[\u200B-\u200D\uFEFF]/g,'').trim()&&!document.getElementById(id)?.querySelector('img,math'))){
     return showCustomAlert('Data Belum Lengkap','Pertanyaan dan pilihan A sampai D wajib diisi.','warning');
   }
 
@@ -615,7 +615,6 @@ document.getElementById('formSoal').addEventListener('submit', function (e) {
     jawaban_benar: document.getElementById('inJawabanBenar').value,
     poin: document.getElementById('inPoinSoal').value
   };
-
   showLoading('Menyimpan Soal...');
   cbtApi
     .withSuccessHandler(res => {
@@ -635,9 +634,7 @@ document.getElementById('formSoal').addEventListener('submit', function (e) {
 });
 
 function handleImportSoal(input){handleExcelUpload(input,rows=>{if(!rows.length)return showCustomAlert('Peringatan','File Excel soal kosong atau tidak valid.');showQuestionImportPreview(rows,input);});}
-
 function validateQuestionImportRow(row,index){const errors=[...(row.__image_errors||[])],warnings=[...(row.__image_warnings||[])];if(String(row.no??'').trim()==='')errors.push('Nomor soal kosong');['pertanyaan','opsi_a','opsi_b','opsi_c','opsi_d'].forEach(key=>{if(!String(row[key]||'').trim())errors.push(`${key} kosong`);});const answer=String(row.jawaban_benar||'').trim().toUpperCase();if(!['A','B','C','D','E'].includes(answer))errors.push('Kunci jawaban harus A/B/C/D/E');else if(!String(row[`opsi_${answer.toLowerCase()}`]||'').trim())errors.push(`Pilihan ${answer} kosong tetapi dipilih sebagai kunci`);if(!(Number(row.poin??1)>0))errors.push('Bobot harus lebih dari 0');return{row:Number(row.__excel_row)||index+2,errors,warnings,status:errors.length?'ERROR':warnings.length?'WARNING':'VALID'};}
-
 function showQuestionImportPreview(rows, input) {
   const validation = rows.map(validateQuestionImportRow);
   pendingQuestionImport = { rows, input, validation };
@@ -660,19 +657,36 @@ function showQuestionImportPreview(rows, input) {
   }).join('');
   modal.classList.add('show'); typesetQuestionMath(modal.querySelector('#questionImportPreviewList'));
 }
-
 function confirmQuestionImport() {
   if (!pendingQuestionImport || pendingQuestionImport.validation.some(item => item.status === 'ERROR')) return;
   const { rows, input } = pendingQuestionImport;
   document.getElementById('modalPreviewImportSoal')?.classList.remove('show');
   showLoading('Mengimport soal...');
-    cbtApi
+  cbtApi
       .withSuccessHandler(res => {
         hideLoading();
         const details = (res.summary?.errors || []).slice(0, 5).map(error => `Baris ${error.row}: ${error.reason}`).join('\n');
         const failed = Number(res.summary?.failed || 0);
-        showCustomAlert(failed ? 'Peringatan Hasil Import' : 'Import Soal Berhasil', res.message + (details ? `\n${details}` : ''), failed ? 'warning' : 'success');
-        loadDataAdminSoal();
+        const saved = res.summary?.saved_questions || [];
+        loadDataAdminSoal(bankRows => {
+          const missing = saved.filter(item => {
+            const question = bankRows.find(row => Number(row.id) === Number(item.id) && Number(row.exam_id || row.ujian_id) === Number(item.exam_id));
+            if (!question) return true;
+            return (item.image_fields || []).some(key => !/<img\b/i.test(String(question[key] || '')));
+          });
+          const lastSaved = saved[saved.length - 1];
+          const target = lastSaved ? bankRows.find(row => Number(row.id) === Number(lastSaved.id)) : null;
+          if (target?.nama_mapel) {
+            ['fltDetailSoalTingkat','fltDetailSoalUjian','fltDetailSoalKelas'].forEach(id => { const field = document.getElementById(id); if (field) field.value = 'ALL'; });
+            const search = document.getElementById('searchDetailSoal'); if (search) search.value = '';
+            pilihDanBukaMapel(target.nama_mapel);
+            document.querySelector(`#tblDetailSoalMapel [data-question-id="${Number(target.id)}"]`)?.scrollIntoView({ block: 'center' });
+          }
+          const destination = target ? `\nBank: ${target.nama_mapel} / ${target.nama_ujian} (soal #${target.id}).` : '';
+          const missingNote = missing.length ? `\n${missing.length} soal/gambar belum terlihat setelah bank dimuat ulang. ID: ${missing.map(item => item.id).join(', ')}.` : '';
+          const warning = failed > 0 || missing.length > 0;
+          showCustomAlert(warning ? 'Peringatan Hasil Import' : 'Import Soal Berhasil', res.message + (details ? `\n${details}` : '') + destination + missingNote, warning ? 'warning' : 'success');
+        }, error => showCustomAlert('Import Belum Terverifikasi', `${res.message}\nBank soal gagal dimuat ulang: ${error.message}`, 'warning'));
         input.value = '';
       })
       .withFailureHandler(err => {
