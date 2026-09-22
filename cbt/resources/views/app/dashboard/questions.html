@@ -12,7 +12,7 @@
               <div style="display:flex; gap:8px; flex-wrap:wrap;">
                 <button class="ui-button btn btn-secondary" onclick="downloadTemplateSoalDenganData()"><i class="fa-solid fa-download"></i> Template Excel (Bisa Gambar)</button>
                 <button class="ui-button btn btn-secondary" onclick="document.getElementById('fileImportSoalGlobal').click()"><i class="fa-solid fa-file-arrow-up"></i> Upload Excel Soal</button>
-                <input type="file" id="fileImportSoalGlobal" accept=".xlsx, .xls" style="display:none" onchange="handleImportSoal(this)">
+                <input type="file" id="fileImportSoalGlobal" accept=".xlsx" style="display:none" onchange="handleImportSoal(this)">
                 <button class="ui-button btn btn-primary" onclick="bukaModalSoal()"><i class="fa-solid fa-plus"></i> Tambah Soal</button>
               </div>
             </div>
@@ -60,7 +60,7 @@
                 <button class="ui-button btn btn-secondary" onclick="exportExcelMapelAktif()"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
                 <button class="ui-button btn btn-secondary" onclick="downloadTemplateSoalMapelAktif()"><i class="fa-solid fa-download"></i> Template Excel Mapel Ini</button>
                 <button class="ui-button btn btn-secondary" onclick="document.getElementById('fileImportSoalDetail').click()"><i class="fa-solid fa-file-arrow-up"></i> Upload Excel</button>
-                <input type="file" id="fileImportSoalDetail" accept=".xlsx, .xls" style="display:none" onchange="handleImportSoal(this)">
+                <input type="file" id="fileImportSoalDetail" accept=".xlsx" style="display:none" onchange="handleImportSoal(this)">
                 <button class="ui-button btn btn-primary" onclick="bukaModalSoalUntukMapelAktif()"><i class="fa-solid fa-plus"></i> Tambah Soal</button>
               </div>
             </div>

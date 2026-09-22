@@ -243,6 +243,7 @@ async function extractImagesFromExcel(file) {
 
   try {
     const zip = await JSZip.loadAsync(file);
+    const diagnostics = { referencedImages: 0, mappedImages: 0, unsupportedObjects: 0 };
 
     // Resolve only drawings connected to the first worksheet; drawings on other
     // sheets must never be assigned to question rows with matching coordinates.
@@ -283,6 +284,7 @@ async function extractImagesFromExcel(file) {
       });
       const drawDoc = parser.parseFromString(await drawingFile.async('string'), 'text/xml');
       const anchors = Array.from(drawDoc.getElementsByTagNameNS('*', 'twoCellAnchor')).concat(Array.from(drawDoc.getElementsByTagNameNS('*', 'oneCellAnchor')));
+      diagnostics.unsupportedObjects += Math.max(0, drawDoc.getElementsByTagNameNS('*', 'pic').length - anchors.length);
       for (const anchor of anchors) {
         const from = anchor.getElementsByTagNameNS('*', 'from')[0];
         const row = from?.getElementsByTagNameNS('*', 'row')[0];
@@ -302,12 +304,14 @@ async function extractImagesFromExcel(file) {
         const blip = anchor.getElementsByTagNameNS('*', 'blip')[0];
         const relationshipId = blip?.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'embed') || blip?.getAttribute('r:embed');
         if (relationshipId && rels[relationshipId]) {
+          diagnostics.referencedImages++;
           const mediaPath = rels[relationshipId];
           const mediaFile = zip.file(mediaPath) || zip.file(new RegExp(mediaPath.split('/').pop().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i'))[0];
           if (mediaFile) {
             const ext = mediaFile.name.split('.').pop().toLowerCase();
             const mime = ext === 'png' ? 'image/png' : (ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : (ext === 'gif' ? 'image/gif' : (ext === 'webp' ? 'image/webp' : (ext === 'svg' ? 'image/svg+xml' : (ext === 'bmp' ? 'image/bmp' : '')))));
-            if (mime) fragments.push(`<img src="${await optimizeQuestionImageDataUrl(`data:${mime};base64,${await mediaFile.async('base64')}`)}">`);
+            if (mime) { fragments.push(`<img src="${await optimizeQuestionImageDataUrl(`data:${mime};base64,${await mediaFile.async('base64')}`)}">`); diagnostics.mappedImages++; }
+            else diagnostics.unsupportedObjects++;
           }
         }
         if (fragments.length) rowImages[dataRowIndex][columnIndex] = `${rowImages[dataRowIndex][columnIndex] || ''}${fragments.join('<br>')}`;
@@ -335,9 +339,11 @@ async function extractImagesFromExcel(file) {
         const mediaPath = relationshipId ? cellImageRels[relationshipId] : '';
         const mediaFile = mediaPath ? (zip.file(mediaPath) || zip.file(new RegExp(mediaPath.split('/').pop().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i'))[0]) : null;
         if (!imageId || !mediaFile) continue;
+        diagnostics.referencedImages++;
         const ext = mediaFile.name.split('.').pop().toLowerCase();
         const mime = ext === 'png' ? 'image/png' : (ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : (ext === 'gif' ? 'image/gif' : (ext === 'webp' ? 'image/webp' : (ext === 'svg' ? 'image/svg+xml' : (ext === 'bmp' ? 'image/bmp' : '')))));
         if (mime) imagesById[imageId] = `<img src="${await optimizeQuestionImageDataUrl(`data:${mime};base64,${await mediaFile.async('base64')}`)}">`;
+        else diagnostics.unsupportedObjects++;
       }
       Array.from(worksheetDoc.getElementsByTagNameNS('*', 'c')).forEach(cell => {
         const formula = cell.getElementsByTagNameNS('*', 'f')[0]?.textContent || '';
@@ -350,8 +356,52 @@ async function extractImagesFromExcel(file) {
         if (dataRowIndex < 0) return;
         if (!rowImages[dataRowIndex]) rowImages[dataRowIndex] = {};
         rowImages[dataRowIndex][columnIndex] = `${rowImages[dataRowIndex][columnIndex] || ''}${imagesById[imageId]}`;
+        diagnostics.mappedImages++;
       });
     }
+
+    // SheetJS returns the plain value of rich-text cells. Read the OOXML runs
+    // directly so Excel's Superscript/Subscript formatting survives import.
+    if (worksheetDoc) {
+      const formattedCells = {};
+      const formattedRunHtml = container => {
+        let html = '', hasScript = false;
+        Array.from(container?.childNodes || []).forEach(node => {
+          if (node.nodeType !== 1) return;
+          const local = node.localName || node.nodeName.replace(/^.*:/, '');
+          if (local === 't') { html += escapeMathMlText(node.textContent || ''); return; }
+          if (local !== 'r') return;
+          const text = Array.from(node.getElementsByTagNameNS('*', 't')).map(item => item.textContent || '').join('');
+          const vertical = node.getElementsByTagNameNS('*', 'vertAlign')[0];
+          const value = vertical?.getAttribute('val') || vertical?.getAttribute('x:val') || '';
+          if (value === 'subscript' || value === 'superscript') { hasScript = true; html += `<${value === 'subscript' ? 'sub' : 'sup'}>${escapeMathMlText(text)}</${value === 'subscript' ? 'sub' : 'sup'}>`; }
+          else html += escapeMathMlText(text);
+        });
+        return hasScript ? html : '';
+      };
+      const sharedStringsFile = zip.file('xl/sharedStrings.xml');
+      const sharedStrings = [];
+      if (sharedStringsFile) {
+        const sharedDoc = parser.parseFromString(await sharedStringsFile.async('string'), 'text/xml');
+        Array.from(sharedDoc.getElementsByTagNameNS('*', 'si')).forEach(item => sharedStrings.push(formattedRunHtml(item)));
+      }
+      Array.from(worksheetDoc.getElementsByTagNameNS('*', 'c')).forEach(cell => {
+        const coordinate = cell.getAttribute('r') || '', match = coordinate.match(/^([A-Z]+)(\d+)$/i);
+        if (!match) return;
+        const type = cell.getAttribute('t') || '';
+        let formatted = '';
+        if (type === 's') formatted = sharedStrings[Number(cell.getElementsByTagNameNS('*', 'v')[0]?.textContent || -1)] || '';
+        else if (type === 'inlineStr') formatted = formattedRunHtml(cell.getElementsByTagNameNS('*', 'is')[0]);
+        if (!formatted) return;
+        const columnIndex = match[1].toUpperCase().split('').reduce((value, character) => value * 26 + character.charCodeAt(0) - 64, 0) - 1;
+        const dataRowIndex = Number(match[2]) - 2;
+        if (dataRowIndex < 0) return;
+        if (!formattedCells[dataRowIndex]) formattedCells[dataRowIndex] = {};
+        formattedCells[dataRowIndex][columnIndex] = formatted;
+      });
+      rowImages.__formattedCells = formattedCells;
+    }
+    rowImages.__diagnostics = diagnostics;
   } catch (err) {
     console.warn('Excel image extraction notice:', err);
   }
@@ -361,6 +411,10 @@ async function extractImagesFromExcel(file) {
 async function handleExcelUpload(input, callback) {
   const file = input.files[0];
   if (!file) return;
+  if (!/\.xlsx$/i.test(file.name)) {
+    input.value = '';
+    return showCustomAlert('Format Excel Tidak Mendukung Gambar', 'Simpan workbook sebagai Excel Workbook (*.xlsx). Format .xls atau .csv tidak dapat membawa gambar/equation ke sistem.', 'warning');
+  }
 
   try {
     // 1. Extract directly embedded images from Excel
@@ -377,10 +431,16 @@ async function handleExcelUpload(input, callback) {
         const json = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
         const matrix = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
         const headers = (matrix[0] || []).map(value => String(value || '').trim());
+        const formattedCells = embeddedImages.__formattedCells || {};
+        const diagnostics = embeddedImages.__diagnostics || {};
 
-        // Merge each drawing into the exact row and content column containing its anchor.
+        // Restore rich-text scripts before merging drawings into their exact cells.
         const contentColumns = new Set(['pertanyaan','opsi_a','opsi_b','opsi_c','opsi_d','opsi_e']);
         json.forEach((row, idx) => {
+          Object.entries(formattedCells[idx] || {}).forEach(([columnIndex, formatted]) => {
+            const key = headers[Number(columnIndex)];
+            if (contentColumns.has(key)) row[key] = formatted;
+          });
           Object.entries(embeddedImages[idx] || {}).forEach(([columnIndex, embeddedContent]) => {
             const key = headers[Number(columnIndex)];
             if (!contentColumns.has(key)) {
@@ -391,6 +451,10 @@ async function handleExcelUpload(input, callback) {
             row[key] = `${String(row[key] || '').trim()}${String(row[key] || '').trim() ? '<br>' : ''}${embeddedContent}`;
           });
         });
+        if (json.length && (Number(diagnostics.unsupportedObjects || 0) > 0 || Number(diagnostics.referencedImages || 0) > Number(diagnostics.mappedImages || 0))) {
+          if (!json[0].__image_warnings) json[0].__image_warnings = [];
+          json[0].__image_warnings.push('Ada objek gambar Excel yang tidak dapat dipetakan. Gunakan PNG/JPG dan pastikan sudut kiri atas gambar berada di cell pertanyaan/opsi dengan properti Move and size with cells.');
+        }
 
         callback(json);
       } catch (err) {
