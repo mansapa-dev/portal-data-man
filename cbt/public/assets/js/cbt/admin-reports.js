@@ -1,6 +1,7 @@
 // Violation logs, result filtering, reports, and participant card printing.
 let cachePelanggaranRaw=[];
 let cacheKartuSiap=[];
+const violationReasonLabels={TAB_HIDDEN:'Halaman ujian tersembunyi',SCREENSHOT_ATTEMPT:'Percobaan screenshot',COPY_ATTEMPT:'Percobaan menyalin teks',SPLIT_SCREEN_SUSPECTED:'Layar terbagi/jendela kecil (indikasi)',WINDOW_BLUR:'Fokus jendela hilang',FULLSCREEN_EXIT:'Keluar layar penuh'};
 function loadDataAdminLogPelanggaran() {
   const tb = document.getElementById('tblAdminLogPelanggaran'); tb.innerHTML = `<tr><td colspan="7" align="center">Memuat...</td></tr>`;
   cbtApi
@@ -10,7 +11,7 @@ function loadDataAdminLogPelanggaran() {
         cachePelanggaranRaw=[];window.cachePelanggaranExcel = [];
         return;
       }
-      cachePelanggaranRaw=res.data;populatePelanggaranFilters();applyFilterPelanggaran();
+      cachePelanggaranRaw=res.data.map(row=>({...row,keterangan:violationReasonLabels[row.keterangan]||row.keterangan}));populatePelanggaranFilters();applyFilterPelanggaran();
     })
     .getAdminLogPelanggaran(stPengelola);
 }

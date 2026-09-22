@@ -171,9 +171,9 @@ function updateViolationDots(jumlah) {
  * Tampilkan modal pelanggaran.
  * @param {number} jumlah  — total pelanggaran saat ini (1-3)
  * @param {boolean} terminated — apakah sesi sudah dihentikan
- * @param {function|null} onDismiss — callback setelah modal ditutup (saat warning biasa)
+ * @param {string} reason — alasan pelanggaran untuk peringatan
  */
-function showViolationModal(jumlah, terminated, onDismiss = null) {
+function showViolationModal(jumlah, terminated, reason = '') {
   const modal = document.getElementById('modalPelanggaran');
   const title = document.getElementById('pelanggaranTitle');
   const icon = document.getElementById('pelanggaranIcon');
@@ -226,8 +226,8 @@ function showViolationModal(jumlah, terminated, onDismiss = null) {
     iconWrap.style.background = isLastWarn ? 'var(--ui-warning-bg)' : 'var(--ui-danger-bg)';
     iconWrap.style.border = isLastWarn ? '2px solid #f59e0b' : 'none';
     txt.textContent = isLastWarn
-      ? `Peringatan ${jumlah}/3: Anda terdeteksi keluar dari aplikasi CBT. Satu pelanggaran lagi akan menghentikan ujian Anda secara otomatis!`
-      : `Peringatan ${jumlah}/3: Anda terdeteksi keluar dari aplikasi CBT. Harap tetap di halaman ini selama ujian berlangsung.`;
+      ? `Peringatan ${jumlah}/3: ${reason || 'Aktivitas yang dilarang terdeteksi.'} Satu pelanggaran lagi akan menghentikan ujian Anda secara otomatis!`
+      : `Peringatan ${jumlah}/3: ${reason || 'Aktivitas yang dilarang terdeteksi.'} Harap tetap mengerjakan ujian sesuai aturan.`;
     btn.textContent = 'Saya Mengerti';
     btn.disabled = false;
     cdWrap.style.display = 'none';
@@ -236,22 +236,27 @@ function showViolationModal(jumlah, terminated, onDismiss = null) {
     btn.parentNode.replaceChild(newBtn, btn);
     newBtn.addEventListener('click', () => {
       modal.classList.remove('show');
-      if (typeof onDismiss === 'function') onDismiss();
     });
   }
 
   modal.classList.add('show');
 }
 
-function aktifkanAntiCheat() {
-  if (antiCheatAttached) return;
-  antiCheatAttached = true;
-
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden || !isUjianJalan || isSubmitting) return;
-
-    cbtApi
+let violationRequestPending = false;
+let lastViolationRequestAt = 0;
+function recordExamViolation(type) {
+  if (!isUjianJalan || isSubmitting || violationRequestPending || Date.now() - lastViolationRequestAt < 1800) return;
+  violationRequestPending = true;
+  lastViolationRequestAt = Date.now();
+  const reasons = {
+    TAB_HIDDEN: 'Halaman ujian tersembunyi.',
+    SCREENSHOT_ATTEMPT: 'Percobaan tangkapan layar terdeteksi.',
+    COPY_ATTEMPT: 'Percobaan menyalin teks soal terdeteksi.',
+    SPLIT_SCREEN_SUSPECTED: 'Tampilan ujian terdeteksi terlalu kecil untuk layar perangkat.'
+  };
+  cbtApi
       .withSuccessHandler(res => {
+        violationRequestPending = false;
         if (!res.success) return;
 
         if (res.dihentikan) {
@@ -279,14 +284,22 @@ function aktifkanAntiCheat() {
           }
         } else {
           // ── WARNING ──
-          showViolationModal(res.jumlah, false);
+          showViolationModal(res.jumlah, false, reasons[type]);
         }
       })
-      .withFailureHandler(() => {
-        // Tetap tampil peringatan meski koneksi bermasalah
-        showViolationModal(1, false);
+      .withFailureHandler(error => {
+        violationRequestPending = false;
+        showCustomAlert('Pencatatan Pelanggaran Gagal', error.message || 'Periksa koneksi dan minta bantuan petugas.', 'warning');
       })
-      .catatPelanggaranServer(stSiswa.id, stUjian.id);
+      .catatPelanggaranServer(stSiswa.id, stUjian.id, type);
+}
+
+function aktifkanAntiCheat() {
+  if (typeof beginExamIntegritySignals === 'function') beginExamIntegritySignals();
+  if (antiCheatAttached) return;
+  antiCheatAttached = true;
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) recordExamViolation('TAB_HIDDEN');
   });
 }
 

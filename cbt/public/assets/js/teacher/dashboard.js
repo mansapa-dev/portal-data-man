@@ -112,6 +112,8 @@
     PASTE_ATTEMPT: 'Menempel Teks',
     PRINT_ATTEMPT: 'Mencoba Cetak',
     FULLSCREEN_EXIT: 'Keluar Layar Penuh',
+    SCREENSHOT_ATTEMPT: 'Percobaan Screenshot',
+    SPLIT_SCREEN_SUSPECTED: 'Layar Terbagi/Jendela Kecil (Indikasi)',
     CONTEXT_MENU: 'Klik Kanan',
     BLUR: 'Keluar Jendela',
     FOCUS_LOST: 'Fokus Hilang',
