@@ -30,8 +30,13 @@ final class QuestionImage
   $binary = base64_decode((string)$encoded, true);
   if ($binary === false || $binary === '') throw new \InvalidArgumentException('Data gambar tidak valid.');
   if (strlen($binary) > self::MAX_BYTES) throw new \InvalidArgumentException('Ukuran gambar maksimal 2 MB.');
-  $mime = (new \finfo(FILEINFO_MIME_TYPE))->buffer($binary);
-  if (!isset(self::MIME_EXTENSIONS[$mime])) throw new \InvalidArgumentException('Isi file bukan gambar PNG, JPG, GIF, atau WebP yang valid.');
+  // fileinfo is optional on shared hosting. getimagesizefromstring validates
+  // actual image bytes and is available without the fileinfo extension.
+  $imageInfo = @getimagesizefromstring($binary);
+  $mime = is_array($imageInfo) ? (string)($imageInfo['mime'] ?? '') : '';
+  if (!isset(self::MIME_EXTENSIONS[$mime]) || strcasecmp($mime, $match[1]) !== 0) {
+   throw new \InvalidArgumentException('Isi file bukan gambar PNG, JPG, GIF, atau WebP yang valid.');
+  }
   $directory = dirname(__DIR__, 2).'/public/assets/uploads/questions';
   if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) throw new \RuntimeException('Folder upload gambar soal tidak dapat dibuat.');
   $name = hash('sha256', $binary).'.'.self::MIME_EXTENSIONS[$mime];
