@@ -104,6 +104,9 @@ function downloadTemplateSoal(namaMapel = '', ujianList = [], existingQuestions 
     ['Properti equation', 'Buka Format Object -> Size & Properties -> Properties, lalu pilih Move and size with cells.'],
     ['Superscript & subscript', 'Gunakan struktur Script pada menu Equation, atau format Superscript/Subscript bawaan Excel.'],
     ['Gambar', 'Pilih Insert -> Pictures langsung pada cell pertanyaan atau opsi_a sampai opsi_e, lalu pilih Move and size with cells.'],
+    ['Equation umum', 'Di Excel gunakan Insert -> Equation untuk pecahan, akar, pangkat, indeks, integral, limit, sigma, dan bentuk lain. Posisikan objek pada cell soal atau pilihan.'],
+    ['Matriks', 'Di Excel gunakan Insert -> Equation -> Matrix. Matriks 3x3 dan ukuran lain diterima selama equation berada pada cell soal atau pilihan.'],
+    ['Template berisi soal', 'Equation dari form CBT disimpan sebagai kode MathML di teks cell Excel agar tetap utuh saat diunggah ulang. Jangan hapus tag <math> jika ingin mempertahankannya.'],
     ['Kolom yang didukung', 'Objek hanya boleh ditempel pada pertanyaan, opsi_a, opsi_b, opsi_c, opsi_d, atau opsi_e.'],
   ];
   const guideSheet = XLSX.utils.aoa_to_sheet([['Fitur', 'Cara Penulisan'], ...guideRows]);

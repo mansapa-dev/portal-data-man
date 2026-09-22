@@ -44,25 +44,45 @@ final class QuestionHtml
  }
  private static function cleanWithoutDom(string $html): string
  {
-  // Keep only images already saved into our controlled upload directory when
-  // shared hosting lacks ext-dom. All other markup still becomes plain text.
-  $images=[];
-  $html=preg_replace_callback('~<img\b[^>]*>~i',static function(array $match)use(&$images):string{
-   $fallback=preg_match('~\balt\s*=\s*(["\'])(.*?)\1~is',$match[0],$description)?' '.html_entity_decode($description[2],ENT_QUOTES|ENT_HTML5,'UTF-8').' ':'';
-   if(!preg_match('~\bsrc\s*=\s*(["\'])(.*?)\1~is',$match[0],$source))return $fallback;
-   $src=html_entity_decode($source[2],ENT_QUOTES|ENT_HTML5,'UTF-8');
-   if(!preg_match('~^assets/uploads/questions/[a-f0-9]{64}\.(?:png|jpg|gif|webp)$~D',$src))return $fallback;
-   $placeholder='CBT_SAFE_IMAGE_'.count($images).'_END';
-   $images[$placeholder]='<img src="'.htmlspecialchars($src,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8').'" alt="Gambar soal" style="max-width:100%;max-height:280px;object-fit:contain">';
-   return $placeholder;
-  },$html)??$html;
-  $html = preg_replace('~<(script|style|iframe|object|embed)\b[^>]*>.*?</\1\s*>~is', '', $html) ?? '';
-  $html = preg_replace_callback('~<img\b[^>]*\balt\s*=\s*(["\'])(.*?)\1[^>]*>~is', static fn(array $match): string => ' '.html_entity_decode($match[2], ENT_QUOTES | ENT_HTML5, 'UTF-8').' ', $html) ?? $html;
-  $html = preg_replace('~<\s*(?:br\s*/?|/p|/div|/li|/tr)\s*>~i', "\n", $html) ?? $html;
-  $text = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
-  $text = preg_replace("~[\t ]+~", ' ', $text) ?? $text;
-  $text = preg_replace("~\n{3,}~", "\n\n", $text) ?? $text;
-  return strtr(nl2br(htmlspecialchars(trim($text), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), false),$images);
+  // Shared hosting may lack ext-dom. Rebuild a small allowlist of markup so
+  // sub/sup, MathML and saved images survive without preserving unsafe input.
+  $html=preg_replace('~<(script|style|iframe|object|embed|svg|form)\b[^>]*>.*?</\1\s*>~is','',$html)??$html;
+  $mathTags=['math','mrow','mi','mn','mo','mtext','mspace','mfrac','msqrt','mroot','msub','msup','msubsup','munder','mover','munderover','mmultiscripts','mprescripts','none','mtable','mtr','mtd','menclose','mpadded','mphantom'];
+  $allowed=array_merge(['p','br','b','strong','i','em','u','s','sub','sup','ul','ol','li','table','thead','tbody','tr','td','th','span','div','img'],$mathTags);
+  $pieces=preg_split('~(<[^>]*>)~s',$html,-1,PREG_SPLIT_DELIM_CAPTURE)?:[];
+  $result='';$stack=[];
+  foreach($pieces as$piece){
+   if($piece==='' )continue;
+   if($piece[0]!=='<'){$result.=nl2br(htmlspecialchars(html_entity_decode($piece,ENT_QUOTES|ENT_HTML5,'UTF-8'),ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8'),false);continue;}
+   if(!preg_match('~^<\s*(/?)\s*([a-z][a-z0-9]*)\b([^>]*)>$~i',$piece,$tagMatch))continue;
+   $closing=$tagMatch[1]==='/';$tag=strtolower($tagMatch[2]);$attributes=$tagMatch[3];
+   if(!in_array($tag,$allowed,true))continue;
+   if($closing){
+    $position=array_search($tag,array_reverse($stack),true);
+    if($position===false)continue;
+    for($i=0;$i<=$position;$i++)$result.='</'.array_pop($stack).'>';
+    continue;
+   }
+   if($tag==='img'){
+    $alt=preg_match('~\balt\s*=\s*(["\'])(.*?)\1~is',$attributes,$altMatch)?html_entity_decode($altMatch[2],ENT_QUOTES|ENT_HTML5,'UTF-8'):'';
+    $src=preg_match('~\bsrc\s*=\s*(["\'])(.*?)\1~is',$attributes,$srcMatch)?html_entity_decode($srcMatch[2],ENT_QUOTES|ENT_HTML5,'UTF-8'):'';
+    if(preg_match('~^assets/uploads/questions/[a-f0-9]{64}\.(?:png|jpg|gif|webp)$~D',$src))$result.='<img src="'.htmlspecialchars($src,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8').'" alt="Gambar soal" style="max-width:100%;max-height:280px;object-fit:contain">';
+    elseif($alt!=='')$result.=htmlspecialchars($alt,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');
+    continue;
+   }
+   if($tag==='br'){$result.='<br>';continue;}
+   $safeAttributes='';
+   if($tag==='math')$safeAttributes=' xmlns="http://www.w3.org/1998/Math/MathML" display="inline"';
+   elseif($tag==='mspace'&&preg_match('~\bwidth\s*=\s*(["\'])([0-9]+(?:\.[0-9]+)?(?:em|ex|px|%))\1~i',$attributes,$width))$safeAttributes=' width="'.$width[2].'"';
+   elseif($tag==='menclose'&&preg_match('~\bnotation\s*=\s*(["\'])(box|circle|longdiv)\1~i',$attributes,$notation))$safeAttributes=' notation="'.$notation[2].'"';
+   elseif($tag==='mfrac'&&preg_match('~\blinethickness\s*=\s*(["\'])0\1~i',$attributes))$safeAttributes=' linethickness="0"';
+   elseif(in_array($tag,['mover','munder'],true)&&preg_match('~\baccent(?:under)?\s*=\s*(["\'])true\1~i',$attributes))$safeAttributes=$tag==='mover'?' accent="true"':' accentunder="true"';
+   $selfClosing=preg_match('~/\s*$~',$attributes)===1||in_array($tag,['mprescripts','none'],true);
+   $result.='<'.$tag.$safeAttributes.($selfClosing?'/':'').'>';
+   if(!$selfClosing)$stack[]=$tag;
+  }
+  while($stack)$result.='</'.array_pop($stack).'>';
+  return $result;
  }
  public static function row(array $row): array
  {
