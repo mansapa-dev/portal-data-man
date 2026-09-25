@@ -12,7 +12,7 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
   <title>Dashboard Guru - CBT MAN 1 Palembang</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <link rel="stylesheet" href="../assets/css/teacher.css?v=20260925-staff-chat-2">
+  <link rel="stylesheet" href="../assets/css/teacher.css?v=20260925-role-menu-3">
   <link rel="stylesheet" href="../assets/css/ui-theme.css?v=20260911-3">
   <script src="../assets/js/dashboard-design.js?v=20260911-3"></script>
   <link rel="stylesheet" href="../assets/css/atomic-components.css?v=20260911-1">
