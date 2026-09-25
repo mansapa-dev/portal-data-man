@@ -21,5 +21,11 @@ final class UserRepository
         $statement->execute(['id' => $id]);
     }
     public function findById(int$id):?array{$statement=$this->db->prepare('SELECT * FROM users WHERE id=:id LIMIT 1');$statement->execute(['id'=>$id]);return$statement->fetch()?:null;}
+    public function staffCapabilities(int$id):array
+    {
+        $statement=$this->db->prepare("SELECT u.role,EXISTS(SELECT 1 FROM teacher_exam_assignments a WHERE a.duty_role='PROCTOR' AND a.exam_id IS NULL AND ((u.teacher_id IS NOT NULL AND a.teacher_id=u.teacher_id) OR (u.employee_id IS NOT NULL AND a.employee_id=u.employee_id))) is_proctor FROM users u WHERE u.id=:id AND u.status='ACTIVE' LIMIT 1");
+        $statement->execute(['id'=>$id]);$row=$statement->fetch();
+        return ['teacher'=>($row['role']??'')==='TEACHER','proctor'=>(bool)($row['is_proctor']??false)];
+    }
     public function updatePassword(int$id,string$hash):void{$statement=$this->db->prepare('UPDATE users SET password_hash=:hash WHERE id=:id');$statement->execute(compact('id','hash'));}
 }

@@ -1,11 +1,11 @@
 <?php
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
-use Cbt\Controllers\{AdminController,AdminStudentController,AuthController,StudentExamController,SupportTicketController,SyncController,SetupController,TeacherController,TeacherSsoController};
+use Cbt\Controllers\{AdminController,AdminStudentController,AuthController,StudentExamController,SupportTicketController,StaffAdminCommunicationController,SyncController,SetupController,TeacherController,TeacherSsoController};
 use Cbt\Core\{Config,Database,Request,Response,Router,ViewRenderer};
 use Cbt\Middleware\{AuditMiddleware,AuthMiddleware,CsrfMiddleware,RateLimitMiddleware};
 use Cbt\Repositories\{AdminRepository,AdminStudentRepository,AttemptRepository,ExamRepository,StudentRepository,UserRepository};
-use Cbt\Services\{AnswerService,AttemptResetService,AuthService,ExamSessionService,ScoringService,SupportTicketService,ViolationService};
+use Cbt\Services\{AnswerService,AttemptResetService,AuthService,ExamSessionService,ScoringService,StaffAdminCommunicationService,SupportTicketService,ViolationService};
 use Cbt\Services\PortalDataSyncService;
 use Cbt\Services\AdminService;
 use Cbt\Services\AdminStudentService;
@@ -39,6 +39,7 @@ $adminService=new AdminService($database,new AdminRepository($pdo));$admin=new A
 $attemptResets=new AttemptResetService($database);
 $adminStudents=new AdminStudentController(new AdminStudentService($database,new AdminStudentRepository($pdo),new SecretCipher()),$attemptResets);
 $supportTickets=new SupportTicketController(new SupportTicketService($database,$attemptResets));
+$staffAdminChat=new StaffAdminCommunicationController(new StaffAdminCommunicationService($database));
 $csrf=new CsrfMiddleware();$studentAuth=new AuthMiddleware('student',null,$pdo);
 $studentSupportAuth=new AuthMiddleware('student',null,$pdo,true);
 $adminAuth=new AuthMiddleware('auth','ADMIN',$pdo);
@@ -104,4 +105,10 @@ $router->get('/api/teacher/live-sessions',[$teacher,'liveSessions'],[$teacherAut
 $router->get('/api/staff/support-tickets',[$supportTickets,'staffIndex'],[$staffAuth]);
 $router->post('/api/staff/support-tickets/{id}/status',[$supportTickets,'update'],[$staffAuth,$csrf,$audit('SUPPORT_TICKET_STATUS_CHANGED','SupportTicket')]);
 $router->post('/api/staff/support-tickets/{id}/reset',[$supportTickets,'reset'],[$staffAuth,$csrf,$audit('SUPPORT_TICKET_RESET','SupportTicket')]);
+$router->post('/api/staff/students/{id}/reset',[$adminStudents,'reset'],[$teacherAuth,$csrf,$audit('STAFF_STUDENT_ATTEMPT_RESET','Student')]);
+$router->get('/api/staff/admin-communications',[$staffAdminChat,'index'],[$staffAuth]);
+$router->post('/api/staff/admin-communications',[$staffAdminChat,'create'],[$teacherAuth,$csrf,$audit('STAFF_ADMIN_THREAD_CREATED','StaffAdminThread')]);
+$router->get('/api/staff/admin-communications/{id}',[$staffAdminChat,'messages'],[$staffAuth]);
+$router->post('/api/staff/admin-communications/{id}/messages',[$staffAdminChat,'reply'],[$staffAuth,$csrf,$audit('STAFF_ADMIN_MESSAGE_SENT','StaffAdminThread')]);
+$router->post('/api/staff/admin-communications/{id}/status',[$staffAdminChat,'status'],[$adminAuth,$csrf,$audit('STAFF_ADMIN_THREAD_STATUS_CHANGED','StaffAdminThread')]);
 $router->dispatch($request)->send();

@@ -8,6 +8,8 @@
 !/storage/cache/.gitkeep
 !/storage/imports/.gitkeep
 !/public/assets/uploads/questions/.gitkeep
+/public/assets/uploads/staff-chat/*
+!/public/assets/uploads/staff-chat/.gitkeep
 /android-app/.gradle/
 /android-app/.idea/
 /android-app/build/

@@ -10,7 +10,7 @@
 
   function stop() { generation += 1; clearTimeout(pollTimer); clearInterval(clockTimer); pollTimer = null; clockTimer = null; }
   function metric(label, value, tone = '') { const card = element('article', undefined, `live-metric ${tone}`.trim()); card.append(element('strong', value), element('span', label)); return card; }
-  function sessionCard(session) {
+  function sessionCard(session, options, refresh) {
     const card = element('article', undefined, 'session-card'), head = element('header'), identity = element('div');
     identity.append(element('strong', session.studentName), element('span', `${session.nisn} · ${session.className || '-'}`));
     head.append(identity, element('span', statusLabel(session.status), `session-status status-${session.status.toLowerCase()}`));
@@ -22,7 +22,9 @@
     const time = element('span', '⏱ Sisa '); time.append(remaining);
     meta.append(element('span', session.connectionState === 'ONLINE' ? 'Terhubung' : 'Koneksi belum terpantau'));
     meta.append(time, element('span', `⚑ Ragu ${session.flaggedQuestions}`), element('span', `⚠ Pelanggaran ${session.violationCount}`));
-    card.append(head, element('p', `${session.subjectName ? session.subjectName + ' · ' : ''}${session.examName}`, 'session-exam'), progressHead, progress, meta); return card;
+    card.append(head, element('p', `${session.subjectName ? session.subjectName + ' · ' : ''}${session.examName}`, 'session-exam'), progressHead, progress, meta);
+    if(options.canReset&&session.status==='TERMINATED'&&session.studentId&&options.onReset){const actions=element('div',undefined,'session-actions'),reset=element('button','Reset CBT siswa','btn btn-danger');reset.type='button';reset.addEventListener('click',async()=>{const reason=window.prompt(`Alasan reset CBT ${session.studentName}:`);if(reason===null)return;if(!reason.trim()){options.notice.textContent='Alasan reset wajib diisi.';return;}reset.disabled=true;try{await options.onReset(session,reason.trim());options.notice.style.color='var(--primary-dark)';options.notice.textContent=`CBT ${session.studentName} berhasil direset.`;await refresh();}catch(error){options.notice.style.color='#c0392b';options.notice.textContent=error.message;}finally{reset.disabled=false;}});actions.append(reset);card.append(actions);}
+    return card;
   }
   function filteredPayload(payload) {
     const sessions = payload.sessions.filter(s => (filterState.exam === 'ALL' || String(s.examId) === filterState.exam) && (filterState.grade === 'ALL' || String(s.gradeName) === filterState.grade) && (filterState.className === 'ALL' || String(s.className) === filterState.className) && (filterState.subject === 'ALL' || String(s.subjectName) === filterState.subject) && (filterState.status === 'ALL' || String(s.status) === filterState.status) && (filterState.connection === 'ALL' || String(s.connectionState) === filterState.connection));
@@ -33,8 +35,8 @@
     const definitions=[['exam','Ujian / Sesi','Semua Ujian','examId'],['grade','Tingkatan','Semua Tingkatan','gradeName'],['className','Kelas','Semua Kelas','className'],['subject','Mata Pelajaran','Semua Mata Pelajaran','subjectName'],['status','Status','Semua Status','status'],['connection','Koneksi','Semua Koneksi','connectionState']].filter(([state])=>!fields||fields.includes(state));
     definitions.forEach(([state,label,all,key])=>{const field=element('label'),caption=element('span',label),select=element('select'),choices=new Map();(staticOptions[state]||[]).forEach(raw=>{const value=String(raw||'').trim();if(value)choices.set(value,state==='grade'?`Tingkat ${value}`:value);});payload.sessions.forEach(s=>{const value=String(s[key]||'').trim();if(value)choices.set(value,state==='exam'?s.examName:state==='grade'?`Tingkat ${value}`:statusLabel(value));});const values=[...choices.keys()].sort((a,b)=>String(choices.get(a)).localeCompare(String(choices.get(b)),'id',{numeric:true}));select.append(new Option(all,'ALL'),...values.map(value=>new Option(choices.get(value),value)));select.value=values.includes(filterState[state])?filterState[state]:'ALL';filterState[state]=select.value;select.addEventListener('change',()=>{filterState[state]=select.value;refreshView();});field.append(caption,select);bar.append(field);});return bar;
   }
-  function appendSessions(root, sessions, grouped, rerender) {
-    if (!grouped) { const grid=element('section',undefined,'session-grid');sessions.slice(0,PAGE_SIZE).forEach(session=>grid.append(sessionCard(session)));root.append(grid);return; }
+  function appendSessions(root, sessions, grouped, rerender, options, refresh) {
+    if (!grouped) { const grid=element('section',undefined,'session-grid');sessions.slice(0,PAGE_SIZE).forEach(session=>grid.append(sessionCard(session,options,refresh)));root.append(grid);return; }
     const groups=new Map();sessions.forEach(session=>{const key=String(session.examId);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(session);});
     groups.forEach((rows,key)=>{
       const state=catalogState.get(key)||{open:filterState.exam!=='ALL',page:1};catalogState.set(key,state);
@@ -45,7 +47,7 @@
       head.append(title,toggle);section.append(head);
       if(state.open){
         const pages=Math.max(1,Math.ceil(rows.length/PAGE_SIZE));state.page=Math.min(state.page,pages);const start=(state.page-1)*PAGE_SIZE;
-        const grid=element('div',undefined,'session-grid');rows.slice(start,start+PAGE_SIZE).forEach(session=>grid.append(sessionCard(session)));section.append(grid);
+        const grid=element('div',undefined,'session-grid');rows.slice(start,start+PAGE_SIZE).forEach(session=>grid.append(sessionCard(session,options,refresh)));section.append(grid);
         if(pages>1){const pager=element('nav',undefined,'catalog-pager'),copy=element('span',`Menampilkan ${start+1}–${Math.min(start+PAGE_SIZE,rows.length)} dari ${rows.length}`),controls=element('div');const prev=element('button','Sebelumnya'),next=element('button','Berikutnya');prev.type=next.type='button';prev.disabled=state.page===1;next.disabled=state.page===pages;prev.addEventListener('click',()=>{state.page--;rerender();});next.addEventListener('click',()=>{state.page++;rerender();});controls.append(prev,element('strong',`${state.page}/${pages}`),next);pager.append(copy,controls);section.append(pager);}
       }
       root.append(section);
@@ -61,11 +63,11 @@
     const grid = element('section', undefined, 'session-grid');
     if (!visible.sessions.length) { const empty = element('div', undefined, 'live-empty'); empty.append(element('strong', 'Belum ada sesi aktif'), element('p', options.enableFilters?'Tidak ada sesi yang sesuai dengan filter saat ini.':'Sesi siswa akan muncul otomatis setelah mereka mulai mengerjakan ujian yang Anda ampu.')); grid.append(empty); }
     root.append(summary);
-    if(!visible.sessions.length)root.append(grid);else appendSessions(root,visible.sessions,options.groupByExam===true,()=>render(root,payload,refresh,options));
+    if(!visible.sessions.length)root.append(grid);else appendSessions(root,visible.sessions,options.groupByExam===true,()=>render(root,payload,refresh,options),options,refresh);
   }
   function startClock(root) { clearInterval(clockTimer); clockTimer = setInterval(() => { const elapsed = Math.floor((Date.now() - fetchedAt) / 1000); root.querySelectorAll('[data-remaining]').forEach(node => { node.textContent = duration(Number(node.dataset.remaining) - elapsed); }); }, 1000); }
   function mount(root, api, notice, options = {}) {
-    stop(); lastPayload = null; const currentGeneration = generation;
+    stop(); lastPayload = null; options.notice=notice; const currentGeneration = generation;
     const load = async () => { if (currentGeneration !== generation) return; try { const response = await api('api/teacher/live-sessions'); if (currentGeneration !== generation) return; lastPayload = response.data; fetchedAt = Date.now(); notice.textContent = ''; render(root, lastPayload, load, options); startClock(root); } catch (error) { notice.textContent = `Live Sessions gagal diperbarui: ${error.message}`; if (!lastPayload) root.replaceChildren(element('div', 'Data live session belum dapat dimuat.', 'live-empty')); } finally { if (currentGeneration === generation) pollTimer = setTimeout(load, 10000); } };
     root.replaceChildren(element('div', 'Menghubungkan ke sesi ujian aktif…', 'live-loading')); load();
   }

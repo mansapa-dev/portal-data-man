@@ -9,7 +9,7 @@ final class AdminService
  public function __construct(private Database$db,private AdminRepository$repo){}
  public function dashboard():array{return$this->repo->dashboard();}
  public function adminLiveSessions():array{return$this->liveSessionPayload($this->repo->allExamIds());}
- public function teacherLiveSessions(int $teacherId,int$userId=0):array{return $this->liveSessionPayload($userId>0?$this->repo->personnelExamIds($userId):$this->repo->teacherExamIds($teacherId));}
+ public function teacherLiveSessions(int $teacherId,int$userId=0):array{$ids=$userId>0&&$this->repo->personnelIsProctor($userId)?$this->repo->allExamIds():($userId>0?$this->repo->personnelExamIds($userId):$this->repo->teacherExamIds($teacherId));return $this->liveSessionPayload($ids);}
  public function references():array{return$this->repo->references();}
  public function exams():array{return$this->repo->exams();}
  public function saveExam(array$d,int$actor):void

@@ -87,6 +87,7 @@ const tabTitles = {
   'tabAdminOverview': 'Ringkasan Sistem',
   'tabAdminLiveSessions': 'Live Sessions',
   'tabAdminSupportTickets': 'Tiket Bantuan CBT',
+  'tabAdminStaffChat': 'Komunikasi Petugas Piket',
   'tabAdminUjian': 'Kelola Ujian & Arsip',
   'tabAdminUjianLanjutan': 'Ujian Khusus',
   'tabAdminSoal': 'Kelola Bank Soal',
@@ -120,6 +121,7 @@ function switchDashTab(tabId, btnEl) {
   if(tabId === 'tabAdminOverview') loadDataAdminDash();
   if(tabId === 'tabAdminLiveSessions') loadDataAdminLiveSessions();
   if(tabId === 'tabAdminSupportTickets') loadDataSupportTickets();
+  if(tabId === 'tabAdminStaffChat') loadAdminStaffChat();
   if(tabId === 'tabAdminUjian') loadDataAdminUjian();
   if(tabId === 'tabAdminUjianLanjutan') loadDataFollowUpExams();
   if(tabId === 'tabAdminSoal') loadDataAdminSoal();
@@ -143,6 +145,7 @@ function refreshActiveDashboardTab() {
     tabAdminOverview: loadDataAdminDash,
     tabAdminLiveSessions: loadDataAdminLiveSessions,
     tabAdminSupportTickets: loadDataSupportTickets,
+    tabAdminStaffChat: loadAdminStaffChat,
     tabAdminUjian: loadDataAdminUjian,
     tabAdminUjianLanjutan: loadDataFollowUpExams,
     tabAdminSoal: loadDataAdminSoal,
@@ -160,6 +163,8 @@ function refreshActiveDashboardTab() {
   loader();
   return true;
 }
+
+async function loadAdminStaffChat(){const root=document.getElementById('adminStaffChatRoot');if(!root||!window.CbtStaffAdminChat)return;const me=await fetch('api/auth/me',{credentials:'same-origin'}).then(r=>r.json());const token=me.data.csrf_token;const client=async(path,method='GET',body)=>{const response=await fetch(path,{method,credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':token},body:body===undefined?undefined:JSON.stringify(body)});const result=await response.json();if(!response.ok)throw new Error(result.message||'Permintaan gagal.');return result;};window.CbtStaffAdminChat.mount(root,client,{admin:true});}
 
 let dashboardRefreshTimer = null;
 function scheduleDashboardRefresh(delay = 500) {

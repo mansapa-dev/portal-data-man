@@ -35,7 +35,7 @@ final class AuthService
         }
         if(isset($_SESSION['auth']['user_id'],$_SESSION['auth']['role'])){
             $row=$this->users->findById((int)$_SESSION['auth']['user_id']);
-            if($row&&$row['status']==='ACTIVE'&&hash_equals((string)$row['role'],(string)$_SESSION['auth']['role']))$staff=['id'=>(int)$row['id'],'nama'=>$row['name'],'username'=>$row['username'],'role'=>$row['role'],'nip'=>$_SESSION['auth']['nip']??null];else unset($_SESSION['auth']);
+            if($row&&$row['status']==='ACTIVE'&&hash_equals((string)$row['role'],(string)$_SESSION['auth']['role']))$staff=['id'=>(int)$row['id'],'nama'=>$row['name'],'username'=>$row['username'],'role'=>$row['role'],'nip'=>$_SESSION['auth']['nip']??null,'capabilities'=>$this->users->staffCapabilities((int)$row['id'])];else unset($_SESSION['auth']);
         }
         return['student'=>$student,'staff'=>$staff];
     }

@@ -33,6 +33,7 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
       <button class="nav-item" data-section="results"><i class="fa-solid fa-square-poll-vertical"></i><span>Hasil Siswa</span></button>
       <button class="nav-item" data-section="violations"><i class="fa-solid fa-shield-halved"></i><span>Pelanggaran</span></button>
       <button class="nav-item" data-section="support"><i class="fa-solid fa-headset"></i><span>Tiket Bantuan</span></button>
+      <button class="nav-item" data-section="admin-chat"><i class="fa-solid fa-comments"></i><span>Komunikasi Admin</span></button>
     </nav>
     <div class="teacher-help-box">
       <h5>Butuh Bantuan?</h5>
@@ -68,9 +69,10 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
     <section id="content" class="content-grid"></section>
   </main>
 
-  <script src="../assets/js/teacher/live-sessions.js?v=20260910-assigned-options"></script>
+  <script src="../assets/js/teacher/live-sessions.js?v=20260925-proctor-reset-1"></script>
   <script src="../assets/js/cbt/support-tickets.js?v=20260911-proctor-1"></script>
-  <script src="../assets/js/teacher/dashboard.js?v=20260911-proctor-1"></script>
+  <script src="../assets/js/cbt/staff-admin-chat.js?v=20260925-1"></script>
+  <script src="../assets/js/teacher/dashboard.js?v=20260925-proctor-reset-1"></script>
   <script src="../assets/js/table-pagination.js?v=20260910-cleanup"></script>
 </body>
 </html>

@@ -5,6 +5,7 @@
   let csrf = '';
   let data = { ujianList: [], hasilList: [], pelanggaranList: [] };
   let activeSection = 'overview';
+  let capabilities = { teacher: false, proctor: false };
 
   const el = (tag, text, className) => {
     const node = document.createElement(tag);
@@ -131,21 +132,25 @@
     content.classList.toggle('teacher-live',section === 'live');
     content.replaceChildren();
     document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.section === section));
-    const titles = { overview: 'Dashboard', exams: 'Ujian Diampu', results: 'Hasil Siswa', violations: 'Pelanggaran Ujian', support: 'Tiket Bantuan' };
+    const titles = { overview: 'Dashboard', exams: 'Ujian Diampu', results: 'Hasil Siswa', violations: 'Pelanggaran Ujian', support: 'Tiket Bantuan', 'admin-chat':'Komunikasi Admin' };
     const pageTitle = document.getElementById('teacherPageTitle');
     if (pageTitle) pageTitle.textContent = titles[section] || 'Dashboard';
     if (section === 'live') {
       if (pageTitle) pageTitle.textContent = 'Sesi Berlangsung';
       const assignedGrades=[...new Set(data.ujianList.map(exam=>String(exam.tingkat||'').trim()).filter(Boolean))];
       const assignedClasses=[...new Set(data.ujianList.flatMap(exam=>String(exam.nama_kelas_target||'').split(',')).map(name=>name.trim()).filter(Boolean))];
-      window.CbtLiveSessions.mount(content, api, notice, {
-        title: 'Live Sessions Kelas Diampu',
-        description: 'Pilih tingkatan dan kelas dari ujian yang ditugaskan kepada Anda.',
+      const liveOptions = {
+        title: capabilities.proctor ? 'Live Sessions Seluruh Ujian' : 'Live Sessions Kelas Diampu',
+        description: capabilities.proctor ? 'Pantau sesi aktif dan bantu reset peserta yang dihentikan karena pelanggaran.' : 'Pilih tingkatan dan kelas dari ujian yang ditugaskan kepada Anda.',
         enableFilters: true,
         filterFields: ['grade', 'className'],
         filterOptions: { grade: assignedGrades, className: assignedClasses },
-        groupByExam: true
-      });
+        groupByExam: true,
+        canReset: capabilities.proctor,
+        onReset: (session,reason) => api(`api/staff/students/${session.studentId}/reset`,'POST',{exam_id:session.examId,reason})
+      };
+      if(capabilities.proctor)liveOptions.filterFields=['exam','grade','className','subject','status','connection'];
+      window.CbtLiveSessions.mount(content, api, notice, liveOptions);
       return;
     }
     if(section==='support'){
@@ -154,6 +159,10 @@
       const client={list:async status=>(await api(`api/staff/support-tickets?status=${encodeURIComponent(status)}`)).data,update:async(id,status,note)=>(await api(`api/staff/support-tickets/${id}/status`,'POST',{status,note})).data,reset:async(id,reason)=>(await api(`api/staff/support-tickets/${id}/reset`,'POST',{reason})).data};
       window.CbtSupportTickets.mountStaff(list,client,true,notice);
       return;
+    }
+    if(section==='admin-chat'){
+      if(!capabilities.proctor){content.append(el('div','Fitur ini hanya tersedia untuk petugas piket.','message'));return;}
+      window.CbtStaffAdminChat.mount(content,api,{admin:false});return;
     }
 
     if (section === 'overview') {
@@ -488,7 +497,7 @@
   }
 
   async function openSection(section) {
-    if (['overview', 'exams', 'results', 'violations'].includes(section)) {
+    if (capabilities.teacher && ['overview', 'exams', 'results', 'violations'].includes(section)) {
       notice.style.color = 'var(--muted)';
       notice.textContent = 'Memuat data terbaru dari database...';
       try {
@@ -521,6 +530,8 @@
       return;
     }
     csrf = me.data.csrf_token;
+    capabilities = me.data.staff.capabilities || {teacher:me.data.staff.role==='TEACHER',proctor:false};
+    const proctorOnly=capabilities.proctor&&!capabilities.teacher;
     const teacherLabel = me.data.staff.nama || me.data.staff.name || me.data.staff.nama_lengkap || me.data.staff.nip || me.data.staff.username || 'Guru';
     document.getElementById('teacherName').textContent = teacherLabel;
     const sidebarName = document.getElementById('teacherSidebarName');
@@ -529,8 +540,9 @@
     if (sidebarName) sidebarName.textContent = teacherLabel;
     if (avatar) avatar.textContent = teacherLabel.trim().charAt(0).toUpperCase() || 'G';
     if (welcomeName) welcomeName.textContent = teacherLabel;
-    data = (await api('api/teacher/dashboard')).data;
-    render('overview');
+    document.querySelector('[data-section="admin-chat"]').hidden=!capabilities.proctor;
+    if(proctorOnly){document.querySelectorAll('.nav-item').forEach(button=>{button.hidden=!['live','support','admin-chat'].includes(button.dataset.section);});document.querySelectorAll('.nav-label').forEach(label=>label.hidden=true);document.querySelector('.welcome .eyebrow').textContent='DASHBOARD PETUGAS PIKET CBT';document.querySelector('.welcome p').textContent='Pantau sesi ujian, tangani tiket peserta, dan berkomunikasi dengan admin sekolah.';document.querySelector('.teacher-user-footer small').textContent='Petugas Piket Ujian';document.querySelector('.teacher-identity small').textContent='Portal Petugas';render('live');}
+    else{data = (await api('api/teacher/dashboard')).data;render('overview');}
   } catch (error) {
     notice.textContent = error.message;
   }
