@@ -137,8 +137,9 @@
     if (pageTitle) pageTitle.textContent = titles[section] || 'Dashboard';
     if (section === 'live') {
       if (pageTitle) pageTitle.textContent = 'Sesi Berlangsung';
-      const assignedGrades=[...new Set(data.ujianList.map(exam=>String(exam.tingkat||'').trim()).filter(Boolean))];
-      const assignedClasses=[...new Set(data.ujianList.flatMap(exam=>String(exam.nama_kelas_target||'').split(',')).map(name=>name.trim()).filter(Boolean))];
+      const assignedExams=Array.isArray(data.ujianList)?data.ujianList:[];
+      const assignedGrades=[...new Set(assignedExams.map(exam=>String(exam.tingkat||'').trim()).filter(Boolean))];
+      const assignedClasses=[...new Set(assignedExams.flatMap(exam=>String(exam.nama_kelas_target||'').split(',')).map(name=>name.trim()).filter(Boolean))];
       const liveOptions = {
         title: capabilities.proctor ? 'Live Sessions Seluruh Ujian' : 'Live Sessions Kelas Diampu',
         description: capabilities.proctor ? 'Pantau sesi aktif dan bantu reset peserta yang dihentikan karena pelanggaran.' : 'Pilih tingkatan dan kelas dari ujian yang ditugaskan kepada Anda.',
@@ -551,7 +552,7 @@
     if (avatar) avatar.textContent = teacherLabel.trim().charAt(0).toUpperCase() || 'G';
     if (welcomeName) welcomeName.textContent = teacherLabel;
     document.querySelector('[data-section="admin-chat"]').hidden=!capabilities.proctor;
-    if(proctorOnly){data={pelanggaranList:[]};document.querySelectorAll('.nav-item').forEach(button=>{button.hidden=!['live','support','admin-chat'].includes(button.dataset.section)&&button.dataset.section!=='violations';});document.querySelectorAll('.nav-label').forEach(label=>label.hidden=true);document.querySelector('.welcome .eyebrow').textContent='DASHBOARD PETUGAS PIKET CBT';document.querySelector('.welcome p').textContent='Pantau sesi ujian, tangani pelanggaran dan tiket peserta, serta berkomunikasi dengan admin sekolah.';document.querySelector('.teacher-user-footer small').textContent='Petugas Piket Ujian';document.querySelector('.teacher-identity small').textContent='Portal Petugas';render('live');}
+    if(proctorOnly){data={ujianList:[],hasilList:[],pelanggaranList:[]};document.querySelectorAll('.nav-item').forEach(button=>{button.hidden=!['live','support','admin-chat'].includes(button.dataset.section)&&button.dataset.section!=='violations';});document.querySelectorAll('.nav-label').forEach(label=>label.hidden=true);document.querySelector('.welcome .eyebrow').textContent='DASHBOARD PETUGAS PIKET CBT';document.querySelector('.welcome p').textContent='Pantau sesi ujian, tangani pelanggaran dan tiket peserta, serta berkomunikasi dengan admin sekolah.';document.querySelector('.teacher-user-footer small').textContent='Petugas Piket Ujian';document.querySelector('.teacher-identity small').textContent='Portal Petugas';render('live');}
     else{data = (await api('api/teacher/dashboard')).data;render('overview');}
   } catch (error) {
     notice.textContent = error.message;
