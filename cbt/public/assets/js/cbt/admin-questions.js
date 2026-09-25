@@ -1,6 +1,5 @@
 // Administrator question bank management (2-Level Subject Catalog & Detail View).
-let cacheAdminSoalRows = [];
-let currentSelectedMapelName = null;
+let cacheAdminSoalRows = [], cacheAdminSoalUjianRows = [], currentSelectedMapelName = null;
 let attachedGambarSoalBase64 = '';
 let pendingQuestionImport = null;
 
@@ -63,6 +62,8 @@ function loadDataAdminSoal(onLoaded = null, onFailure = null) {
       </div>`;
   }
 
+  cbtApi.withSuccessHandler(exams => {cacheAdminSoalUjianRows=Array.isArray(exams)?exams:(exams?.data||[]);if(currentSelectedMapelName){populateDetailSoalFilters();applyFilterDetailSoal();}else renderKatalogMapelGrid();}).withFailureHandler(()=>{cacheAdminSoalUjianRows=[];}).getAdminUjianList(stPengelola);
+
   cbtApi
     .withSuccessHandler(rows => {
       cacheAdminSoalRows = rows || [];
@@ -118,13 +119,13 @@ function renderKatalogMapelGrid() {
     subjectMap[name].questions.push(q);
   });
 
+  cacheAdminSoalUjianRows.forEach(exam=>{const name=exam.nama_mapel||'Mata Pelajaran Umum';if(!subjectMap[name])subjectMap[name]={id:exam.subject_id||0,code:exam.kode_mapel||'',name,questions:[],exams:[]};if(!subjectMap[name].exams)subjectMap[name].exams=[];subjectMap[name].exams.push(exam);});
+
   let subjectList = Object.values(subjectMap);
 
-  // Apply filters
   if (tingVal !== 'ALL') {
     subjectList = subjectList.filter(s => {
-      if (s.questions.length === 0) return true;
-      return s.questions.some(q => String(q.tingkat).toUpperCase() === tingVal.toUpperCase());
+      return s.questions.some(q => String(q.tingkat).toUpperCase() === tingVal.toUpperCase()) || (s.exams || []).some(exam => String(exam.tingkat).toUpperCase() === tingVal.toUpperCase());
     });
   }
 
@@ -134,7 +135,6 @@ function renderKatalogMapelGrid() {
     });
   }
 
-  // Sort alphabetically
   subjectList.sort((a, b) => a.name.localeCompare(b.name));
 
   if (subjectList.length === 0) {
@@ -150,7 +150,7 @@ function renderKatalogMapelGrid() {
 
   container.innerHTML = subjectList.map(s => {
     const totalSoal = s.questions.length;
-    const grades = [...new Set(s.questions.map(q => q.tingkat).filter(Boolean))].sort().join(', ');
+    const grades = [...new Set([...s.questions.map(q => q.tingkat), ...(s.exams || []).map(exam => exam.tingkat)].filter(Boolean))].sort().join(', ');
     const iconClass = getSubjectIcon(s.name);
 
     return `
@@ -236,12 +236,14 @@ function populateDetailSoalFilters() {
 
   const tingVal = document.getElementById('fltDetailSoalTingkat')?.value || 'ALL';
   const questionsForMapel = cacheAdminSoalRows.filter(q => (q.nama_mapel || '').trim().toLowerCase() === currentSelectedMapelName.trim().toLowerCase());
+  const examsForMapel = cacheAdminSoalUjianRows.filter(exam => (exam.nama_mapel || '').trim().toLowerCase() === currentSelectedMapelName.trim().toLowerCase());
 
   // 1. Populate Dropdown Jadwal Ujian
   const fltUjian = document.getElementById('fltDetailSoalUjian');
   if (fltUjian) {
     const currentVal = fltUjian.value;
     const examsMap = {};
+    examsForMapel.forEach(exam=>{if(tingVal==='ALL'||String(exam.tingkat||'').toUpperCase()===tingVal.toUpperCase())examsMap[exam.id]=exam.nama_ujian||`Ujian #${exam.id}`;});
     questionsForMapel.forEach(q => {
       if (tingVal === 'ALL' || String(q.tingkat || '').toUpperCase() === tingVal.toUpperCase()) {
         const eid = q.exam_id || q.ujian_id;
@@ -263,7 +265,6 @@ function populateDetailSoalFilters() {
     }
   }
 
-  // 2. Populate Dropdown Kelas
   const fltKelas = document.getElementById('fltDetailSoalKelas');
   if (fltKelas) {
     const currentVal = fltKelas.value;
