@@ -27,9 +27,9 @@ final class TeacherSsoController
         $foreign=$role==='EMPLOYEE'?'employee_id':'teacher_id';$q=$this->db->prepare("SELECT * FROM users WHERE {$foreign}=:person LIMIT 1");$q->execute(['person'=>$person['id']]);$user=$q->fetch();
         if(!$user){$username=$person['nip']?:'portal-'.($employeePortal?:$teacherPortal);$insert=$this->db->prepare("INSERT INTO users(teacher_id,employee_id,username,password_hash,name,role,status) VALUES(:teacher,:employee,:username,:hash,:name,:role,'ACTIVE')");$insert->execute(['teacher'=>$teacher['id']??null,'employee'=>$employee['id']??null,'username'=>$username,'hash'=>password_hash(bin2hex(random_bytes(32)),PASSWORD_DEFAULT),'name'=>$person['name_snapshot'],'role'=>$role]);$q->execute(['person'=>$person['id']]);$user=$q->fetch();}
         if(!$user||$user['role']!==$role||$user['status']!=='ACTIVE')return Response::error('Akun CBT personel tidak aktif.',403);
-        Session::regenerate();unset($_SESSION['student']);$_SESSION['auth']=['user_id'=>(int)$user['id'],'teacher_id'=>$teacher?(int)$teacher['id']:null,'employee_id'=>$employee?(int)$employee['id']:null,'portal_teacher_id'=>$teacherPortal?:null,'portal_employee_id'=>$employeePortal?:null,'nip'=>$person['nip'],'role'=>$role];unset($_SESSION['oidc_teacher']);header('Location: /guru/dashboard');exit;
+        Session::regenerate();unset($_SESSION['student']);$_SESSION['auth']=['user_id'=>(int)$user['id'],'teacher_id'=>$teacher?(int)$teacher['id']:null,'employee_id'=>$employee?(int)$employee['id']:null,'portal_teacher_id'=>$teacherPortal?:null,'portal_employee_id'=>$employeePortal?:null,'nip'=>$person['nip'],'role'=>$role,'oidc_id_token'=>(string)($body['id_token']??''),'oidc_end_session'=>(string)($oidc['end_session_endpoint']??'')];unset($_SESSION['oidc_teacher']);header('Location: /guru/dashboard');exit;
     }
-    public function logout(Request $request): Response { Session::destroy();header('Location: /guru');exit; }
+    public function logout(Request $request): Response { $token=(string)($_SESSION['auth']['oidc_id_token']??'');$end=(string)($_SESSION['auth']['oidc_end_session']??'');$post=(string)Config::get('PORTAL_DATA_OIDC_POST_LOGOUT_URI','');Session::destroy();if($end!==''&&$post!==''){$this->https($end);$this->https($post);header('Location: '.$end.'?'.http_build_query(['id_token_hint'=>$token,'post_logout_redirect_uri'=>$post]));exit;}header('Location: '.($post?:'/guru'));exit; }
     private function oidc(): array
     {
         if($this->discovery!==null)return$this->discovery;
@@ -42,7 +42,7 @@ final class TeacherSsoController
             if(!empty($data['userinfo_endpoint']))$endpoints[]=(string)$data['userinfo_endpoint'];
             foreach($endpoints as$endpoint)$this->https($endpoint);
             if(rtrim((string)$data['issuer'],'/')!==rtrim($configured,'/'))continue;
-            return$this->discovery=['issuer'=>rtrim((string)$data['issuer'],'/'),'authorization_endpoint'=>(string)$data['authorization_endpoint'],'token_endpoint'=>(string)$data['token_endpoint'],'userinfo_endpoint'=>(string)($data['userinfo_endpoint']??''),'jwks_uri'=>(string)$data['jwks_uri']];
+            return$this->discovery=['issuer'=>rtrim((string)$data['issuer'],'/'),'authorization_endpoint'=>(string)$data['authorization_endpoint'],'token_endpoint'=>(string)$data['token_endpoint'],'userinfo_endpoint'=>(string)($data['userinfo_endpoint']??''),'jwks_uri'=>(string)$data['jwks_uri'],'end_session_endpoint'=>(string)($data['end_session_endpoint']??'')];
         }
         Response::error('Konfigurasi endpoint SSO Portal Data tidak dapat dibaca.',503)->send();return[];
     }

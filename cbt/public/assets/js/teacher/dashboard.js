@@ -607,13 +607,7 @@
     }
   });
 
-  const handleLogout = async () => {
-    try {
-      await api('api/auth/logout', 'POST', {});
-    } finally {
-      location.href = '../guru';
-    }
-  };
+  const handleLogout = () => { location.href = '../auth/sso/logout'; };
 
   const btnLogoutTop = document.getElementById('topbarLogoutGuru');
   if (btnLogoutTop) btnLogoutTop.addEventListener('click', handleLogout);
