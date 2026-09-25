@@ -365,7 +365,7 @@
        LOG PELANGGARAN
     ================================================================ */
     if (section === 'violations') {
-      const box = panel('Log Pelanggaran', 'Catatan aktivitas kecurangan atau pergantian tab peserta selama ujian yang Anda ampu.');
+      const box = panel('Log Pelanggaran', capabilities.proctor ? 'Catatan pelanggaran peserta. Petugas dapat mereset CBT siswa yang telah dihentikan.' : 'Catatan aktivitas kecurangan atau pergantian tab peserta selama ujian yang Anda ampu.');
 
       // ---- Filter bar ----
       const filterBar = el('div', undefined, 'teacher-result-controls');
@@ -439,8 +439,9 @@
         );
 
         vTable.replaceChildren(table(
-          ['Waktu (WIB)', 'No. Peserta', 'Nama Siswa', 'Kelas', 'Nama Ujian', 'Total', 'Jenis Pelanggaran'],
-          filtered.map((x) => [
+          ['Waktu (WIB)', 'No. Peserta', 'Nama Siswa', 'Kelas', 'Nama Ujian', 'Total', 'Jenis Pelanggaran', ...(capabilities.proctor ? ['Aksi'] : [])],
+          filtered.map((x) => {
+            const cells = [
             fmtDatetime(x.waktu),
             x.nomor_ujian || '-',
             x.nama_siswa,
@@ -448,7 +449,9 @@
             x.nama_ujian,
             createBadge(`${x.jumlah_pelanggaran}×`, 'red'),
             humanizeViolation(x.keterangan),
-          ])
+            ];
+            if(capabilities.proctor){const action=el('span');if(x.attempt_status==='TERMINATED'){const reset=el('button','Reset CBT','btn btn-danger');reset.type='button';reset.addEventListener('click',async()=>{const reason=window.prompt(`Alasan reset CBT ${x.nama_siswa}:`);if(reason===null)return;if(!reason.trim()){notice.textContent='Alasan reset wajib diisi.';return;}reset.disabled=true;try{await api(`api/staff/students/${x.student_id}/reset`,'POST',{exam_id:x.exam_id,reason:reason.trim()});notice.style.color='var(--primary-dark)';notice.textContent=`CBT ${x.nama_siswa} berhasil direset.`;data.pelanggaranList=(await api('api/staff/violations')).data;buildViolationOptions(data.pelanggaranList);renderViolations(data.pelanggaranList);}catch(error){notice.style.color='#c0392b';notice.textContent=error.message;}finally{reset.disabled=false;}});action.append(reset);}else action.textContent='—';cells.push(action);}return cells;
+          })
         ));
       };
 
@@ -462,7 +465,8 @@
         refreshBtn.disabled = true;
         refreshBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Memuat…';
         try {
-          data = (await api('api/teacher/dashboard')).data;
+          if(capabilities.proctor)data.pelanggaranList=(await api('api/staff/violations')).data;
+          else data = (await api('api/teacher/dashboard')).data;
           buildViolationOptions(data.pelanggaranList);
           renderViolations(data.pelanggaranList);
         } catch (err) {
@@ -497,7 +501,13 @@
   }
 
   async function openSection(section) {
-    if (capabilities.teacher && ['overview', 'exams', 'results', 'violations'].includes(section)) {
+    if (section === 'violations' && capabilities.proctor) {
+      notice.style.color = 'var(--muted)';
+      notice.textContent = 'Memuat log pelanggaran terbaru...';
+      try { data.pelanggaranList = (await api('api/staff/violations')).data; notice.textContent = ''; }
+      catch (error) { notice.style.color = '#c0392b'; notice.textContent = `Data terbaru gagal dimuat: ${error.message}`; }
+    }
+    if (capabilities.teacher && ['overview', 'exams', 'results', 'violations'].includes(section) && !(section === 'violations' && capabilities.proctor)) {
       notice.style.color = 'var(--muted)';
       notice.textContent = 'Memuat data terbaru dari database...';
       try {
@@ -541,7 +551,7 @@
     if (avatar) avatar.textContent = teacherLabel.trim().charAt(0).toUpperCase() || 'G';
     if (welcomeName) welcomeName.textContent = teacherLabel;
     document.querySelector('[data-section="admin-chat"]').hidden=!capabilities.proctor;
-    if(proctorOnly){document.querySelectorAll('.nav-item').forEach(button=>{button.hidden=!['live','support','admin-chat'].includes(button.dataset.section);});document.querySelectorAll('.nav-label').forEach(label=>label.hidden=true);document.querySelector('.welcome .eyebrow').textContent='DASHBOARD PETUGAS PIKET CBT';document.querySelector('.welcome p').textContent='Pantau sesi ujian, tangani tiket peserta, dan berkomunikasi dengan admin sekolah.';document.querySelector('.teacher-user-footer small').textContent='Petugas Piket Ujian';document.querySelector('.teacher-identity small').textContent='Portal Petugas';render('live');}
+    if(proctorOnly){data={pelanggaranList:[]};document.querySelectorAll('.nav-item').forEach(button=>{button.hidden=!['live','support','admin-chat'].includes(button.dataset.section)&&button.dataset.section!=='violations';});document.querySelectorAll('.nav-label').forEach(label=>label.hidden=true);document.querySelector('.welcome .eyebrow').textContent='DASHBOARD PETUGAS PIKET CBT';document.querySelector('.welcome p').textContent='Pantau sesi ujian, tangani pelanggaran dan tiket peserta, serta berkomunikasi dengan admin sekolah.';document.querySelector('.teacher-user-footer small').textContent='Petugas Piket Ujian';document.querySelector('.teacher-identity small').textContent='Portal Petugas';render('live');}
     else{data = (await api('api/teacher/dashboard')).data;render('overview');}
   } catch (error) {
     notice.textContent = error.message;

@@ -8,4 +8,5 @@ final class TeacherController
  public function __construct(private AdminService$service){}
  public function liveSessions(Request$r):Response{$a=$_SESSION['auth'];return Response::json($this->service->teacherLiveSessions((int)($a['teacher_id']??0),(int)($a['user_id']??0)));}
  public function dashboard(Request$r):Response{$a=$_SESSION['auth'];return Response::json($this->service->teacherDashboard((int)($a['teacher_id']??0),(int)($a['user_id']??0),(string)$a['role']));}
+ public function violations(Request$r):Response{return Response::json($this->service->proctorViolations((int)($_SESSION['auth']['user_id']??0)));}
 }

@@ -72,6 +72,7 @@ final class AdminService
  public function deleteAssignment(int$id):void{$this->repo->deleteAssignment($id);}
  public function results():array{return$this->repo->results();}
  public function violations():array{return$this->repo->violations();}
+ public function proctorViolations(int$userId):array{if(!$this->repo->personnelIsProctor($userId))throw new DomainException('Log pelanggaran hanya dapat diakses petugas piket.',403);return$this->repo->violations();}
  public function teacherDashboard(int$teacherId,int$userId,string$role):array{$ids=$role==='ADMIN'?$this->repo->allExamIds():$this->repo->personnelExamIds($userId);$all=$this->repo->exams();$list=array_values(array_filter($all,fn($e)=>in_array((int)$e['id'],$ids,true)));return['ujianList'=>$list,'hasilList'=>$this->repo->results($ids),'pelanggaranList'=>$this->repo->violations($ids),'syncedAt'=>gmdate(DATE_ATOM)];}
  private function liveSessionPayload(array$examIds):array{$sessions=$this->repo->liveSessions($examIds);return['sessions'=>$sessions,'summary'=>['active'=>count(array_filter($sessions,fn(array$s):bool=>$s['status']==='IN_PROGRESS')),'online'=>count(array_filter($sessions,fn(array$s):bool=>$s['status']==='IN_PROGRESS'&&$s['connectionState']==='ONLINE')),'terminated'=>count(array_filter($sessions,fn(array$s):bool=>$s['status']==='TERMINATED')),'total'=>count($sessions)],'serverTime'=>gmdate(DATE_ATOM),'refreshSeconds'=>10];}
  public function importQuestions(array$rows):array

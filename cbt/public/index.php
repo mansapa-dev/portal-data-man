@@ -102,6 +102,7 @@ $router->get('/api/admin/settings',[$admin,'settings'],[$adminAuth]);
 $router->post('/api/admin/settings',[$admin,'saveSettings'],[$adminAuth,$csrf,$audit('SETTINGS_SAVED','Settings')]);
 $router->get('/api/teacher/dashboard',[$teacher,'dashboard'],[$staffAuth]);
 $router->get('/api/teacher/live-sessions',[$teacher,'liveSessions'],[$teacherAuth]);
+$router->get('/api/staff/violations',[$teacher,'violations'],[$teacherAuth]);
 $router->get('/api/staff/support-tickets',[$supportTickets,'staffIndex'],[$staffAuth]);
 $router->post('/api/staff/support-tickets/{id}/status',[$supportTickets,'update'],[$staffAuth,$csrf,$audit('SUPPORT_TICKET_STATUS_CHANGED','SupportTicket')]);
 $router->post('/api/staff/support-tickets/{id}/reset',[$supportTickets,'reset'],[$staffAuth,$csrf,$audit('SUPPORT_TICKET_RESET','SupportTicket')]);
