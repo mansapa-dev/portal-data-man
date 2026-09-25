@@ -15,7 +15,7 @@
         <div class="input-group">
           <label class="ui-label" for="inPertanyaan">Teks Pertanyaan</label>
           <div class="input-wrapper">
-            <div id="inPertanyaan" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="Tulis teks pertanyaan di sini..." class="ui-control question-visual-editor"></div>
+            <div id="inPertanyaan" contenteditable="true" role="textbox" aria-multiline="true" dir="auto" data-placeholder="Tulis teks pertanyaan di sini (Indonesia atau Arab)..." class="ui-control question-visual-editor"></div>
           </div>
           <div class="question-format-toolbar" aria-label="Format pertanyaan"><button type="button" onclick="wrapQuestionContent('inPertanyaan','<sup>','</sup>','2')">x<sup>2</sup></button><button type="button" onclick="wrapQuestionContent('inPertanyaan','<sub>','</sub>','2')">x<sub>2</sub></button><button type="button" onclick="insertQuestionEquation('inPertanyaan')"><i class="fa-solid fa-square-root-variable"></i> Equation</button><button type="button" onclick="insertQuestionSymbol('inPertanyaan','±')">±</button><button type="button" onclick="insertQuestionSymbol('inPertanyaan','°')">°</button><button type="button" onclick="document.getElementById('inPertanyaanImage').click()"><i class="fa-solid fa-image"></i> Gambar</button><input type="file" id="inPertanyaanImage" accept="image/*,.jfif,.jpe,.dib,.tif,.tiff,.heic,.heif" hidden onchange="handleQuestionContentImage(this,'inPertanyaan')"></div>
         </div>
@@ -51,12 +51,12 @@
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
           <div class="input-group">
             <label class="ui-label" for="inOpsiA">Opsi A</label>
-            <div class="input-wrapper"><div id="inOpsiA" contenteditable="true" role="textbox" data-placeholder="Jawaban A" class="ui-control question-visual-editor"></div></div>
+            <div class="input-wrapper"><div id="inOpsiA" contenteditable="true" role="textbox" dir="auto" data-placeholder="Jawaban A" class="ui-control question-visual-editor"></div></div>
             <div class="question-format-toolbar"><button type="button" onclick="wrapQuestionContent('inOpsiA','<sup>','</sup>','2')">x<sup>2</sup></button><button type="button" onclick="wrapQuestionContent('inOpsiA','<sub>','</sub>','2')">x<sub>2</sub></button><button type="button" onclick="insertQuestionEquation('inOpsiA')">Equation</button><button type="button" aria-label="Tambah gambar opsi A" onclick="document.getElementById('inOpsiAImage').click()"><i class="fa-solid fa-image"></i> Gambar</button><input type="file" id="inOpsiAImage" accept="image/*,.jfif,.jpe,.dib,.tif,.tiff,.heic,.heif" hidden onchange="handleQuestionContentImage(this,'inOpsiA')"></div>
           </div>
           <div class="input-group">
             <label class="ui-label" for="inOpsiB">Opsi B</label>
-            <div class="input-wrapper"><div id="inOpsiB" contenteditable="true" role="textbox" data-placeholder="Jawaban B" class="ui-control question-visual-editor"></div></div>
+            <div class="input-wrapper"><div id="inOpsiB" contenteditable="true" role="textbox" dir="auto" data-placeholder="Jawaban B" class="ui-control question-visual-editor"></div></div>
             <div class="question-format-toolbar"><button type="button" onclick="wrapQuestionContent('inOpsiB','<sup>','</sup>','2')">x<sup>2</sup></button><button type="button" onclick="wrapQuestionContent('inOpsiB','<sub>','</sub>','2')">x<sub>2</sub></button><button type="button" onclick="insertQuestionEquation('inOpsiB')">Equation</button><button type="button" aria-label="Tambah gambar opsi B" onclick="document.getElementById('inOpsiBImage').click()"><i class="fa-solid fa-image"></i> Gambar</button><input type="file" id="inOpsiBImage" accept="image/*,.jfif,.jpe,.dib,.tif,.tiff,.heic,.heif" hidden onchange="handleQuestionContentImage(this,'inOpsiB')"></div>
           </div>
         </div>
@@ -64,19 +64,19 @@
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
           <div class="input-group">
             <label class="ui-label" for="inOpsiC">Opsi C</label>
-            <div class="input-wrapper"><div id="inOpsiC" contenteditable="true" role="textbox" data-placeholder="Jawaban C" class="ui-control question-visual-editor"></div></div>
+            <div class="input-wrapper"><div id="inOpsiC" contenteditable="true" role="textbox" dir="auto" data-placeholder="Jawaban C" class="ui-control question-visual-editor"></div></div>
             <div class="question-format-toolbar"><button type="button" onclick="wrapQuestionContent('inOpsiC','<sup>','</sup>','2')">x<sup>2</sup></button><button type="button" onclick="wrapQuestionContent('inOpsiC','<sub>','</sub>','2')">x<sub>2</sub></button><button type="button" onclick="insertQuestionEquation('inOpsiC')">Equation</button><button type="button" aria-label="Tambah gambar opsi C" onclick="document.getElementById('inOpsiCImage').click()"><i class="fa-solid fa-image"></i> Gambar</button><input type="file" id="inOpsiCImage" accept="image/*,.jfif,.jpe,.dib,.tif,.tiff,.heic,.heif" hidden onchange="handleQuestionContentImage(this,'inOpsiC')"></div>
           </div>
           <div class="input-group">
             <label class="ui-label" for="inOpsiD">Opsi D</label>
-            <div class="input-wrapper"><div id="inOpsiD" contenteditable="true" role="textbox" data-placeholder="Jawaban D" class="ui-control question-visual-editor"></div></div>
+            <div class="input-wrapper"><div id="inOpsiD" contenteditable="true" role="textbox" dir="auto" data-placeholder="Jawaban D" class="ui-control question-visual-editor"></div></div>
             <div class="question-format-toolbar"><button type="button" onclick="wrapQuestionContent('inOpsiD','<sup>','</sup>','2')">x<sup>2</sup></button><button type="button" onclick="wrapQuestionContent('inOpsiD','<sub>','</sub>','2')">x<sub>2</sub></button><button type="button" onclick="insertQuestionEquation('inOpsiD')">Equation</button><button type="button" aria-label="Tambah gambar opsi D" onclick="document.getElementById('inOpsiDImage').click()"><i class="fa-solid fa-image"></i> Gambar</button><input type="file" id="inOpsiDImage" accept="image/*,.jfif,.jpe,.dib,.tif,.tiff,.heic,.heif" hidden onchange="handleQuestionContentImage(this,'inOpsiD')"></div>
           </div>
         </div>
 
         <div class="input-group">
           <label class="ui-label" for="inOpsiE">Opsi E (Opsional)</label>
-          <div class="input-wrapper"><div id="inOpsiE" contenteditable="true" role="textbox" data-placeholder="Jawaban E" class="ui-control question-visual-editor"></div></div>
+          <div class="input-wrapper"><div id="inOpsiE" contenteditable="true" role="textbox" dir="auto" data-placeholder="Jawaban E" class="ui-control question-visual-editor"></div></div>
           <div class="question-format-toolbar"><button type="button" onclick="wrapQuestionContent('inOpsiE','<sup>','</sup>','2')">x<sup>2</sup></button><button type="button" onclick="wrapQuestionContent('inOpsiE','<sub>','</sub>','2')">x<sub>2</sub></button><button type="button" onclick="insertQuestionEquation('inOpsiE')">Equation</button><button type="button" aria-label="Tambah gambar opsi E" onclick="document.getElementById('inOpsiEImage').click()"><i class="fa-solid fa-image"></i> Gambar</button><input type="file" id="inOpsiEImage" accept="image/*,.jfif,.jpe,.dib,.tif,.tiff,.heic,.heif" hidden onchange="handleQuestionContentImage(this,'inOpsiE')"></div>
         </div>
 

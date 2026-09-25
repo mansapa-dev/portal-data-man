@@ -8,3 +8,8 @@
 !/storage/cache/.gitkeep
 !/storage/imports/.gitkeep
 !/public/assets/uploads/questions/.gitkeep
+/android-app/.gradle/
+/android-app/.idea/
+/android-app/build/
+/android-app/app/build/
+/android-app/local.properties

@@ -118,7 +118,7 @@ function renderSoal() {
     const visualLabel = String.fromCharCode(65 + i);
     const cls = svd === opt.key ? 'selected' : '';
     return `<div class="opt-btn ${cls}" role="radio" tabindex="${svd === opt.key || (!svd && i === 0) ? 0 : -1}" aria-checked="${svd === opt.key}" onkeydown="studentOptionKey(event, this)" onclick="simpanJawaban('${s.id}','${opt.key}', ${stIdx + 1})">
-      <div class="opt-char">${visualLabel}</div><div class="opt-text">${opt.text}</div>
+      <div class="opt-char">${visualLabel}</div><div class="opt-text question-rich-content" dir="auto">${opt.text}</div>
     </div>`;
   }).join('');
   typesetQuestionMath([document.getElementById('cbtSoalText'), document.getElementById('cbtOptionList')]);

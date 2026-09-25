@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">CBT MAN 1 Palembang</string>
+    <string name="multi_window_blocked">Tutup mode layar terbagi atau jendela mengambang untuk melanjutkan ujian CBT.</string>
+    <string name="external_link_blocked">Aplikasi ini hanya membuka situs CBT resmi.</string>
+    <string name="load_failed">CBT tidak dapat dimuat. Periksa koneksi internet, lalu buka aplikasi kembali.</string>
+    <string name="back_blocked">Gunakan tombol navigasi di dalam CBT.</string>
+</resources>

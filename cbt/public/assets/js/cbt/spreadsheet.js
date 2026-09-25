@@ -1,4 +1,7 @@
 // Spreadsheet export, template generation, and upload parsing helpers.
+function spreadsheetContainsArabic(value) {
+  return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/u.test(String(value || ''));
+}
 function exportToExcel(filename, sheetName, headers, dataRows) {
   if (!dataRows || dataRows.length === 0) {
     showCustomAlert('Peringatan', 'Tidak ada data untuk diexport.');
@@ -55,6 +58,11 @@ function downloadTemplateSoal(namaMapel = '', ujianList = [], existingQuestions 
       'Kloroplas',
       'A',
       1
+    ],
+    [
+      '', selectedExam?.id || '', selectedExam?.nama_ujian || (namaMapel ? '' : 'Bahasa Arab Kelas X'), 3,
+      'اقْرَأْ هَذِهِ الْجُمْلَةَ، ثُمَّ اخْتَرِ الْجَوَابَ الصَّحِيحَ.',
+      'هَذَا كِتَابٌ', 'هَذِهِ مَدْرَسَةٌ', 'ذَلِكَ قَلَمٌ', 'تِلْكَ سَيَّارَةٌ', '', 'B', 1
     ]
   ];
   const examNumbers = new Map();
@@ -88,6 +96,12 @@ function downloadTemplateSoal(namaMapel = '', ujianList = [], existingQuestions 
   templateSheet['!rows'] = [{ hpt: 28 }, ...templateRows.map(() => ({ hpt: 72 }))];
   templateSheet['!autofilter'] = { ref: `A1:${XLSX.utils.encode_col(headers.length - 1)}${templateRows.length + 1}` };
   templateSheet['!freeze'] = { xSplit: 0, ySplit: 1 };
+  [4,5,6,7,8,9].forEach(columnIndex => templateRows.forEach((row,rowIndex) => {
+    const cell = templateSheet[XLSX.utils.encode_cell({r:rowIndex+1,c:columnIndex})];
+    if (!cell) return;
+    const arabic = spreadsheetContainsArabic(row[columnIndex]);
+    cell.s = { ...(cell.s || {}), alignment: { vertical:'top', wrapText:true, horizontal:arabic?'right':'left', readingOrder:arabic?2:1 } };
+  }));
   XLSX.utils.book_append_sheet(workbook, templateSheet, 'Template Soal');
 
   if (selectedExam) {
@@ -103,6 +117,7 @@ function downloadTemplateSoal(namaMapel = '', ujianList = [], existingQuestions 
     ['Posisi equation', 'Letakkan seluruh kotak equation di dalam cell tujuan. Cell pada sudut kiri atas objek menentukan pertanyaan/jawaban pemiliknya.'],
     ['Properti equation', 'Buka Format Object -> Size & Properties -> Properties, lalu pilih Move and size with cells.'],
     ['Superscript & subscript', 'Gunakan struktur Script pada menu Equation, atau format Superscript/Subscript bawaan Excel.'],
+    ['Bahasa Arab', 'Ketik atau tempel teks Arab dan harakat langsung pada cell pertanyaan atau opsi. Template meratakan cell Arab ke kanan; teks Arab dan Indonesia boleh dicampur.'],
     ['Gambar', 'Pilih Insert -> Pictures langsung pada cell pertanyaan atau opsi_a sampai opsi_e, lalu pilih Move and size with cells.'],
     ['Equation umum', 'Di Excel gunakan Insert -> Equation untuk pecahan, akar, pangkat, indeks, integral, limit, sigma, dan bentuk lain. Posisikan objek pada cell soal atau pilihan.'],
     ['Matriks', 'Di Excel gunakan Insert -> Equation -> Matrix. Matriks 3x3 dan ukuran lain diterima selama equation berada pada cell soal atau pilihan.'],

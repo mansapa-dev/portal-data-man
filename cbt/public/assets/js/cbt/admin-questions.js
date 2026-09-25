@@ -381,7 +381,7 @@ function applyFilterDetailSoal() {
       <tr data-question-id="${s.id}">
         <td style="font-weight:700; color:var(--text-muted); text-align:center;">${num + 1}</td>
         <td style="max-width:380px;">
-          <div style="font-size:13px; color:var(--text-main); line-height:1.5;">
+          <div class="question-rich-content" dir="auto" style="font-size:13px; color:var(--text-main); line-height:1.5;">
             ${s.pertanyaan}
           </div>
           <small style="color:var(--text-muted); font-size:11px; margin-top:6px; display:block;">
@@ -390,7 +390,7 @@ function applyFilterDetailSoal() {
           </small>
         </td>
         <td>
-          <div style="display:flex; flex-direction:column; gap:3px; font-size:11.5px;">
+          <div class="question-import-options" style="display:flex; flex-direction:column; gap:3px; font-size:11.5px;">
             <div style="${s.jawaban_benar==='A'?'font-weight:700; color:var(--primary-dark);':''}"><span class="badge ${s.jawaban_benar==='A'?'bg-green':'bg-gray'}" style="padding:1px 5px; font-size:10px;">A</span> ${s.opsi_a}</div>
             <div style="${s.jawaban_benar==='B'?'font-weight:700; color:var(--primary-dark);':''}"><span class="badge ${s.jawaban_benar==='B'?'bg-green':'bg-gray'}" style="padding:1px 5px; font-size:10px;">B</span> ${s.opsi_b}</div>
             <div style="${s.jawaban_benar==='C'?'font-weight:700; color:var(--primary-dark);':''}"><span class="badge ${s.jawaban_benar==='C'?'bg-green':'bg-gray'}" style="padding:1px 5px; font-size:10px;">C</span> ${s.opsi_c}</div>
@@ -423,12 +423,12 @@ function lihatSoalById(id) {
   const s = (cacheAdminSoalRows || []).find(x => String(x.id) === String(id));
   if (!s) return showCustomAlert('Soal Tidak Ditemukan', 'Muat ulang bank soal lalu coba kembali.', 'warning');
   document.getElementById('detailSoalMeta').textContent = `${s.nama_ujian || 'Ujian #' + (s.exam_id || s.ujian_id)} • ${s.nama_mapel || 'Mapel Umum'}${s.tingkat ? ' • Tingkat ' + s.tingkat : ''}`;
-  document.getElementById('detailSoalPertanyaan').innerHTML = s.pertanyaan || '';
+  const questionDetail=document.getElementById('detailSoalPertanyaan');questionDetail.dir='auto';questionDetail.classList.add('question-rich-content');questionDetail.innerHTML=s.pertanyaan||'';
   const options = [['A', s.opsi_a], ['B', s.opsi_b], ['C', s.opsi_c], ['D', s.opsi_d], ['E', s.opsi_e]].filter(([, value]) => value);
   document.getElementById('detailSoalPilihan').innerHTML = options.map(([key, value]) => `
     <div style="display:flex; gap:8px; align-items:flex-start; padding:9px 10px; border:1px solid var(--border); border-radius:8px; ${key === s.jawaban_benar ? 'background:#ecfdf5; border-color:#86efac;' : 'background:var(--surface);'}">
       <span class="badge ${key === s.jawaban_benar ? 'bg-green' : 'bg-gray'}" style="min-width:24px; text-align:center;">${key}</span>
-      <div style="font-size:13px; line-height:1.5;">${value}</div>
+      <div class="question-rich-content" dir="auto" style="font-size:13px; line-height:1.5;">${value}</div>
     </div>`).join('');
   document.getElementById('detailSoalKunci').textContent = s.jawaban_benar || '-';
   document.getElementById('detailSoalPoin').textContent = String(s.poin || 1);
@@ -586,7 +586,7 @@ function editSoal(s) {
   bukaModalSoal(s);
 }
 let questionPreviewTimer=null;
-function renderQuestionFormPreview(){const root=document.getElementById('questionFormPreview');if(!root)return;const question=safeQuestionPreviewHtml(questionEditorValue('inPertanyaan')),options=['A','B','C','D','E'].map(letter=>[letter,safeQuestionPreviewHtml(questionEditorValue(`inOpsi${letter}`))]).filter(([,value])=>value);root.innerHTML=`<div class="question-rich-content">${question||'<span class="text-muted">Preview pertanyaan</span>'}</div><div class="question-import-options">${options.map(([letter,value])=>`<div><b>${letter}.</b> <span>${value}</span></div>`).join('')}</div>`;typesetQuestionMath(root);}
+function renderQuestionFormPreview(){const root=document.getElementById('questionFormPreview');if(!root)return;const question=safeQuestionPreviewHtml(questionEditorValue('inPertanyaan')),options=['A','B','C','D','E'].map(letter=>[letter,safeQuestionPreviewHtml(questionEditorValue(`inOpsi${letter}`))]).filter(([,value])=>value);root.innerHTML=`<div class="question-rich-content" dir="auto">${question||'<span class="text-muted">Preview pertanyaan</span>'}</div><div class="question-import-options">${options.map(([letter,value])=>`<div><b>${letter}.</b> <span dir="auto">${value}</span></div>`).join('')}</div>`;typesetQuestionMath(root);}
 ['inPertanyaan','inOpsiA','inOpsiB','inOpsiC','inOpsiD','inOpsiE'].forEach(id=>document.getElementById(id)?.addEventListener('input',()=>{clearTimeout(questionPreviewTimer);questionPreviewTimer=setTimeout(renderQuestionFormPreview,180);}));
 document.getElementById('formSoal').addEventListener('submit', function (e) {
   e.preventDefault();
