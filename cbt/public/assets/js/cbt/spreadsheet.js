@@ -2,6 +2,13 @@
 function spreadsheetContainsArabic(value) {
   return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/u.test(String(value || ''));
 }
+function spreadsheetDirectionalValue(value) {
+  const text=String(value??'').replace(/[\u200E\u200F\u202A-\u202E\u2066-\u2069]/g,'');
+  return spreadsheetContainsArabic(text)?`\u200F${text}`:text;
+}
+function spreadsheetPlainValue(value) {
+  return typeof value==='string'?value.replace(/[\u200E\u200F\u202A-\u202E\u2066-\u2069]/g,''):value;
+}
 function exportToExcel(filename, sheetName, headers, dataRows) {
   if (!dataRows || dataRows.length === 0) {
     showCustomAlert('Peringatan', 'Tidak ada data untuk diexport.');
@@ -91,7 +98,8 @@ function downloadTemplateSoal(namaMapel = '', ujianList = [], existingQuestions 
   const templateRows = existingData.length ? existingData : sampleData;
   const filename = namaMapel ? `template_soal_${namaMapel.toLowerCase().replace(/\s+/g, '_')}.xlsx` : 'template_soal.xlsx';
   const workbook = XLSX.utils.book_new();
-  const templateSheet = XLSX.utils.aoa_to_sheet([headers, ...templateRows]);
+  const directionalRows=templateRows.map(row=>row.map((value,columnIndex)=>columnIndex>=4&&columnIndex<=9?spreadsheetDirectionalValue(value):value));
+  const templateSheet = XLSX.utils.aoa_to_sheet([headers, ...directionalRows]);
   templateSheet['!cols'] = headers.map(header => ({ wch: header === 'pertanyaan' ? 48 : Math.max(14, header.length + 2) }));
   templateSheet['!rows'] = [{ hpt: 28 }, ...templateRows.map(() => ({ hpt: 72 }))];
   templateSheet['!autofilter'] = { ref: `A1:${XLSX.utils.encode_col(headers.length - 1)}${templateRows.length + 1}` };
@@ -505,7 +513,7 @@ async function handleExcelUpload(input, callback) {
         for (let sheetRowIndex = 1; sheetRowIndex < Math.max(matrix.length, lastImageRow + 2); sheetRowIndex++) {
           const values = matrix[sheetRowIndex] || [];
           const row = { __excel_row: sheetRowIndex + 1 };
-          headers.forEach((key, columnIndex) => { if (key) row[key] = values[columnIndex] ?? ''; });
+          headers.forEach((key, columnIndex) => { if (key) { row[key] = values[columnIndex] ?? ''; row[key] = spreadsheetPlainValue(row[key]); } });
           const dataRowIndex = sheetRowIndex - 1;
           Object.entries(formattedCells[dataRowIndex] || {}).forEach(([columnIndex, formatted]) => {
             const key = headers[Number(columnIndex)];

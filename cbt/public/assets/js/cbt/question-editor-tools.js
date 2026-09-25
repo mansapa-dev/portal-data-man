@@ -2,9 +2,12 @@ const questionEditorIds=['inPertanyaan','inOpsiA','inOpsiB','inOpsiC','inOpsiD',
 let questionEquationTarget='';
 let questionEquationRange=null;
 
+function questionTextIsArabic(value){return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/u.test(String(value||''));}
+function updateQuestionEditorDirection(field){if(!field)return;const rtl=questionTextIsArabic(field.textContent);field.dir=rtl?'rtl':'ltr';field.classList.toggle('question-editor-rtl',rtl);}
 function questionEditorValue(fieldId){const field=document.getElementById(fieldId);return field?field.innerHTML.replace(/\u200B|&#(?:8203|x200b);|&ZeroWidthSpace;/gi,'').trim():'';}
-function setQuestionEditorValue(fieldId,value){const field=document.getElementById(fieldId);if(field)field.innerHTML=String(value||'');}
+function setQuestionEditorValue(fieldId,value){const field=document.getElementById(fieldId);if(field){field.innerHTML=String(value||'');updateQuestionEditorDirection(field);}}
 function clearQuestionEditors(){questionEditorIds.forEach(id=>setQuestionEditorValue(id,''));}
+questionEditorIds.forEach(id=>{const field=document.getElementById(id);if(field){field.addEventListener('input',()=>updateQuestionEditorDirection(field));field.addEventListener('paste',()=>setTimeout(()=>updateQuestionEditorDirection(field)));updateQuestionEditorDirection(field);}});
 function escapeQuestionMathText(value){return String(value||'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'})[char]);}
 function questionMathTokens(value){return (String(value||'').match(/[0-9]+(?:[.,][0-9]+)?|[A-Za-z\u00C0-\uFFFF]+|\s+|./gu)||[]).map(part=>/^\s+$/u.test(part)?'<mspace width="0.25em"></mspace>':(/^[0-9]/u.test(part)?`<mn>${escapeQuestionMathText(part)}</mn>`:(/^[A-Za-z\u00C0-\uFFFF]/u.test(part)?`<mi>${escapeQuestionMathText(part)}</mi>`:`<mo>${escapeQuestionMathText(part)}</mo>`))).join('');}
 
