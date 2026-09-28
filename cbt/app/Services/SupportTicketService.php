@@ -69,7 +69,7 @@ final class SupportTicketService
         $status=$status!==null?strtoupper(trim($status)):null;
         if($status&&$status!=='ALL'){if(!in_array($status,self::STATUSES,true))throw new DomainException('Filter status tidak valid.',422);$where[]='t.status=:status';$params['status']=$status;}
         $sql=$this->selectSql().($where?' WHERE '.implode(' AND ',$where):'')." ORDER BY FIELD(t.status,'OPEN','IN_PROGRESS','RESOLVED','CLOSED'),t.updated_at DESC LIMIT 200";
-        $q=$this->db->pdo()->prepare($sql);$q->execute($params);return array_map([$this,'map'],$q->fetchAll());
+        $q=$this->db->pdo()->prepare($sql);$q->execute($params);$actor=(int)($auth['user_id']??0);return array_map(function(array$row)use($actor){$ticket=$this->map($row);$ticket['isHandler']=$actor>0&&(int)($row['handled_by']??0)===$actor;return$ticket;},$q->fetchAll());
     }
 
     public function update(string $publicId,array $auth,string $status,string $note):array
@@ -79,6 +79,11 @@ final class SupportTicketService
         if(mb_strlen($note)>1000)throw new DomainException('Catatan petugas maksimal 1000 karakter.',422);
         return $this->db->transaction(function(PDO $pdo)use($publicId,$auth,$status,$note){
             $ticket=$this->accessibleTicket($pdo,$publicId,$auth,true);
+            $actor=(int)($auth['user_id']??0);$handler=(int)($ticket['handled_by']??0);$current=(string)$ticket['status'];
+            if(in_array($current,['RESOLVED','CLOSED'],true))throw new DomainException('Tiket ini sudah diselesaikan dan tidak dapat direspons ulang.',409);
+            if($current==='IN_PROGRESS'&&$handler!==$actor)throw new DomainException('Tiket sedang ditangani petugas lain.',409);
+            if($status==='RESOLVED'&&($current!=='IN_PROGRESS'||$handler!==$actor))throw new DomainException('Ambil tiket terlebih dahulu sebelum menandainya selesai.',409);
+            if($status==='IN_PROGRESS'&&$current!=='OPEN'&&$handler!==$actor)throw new DomainException('Tiket sudah diambil petugas lain.',409);
             $resolved=in_array($status,['RESOLVED','CLOSED'],true)?gmdate('Y-m-d H:i:s'):null;
             $q=$pdo->prepare('UPDATE support_tickets SET status=?,handled_by=?,staff_note=?,resolution_type=?,resolved_at=? WHERE id=?');
             $q->execute([$status,(int)$auth['user_id'],trim($note)?:null,$status==='RESOLVED'?'ASSISTED':null,$resolved,$ticket['id']]);
@@ -89,6 +94,8 @@ final class SupportTicketService
     public function resetAndResolve(string $publicId,array $auth,string $reason):array
     {
         $ticket=$this->accessibleTicket($this->db->pdo(),$publicId,$auth,false);
+        if(in_array((string)$ticket['status'],['RESOLVED','CLOSED'],true))throw new DomainException('Tiket ini sudah diselesaikan dan tidak dapat direspons ulang.',409);
+        if((string)$ticket['status']!=='IN_PROGRESS'||(int)($ticket['handled_by']??0)!==(int)($auth['user_id']??0))throw new DomainException('Ambil tiket terlebih dahulu. Hanya petugas yang menangani tiket ini yang dapat mereset CBT.',409);
         if(!(int)$ticket['exam_id'])throw new DomainException('Tiket ini tidak memiliki ujian yang dapat direset.',409);
         $result=$this->resets->reset((int)$ticket['student_id'],(int)$ticket['exam_id'],(int)$auth['user_id'],$reason);
         $updated=$this->update($publicId,$auth,'RESOLVED',trim($reason));
@@ -118,7 +125,7 @@ final class SupportTicketService
     }
     private function selectSql():string
     {
-        return "SELECT t.public_id,t.student_id,t.exam_id,t.attempt_id,t.category,t.message,t.status,t.staff_note,t.resolution_type,t.created_at,t.updated_at,t.resolved_at,s.nisn,s.name_snapshot student_name,s.class_snapshot class_name,e.name exam_name,a.status attempt_status,a.violation_count,u.name handler_name FROM support_tickets t JOIN students s ON s.id=t.student_id LEFT JOIN exams e ON e.id=t.exam_id LEFT JOIN exam_attempts a ON a.id=t.attempt_id LEFT JOIN users u ON u.id=t.handled_by";
+        return "SELECT t.public_id,t.student_id,t.exam_id,t.attempt_id,t.category,t.message,t.status,t.handled_by,t.staff_note,t.resolution_type,t.created_at,t.updated_at,t.resolved_at,s.nisn,s.name_snapshot student_name,s.class_snapshot class_name,e.name exam_name,a.status attempt_status,a.violation_count,u.name handler_name FROM support_tickets t JOIN students s ON s.id=t.student_id LEFT JOIN exams e ON e.id=t.exam_id LEFT JOIN exam_attempts a ON a.id=t.attempt_id LEFT JOIN users u ON u.id=t.handled_by";
     }
     private function map(array|false $row):array
     {
