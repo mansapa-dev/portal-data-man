@@ -9,7 +9,6 @@ function spreadsheetDirectionalValue(value) {
 function spreadsheetPlainValue(value) {
   return typeof value==='string'?value.replace(/[\u200E\u200F\u202A-\u202E\u2066-\u2069]/g,''):value;
 }
-function insertWorksheetDataValidations(xml,validation){const later=/<(?:hyperlinks|printOptions|pageMargins|pageSetup|headerFooter|rowBreaks|colBreaks|customProperties|cellWatches|ignoredErrors|smartTags|drawing|legacyDrawing|legacyDrawingHF|picture|oleObjects|controls|webPublishItems|tableParts|extLst)\b/;const match=later.exec(xml);return match?`${xml.slice(0,match.index)}${validation}${xml.slice(match.index)}`:xml.replace('</worksheet>',`${validation}</worksheet>`);}
 function exportToExcel(filename, sheetName, headers, dataRows) {
   if (!dataRows || dataRows.length === 0) {
     showCustomAlert('Peringatan', 'Tidak ada data untuk diexport.');
@@ -127,7 +126,7 @@ function downloadTemplateSoal(namaMapel = '', ujianList = [], existingQuestions 
     XLSX.utils.book_append_sheet(workbook, referenceSheet, 'Referensi Ujian');
   }
   const guideRows = [
-    ['Tipe soal', 'Pilih dari dropdown: Pilihan Ganda, Pilihan Ganda Kompleks, atau Isian Singkat. Jika kosong dianggap Pilihan Ganda.'],
+    ['Tipe soal', 'Tulis salah satu: Pilihan Ganda, Pilihan Ganda Kompleks, atau Isian Singkat. Jika kosong dianggap Pilihan Ganda.'],
     ['Kunci kompleks', 'Tulis semua opsi benar dipisahkan koma, contoh A,C,D. Jawaban sebagian mendapat nilai parsial dan pilihan salah mengurangi nilai.'],
     ['Isian singkat', 'Kosongkan opsi A-E. Beberapa variasi jawaban dipisahkan tanda |, contoh Palembang|Kota Palembang.'],
     ['Isi template', options.includeExamples === true || (options.examplesWhenEmpty === true && !existingData.length) ? 'Contoh pengisian tersedia langsung pada sheet Template Soal. Ganti atau hapus seluruh baris contoh sebelum file diunggah.' : 'Template jadwal memuat soal aktif pada jadwal yang dipilih. Jangan mengubah id_soal untuk memperbarui soal lama; kosongkan id_soal untuk soal baru.'],
@@ -145,9 +144,7 @@ function downloadTemplateSoal(namaMapel = '', ujianList = [], existingQuestions 
   const guideSheet = XLSX.utils.aoa_to_sheet([['Fitur', 'Cara Penulisan'], ...guideRows]);
   guideSheet['!cols'] = [{ wch: 20 }, { wch: 90 }];
   XLSX.utils.book_append_sheet(workbook, guideSheet, 'Petunjuk Format');
-  if(typeof JSZip==='undefined')return XLSX.writeFile(workbook,filename,{cellStyles:true});
-  const bytes=XLSX.write(workbook,{bookType:'xlsx',type:'array',cellStyles:true});
-  JSZip.loadAsync(bytes).then(zip=>zip.file('xl/worksheets/sheet1.xml').async('string').then(xml=>{const validation='<dataValidations count="1"><dataValidation type="list" allowBlank="1" showErrorMessage="1" errorTitle="Tipe soal tidak valid" error="Pilih tipe soal dari daftar." sqref="D2:D1000"><formula1>"Pilihan Ganda,Pilihan Ganda Kompleks,Isian Singkat"</formula1></dataValidation></dataValidations>';zip.file('xl/worksheets/sheet1.xml',insertWorksheetDataValidations(xml,validation));return zip.generateAsync({type:'blob'});})).then(blob=>{const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}).catch(error=>showCustomAlert('Template Gagal Dibuat',error.message,'error'));
+  XLSX.writeFile(workbook,filename,{cellStyles:true});
 }
 
 function downloadTemplateSoalDenganData() {
