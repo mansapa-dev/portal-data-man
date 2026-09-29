@@ -647,12 +647,14 @@ function showQuestionImportPreview(rows, input) {
   }
   const errors = validation.filter(item => item.status === 'ERROR').length;
   const warnings = validation.filter(item => item.status === 'WARNING').length;
-  const summary = modal.querySelector('#questionImportSummary'); summary.className = `alert ${errors ? 'error' : warnings ? 'warning' : 'success'}`; summary.textContent = `${rows.length} soal diperiksa: ${rows.length-errors-warnings} valid, ${warnings} warning, ${errors} error.`;
+  const firstError=validation.find(item=>item.status==='ERROR'),errorDetail=firstError?` Error pertama: baris Excel ${firstError.row} — ${firstError.errors.join('; ')}.`:'';
+  const summary = modal.querySelector('#questionImportSummary'); summary.className = `alert ${errors ? 'error' : warnings ? 'warning' : 'success'}`; summary.textContent = `${rows.length} soal diperiksa: ${rows.length-errors-warnings} valid, ${warnings} warning, ${errors} error.${errorDetail}`;
   modal.querySelector('#btnConfirmQuestionImport').disabled = errors > 0;
-  modal.querySelector('#questionImportPreviewList').innerHTML = rows.map((row,index) => {
-    const result=validation[index], options=['a','b','c','d','e'].filter(key=>String(row[`opsi_${key}`]||'').trim());
+  const previewItems=rows.map((row,index)=>({row,index,result:validation[index]})).sort((a,b)=>({ERROR:0,WARNING:1,VALID:2}[a.result.status]-({ERROR:0,WARNING:1,VALID:2}[b.result.status])||a.index-b.index));
+  modal.querySelector('#questionImportPreviewList').innerHTML = previewItems.map(({row,index,result}) => {
+    const options=['a','b','c','d','e'].filter(key=>String(row[`opsi_${key}`]||'').trim());
     const notes=[...result.errors,...result.warnings].map(note=>`<li>${escapeQuestionUiText(note)}</li>`).join('');
-    return `<article class="question-import-card"><header><b>Soal ${escapeQuestionUiText(row.no || index+1)}</b><span class="badge ${result.status==='ERROR'?'bg-red':result.status==='WARNING'?'bg-yellow':'bg-green'}">${result.status}</span></header><div class="question-rich-content">${safeQuestionPreviewHtml(row.pertanyaan)}</div><div class="question-import-options">${options.map(key=>`<div><b>${key.toUpperCase()}.</b> <span>${safeQuestionPreviewHtml(row[`opsi_${key}`])}</span></div>`).join('')}</div><small>Kunci: ${escapeQuestionUiText(row.jawaban_benar)} · Bobot: ${escapeQuestionUiText(row.poin || 1)}</small>${notes?`<ul>${notes}</ul>`:''}</article>`;
+    return `<article class="question-import-card" data-import-status="${result.status}"><header><b>Baris Excel ${result.row} · Soal ${escapeQuestionUiText(row.no || index+1)}</b><span class="badge ${result.status==='ERROR'?'bg-red':result.status==='WARNING'?'bg-yellow':'bg-green'}">${result.status}</span></header><div class="question-rich-content">${safeQuestionPreviewHtml(row.pertanyaan)}</div><div class="question-import-options">${options.map(key=>`<div><b>${key.toUpperCase()}.</b> <span>${safeQuestionPreviewHtml(row[`opsi_${key}`])}</span></div>`).join('')}</div><small>Kunci: ${escapeQuestionUiText(row.jawaban_benar)} · Bobot: ${escapeQuestionUiText(row.poin || 1)}</small>${notes?`<ul>${notes}</ul>`:''}</article>`;
   }).join('');
   modal.classList.add('show'); typesetQuestionMath(modal.querySelector('#questionImportPreviewList'));
 }
