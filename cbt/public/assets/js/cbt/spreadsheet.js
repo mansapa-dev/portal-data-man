@@ -130,7 +130,7 @@ function downloadTemplateSoal(namaMapel = '', ujianList = [], existingQuestions 
     ['Kompatibilitas', 'Template memakai format XLSX standar dan dapat dibuka di Microsoft Excel, Google Sheets, LibreOffice Calc, WPS Office, OnlyOffice, dan aplikasi spreadsheet lain. Saat ekspor dari aplikasi tersebut, pertahankan nama kolom pada baris pertama.'],
     ['Kunci kompleks', 'Tulis semua opsi benar dipisahkan koma, contoh A,C,D. Jawaban sebagian mendapat nilai parsial dan pilihan salah mengurangi nilai.'],
     ['Isian singkat', 'Kosongkan opsi A-E. Beberapa variasi jawaban dipisahkan tanda |, contoh Palembang|Kota Palembang.'],
-    ['Isi template', options.includeExamples === true || (options.examplesWhenEmpty === true && !existingData.length) ? 'Contoh pengisian tersedia langsung pada sheet Template Soal. Ganti atau hapus seluruh baris contoh sebelum file diunggah.' : 'Template jadwal memuat soal aktif pada jadwal yang dipilih. Jangan mengubah id_soal untuk memperbarui soal lama; kosongkan id_soal untuk soal baru.'],
+    ['Isi template', options.includeExamples === true || (options.examplesWhenEmpty === true && !existingData.length) ? 'Contoh pengisian tersedia langsung pada sheet Template Soal. Ganti atau hapus seluruh baris contoh sebelum file diunggah.' : 'Isi satu soal per baris. Kosongkan id_soal untuk soal baru.'],
     ['Equation & simbol', 'Klik cell pertanyaan/jawaban, pilih Insert -> Equation, lalu susun equation dari menu Excel. Tidak perlu menulis LaTeX.'],
     ['Posisi equation', 'Letakkan seluruh kotak equation di dalam cell tujuan. Cell pada sudut kiri atas objek menentukan pertanyaan/jawaban pemiliknya.'],
     ['Properti equation', 'Buka Format Object -> Size & Properties -> Properties, lalu pilih Move and size with cells.'],
