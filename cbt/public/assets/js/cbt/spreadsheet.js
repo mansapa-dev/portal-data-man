@@ -127,6 +127,7 @@ function downloadTemplateSoal(namaMapel = '', ujianList = [], existingQuestions 
   }
   const guideRows = [
     ['Tipe soal', 'Tulis salah satu: Pilihan Ganda, Pilihan Ganda Kompleks, atau Isian Singkat. Jika kosong dianggap Pilihan Ganda.'],
+    ['Kompatibilitas', 'Template memakai format XLSX standar dan dapat dibuka di Microsoft Excel, Google Sheets, LibreOffice Calc, WPS Office, OnlyOffice, dan aplikasi spreadsheet lain. Saat ekspor dari aplikasi tersebut, pertahankan nama kolom pada baris pertama.'],
     ['Kunci kompleks', 'Tulis semua opsi benar dipisahkan koma, contoh A,C,D. Jawaban sebagian mendapat nilai parsial dan pilihan salah mengurangi nilai.'],
     ['Isian singkat', 'Kosongkan opsi A-E. Beberapa variasi jawaban dipisahkan tanda |, contoh Palembang|Kota Palembang.'],
     ['Isi template', options.includeExamples === true || (options.examplesWhenEmpty === true && !existingData.length) ? 'Contoh pengisian tersedia langsung pada sheet Template Soal. Ganti atau hapus seluruh baris contoh sebelum file diunggah.' : 'Template jadwal memuat soal aktif pada jadwal yang dipilih. Jangan mengubah id_soal untuk memperbarui soal lama; kosongkan id_soal untuk soal baru.'],
@@ -490,14 +491,16 @@ async function extractImagesFromExcel(file) {
 async function handleExcelUpload(input, callback) {
   const file = input.files[0];
   if (!file) return;
-  if (!/\.xlsx$/i.test(file.name)) {
+  const extension=String(file.name||'').split('.').pop().toLowerCase();
+  if (!['xlsx','xls','ods','csv'].includes(extension)) {
     input.value = '';
-    return showCustomAlert('Format Excel Tidak Mendukung Gambar', 'Simpan workbook sebagai Excel Workbook (*.xlsx). Format .xls atau .csv tidak dapat membawa gambar/equation ke sistem.', 'warning');
+    return showCustomAlert('Format Spreadsheet Tidak Didukung', 'Gunakan file XLSX, XLS, ODS, atau CSV.', 'warning');
   }
 
   try {
-    // 1. Extract directly embedded images from Excel
-    const embeddedImages = await extractImagesFromExcel(file);
+    // Images and native Office equations are an XLSX extension. Other portable
+    // spreadsheet formats remain supported for text-only question content.
+    const embeddedImages = extension==='xlsx' ? await extractImagesFromExcel(file) : {__formattedCells:{},__diagnostics:{}};
 
     // 2. Read sheet rows
     const reader = new FileReader();
@@ -508,7 +511,7 @@ async function handleExcelUpload(input, callback) {
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
         const matrix = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "", blankrows: true });
-        const headers = (matrix[0] || []).map(value => String(value || '').trim());
+        const headers = (matrix[0] || []).map(value => String(value || '').replace(/^\uFEFF/,'').trim().toLowerCase().replace(/[\s-]+/g,'_'));
         const formattedCells = embeddedImages.__formattedCells || {};
         const diagnostics = embeddedImages.__diagnostics || {};
         if (Number(diagnostics.unsupportedObjects || 0) > 0 || Number(diagnostics.referencedImages || 0) !== Number(diagnostics.mappedImages || 0)) {
