@@ -62,3 +62,25 @@
       </form>
     </div>
   </div>
+
+  <div class="modal" id="modalPortalSyncOptions">
+    <div class="modal-content portal-sync-modal">
+      <div class="modal-header">
+        <div><h3>Sinkronkan Portal Data</h3><p>Pilih data yang ingin diperbarui dari SIPADU ke CBT.</p></div>
+        <button aria-label="Tutup dialog" type="button" class="btn-close" onclick="tutupPilihanSinkronisasiPortal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <label class="portal-sync-all"><input id="portalSyncAll" type="checkbox" checked onchange="ubahPilihanSinkronisasiPortal('all',this.checked)"><span><b>Sinkronkan semua</b><small>Direkomendasikan agar seluruh referensi tetap konsisten.</small></span></label>
+        <div class="portal-sync-options">
+          <label><input type="checkbox" data-sync-type="academic_years" checked onchange="ubahPilihanSinkronisasiPortal('academic_years',this.checked)"><span><b>Tahun Ajaran</b><small>Periode akademik CBT</small></span></label>
+          <label><input type="checkbox" data-sync-type="semesters" checked onchange="ubahPilihanSinkronisasiPortal('semesters',this.checked)"><span><b>Semester</b><small>Semester ganjil dan genap</small></span></label>
+          <label><input type="checkbox" data-sync-type="classes" checked onchange="ubahPilihanSinkronisasiPortal('classes',this.checked)"><span><b>Kelas / Rombel</b><small>Kode, nama, dan tingkat kelas</small></span></label>
+          <label><input type="checkbox" data-sync-type="employees" checked onchange="ubahPilihanSinkronisasiPortal('employees',this.checked)"><span><b>Pegawai</b><small>Data calon petugas piket</small></span></label>
+          <label><input type="checkbox" data-sync-type="students" checked onchange="ubahPilihanSinkronisasiPortal('students',this.checked)"><span><b>Siswa</b><small>NISN, nama, kelas, dan status</small></span></label>
+          <label><input type="checkbox" data-sync-type="teachers" checked onchange="ubahPilihanSinkronisasiPortal('teachers',this.checked)"><span><b>Guru</b><small>Data guru dan identitas Portal</small></span></label>
+        </div>
+        <div class="portal-sync-note"><i class="fa-solid fa-circle-info"></i><span>Memilih siswa otomatis menyertakan tahun ajaran, semester, dan kelas. Guru serta pegawai dapat disinkronkan terpisah.</span></div>
+      </div>
+      <div class="modal-footer"><button type="button" class="ui-button btn btn-secondary" onclick="tutupPilihanSinkronisasiPortal()">Batal</button><button type="button" id="btnRunPortalSync" class="ui-button btn btn-primary" onclick="sinkronkanPortalDataTerpilih()"><i class="fa-solid fa-rotate"></i> Mulai Sinkronisasi</button></div>
+    </div>
+  </div>

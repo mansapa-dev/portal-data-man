@@ -389,19 +389,50 @@ function refreshSemesterOptions(selected = '') {
 document.getElementById('inTahunAjaran').addEventListener('change', () => { refreshSemesterOptions(); refreshClassOptions(); });
 document.getElementById('inTingkatUjian').addEventListener('change', () => refreshClassOptions());
 
-function sinkronkanSemuaPortalData() {
-  const types = ['academic_years', 'semesters', 'classes', 'employees', 'students', 'teachers'];
+const portalSyncOrder = ['academic_years', 'semesters', 'classes', 'employees', 'students', 'teachers'];
+const portalSyncLabels = { academic_years: 'Tahun Ajaran', semesters: 'Semester', classes: 'Kelas / Rombel', employees: 'Pegawai', students: 'Siswa', teachers: 'Guru' };
+
+function portalSyncInputs() { return [...document.querySelectorAll('#modalPortalSyncOptions [data-sync-type]')]; }
+function perbaruiStatusPilihanSinkronisasiPortal() {
+  const inputs = portalSyncInputs(), selected = inputs.filter(input => input.checked).length, all = document.getElementById('portalSyncAll'), button = document.getElementById('btnRunPortalSync');
+  if (all) { all.checked = selected === inputs.length; all.indeterminate = selected > 0 && selected < inputs.length; }
+  if (button) button.disabled = selected === 0;
+}
+function ubahPilihanSinkronisasiPortal(type, checked) {
+  const byType = value => document.querySelector(`#modalPortalSyncOptions [data-sync-type="${value}"]`);
+  if (type === 'all') portalSyncInputs().forEach(input => { input.checked = checked; });
+  else if (checked) {
+    if (type === 'students') ['academic_years', 'semesters', 'classes'].forEach(value => { const input = byType(value); if (input) input.checked = true; });
+    if (type === 'classes' || type === 'semesters') { const input = byType('academic_years'); if (input) input.checked = true; }
+  } else {
+    if (type === 'academic_years') ['semesters', 'classes', 'students'].forEach(value => { const input = byType(value); if (input) input.checked = false; });
+    if (type === 'semesters' || type === 'classes') { const input = byType('students'); if (input) input.checked = false; }
+  }
+  perbaruiStatusPilihanSinkronisasiPortal();
+}
+function bukaPilihanSinkronisasiPortal() {
+  portalSyncInputs().forEach(input => { input.checked = true; });
+  perbaruiStatusPilihanSinkronisasiPortal();
+  document.getElementById('modalPortalSyncOptions')?.classList.add('show');
+}
+function tutupPilihanSinkronisasiPortal() { document.getElementById('modalPortalSyncOptions')?.classList.remove('show'); }
+function sinkronkanPortalDataTerpilih() {
+  const selected = new Set(portalSyncInputs().filter(input => input.checked).map(input => input.dataset.syncType));
+  const types = portalSyncOrder.filter(type => selected.has(type));
+  if (!types.length) return showCustomAlert('Pilih Data', 'Pilih minimal satu jenis data yang akan disinkronkan.', 'warning');
+  tutupPilihanSinkronisasiPortal();
   const summaries = [];
   showLoading('Sinkronisasi referensi Portal Data...');
   const next = index => {
     if (index >= types.length) {
       hideLoading(); loadPortalReferences(); loadDataAdminSiswa();
-      showCustomAlert('Sinkronisasi selesai', summaries.map(s => `${s.type}: ${s.total || 0} data`).join('\n'));
+      showCustomAlert('Sinkronisasi selesai', summaries.map(s => `${portalSyncLabels[s.type] || s.type}: ${s.total || 0} data`).join('\n'));
       return;
     }
     cbtApi.withSuccessHandler(res => { summaries.push({ type: types[index], ...res }); next(index + 1); })
-      .withFailureHandler(err => { hideLoading(); showCustomAlert('Sinkronisasi gagal', `${types[index]}: ${err.message}`); })
+      .withFailureHandler(err => { hideLoading(); const done = summaries.length ? `\n\nSudah selesai:\n${summaries.map(s => `${portalSyncLabels[s.type]}: ${s.total || 0} data`).join('\n')}` : ''; showCustomAlert('Sinkronisasi gagal', `${portalSyncLabels[types[index]]}: ${err.message}${done}`, 'error'); })
       .syncPortalData(types[index]);
   };
   next(0);
 }
+function sinkronkanSemuaPortalData() { bukaPilihanSinkronisasiPortal(); }
