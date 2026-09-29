@@ -66,7 +66,17 @@
     try {
     try {
       response = await fetch(path.replace(/^\//, ''), { method, signal: controller.signal, credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf }, body: body === undefined ? undefined : JSON.stringify(body) });
-      payload = await response.json();
+      const responseText = await response.text();
+      try { payload = JSON.parse(responseText); }
+      catch (_) {
+        const contentType = response.headers.get('content-type') || '';
+        const detail = contentType.includes('text/html') || /^\s*</.test(responseText)
+          ? 'Server mengirim halaman error, bukan respons API.'
+          : 'Server mengirim respons API yang tidak valid.';
+        const parseError = new Error(`${detail} (HTTP ${response.status || 'tidak diketahui'}).`);
+        parseError.status = response.status || 502;
+        throw parseError;
+      }
     } catch (error) {
       if (error?.name === 'AbortError' || /\b(?:abort(?:ed)?|signal is aborted)\b/i.test(String(error?.message || ''))) { const timeoutError = new Error('Server membutuhkan waktu terlalu lama untuk menyelesaikan proses. Silakan coba kembali.'); timeoutError.status = 408; timeoutError.code = 'REQUEST_TIMEOUT'; throw timeoutError; }
       throw error;

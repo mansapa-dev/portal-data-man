@@ -30,6 +30,19 @@ class CbtIntegrationTest extends TestCase
         $this->getJson('/api/v1/integration/cbt/employees')->assertUnauthorized();
     }
 
+    public function test_academic_year_revision_only_hashes_its_small_reference(): void
+    {
+        AcademicYear::create(['name'=>'2026/2027', 'startDate'=>'2026-07-01', 'endDate'=>'2027-06-30', 'isActive'=>true]);
+        Student::create(['nisn'=>'0000000001', 'fullName'=>'Siswa']);
+
+        $response = app(CbtIntegrationController::class)
+            ->revisions(Request::create('/api/v1/integration/cbt/revisions?type=ACADEMIC_YEARS'))
+            ->getData(true)['data'];
+
+        $this->assertSame(['ACADEMIC_YEARS'], array_keys($response));
+        $this->assertMatchesRegularExpression('/^[a-f0-9]{64}$/', $response['ACADEMIC_YEARS']);
+    }
+
     public function test_bulk_edits_and_deletions_change_revisions_without_model_events(): void
     {
         $student = Student::create(['nisn'=>'0000000001', 'fullName'=>'Siswa Aktif', 'status'=>'ACTIVE']);
