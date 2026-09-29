@@ -323,9 +323,10 @@ function jalankanGeneratePinMassal(targetGrade, targetClass) {
         submitButton.disabled = false;
         submitButton.innerHTML = '<i class="fa-solid fa-bolt"></i> Mulai Generate PIN';
       }
+      const reason = err?.code === 'REQUEST_TIMEOUT' || err?.status === 408 ? 'Server belum menyelesaikan batch tepat waktu. Silakan jalankan kembali; PIN dari batch yang sudah berhasil tetap tersedia pada CSV.' : (err?.message || 'Permintaan gagal.');
       showCustomAlert(
         'Generate PIN Gagal',
-        `Proses berhenti setelah ${totalUpdated} siswa. ${err.message}`,
+        `Proses berhenti setelah ${totalUpdated} siswa. ${reason}`,
         'error'
       );
   };
@@ -347,7 +348,7 @@ function jalankanGeneratePinMassal(targetGrade, targetClass) {
         tingkat: targetGrade,
         kelas: targetClass,
         cursor,
-        limit: 50
+        limit: 5
       });
   };
 

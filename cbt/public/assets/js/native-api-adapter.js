@@ -60,7 +60,7 @@
     try { await csrfPromise; } catch (_) { csrfPromise = refreshCsrf(); await csrfPromise; }
     const controller = new AbortController();
     // Login/start can queue during a mass arrival; accepted answers keep a short retry window.
-    const timeoutMs = /auth\/student\/login|student\/exams\/\d+\/start/.test(path) ? 120000 : /student\/exams\/\d+\/submit|admin\/questions(?:\/import)?$/.test(path) && method === 'POST' || path === 'api/admin/students' && method === 'GET' ? 60000 : 15000;
+    const timeoutMs = /auth\/student\/login|student\/exams\/\d+\/start/.test(path) || path === 'api/admin/students/generate-pins' && method === 'POST' ? 120000 : /student\/exams\/\d+\/submit|admin\/questions(?:\/import)?$/.test(path) && method === 'POST' || path === 'api/admin/students' && method === 'GET' ? 60000 : 15000;
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     let response, payload;
     try {
@@ -68,7 +68,7 @@
       response = await fetch(path.replace(/^\//, ''), { method, signal: controller.signal, credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf }, body: body === undefined ? undefined : JSON.stringify(body) });
       payload = await response.json();
     } catch (error) {
-      if (error?.name === 'AbortError') { const timeoutError = new Error('Server membutuhkan waktu terlalu lama untuk menyiapkan data. Silakan coba kembali.'); timeoutError.status = 408; timeoutError.code = 'REQUEST_TIMEOUT'; throw timeoutError; }
+      if (error?.name === 'AbortError' || /\b(?:abort(?:ed)?|signal is aborted)\b/i.test(String(error?.message || ''))) { const timeoutError = new Error('Server membutuhkan waktu terlalu lama untuk menyelesaikan proses. Silakan coba kembali.'); timeoutError.status = 408; timeoutError.code = 'REQUEST_TIMEOUT'; throw timeoutError; }
       throw error;
     }
     } finally { clearTimeout(timeout); }
