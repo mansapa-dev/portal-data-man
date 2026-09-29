@@ -38,8 +38,9 @@
     } else {
       rows.forEach((row) => {
         const line = el('tr');
-        row.forEach((value) => {
+        row.forEach((value, columnIndex) => {
           const td = document.createElement('td');
+          td.dataset.label = headers[columnIndex] || '';
           if (value instanceof HTMLElement) {
             td.appendChild(value);
           } else {
@@ -404,7 +405,7 @@
         ...vTypes.map((x) => new Option(humanizeViolation(x), x))
       );
 
-      const vTable = el('div', undefined, 'teacher-result-table');
+      const vTable = el('div', undefined, 'teacher-result-table teacher-violation-table');
 
       const buildViolationOptions = (rawList) => {
         // Re-populate filter options saat data fresh

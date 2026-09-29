@@ -620,3 +620,44 @@ tr:hover td {
   .staff-chat-refresh{width:100%;justify-content:center}
   .staff-chat-form-title>span{display:none}
 }
+
+/* Penyempurnaan desktop untuk komunikasi admin. */
+@media(min-width:1025px){
+  .staff-chat-layout{grid-template-columns:minmax(320px,380px) minmax(0,1fr);gap:20px;align-items:stretch}
+  .staff-chat-side,.staff-chat-main{min-height:600px}
+  .staff-chat-form{padding-block:36px}
+}
+.staff-chat-form textarea{min-height:150px;max-height:320px}
+.staff-chat-form input[type=file]{padding:7px;background:#fbfcfb;color:var(--muted);font-size:13px}
+.staff-chat-form input[type=file]::file-selector-button{margin-right:12px;padding:9px 13px;border:1px solid var(--line);border-radius:8px;background:var(--green-soft);color:var(--green-dark);font:inherit;font-weight:800;cursor:pointer}
+.staff-chat-form input[type=file]::file-selector-button:hover{border-color:var(--green);background:#dff1e1}
+.staff-chat-form-actions{padding-top:2px}.staff-chat-form-actions .btn{display:inline-flex;align-items:center;gap:8px;padding-inline:18px}
+
+/* Log pelanggaran: tabel rapi di desktop, kartu informatif di ponsel. */
+.teacher-violation-table{background:#fff}
+.teacher-violation-table table{table-layout:auto;min-width:980px}
+.teacher-violation-table thead th{position:sticky;top:0;z-index:1;padding-block:14px;background:#f3f6f1;color:#526055;white-space:nowrap}
+.teacher-violation-table tbody tr:nth-child(even) td{background:#fbfcfb}
+.teacher-violation-table tbody tr:hover td{background:#f1f6ef}
+.teacher-violation-table td{padding-block:14px;line-height:1.45}
+.teacher-violation-table td:nth-child(1),.teacher-violation-table td:nth-child(2),.teacher-violation-table td:nth-child(4),.teacher-violation-table td:nth-child(6),.teacher-violation-table td:last-child{white-space:nowrap}
+.teacher-violation-table td:nth-child(3){min-width:180px;font-weight:700}
+.teacher-violation-table td:nth-child(5){min-width:165px}
+.teacher-violation-table td:nth-child(7){min-width:150px}
+.teacher-violation-table .badge{display:inline-flex;align-items:center;justify-content:center;min-width:46px}
+.teacher-violation-table .btn-danger{min-height:38px;padding:8px 13px;border:1px solid #fecaca;border-radius:10px;background:#fff1f2;color:#c81e2b;white-space:nowrap}
+.teacher-violation-table .btn-danger:hover{background:#ffe4e6}
+
+@media(max-width:700px){
+  .teacher-violation-table{overflow:visible;border:0;background:transparent}
+  .teacher-violation-table table{display:block;min-width:0}
+  .teacher-violation-table thead{display:none}
+  .teacher-violation-table tbody{display:grid;gap:12px}
+  .teacher-violation-table tr{display:grid;gap:0;overflow:hidden;border:1px solid var(--line);border-radius:14px;background:#fff;box-shadow:var(--shadow-sm)}
+  .teacher-violation-table td{display:grid;grid-template-columns:minmax(105px,38%) minmax(0,1fr);align-items:start;gap:12px;min-width:0!important;padding:10px 14px;border-bottom:1px solid #edf1ed;background:#fff!important;white-space:normal!important;text-align:left!important;overflow-wrap:anywhere}
+  .teacher-violation-table td::before{content:attr(data-label);color:var(--muted);font-size:11px;font-weight:800;line-height:1.5;text-transform:uppercase;letter-spacing:.25px}
+  .teacher-violation-table td:last-child{border-bottom:0}
+  .teacher-violation-table td[colspan]{display:block;padding:28px;text-align:center!important}
+  .teacher-violation-table td[colspan]::before{display:none}
+  .teacher-violation-table .btn-danger{width:100%;justify-content:center}
+}

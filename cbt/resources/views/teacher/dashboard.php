@@ -12,7 +12,7 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
   <title>Dashboard Guru - CBT MAN 1 Palembang</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <link rel="stylesheet" href="../assets/css/teacher.css?v=20260929-chat-responsive-4">
+  <link rel="stylesheet" href="../assets/css/teacher.css?v=20260929-chat-violation-ui-5">
   <link rel="stylesheet" href="../assets/css/ui-theme.css?v=20260911-3">
   <script src="../assets/js/dashboard-design.js?v=20260911-3"></script>
   <link rel="stylesheet" href="../assets/css/atomic-components.css?v=20260911-1">
@@ -71,8 +71,8 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
 
   <script src="../assets/js/teacher/live-sessions.js?v=20260925-proctor-reset-1"></script>
   <script src="../assets/js/cbt/support-tickets.js?v=20260911-proctor-1"></script>
-  <script src="../assets/js/cbt/staff-admin-chat.js?v=20260925-1"></script>
-  <script src="../assets/js/teacher/dashboard.js?v=20260925-proctor-live-4"></script>
+  <script src="../assets/js/cbt/staff-admin-chat.js?v=20260929-form-ui-2"></script>
+  <script src="../assets/js/teacher/dashboard.js?v=20260929-violation-ui-5"></script>
   <script src="../assets/js/table-pagination.js?v=20260910-cleanup"></script>
 </body>
 </html>
