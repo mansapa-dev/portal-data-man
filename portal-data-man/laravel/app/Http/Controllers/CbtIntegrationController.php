@@ -96,10 +96,9 @@ class CbtIntegrationController extends Controller
     public function students(Request $request): JsonResponse
     {
         $limit = min(max((int) $request->query('per_page', 100), 1), 200);
-        $page = Student::query()->where('status', 'ACTIVE')->with(['enrollments' => fn ($query) => $query
-            ->where('status', 'ACTIVE')->with(['schoolClass', 'academicYear', 'semester'])->latest('enrolledAt')->orderByDesc('id')])->orderBy('id')->paginate($limit);
+        $page = Student::query()->where('status', 'ACTIVE')->with(['currentEnrollment.schoolClass', 'currentEnrollment.academicYear', 'currentEnrollment.semester'])->orderBy('id')->paginate($limit);
         $page->getCollection()->transform(function (Student $student): array {
-            $enrollment = $student->enrollments->first();
+            $enrollment = $student->currentEnrollment;
 
             return ['id' => $student->publicId, 'nisn' => $student->nisn, 'name' => $student->fullName,
                 'status' => $student->status, 'is_active' => $student->status === 'ACTIVE',
