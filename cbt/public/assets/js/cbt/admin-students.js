@@ -1,6 +1,9 @@
 // Administrator student controls backed by Portal Data synchronization and batch PIN generation.
 
+let adminStudentLoadInFlight = false, adminStudentReloadQueued = false;
 function loadDataAdminSiswa() {
+  if (adminStudentLoadInFlight) { adminStudentReloadQueued = true; return; }
+  adminStudentLoadInFlight = true;
   const tb = document.getElementById('tblAdminSiswa');
   if (tb) tb.innerHTML = `<tr><td colspan="8" align="center" style="padding:24px;">Memuat data peserta ujian...</td></tr>`;
 
@@ -11,13 +14,17 @@ function loadDataAdminSiswa() {
 
   cbtApi
     .withSuccessHandler(rows => {
+      adminStudentLoadInFlight = false;
       cacheSiswaGlobal = Array.isArray(rows) ? rows : (rows?.data || []);
       populateAdminSiswaFilters();
       applyFilterSiswa();
+      if (adminStudentReloadQueued) { adminStudentReloadQueued = false; setTimeout(loadDataAdminSiswa, 0); }
     })
     .withFailureHandler(err => {
-      showCustomAlert('Gagal Memuat Data', `Terjadi kesalahan saat mengambil data siswa: ${err.message}`, 'error');
-      if (tb) tb.innerHTML = `<tr><td colspan="8" align="center" style="padding:24px; color:var(--danger);">Gagal memuat data siswa: ${err.message}</td></tr>`;
+      adminStudentLoadInFlight = false;
+      const message = err?.code === 'REQUEST_TIMEOUT' || err?.status === 408 ? 'Data siswa belum selesai disiapkan oleh server. Silakan tekan Coba Lagi.' : (err?.message || 'Permintaan gagal.');
+      if (tb) tb.innerHTML = `<tr><td colspan="8" align="center" style="padding:28px; color:var(--danger);"><i class="fa-solid fa-triangle-exclamation" style="display:block;font-size:24px;margin-bottom:8px"></i><b>Data siswa belum dapat dimuat</b><div style="margin:6px 0 12px;color:var(--text-muted)">${message}</div><button type="button" class="btn btn-secondary" onclick="loadDataAdminSiswa()"><i class="fa-solid fa-rotate"></i> Coba Lagi</button></td></tr>`;
+      if (adminStudentReloadQueued) adminStudentReloadQueued = false;
     })
     .getAdminSiswaList(stPengelola);
 }
