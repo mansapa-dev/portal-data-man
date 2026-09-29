@@ -430,7 +430,7 @@ function sinkronkanPortalDataTerpilih() {
       return;
     }
     cbtApi.withSuccessHandler(res => { summaries.push({ type: types[index], ...res }); next(index + 1); })
-      .withFailureHandler(err => { hideLoading(); const done = summaries.length ? `\n\nSudah selesai:\n${summaries.map(s => `${portalSyncLabels[s.type]}: ${s.total || 0} data`).join('\n')}` : ''; showCustomAlert('Sinkronisasi gagal', `${portalSyncLabels[types[index]]}: ${err.message}${done}`, 'error'); })
+      .withFailureHandler(err => { hideLoading(); const done = summaries.length ? `\n\nSudah selesai:\n${summaries.map(s => `${portalSyncLabels[s.type]}: ${s.total || 0} data`).join('\n')}` : ''; const retry = err?.code === 'REQUEST_TIMEOUT' || err?.status === 408 ? '\n\nProses melewati batas waktu 120 detik. Tunggu sebentar sebelum mencoba ulang jenis data ini.' : ''; showCustomAlert('Sinkronisasi gagal', `${portalSyncLabels[types[index]]}: ${err.message}${retry}${done}`, 'error'); })
       .syncPortalData(types[index]);
   };
   next(0);
