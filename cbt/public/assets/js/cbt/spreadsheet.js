@@ -9,6 +9,7 @@ function spreadsheetDirectionalValue(value) {
 function spreadsheetPlainValue(value) {
   return typeof value==='string'?value.replace(/[\u200E\u200F\u202A-\u202E\u2066-\u2069]/g,''):value;
 }
+function insertWorksheetDataValidations(xml,validation){const later=/<(?:hyperlinks|printOptions|pageMargins|pageSetup|headerFooter|rowBreaks|colBreaks|customProperties|cellWatches|ignoredErrors|smartTags|drawing|legacyDrawing|legacyDrawingHF|picture|oleObjects|controls|webPublishItems|tableParts|extLst)\b/;const match=later.exec(xml);return match?`${xml.slice(0,match.index)}${validation}${xml.slice(match.index)}`:xml.replace('</worksheet>',`${validation}</worksheet>`);}
 function exportToExcel(filename, sheetName, headers, dataRows) {
   if (!dataRows || dataRows.length === 0) {
     showCustomAlert('Peringatan', 'Tidak ada data untuk diexport.');
@@ -146,7 +147,7 @@ function downloadTemplateSoal(namaMapel = '', ujianList = [], existingQuestions 
   XLSX.utils.book_append_sheet(workbook, guideSheet, 'Petunjuk Format');
   if(typeof JSZip==='undefined')return XLSX.writeFile(workbook,filename,{cellStyles:true});
   const bytes=XLSX.write(workbook,{bookType:'xlsx',type:'array',cellStyles:true});
-  JSZip.loadAsync(bytes).then(zip=>zip.file('xl/worksheets/sheet1.xml').async('string').then(xml=>{const validation='<dataValidations count="1"><dataValidation type="list" allowBlank="1" showErrorMessage="1" errorTitle="Tipe soal tidak valid" error="Pilih tipe soal dari daftar." sqref="D2:D1000"><formula1>"Pilihan Ganda,Pilihan Ganda Kompleks,Isian Singkat"</formula1></dataValidation></dataValidations>';zip.file('xl/worksheets/sheet1.xml',xml.replace('</worksheet>',validation+'</worksheet>'));return zip.generateAsync({type:'blob'});})).then(blob=>{const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}).catch(error=>showCustomAlert('Template Gagal Dibuat',error.message,'error'));
+  JSZip.loadAsync(bytes).then(zip=>zip.file('xl/worksheets/sheet1.xml').async('string').then(xml=>{const validation='<dataValidations count="1"><dataValidation type="list" allowBlank="1" showErrorMessage="1" errorTitle="Tipe soal tidak valid" error="Pilih tipe soal dari daftar." sqref="D2:D1000"><formula1>"Pilihan Ganda,Pilihan Ganda Kompleks,Isian Singkat"</formula1></dataValidation></dataValidations>';zip.file('xl/worksheets/sheet1.xml',insertWorksheetDataValidations(xml,validation));return zip.generateAsync({type:'blob'});})).then(blob=>{const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}).catch(error=>showCustomAlert('Template Gagal Dibuat',error.message,'error'));
 }
 
 function downloadTemplateSoalDenganData() {
