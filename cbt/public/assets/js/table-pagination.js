@@ -75,7 +75,7 @@
   function queueScan() {
     if (scanQueued) return;
     scanQueued = true;
-    requestAnimationFrame(() => { scanQueued = false; scan(true); });
+    requestAnimationFrame(() => { scanQueued = false; scan(false); });
   }
 
   const observer = new MutationObserver((mutations) => {

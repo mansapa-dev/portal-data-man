@@ -141,6 +141,10 @@ function refreshActiveDashboardTab() {
   if (focused && ['INPUT', 'SELECT', 'TEXTAREA'].includes(focused.tagName)) return false;
   const active = document.querySelector('.dash-tab:not(.hidden)');
   if (!active) return false;
+  const questionDetail = document.getElementById('viewDetailMapelSoal');
+  if (active.id === 'tabAdminSoal' && questionDetail && !questionDetail.classList.contains('hidden')) {
+    return true;
+  }
   const loaders = {
     tabAdminOverview: loadDataAdminDash,
     tabAdminLiveSessions: loadDataAdminLiveSessions,
