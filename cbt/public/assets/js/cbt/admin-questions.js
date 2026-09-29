@@ -2,13 +2,11 @@
 let cacheAdminSoalRows = [], cacheAdminSoalUjianRows = [], currentSelectedMapelName = null;
 let attachedGambarSoalBase64 = '';
 let pendingQuestionImport = null;
-
 function escapeQuestionUiText(value) {
   return String(value ?? '').replace(/[&<>'"]/g, character => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
   })[character]);
 }
-
 // Icons mapping for Indonesian school subjects
 const subjectIconMap = {
   'matematika': 'fa-calculator',
@@ -543,7 +541,6 @@ function bukaModalSoal(data = null, preselectedExamId = null) {
   clearQuestionEditors();
   hapusGambarSoalModal();
   showLoading('Memuat daftar jadwal ujian...');
-
   cbtApi
     .withSuccessHandler(ujianList => {
       hideLoading();
@@ -551,19 +548,16 @@ function bukaModalSoal(data = null, preselectedExamId = null) {
       sel.innerHTML = ujianList.map(u => `
         <option value="${u.id}">${u.nama_ujian} (${u.nama_mapel || 'Mapel'} — Tingkat ${u.tingkat})</option>
       `).join('');
-
       if (preselectedExamId) {
         sel.value = preselectedExamId;
       } else if (currentSelectedMapelName) {
         const found = ujianList.find(u => (u.nama_mapel || '').toLowerCase() === currentSelectedMapelName.toLowerCase());
         if (found) sel.value = found.id;
       }
-
       if (data) {
         document.getElementById('titleModalSoal').textContent = "Edit Soal Pilihan Ganda";
         document.getElementById('editSoalId').value = data.id;
         sel.value = data.exam_id || data.ujian_id;
-
         // Keep every inline image in its original position when an existing
         // question is edited; extracting only the first image lost the rest.
         setQuestionEditorValue('inPertanyaan', data.pertanyaan || '');
@@ -572,17 +566,23 @@ function bukaModalSoal(data = null, preselectedExamId = null) {
         setQuestionEditorValue('inOpsiC', data.opsi_c);
         setQuestionEditorValue('inOpsiD', data.opsi_d);
         setQuestionEditorValue('inOpsiE', data.opsi_e || '');
-        document.getElementById('inJawabanBenar').value = data.jawaban_benar;
+        document.getElementById('inTipeSoal').value = data.tipe_soal || 'MULTIPLE_CHOICE';
+        document.getElementById('inJawabanBenar').value = String(data.jawaban_benar||'').split(',')[0] || 'A';
+        document.querySelectorAll('#multipleAnswerField input').forEach(input=>{input.checked=String(data.jawaban_benar||'').split(',').includes(input.value);});
+        document.getElementById('inJawabanSingkat').value = data.tipe_soal==='SHORT_ANSWER' ? data.jawaban_benar : '';
         document.getElementById('inPoinSoal').value = data.poin || 1;
       } else {
         document.getElementById('titleModalSoal').textContent = "Tambah Soal Baru";
         document.getElementById('editSoalId').value = "";
+        document.getElementById('inTipeSoal').value = 'MULTIPLE_CHOICE';
       }
+      updateQuestionTypeForm();
       document.getElementById('modalSoal').classList.add('show');
       renderQuestionFormPreview();
     })
     .getAdminUjianList(stPengelola);
 }
+function updateQuestionTypeForm(){const type=document.getElementById('inTipeSoal')?.value||'MULTIPLE_CHOICE';document.getElementById('questionOptionFields')?.classList.toggle('hidden',type==='SHORT_ANSWER');document.getElementById('singleAnswerField')?.classList.toggle('hidden',type!=='MULTIPLE_CHOICE');document.getElementById('multipleAnswerField')?.classList.toggle('hidden',type!=='MULTIPLE_RESPONSE');document.getElementById('shortAnswerField')?.classList.toggle('hidden',type!=='SHORT_ANSWER');renderQuestionFormPreview();}
 function editSoal(s) {
   bukaModalSoal(s);
 }
@@ -594,16 +594,15 @@ document.getElementById('formSoal').addEventListener('submit', function (e) {
   let pertanyaanText = questionEditorValue('inPertanyaan');
   const gambarUrl = document.getElementById('inGambarSoalUrl').value.trim();
   const activeImage = attachedGambarSoalBase64 || gambarUrl;
-
-  const requiredEditors=['inPertanyaan','inOpsiA','inOpsiB','inOpsiC','inOpsiD'];
+  const type=document.getElementById('inTipeSoal').value;
+  const requiredEditors=type==='SHORT_ANSWER'?['inPertanyaan']:['inPertanyaan','inOpsiA','inOpsiB','inOpsiC','inOpsiD'];
   if(requiredEditors.some(id=>!(id==='inPertanyaan'&&activeImage)&&!document.getElementById(id)?.textContent.replace(/[\u200B-\u200D\uFEFF]/g,'').trim()&&!document.getElementById(id)?.querySelector('img,math'))){
     return showCustomAlert('Data Belum Lengkap','Pertanyaan dan pilihan A sampai D wajib diisi.','warning');
   }
-
   if (activeImage && !pertanyaanText.includes('<img')) {
     pertanyaanText += `<br><img src="${activeImage}" style="max-width:100%; max-height:280px; object-fit:contain; border-radius:8px; margin:8px 0; display:block;" />`;
   }
-
+  const complexAnswer=[...document.querySelectorAll('#multipleAnswerField input:checked')].map(input=>input.value).join(',');
   const payload = {
     id: document.getElementById('editSoalId').value || null,
     ujian_id: document.getElementById('inSoalUjianId').value,
@@ -613,7 +612,8 @@ document.getElementById('formSoal').addEventListener('submit', function (e) {
     opsi_c: questionEditorValue('inOpsiC'),
     opsi_d: questionEditorValue('inOpsiD'),
     opsi_e: questionEditorValue('inOpsiE'),
-    jawaban_benar: document.getElementById('inJawabanBenar').value,
+    tipe_soal:type,
+    jawaban_benar:type==='SHORT_ANSWER'?document.getElementById('inJawabanSingkat').value:type==='MULTIPLE_RESPONSE'?complexAnswer:document.getElementById('inJawabanBenar').value,
     poin: document.getElementById('inPoinSoal').value
   };
   showLoading('Menyimpan Soal...');
@@ -635,7 +635,7 @@ document.getElementById('formSoal').addEventListener('submit', function (e) {
 });
 
 function handleImportSoal(input){handleExcelUpload(input,rows=>{if(!rows.length)return showCustomAlert('Peringatan','File Excel soal kosong atau tidak valid.');showQuestionImportPreview(rows,input);});}
-function validateQuestionImportRow(row,index){const errors=[...(row.__image_errors||[])],warnings=[...(row.__image_warnings||[])];if(String(row.no??'').trim()==='')errors.push('Nomor soal kosong');['pertanyaan','opsi_a','opsi_b','opsi_c','opsi_d'].forEach(key=>{if(!String(row[key]||'').trim())errors.push(`${key} kosong`);});const answer=String(row.jawaban_benar||'').trim().toUpperCase();if(!['A','B','C','D','E'].includes(answer))errors.push('Kunci jawaban harus A/B/C/D/E');else if(!String(row[`opsi_${answer.toLowerCase()}`]||'').trim())errors.push(`Pilihan ${answer} kosong tetapi dipilih sebagai kunci`);if(!(Number(row.poin??1)>0))errors.push('Bobot harus lebih dari 0');return{row:Number(row.__excel_row)||index+2,errors,warnings,status:errors.length?'ERROR':warnings.length?'WARNING':'VALID'};}
+function validateQuestionImportRow(row,index){const errors=[...(row.__image_errors||[])],warnings=[...(row.__image_warnings||[])],aliases={'PILIHAN GANDA':'MULTIPLE_CHOICE','PILIHAN_GANDA':'MULTIPLE_CHOICE','MULTIPLE_CHOICE':'MULTIPLE_CHOICE','PILIHAN GANDA KOMPLEKS':'MULTIPLE_RESPONSE','PILIHAN_GANDA_KOMPLEKS':'MULTIPLE_RESPONSE','MULTIPLE_RESPONSE':'MULTIPLE_RESPONSE','ISIAN SINGKAT':'SHORT_ANSWER','ISIAN_SINGKAT':'SHORT_ANSWER','SHORT_ANSWER':'SHORT_ANSWER'},type=aliases[String(row.tipe_soal||'MULTIPLE_CHOICE').trim().toUpperCase()];if(!type)errors.push('Tipe soal tidak valid');if(String(row.no??'').trim()==='')errors.push('Nomor soal kosong');if(!String(row.pertanyaan||'').trim())errors.push('pertanyaan kosong');if(type!=='SHORT_ANSWER')['opsi_a','opsi_b','opsi_c','opsi_d'].forEach(key=>{if(!String(row[key]||'').trim())errors.push(`${key} kosong`);});const answer=String(row.jawaban_benar||'').trim();if(!answer)errors.push('Kunci jawaban kosong');if(type==='MULTIPLE_CHOICE'&&!/^[A-E]$/i.test(answer))errors.push('Kunci pilihan ganda harus A-E');if(type==='MULTIPLE_RESPONSE'&&answer.split(',').filter(Boolean).length<2)errors.push('Kunci kompleks minimal dua pilihan, contoh A,C');if(!(Number(row.poin??1)>0))errors.push('Bobot harus lebih dari 0');return{row:Number(row.__excel_row)||index+2,errors,warnings,status:errors.length?'ERROR':warnings.length?'WARNING':'VALID'};}
 function showQuestionImportPreview(rows, input) {
   const validation = rows.map(validateQuestionImportRow);
   pendingQuestionImport = { rows, input, validation };

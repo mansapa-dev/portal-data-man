@@ -11,6 +11,7 @@
           <label class="ui-label" for="inSoalUjianId">Pilih Jadwal Ujian / Mapel</label>
           <div class="input-wrapper"><select id="inSoalUjianId" required class="ui-control"></select></div>
         </div>
+        <div class="input-group"><label class="ui-label" for="inTipeSoal">Tipe Soal</label><div class="input-wrapper"><select id="inTipeSoal" class="ui-control" onchange="updateQuestionTypeForm()"><option value="MULTIPLE_CHOICE">Pilihan Ganda</option><option value="MULTIPLE_RESPONSE">Pilihan Ganda Kompleks</option><option value="SHORT_ANSWER">Isian Singkat</option></select></div></div>
 
         <div class="input-group">
           <label class="ui-label" for="inPertanyaan">Teks Pertanyaan</label>
@@ -48,6 +49,7 @@
           </div>
         </div>
 
+        <div id="questionOptionFields">
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
           <div class="input-group">
             <label class="ui-label" for="inOpsiA">Opsi A</label>
@@ -79,12 +81,15 @@
           <div class="input-wrapper"><div id="inOpsiE" contenteditable="true" role="textbox" dir="auto" data-placeholder="Jawaban E" class="ui-control question-visual-editor"></div></div>
           <div class="question-format-toolbar"><button type="button" onclick="wrapQuestionContent('inOpsiE','<sup>','</sup>','2')">x<sup>2</sup></button><button type="button" onclick="wrapQuestionContent('inOpsiE','<sub>','</sub>','2')">x<sub>2</sub></button><button type="button" onclick="insertQuestionEquation('inOpsiE')">Equation</button><button type="button" aria-label="Tambah gambar opsi E" onclick="document.getElementById('inOpsiEImage').click()"><i class="fa-solid fa-image"></i> Gambar</button><input type="file" id="inOpsiEImage" accept="image/*,.jfif,.jpe,.dib,.tif,.tiff,.heic,.heif" hidden onchange="handleQuestionContentImage(this,'inOpsiE')"></div>
         </div>
+        </div>
 
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
-          <div class="input-group">
+          <div class="input-group" id="singleAnswerField">
             <label class="ui-label" for="inJawabanBenar">Kunci Jawaban</label>
             <div class="input-wrapper"><select id="inJawabanBenar" class="ui-control"><option value="A">Opsi A</option><option value="B">Opsi B</option><option value="C">Opsi C</option><option value="D">Opsi D</option><option value="E">Opsi E</option></select></div>
           </div>
+          <div class="input-group hidden" id="multipleAnswerField"><label class="ui-label">Kunci Jawaban Kompleks</label><div class="question-complex-keys"><label><input type="checkbox" value="A"> A</label><label><input type="checkbox" value="B"> B</label><label><input type="checkbox" value="C"> C</label><label><input type="checkbox" value="D"> D</label><label><input type="checkbox" value="E"> E</label></div><small>Pilih minimal dua jawaban benar.</small></div>
+          <div class="input-group hidden" id="shortAnswerField"><label class="ui-label" for="inJawabanSingkat">Kunci Isian Singkat</label><div class="input-wrapper"><input id="inJawabanSingkat" class="ui-control" maxlength="1000" placeholder="Contoh: Palembang|Kota Palembang"></div><small>Pisahkan variasi jawaban dengan tanda |. Kapital dan spasi diabaikan.</small></div>
           <div class="input-group">
             <label class="ui-label" for="inPoinSoal">Poin Soal</label>
             <div class="input-wrapper"><input type="number" id="inPoinSoal" value="1" required style="padding-left:12px" class="ui-control"></div>

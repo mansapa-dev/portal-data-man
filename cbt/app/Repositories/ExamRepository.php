@@ -83,7 +83,7 @@ final class ExamRepository
     private function hasStudentTargets():bool{try{$s=$this->db->query("SHOW TABLES LIKE 'exam_target_students'");return(bool)$s->fetchColumn();}catch(\PDOException){return false;}}
     public function questions(int $examId, bool $includeAnswers = false): array
     {
-        $columns = 'id, public_id, question_text, option_a, option_b, option_c, option_d, option_e, points';
+        $columns = 'id, public_id, question_type, question_text, option_a, option_b, option_c, option_d, option_e, points';
         if ($includeAnswers) $columns .= ', correct_answer';
         $statement = $this->db->prepare("SELECT {$columns} FROM questions WHERE exam_id=:exam_id AND status='ACTIVE'");
         $statement->execute(['exam_id' => $examId]);

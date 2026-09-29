@@ -1,9 +1,10 @@
 CREATE TABLE IF NOT EXISTS attempt_questions (
  attempt_id BIGINT UNSIGNED NOT NULL,
  question_id BIGINT UNSIGNED NOT NULL,
+ question_type VARCHAR(30) NOT NULL DEFAULT 'MULTIPLE_CHOICE',
  question_text TEXT NOT NULL,
- option_a TEXT NOT NULL, option_b TEXT NOT NULL, option_c TEXT NOT NULL, option_d TEXT NOT NULL, option_e TEXT NULL,
- correct_answer CHAR(1) NOT NULL,
+ option_a TEXT NULL, option_b TEXT NULL, option_c TEXT NULL, option_d TEXT NULL, option_e TEXT NULL,
+ correct_answer TEXT NOT NULL,
  points DECIMAL(8,2) NOT NULL,
  PRIMARY KEY (attempt_id,question_id),
  CONSTRAINT fk_attempt_questions_attempt FOREIGN KEY (attempt_id) REFERENCES exam_attempts(id) ON DELETE CASCADE

@@ -35,7 +35,7 @@ function downloadTemplateSiswa() {
 }
 
 function downloadTemplateSoal(namaMapel = '', ujianList = [], existingQuestions = [], options = {}) {
-  let headers = ['id_soal', 'ujian_id', 'nama_ujian', 'no', 'pertanyaan', 'opsi_a', 'opsi_b', 'opsi_c', 'opsi_d', 'opsi_e', 'jawaban_benar', 'poin'];
+  let headers = ['id_soal', 'ujian_id', 'nama_ujian', 'tipe_soal', 'no', 'pertanyaan', 'opsi_a', 'opsi_b', 'opsi_c', 'opsi_d', 'opsi_e', 'jawaban_benar', 'poin'];
   const selectedExam = Array.isArray(ujianList) && ujianList.length ? ujianList[0] : null;
   let sampleData = [
     [
@@ -72,6 +72,9 @@ function downloadTemplateSoal(namaMapel = '', ujianList = [], existingQuestions 
       'هَذَا كِتَابٌ', 'هَذِهِ مَدْرَسَةٌ', 'ذَلِكَ قَلَمٌ', 'تِلْكَ سَيَّارَةٌ', '', 'B', 1
     ]
   ];
+  sampleData=sampleData.map(row=>{row.splice(3,0,'Pilihan Ganda');return row;});
+  sampleData[1][3]='Pilihan Ganda Kompleks';sampleData[1][11]='A,C';
+  sampleData.push(['',selectedExam?.id||'',selectedExam?.nama_ujian||(namaMapel?'':'Pengetahuan Umum'),'Isian Singkat',4,'Ibu kota Sumatera Selatan adalah ...','','','','','','Palembang|Kota Palembang',2]);
   const examNumbers = new Map();
   const existingData = (Array.isArray(existingQuestions) ? existingQuestions : [])
     .slice()
@@ -84,6 +87,7 @@ function downloadTemplateSoal(namaMapel = '', ujianList = [], existingQuestions 
         question.id || '',
         examId,
         question.nama_ujian || '',
+        ({MULTIPLE_CHOICE:'Pilihan Ganda',MULTIPLE_RESPONSE:'Pilihan Ganda Kompleks',SHORT_ANSWER:'Isian Singkat'})[question.tipe_soal] || 'Pilihan Ganda',
         number,
         question.pertanyaan || '',
         question.opsi_a || '',
@@ -91,7 +95,7 @@ function downloadTemplateSoal(namaMapel = '', ujianList = [], existingQuestions 
         question.opsi_c || '',
         question.opsi_d || '',
         question.opsi_e || '',
-        String(question.jawaban_benar || '').toUpperCase(),
+        question.tipe_soal === 'SHORT_ANSWER' ? String(question.jawaban_benar || '') : String(question.jawaban_benar || '').toUpperCase(),
         question.poin || 1
       ];
     });
@@ -100,13 +104,13 @@ function downloadTemplateSoal(namaMapel = '', ujianList = [], existingQuestions 
   const suffix = safeName(options.filenameSuffix);
   const filename = namaMapel ? `template_soal_${namaMapel.toLowerCase().trim().replace(/\s+/g, '_')}${suffix ? `_${suffix}` : ''}.xlsx` : 'template_soal.xlsx';
   const workbook = XLSX.utils.book_new();
-  const directionalRows=templateRows.map(row=>row.map((value,columnIndex)=>columnIndex>=4&&columnIndex<=9?spreadsheetDirectionalValue(value):value));
+  const directionalRows=templateRows.map(row=>row.map((value,columnIndex)=>columnIndex>=5&&columnIndex<=10?spreadsheetDirectionalValue(value):value));
   const templateSheet = XLSX.utils.aoa_to_sheet([headers, ...directionalRows]);
   templateSheet['!cols'] = headers.map(header => ({ wch: header === 'pertanyaan' ? 48 : Math.max(14, header.length + 2) }));
   templateSheet['!rows'] = [{ hpt: 28 }, ...templateRows.map(() => ({ hpt: 72 }))];
   templateSheet['!autofilter'] = { ref: `A1:${XLSX.utils.encode_col(headers.length - 1)}${templateRows.length + 1}` };
   templateSheet['!freeze'] = { xSplit: 0, ySplit: 1 };
-  [4,5,6,7,8,9].forEach(columnIndex => templateRows.forEach((row,rowIndex) => {
+  [5,6,7,8,9,10].forEach(columnIndex => templateRows.forEach((row,rowIndex) => {
     const cell = templateSheet[XLSX.utils.encode_cell({r:rowIndex+1,c:columnIndex})];
     if (!cell) return;
     const arabic = spreadsheetContainsArabic(row[columnIndex]);
@@ -122,6 +126,9 @@ function downloadTemplateSoal(namaMapel = '', ujianList = [], existingQuestions 
     XLSX.utils.book_append_sheet(workbook, referenceSheet, 'Referensi Ujian');
   }
   const guideRows = [
+    ['Tipe soal', 'Pilih dari dropdown: Pilihan Ganda, Pilihan Ganda Kompleks, atau Isian Singkat. Jika kosong dianggap Pilihan Ganda.'],
+    ['Kunci kompleks', 'Tulis semua opsi benar dipisahkan koma, contoh A,C,D. Jawaban sebagian mendapat nilai parsial dan pilihan salah mengurangi nilai.'],
+    ['Isian singkat', 'Kosongkan opsi A-E. Beberapa variasi jawaban dipisahkan tanda |, contoh Palembang|Kota Palembang.'],
     ['Isi template', options.includeExamples === true || (options.examplesWhenEmpty === true && !existingData.length) ? 'Contoh pengisian tersedia langsung pada sheet Template Soal. Ganti atau hapus seluruh baris contoh sebelum file diunggah.' : 'Template jadwal memuat soal aktif pada jadwal yang dipilih. Jangan mengubah id_soal untuk memperbarui soal lama; kosongkan id_soal untuk soal baru.'],
     ['Equation & simbol', 'Klik cell pertanyaan/jawaban, pilih Insert -> Equation, lalu susun equation dari menu Excel. Tidak perlu menulis LaTeX.'],
     ['Posisi equation', 'Letakkan seluruh kotak equation di dalam cell tujuan. Cell pada sudut kiri atas objek menentukan pertanyaan/jawaban pemiliknya.'],
@@ -137,7 +144,9 @@ function downloadTemplateSoal(namaMapel = '', ujianList = [], existingQuestions 
   const guideSheet = XLSX.utils.aoa_to_sheet([['Fitur', 'Cara Penulisan'], ...guideRows]);
   guideSheet['!cols'] = [{ wch: 20 }, { wch: 90 }];
   XLSX.utils.book_append_sheet(workbook, guideSheet, 'Petunjuk Format');
-  XLSX.writeFile(workbook, filename, { cellStyles: true });
+  if(typeof JSZip==='undefined')return XLSX.writeFile(workbook,filename,{cellStyles:true});
+  const bytes=XLSX.write(workbook,{bookType:'xlsx',type:'array',cellStyles:true});
+  JSZip.loadAsync(bytes).then(zip=>zip.file('xl/worksheets/sheet1.xml').async('string').then(xml=>{const validation='<dataValidations count="1"><dataValidation type="list" allowBlank="1" showErrorMessage="1" errorTitle="Tipe soal tidak valid" error="Pilih tipe soal dari daftar." sqref="D2:D1000"><formula1>"Pilihan Ganda,Pilihan Ganda Kompleks,Isian Singkat"</formula1></dataValidation></dataValidations>';zip.file('xl/worksheets/sheet1.xml',xml.replace('</worksheet>',validation+'</worksheet>'));return zip.generateAsync({type:'blob'});})).then(blob=>{const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}).catch(error=>showCustomAlert('Template Gagal Dibuat',error.message,'error'));
 }
 
 function downloadTemplateSoalDenganData() {

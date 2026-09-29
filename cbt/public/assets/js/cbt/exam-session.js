@@ -50,7 +50,7 @@ function persiapkanUjian(uData) {
         ].filter(o => o.text && o.text.trim() !== '');
 
         const seedOpsi = rngSeed(String(stSiswa.id) + "_" + String(s.id));
-        return { id: s.id, num: i + 1, q: s.pertanyaan, opts: res.serverOrdered ? rawOpts : acakArray(rawOpts, seedOpsi) };
+        return { id: s.id, num: i + 1, q: s.pertanyaan, tipe: s.tipe || 'MULTIPLE_CHOICE', opts: res.serverOrdered ? rawOpts : acakArray(rawOpts, seedOpsi) };
       });
 
       stJawab = {}; stRagu = {}; (jawRaw||[]).forEach(j => {
@@ -114,15 +114,19 @@ function renderSoal() {
   else { btnR.className = 'btn btn-secondary'; btnR.innerHTML = '<i class="fa-regular fa-flag"></i> Ragu-ragu'; }
 
   const svd = stJawab[s.id] || '';
+  if(s.tipe==='SHORT_ANSWER'){document.getElementById('cbtOptionList').innerHTML=`<label class="short-answer-box"><span>Jawaban singkat</span><input maxlength="500" value="${String(svd).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}" placeholder="Ketik jawaban Anda" onchange="simpanIsianSingkat('${s.id}',this.value,${stIdx+1})"></label>`;return;}
+  const selected=String(svd).split(',').filter(Boolean);
   document.getElementById('cbtOptionList').innerHTML = s.opts.map((opt, i) => {
     const visualLabel = String.fromCharCode(65 + i);
-    const cls = svd === opt.key ? 'selected' : '';
-    return `<div class="opt-btn ${cls}" role="radio" tabindex="${svd === opt.key || (!svd && i === 0) ? 0 : -1}" aria-checked="${svd === opt.key}" onkeydown="studentOptionKey(event, this)" onclick="simpanJawaban('${s.id}','${opt.key}', ${stIdx + 1})">
+    const chosen = s.tipe==='MULTIPLE_RESPONSE'?selected.includes(opt.key):svd===opt.key,cls=chosen?'selected':'';
+    return `<div class="opt-btn ${cls}" role="${s.tipe==='MULTIPLE_RESPONSE'?'checkbox':'radio'}" tabindex="${chosen || (!svd && i === 0) ? 0 : -1}" aria-checked="${chosen}" onkeydown="studentOptionKey(event, this)" onclick="${s.tipe==='MULTIPLE_RESPONSE'?'toggleJawabanKompleks':'simpanJawaban'}('${s.id}','${opt.key}', ${stIdx + 1})">
       <div class="opt-char">${visualLabel}</div><div class="opt-text question-rich-content" dir="auto">${opt.text}</div>
     </div>`;
   }).join('');
   typesetQuestionMath([document.getElementById('cbtSoalText'), document.getElementById('cbtOptionList')]);
 }
+function toggleJawabanKompleks(soalId,key,nomorSoal){const selected=new Set(String(stJawab[soalId]||'').split(',').filter(Boolean));selected.has(key)?selected.delete(key):selected.add(key);simpanJawaban(soalId,[...selected].sort().join(','),nomorSoal);}
+function simpanIsianSingkat(soalId,value,nomorSoal){simpanJawaban(soalId,String(value).trim(),nomorSoal);}
 
 function simpanJawaban(soalId, originalKey, nomorSoal) {
   if (!isUjianJalan || isSubmitting) return;

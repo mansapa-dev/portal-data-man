@@ -47,7 +47,7 @@ final class ScoringService
 
    $this->ensureAttemptQuestions($attempt);
 
-   $sql='SELECT q.question_id id,q.correct_answer,q.points,a.answer FROM attempt_questions q LEFT JOIN student_answers a ON a.question_id=q.question_id AND a.attempt_id=q.attempt_id WHERE q.attempt_id=:attempt';
+   $sql='SELECT q.question_id id,q.question_type,q.correct_answer,q.option_a,q.option_b,q.option_c,q.option_d,q.option_e,q.points,a.answer FROM attempt_questions q LEFT JOIN student_answers a ON a.question_id=q.question_id AND a.attempt_id=q.attempt_id WHERE q.attempt_id=:attempt';
    $statement=$this->db->pdo()->prepare($sql);
    $statement->execute(['attempt'=>$attempt['id']]);
    $rows=$statement->fetchAll();
@@ -57,8 +57,7 @@ final class ScoringService
    foreach($rows as$row){
     $maximum+=(float)$row['points'];
     if($row['answer']===null){$blank++;}
-    elseif(hash_equals($row['correct_answer'],$row['answer'])){$correct++;$earned+=(float)$row['points'];}
-    else{$wrong++;}
+    else{$fraction=$this->answerFraction((string)($row['question_type']??'MULTIPLE_CHOICE'),(string)$row['correct_answer'],(string)$row['answer'],count(array_filter([$row['option_a'],$row['option_b'],$row['option_c'],$row['option_d'],$row['option_e']],static fn($value):bool=>trim((string)$value)!=='')));$earned+=(float)$row['points']*$fraction;if($fraction>=1.0)$correct++;else$wrong++;}
    }
    $score=$maximum>0?round($earned/$maximum*100,2):0.0;
 
@@ -118,14 +117,14 @@ final class ScoringService
   $attempt=$this->attempts->find($studentId,$examId)??throw new DomainException('Sesi ujian tidak ditemukan.',404);
   if($attempt['status']!=='COMPLETED')throw new DomainException('Review hanya tersedia untuk ujian yang diselesaikan.',403);
   $this->ensureAttemptQuestions($attempt);
-  $sql='SELECT q.question_id id,q.question_text,q.correct_answer,a.answer FROM attempt_questions q LEFT JOIN student_answers a ON a.question_id=q.question_id AND a.attempt_id=q.attempt_id WHERE q.attempt_id=:attempt';
+  $sql='SELECT q.question_id id,q.question_type,q.question_text,q.correct_answer,q.option_a,q.option_b,q.option_c,q.option_d,q.option_e,a.answer FROM attempt_questions q LEFT JOIN student_answers a ON a.question_id=q.question_id AND a.attempt_id=q.attempt_id WHERE q.attempt_id=:attempt';
   $s=$this->db->pdo()->prepare($sql);$s->execute(['attempt'=>$attempt['id']]);$rows=$s->fetchAll();
   if(!$rows)throw new DomainException('Data soal untuk review tidak tersedia. Jalankan upgrade database atau pulihkan bank soal ujian ini.',409);
   $byId=[];foreach($rows as$row)$byId[(int)$row['id']]=$row;$ordered=[];
   foreach(json_decode($attempt['question_order'],true,512,JSON_THROW_ON_ERROR)as$id)if(isset($byId[(int)$id]))$ordered[]=$byId[(int)$id];
    $questions=[];
    foreach($ordered as$row){
-    $status=$row['answer']===null?'KOSONG':(hash_equals((string)$row['correct_answer'],(string)$row['answer'])?'BENAR':'SALAH');
+    $fraction=$row['answer']===null?0.0:$this->answerFraction((string)($row['question_type']??'MULTIPLE_CHOICE'),(string)$row['correct_answer'],(string)$row['answer'],count(array_filter([$row['option_a'],$row['option_b'],$row['option_c'],$row['option_d'],$row['option_e']],static fn($value):bool=>trim((string)$value)!=='')));$status=$row['answer']===null?'KOSONG':($fraction>=1?'BENAR':($fraction>0?'SEBAGIAN':'SALAH'));
     $questions[]=['id'=>(int)$row['id'],'pertanyaan'=>\Cbt\Support\QuestionHtml::clean($row['question_text']),'status'=>$status];
    }
    return['soal'=>$questions];
@@ -138,7 +137,13 @@ final class ScoringService
   if((int)$count->fetchColumn()>0)return;
   // Compatibility for attempts created before question snapshots existed. Current
   // bank contents are the only recoverable source for these legacy attempts.
-  $insert=$this->db->pdo()->prepare("INSERT IGNORE INTO attempt_questions(attempt_id,question_id,question_text,option_a,option_b,option_c,option_d,option_e,correct_answer,points) SELECT :attempt,q.id,q.question_text,q.option_a,q.option_b,q.option_c,q.option_d,q.option_e,q.correct_answer,q.points FROM questions q WHERE q.exam_id=:exam AND JSON_CONTAINS(:question_order,CAST(q.id AS CHAR))");
+  $insert=$this->db->pdo()->prepare("INSERT IGNORE INTO attempt_questions(attempt_id,question_id,question_type,question_text,option_a,option_b,option_c,option_d,option_e,correct_answer,points) SELECT :attempt,q.id,COALESCE(q.question_type,'MULTIPLE_CHOICE'),q.question_text,q.option_a,q.option_b,q.option_c,q.option_d,q.option_e,q.correct_answer,q.points FROM questions q WHERE q.exam_id=:exam AND JSON_CONTAINS(:question_order,CAST(q.id AS CHAR))");
   $insert->execute(['attempt'=>$attempt['id'],'exam'=>$attempt['exam_id'],'question_order'=>$attempt['question_order']]);
+ }
+ private function answerFraction(string$type,string$key,string$answer,int$optionCount=5):float
+ {
+  if($type==='SHORT_ANSWER'){$normalize=fn(string$v)=>mb_strtolower(trim(preg_replace('/\s+/u',' ',$v)??$v),'UTF-8');$given=$normalize($answer);foreach(explode('|',$key)as$accepted)if($given!==''&&hash_equals($normalize($accepted),$given))return 1.0;return 0.0;}
+  $correct=array_values(array_unique(array_filter(array_map('trim',explode(',',strtoupper($key))))));$selected=array_values(array_unique(array_filter(array_map('trim',explode(',',strtoupper($answer))))));sort($correct);sort($selected);if($type!=='MULTIPLE_RESPONSE')return $correct===$selected?1.0:0.0;
+  $correctSelected=count(array_intersect($selected,$correct));$wrongSelected=count(array_diff($selected,$correct));$wrongOptions=max(1,$optionCount-count($correct));return max(0.0,min(1.0,$correctSelected/max(1,count($correct))-$wrongSelected/$wrongOptions));
  }
 }
