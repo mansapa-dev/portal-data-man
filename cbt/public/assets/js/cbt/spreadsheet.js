@@ -96,7 +96,9 @@ function downloadTemplateSoal(namaMapel = '', ujianList = [], existingQuestions 
       ];
     });
   const templateRows = options.blank === true ? [] : (existingData.length ? existingData : sampleData);
-  const filename = namaMapel ? `template_soal_${namaMapel.toLowerCase().replace(/\s+/g, '_')}.xlsx` : 'template_soal.xlsx';
+  const safeName = value => String(value || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  const suffix = safeName(options.filenameSuffix);
+  const filename = namaMapel ? `template_soal_${namaMapel.toLowerCase().trim().replace(/\s+/g, '_')}${suffix ? `_${suffix}` : ''}.xlsx` : 'template_soal.xlsx';
   const workbook = XLSX.utils.book_new();
   const directionalRows=templateRows.map(row=>row.map((value,columnIndex)=>columnIndex>=4&&columnIndex<=9?spreadsheetDirectionalValue(value):value));
   const templateSheet = XLSX.utils.aoa_to_sheet([headers, ...directionalRows]);
@@ -120,7 +122,7 @@ function downloadTemplateSoal(namaMapel = '', ujianList = [], existingQuestions 
     XLSX.utils.book_append_sheet(workbook, referenceSheet, 'Referensi Ujian');
   }
   const guideRows = [
-    ['Isi template', options.blank === true ? 'Template umum sengaja dikosongkan. Tambahkan soal mulai dari baris kedua dan biarkan id_soal kosong untuk soal baru.' : 'Template mapel dapat memuat soal aktif. Jangan mengubah id_soal jika baris tersebut hendak diperbarui. Kosongkan id_soal hanya untuk soal baru.'],
+    ['Isi template', options.includeExamples === true || (options.examplesWhenEmpty === true && !existingData.length) ? 'Contoh pengisian tersedia langsung pada sheet Template Soal. Ganti atau hapus seluruh baris contoh sebelum file diunggah.' : 'Template jadwal memuat soal aktif pada jadwal yang dipilih. Jangan mengubah id_soal untuk memperbarui soal lama; kosongkan id_soal untuk soal baru.'],
     ['Equation & simbol', 'Klik cell pertanyaan/jawaban, pilih Insert -> Equation, lalu susun equation dari menu Excel. Tidak perlu menulis LaTeX.'],
     ['Posisi equation', 'Letakkan seluruh kotak equation di dalam cell tujuan. Cell pada sudut kiri atas objek menentukan pertanyaan/jawaban pemiliknya.'],
     ['Properti equation', 'Buka Format Object -> Size & Properties -> Properties, lalu pilih Move and size with cells.'],
@@ -143,7 +145,7 @@ function downloadTemplateSoalDenganData() {
   cbtApi
     .withSuccessHandler(ujianList => {
       hideLoading();
-      downloadTemplateSoal('', ujianList || [], [], { blank: true });
+      downloadTemplateSoal('', [], [], { includeExamples: true });
     })
     .withFailureHandler(error => {
       hideLoading();

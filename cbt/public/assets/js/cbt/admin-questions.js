@@ -218,11 +218,11 @@ function downloadTemplateSoalMapelAktif() {
   cbtApi
     .withSuccessHandler(ujianList => {
       hideLoading();
-      const selectedName = currentSelectedMapelName.trim().toLowerCase();
-      const exams = (ujianList || []).filter(ujian => String(ujian.nama_mapel || '').trim().toLowerCase() === selectedName);
-      if (!exams.length) return showCustomAlert('Jadwal Ujian Belum Ada', `Buat jadwal ujian untuk ${currentSelectedMapelName} sebelum mengunduh template.`, 'warning');
-      const questions = cacheAdminSoalRows.filter(question => String(question.nama_mapel || '').trim().toLowerCase() === selectedName);
-      downloadTemplateSoal(currentSelectedMapelName, exams, questions);
+      const selectedName = currentSelectedMapelName.trim().toLowerCase(), examFilter = document.getElementById('fltDetailSoalUjian')?.value || 'ALL', subjectExams = (ujianList || []).filter(ujian => String(ujian.nama_mapel || '').trim().toLowerCase() === selectedName);
+      const exams = examFilter === 'ALL' ? subjectExams : subjectExams.filter(ujian => String(ujian.id) === String(examFilter));
+      if (!exams.length) return showCustomAlert('Jadwal Ujian Belum Ada', examFilter === 'ALL' ? `Buat jadwal ujian untuk ${currentSelectedMapelName} sebelum mengunduh template.` : 'Jadwal ujian yang dipilih tidak ditemukan. Muat ulang bank soal lalu coba kembali.', 'warning');
+      const examIds = new Set(exams.map(exam => String(exam.id))), questions = cacheAdminSoalRows.filter(question => String(question.nama_mapel || '').trim().toLowerCase() === selectedName && examIds.has(String(question.exam_id || question.ujian_id)));
+      downloadTemplateSoal(currentSelectedMapelName, exams, questions, { examplesWhenEmpty: true, filenameSuffix: examFilter === 'ALL' ? '' : exams[0].nama_ujian });
     })
     .withFailureHandler(error => {
       hideLoading();
