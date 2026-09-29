@@ -33,7 +33,6 @@ const subjectIconMap = {
   'informatika': 'fa-laptop-code',
   'tik': 'fa-desktop'
 };
-
 function getSubjectIcon(name) {
   const clean = String(name || '').toLowerCase();
   for (const [key, icon] of Object.entries(subjectIconMap)) {
@@ -41,7 +40,6 @@ function getSubjectIcon(name) {
   }
   return 'fa-book-open';
 }
-
 function loadDataAdminSoal(onLoaded = null, onFailure = null) {
   loadPortalReferences(() => {
     if (currentSelectedMapelName) {
@@ -64,14 +62,14 @@ function loadDataAdminSoal(onLoaded = null, onFailure = null) {
 
   cbtApi
     .withSuccessHandler(rows => {
-      cacheAdminSoalRows = rows || [];
-      if (currentSelectedMapelName) {
-        populateDetailSoalFilters();
-        applyFilterDetailSoal();
-      } else {
-        renderKatalogMapelGrid();
+      try {
+        cacheAdminSoalRows = Array.isArray(rows) ? rows : [];
+        if(currentSelectedMapelName){populateDetailSoalFilters();applyFilterDetailSoal();}else renderKatalogMapelGrid();
+        if (typeof onLoaded === 'function') onLoaded(cacheAdminSoalRows);
+      } catch (error) {
+        if (gridContainer) gridContainer.innerHTML=`<div class="alert error" style="grid-column:1/-1">Katalog gagal ditampilkan: ${escapeQuestionUiText(error?.message||'Data tidak valid.')}</div>`;
+        if (typeof onFailure === 'function') onFailure(error);
       }
-      if (typeof onLoaded === 'function') onLoaded(cacheAdminSoalRows);
     })
     .withFailureHandler(error => {
       cacheAdminSoalRows = [];
@@ -100,24 +98,25 @@ function renderKatalogMapelGrid() {
   // Combine subjects from portalReferences & existing question subjects
   const subjectMap = {};
 
-  if (portalReferences && portalReferences.subjects) {
+  if (portalReferences && Array.isArray(portalReferences.subjects)) {
     portalReferences.subjects.forEach(s => {
-      const name = s.name;
+      const name = String(s?.name || '').trim();
+      if (!name) return;
       if (!subjectMap[name]) {
-        subjectMap[name] = { id: s.id, code: s.code || '', name: s.name, questions: [] };
+        subjectMap[name] = { id: s.id, code: String(s.code || ''), name, questions: [] };
       }
     });
   }
 
-  cacheAdminSoalRows.forEach(q => {
-    const name = q.nama_mapel || 'Mata Pelajaran Umum';
+  (Array.isArray(cacheAdminSoalRows)?cacheAdminSoalRows:[]).forEach(q => {
+    const name = String(q?.nama_mapel || 'Mata Pelajaran Umum').trim() || 'Mata Pelajaran Umum';
     if (!subjectMap[name]) {
-      subjectMap[name] = { id: q.subject_id || 0, code: q.kode_mapel || '', name: name, questions: [] };
+      subjectMap[name] = { id: q.subject_id || 0, code: String(q.kode_mapel || ''), name: name, questions: [] };
     }
     subjectMap[name].questions.push(q);
   });
 
-  cacheAdminSoalUjianRows.forEach(exam=>{const name=exam.nama_mapel||'Mata Pelajaran Umum';if(!subjectMap[name])subjectMap[name]={id:exam.subject_id||0,code:exam.kode_mapel||'',name,questions:[],exams:[]};if(!subjectMap[name].exams)subjectMap[name].exams=[];subjectMap[name].exams.push(exam);});
+  (Array.isArray(cacheAdminSoalUjianRows)?cacheAdminSoalUjianRows:[]).forEach(exam=>{const name=String(exam?.nama_mapel||'Mata Pelajaran Umum').trim()||'Mata Pelajaran Umum';if(!subjectMap[name])subjectMap[name]={id:exam.subject_id||0,code:String(exam.kode_mapel||''),name,questions:[],exams:[]};if(!subjectMap[name].exams)subjectMap[name].exams=[];subjectMap[name].exams.push(exam);});
 
   let subjectList = Object.values(subjectMap);
 
