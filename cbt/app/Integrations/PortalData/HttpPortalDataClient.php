@@ -25,7 +25,10 @@ final class HttpPortalDataClient implements PortalDataClientInterface
     }
 
     public function students(int $page, int $limit): array { return $this->page('/api/v1/integration/cbt/students', $page, $limit); }
-    public function revisions(): array { return $this->get('/api/v1/integration/cbt/revisions', [])['data'] ?? []; }
+    public function revisions(?string $type = null): array
+    {
+        return $this->get('/api/v1/integration/cbt/revisions', $type === null ? [] : ['type' => $type])['data'] ?? [];
+    }
     public function teachers(int $page, int $limit): array { return $this->page('/api/v1/integration/cbt/teachers', $page, $limit); }
     public function employees(int $page, int $limit): array { return $this->page('/api/v1/integration/cbt/employees', $page, $limit); }
     public function classes(int $page, int $limit): array { return $this->page('/api/v1/integration/cbt/classes', $page, $limit); }

@@ -28,7 +28,10 @@ final class PortalDataSyncService
  private function revision(string$type):?string
  {
   if(!method_exists($this->portal,'revisions'))return null;
-  $revisions=$this->portal->revisions();$value=$revisions[$type]??null;
+  // Minta checksum khusus tipe ini. Menghitung seluruh referensi (terutama
+  // siswa/enrollment) saat menyinkronkan tahun ajaran kecil dapat melewati
+  // batas waktu request pada shared hosting.
+  $revisions=$this->portal->revisions($type);$value=$revisions[$type]??null;
   if($type==='EMPLOYEES'&&$value===null)return null;
   if(!is_string($value)||!preg_match('/^[a-f0-9]{64}$/',$value))throw new \UnexpectedValueException('Revisi Portal Data tidak valid.');
   return $value;

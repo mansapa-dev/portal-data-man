@@ -14,8 +14,24 @@ use Illuminate\Http\Request;
 
 class CbtIntegrationController extends Controller
 {
-    public function revisions(): JsonResponse
+    public function revisions(?Request $request = null): JsonResponse
     {
+        // CBT requests the checksum for one type before and after a sync. Do
+        // not hash every large table for a small reference such as AcademicYear:
+        // that can exceed the web-server timeout on shared hosting.
+        $requestedType = strtoupper((string) ($request?->query('type', '') ?? ''));
+        $dependencies = [
+            'STUDENTS' => ['Student', 'ClassEnrollment', 'SchoolClass', 'AcademicYear', 'Semester'],
+            'TEACHERS' => ['Teacher'],
+            'EMPLOYEES' => ['Employee'],
+            'CLASSES' => ['SchoolClass', 'AcademicYear'],
+            'ACADEMIC_YEARS' => ['AcademicYear'],
+            'SEMESTERS' => ['Semester', 'AcademicYear'],
+        ];
+        if ($requestedType !== '' && ! array_key_exists($requestedType, $dependencies)) {
+            return response()->json(['success' => false, 'message' => 'Jenis checksum CBT tidak valid.'], 422);
+        }
+
         // One background CBT worker polls this endpoint; no participant requests.
         // Hash actual reference fields so bulk imports, deletes and same-second
         // edits are detected even when Eloquent events are bypassed.
@@ -28,6 +44,9 @@ class CbtIntegrationController extends Controller
             'AcademicYear' => ['id', 'publicId', 'name', 'isActive', 'startDate'],
             'Semester' => ['id', 'publicId', 'academicYearId', 'type', 'isActive', 'startDate'],
         ];
+        if ($requestedType !== '') {
+            $tables = array_intersect_key($tables, array_flip($dependencies[$requestedType]));
+        }
         $hashes = [];
         foreach ($tables as $table => $columns) {
             $hash = hash_init('sha256');
@@ -36,14 +55,22 @@ class CbtIntegrationController extends Controller
             }
             $hashes[$table] = hash_final($hash);
         }
-        return ApiResponse::success([
-            'STUDENTS' => hash('sha256', implode('', array_intersect_key($hashes, array_flip(['Student', 'ClassEnrollment', 'SchoolClass', 'AcademicYear', 'Semester'])))),
-            'TEACHERS' => $hashes['Teacher'],
-            'EMPLOYEES' => $hashes['Employee'],
-            'CLASSES' => hash('sha256', $hashes['SchoolClass'].$hashes['AcademicYear']),
-            'ACADEMIC_YEARS' => $hashes['AcademicYear'],
-            'SEMESTERS' => hash('sha256', $hashes['Semester'].$hashes['AcademicYear']),
-        ], 'Versi referensi CBT.');
+        $revisions = [];
+        foreach ($requestedType === '' ? array_keys($dependencies) : [$requestedType] as $type) {
+            $revisions[$type] = match ($type) {
+                'STUDENTS' => hash('sha256', implode('', array_map(fn (string $table) => $hashes[$table], $dependencies[$type]))),
+                'TEACHERS' => $hashes['Teacher'],
+                'EMPLOYEES' => $hashes['Employee'],
+                'CLASSES' => hash('sha256', $hashes['SchoolClass'].$hashes['AcademicYear']),
+                'ACADEMIC_YEARS' => $hashes['AcademicYear'],
+                'SEMESTERS' => hash('sha256', $hashes['Semester'].$hashes['AcademicYear']),
+            };
+        }
+
+        return ApiResponse::success(
+            $requestedType === '' ? $revisions : [$requestedType => $revisions[$requestedType]],
+            'Versi referensi CBT.'
+        );
     }
 
     public function academicYears(): JsonResponse
