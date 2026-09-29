@@ -296,9 +296,9 @@ function jalankanGeneratePinMassal(targetGrade, targetClass) {
         submitButton.disabled = false;
         submitButton.innerHTML = '<i class="fa-solid fa-bolt"></i> Mulai Generate PIN';
       }
-      downloadGeneratedPinCsv(generatedCredentials);
+      downloadGeneratedPinExcel(generatedCredentials);
       loadDataAdminSiswa();
-      showCustomAlert('Generate PIN Dibatalkan', `Proses dihentikan. ${totalUpdated} PIN yang sudah dibuat tetap diunduh dalam CSV.`, 'warning');
+      showCustomAlert('Generate PIN Dibatalkan', `Proses dihentikan. ${totalUpdated} PIN yang sudah dibuat tetap diunduh dalam Excel.`, 'warning');
   };
 
   const finish = () => {
@@ -308,11 +308,11 @@ function jalankanGeneratePinMassal(targetGrade, targetClass) {
         submitButton.disabled = false;
         submitButton.innerHTML = '<i class="fa-solid fa-bolt"></i> Mulai Generate PIN';
       }
-      downloadGeneratedPinCsv(generatedCredentials);
+      downloadGeneratedPinExcel(generatedCredentials);
       loadDataAdminSiswa();
       showCustomAlert(
         'Generate PIN Berhasil',
-        `Berhasil membuat PIN otomatis baru untuk ${totalUpdated} siswa. CSV kredensial telah diunduh satu kali; simpan dengan aman karena PIN tidak dapat ditampilkan kembali.`,
+        `Berhasil membuat PIN otomatis baru untuk ${totalUpdated} siswa. Excel kredensial telah diunduh satu kali; simpan dengan aman karena PIN tidak dapat ditampilkan kembali.`,
         'success'
       );
   };
@@ -323,7 +323,10 @@ function jalankanGeneratePinMassal(targetGrade, targetClass) {
         submitButton.disabled = false;
         submitButton.innerHTML = '<i class="fa-solid fa-bolt"></i> Mulai Generate PIN';
       }
-      const reason = err?.code === 'REQUEST_TIMEOUT' || err?.status === 408 ? 'Server belum menyelesaikan batch tepat waktu. Silakan jalankan kembali; PIN dari batch yang sudah berhasil tetap tersedia pada CSV.' : (err?.message || 'Permintaan gagal.');
+      const hasCompletedBatch = generatedCredentials.length > 0;
+      if (hasCompletedBatch) downloadGeneratedPinExcel(generatedCredentials);
+      const savedProgress = hasCompletedBatch ? ' PIN dari batch yang sudah berhasil telah diunduh dalam Excel.' : '';
+      const reason = err?.code === 'REQUEST_TIMEOUT' || err?.status === 408 ? `Server belum menyelesaikan batch tepat waktu. Silakan jalankan kembali.${savedProgress}` : `${err?.message || 'Permintaan gagal.'}${savedProgress}`;
       showCustomAlert(
         'Generate PIN Gagal',
         `Proses berhenti setelah ${totalUpdated} siswa. ${reason}`,
@@ -355,20 +358,14 @@ function jalankanGeneratePinMassal(targetGrade, targetClass) {
   processNextBatch();
 }
 
-function downloadGeneratedPinCsv(rows) {
+function downloadGeneratedPinExcel(rows) {
   if (!Array.isArray(rows) || rows.length === 0) return;
-  const escape = value => {
-    let safe = String(value ?? '');
-    if (/^[=+\-@]/.test(safe)) safe = `'${safe}`;
-    return `"${safe.replace(/"/g, '""')}"`;
-  };
-  const csv = ['NISN,Nama,Kelas,PIN', ...rows.map(row => [row.nisn, row.nama, row.kelas, row.pin].map(escape).join(','))].join('\r\n');
-  const url = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }));
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `pin-cbt-${new Date().toISOString().slice(0, 10)}.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
+  exportToExcel(
+    `pin-cbt-${new Date().toISOString().slice(0, 10)}.xlsx`,
+    'Kredensial PIN',
+    ['NISN', 'Nama', 'Kelas', 'PIN'],
+    rows.map(row => [String(row.nisn ?? ''), row.nama, row.kelas, String(row.pin ?? '')])
+  );
 }
 
 function editSiswaSatuanById(id) {

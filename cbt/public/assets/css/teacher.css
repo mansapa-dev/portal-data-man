@@ -567,3 +567,56 @@ tr:hover td {
 .teacher-result-table th,.teacher-result-table td{vertical-align:middle}.teacher-result-table th:nth-child(1),.teacher-result-table td:nth-child(1),.teacher-result-table th:nth-child(n+3),.teacher-result-table td:nth-child(n+3){text-align:center}.teacher-result-table th:nth-child(2),.teacher-result-table td:nth-child(2),.teacher-result-table th:nth-child(5),.teacher-result-table td:nth-child(5),.teacher-result-table th:nth-child(6),.teacher-result-table td:nth-child(6){text-align:left}.teacher-result-table td:last-child{white-space:nowrap;font-variant-numeric:tabular-nums}
 .table-pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 3px 1px;color:var(--muted);font-size:11px}.table-pagination>div{display:flex;align-items:center;gap:8px}.table-pagination b{min-width:92px;color:var(--ink);font-size:10.5px;text-align:center}.table-pagination button{display:grid;place-items:center;width:32px;height:32px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--green-dark);font-size:16px;font-weight:800;cursor:pointer}.table-pagination button:hover:not(:disabled){border-color:var(--green);background:var(--green-soft)}.table-pagination button:disabled{opacity:.4;cursor:not-allowed}@media(max-width:520px){.table-pagination{align-items:stretch;flex-direction:column;text-align:center}.table-pagination>div{justify-content:center}.table-pagination button{width:38px;height:36px}}
 .nav-item[hidden],.nav-label[hidden]{display:none!important}
+
+/* Komunikasi admin: tetap nyaman dari desktop, tablet, hingga ponsel. */
+.staff-chat-layout,.staff-chat-side,.staff-chat-main,.staff-chat-head>div,.staff-chat-form-title>div{min-width:0}
+.staff-chat-head h3,.staff-chat-head small,.staff-chat-form-title h3,.staff-chat-form-title p{overflow-wrap:anywhere}
+.staff-chat-head small{display:block;margin-top:4px;color:var(--muted);font-size:12px;line-height:1.45}
+.staff-chat-tools{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);background:#f8faf9}
+.staff-chat-search{display:flex;align-items:center;gap:9px;min-width:0;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--muted)}
+.staff-chat-search input{width:100%;min-width:0;min-height:42px;padding:9px 0;border:0;background:transparent;color:var(--ink);outline:0}
+.staff-chat-tools>select{min-height:42px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}
+.staff-chat-threads .support-empty{display:grid;place-items:center;gap:7px;margin:14px;padding:30px 16px;line-height:1.5}
+.staff-chat-threads .support-empty i{font-size:22px}.staff-chat-threads .support-empty b{color:var(--ink)}
+.staff-chat-form{align-content:start;width:min(680px,100%);margin-inline:auto;padding:clamp(20px,4vw,34px)}
+.staff-chat-form-title{display:flex;align-items:flex-start;gap:12px;margin-bottom:4px}
+.staff-chat-form-title>span{display:grid;place-items:center;flex:0 0 42px;width:42px;height:42px;border-radius:12px;background:var(--green-soft);color:var(--green-dark)}
+.staff-chat-form-title h3{font-size:18px;line-height:1.35}.staff-chat-form-title p{margin:4px 0 0;font-size:13px;line-height:1.55}
+.staff-chat-form input,.staff-chat-form select,.staff-chat-form textarea,.staff-chat-reply textarea{min-height:46px;font-size:16px;line-height:1.5}
+.staff-chat-form input[type=file]{height:auto;min-height:46px;max-width:100%;padding:9px}
+.staff-chat-form-actions .btn{min-height:44px}
+
+@media(max-width:1024px){
+  .staff-chat-layout{grid-template-columns:1fr;gap:16px}
+  .staff-chat-side,.staff-chat-main{min-height:0}
+  .staff-chat-threads{max-height:360px;overflow-y:auto}
+}
+
+@media(max-width:600px){
+  .main{padding-bottom:calc(32px + env(safe-area-inset-bottom))}
+  .staff-chat-layout{gap:12px}
+  .staff-chat-side,.staff-chat-main{border-radius:13px}
+  .staff-chat-head{align-items:flex-start;padding:15px;gap:10px}
+  .staff-chat-head h3{font-size:16px;line-height:1.35}
+  .staff-chat-refresh{flex:0 0 auto;min-height:40px;padding:9px 11px;white-space:nowrap}
+  .staff-chat-tools{grid-template-columns:1fr;padding:11px 14px}
+  .staff-chat-threads{max-height:300px}
+  .staff-chat-threads .support-empty{margin:12px;padding:24px 14px}
+  .staff-chat-form{gap:16px;padding:20px 16px 28px}
+  .staff-chat-form-title{gap:10px}
+  .staff-chat-form-title>span{flex-basis:38px;width:38px;height:38px}
+  .staff-chat-form-title h3{font-size:17px}
+  .staff-chat-form-actions,.staff-chat-form-actions .btn{width:100%}
+  .staff-chat-form-actions .btn{justify-content:center}
+  .staff-chat-conversation>header{align-items:flex-start;flex-direction:column;padding:14px}
+  .staff-chat-contact h3{white-space:normal;overflow-wrap:anywhere}
+  .staff-chat-messages{max-height:min(52vh,480px);padding:14px}
+  .staff-chat-message{min-width:0;max-width:92%;overflow-wrap:anywhere}
+  .staff-chat-reply{padding:14px}
+}
+
+@media(max-width:380px){
+  .staff-chat-head{flex-wrap:wrap}
+  .staff-chat-refresh{width:100%;justify-content:center}
+  .staff-chat-form-title>span{display:none}
+}
