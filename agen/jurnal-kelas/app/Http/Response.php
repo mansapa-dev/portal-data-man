@@ -10,6 +10,7 @@ final class Response
         $stylesheet = '<link rel="stylesheet" href="/assets/css/ui.css">';
         if (!str_contains($html, '/assets/css/ui.css')) $html = str_replace('</head>', $stylesheet.'</head>', $html);
         if (!str_contains($html, '/assets/js/toast.js')) $html = str_replace('</body>', '<script src="/assets/js/toast.js"></script></body>', $html);
+        if (!str_contains($html, '/assets/js/app.js')) $html = str_replace('</body>', '<script type="module" src="/assets/js/app.js"></script></body>', $html);
         if (isset($_SESSION['user']) && !str_contains($html, 'class="app-shell"')) {
             $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
             $active = static fn (string $prefix): string => str_starts_with($path, $prefix) ? ' class="active"' : '';

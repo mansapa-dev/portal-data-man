@@ -22,6 +22,8 @@ let cacheHasilRaw = [];
 let cacheSiswaGlobal = [];
 let portalReferences = { teachers: [], subjects: [], classes: [], academic_years: [], semesters: [] };
 let portalReferencesLoaded = false;
+let portalReferencesLoading = false;
+let portalReferenceWaiters = [];
 
 let cancelLoadingHandler = null;
 

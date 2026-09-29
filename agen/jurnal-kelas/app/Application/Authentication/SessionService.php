@@ -16,7 +16,10 @@ final class SessionService
     {
         $statement=$this->database->pdo()->prepare('SELECT id,token_hash,csrf_token_hash FROM user_sessions WHERE public_id=:public_id AND revoked_at IS NULL AND expires_at>NOW(3) LIMIT 1'); $statement->execute(['public_id'=>$publicId]); $session=$statement->fetch();
         if(!$session||!hash_equals($session['token_hash'],hash('sha256',session_id()))||!hash_equals($session['csrf_token_hash'],hash('sha256',(string)($_SESSION['csrf_token']??'')))) return false;
-        $this->database->pdo()->prepare('UPDATE user_sessions SET last_used_at=NOW(3) WHERE id=:id')->execute(['id'=>$session['id']]); return true;
+        // Keep the activity timestamp useful without turning every API/page
+        // request into a database write. This also reduces lock pressure when
+        // a page loads several authenticated resources at once.
+        $this->database->pdo()->prepare('UPDATE user_sessions SET last_used_at=NOW(3) WHERE id=:id AND last_used_at < DATE_SUB(NOW(3), INTERVAL 60 SECOND)')->execute(['id'=>$session['id']]); return true;
     }
     public function revoke(?string $publicId): void { if($publicId)$this->database->pdo()->prepare('UPDATE user_sessions SET revoked_at=NOW(3) WHERE public_id=:public_id AND revoked_at IS NULL')->execute(['public_id'=>$publicId]); }
 }

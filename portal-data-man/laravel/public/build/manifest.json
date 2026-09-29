@@ -1,4 +1,22 @@
 {
+  "_query-vendor-BZiUcLjj.js": {
+    "file": "assets/query-vendor-BZiUcLjj.js",
+    "name": "query-vendor"
+  },
+  "_react-vendor-CHgWxtyW.js": {
+    "file": "assets/react-vendor-CHgWxtyW.js",
+    "name": "react-vendor",
+    "imports": [
+      "_query-vendor-BZiUcLjj.js"
+    ]
+  },
+  "_vendor-DqrfUV47.js": {
+    "file": "assets/vendor-DqrfUV47.js",
+    "name": "vendor",
+    "imports": [
+      "_react-vendor-CHgWxtyW.js"
+    ]
+  },
   "resources/css/dashboard-shell.css": {
     "file": "assets/dashboard-shell-BRER9c2O.css",
     "src": "resources/css/dashboard-shell.css",
@@ -9,10 +27,15 @@
     ]
   },
   "resources/js/portal-react/main.tsx": {
-    "file": "assets/main-C41p1fKc.js",
+    "file": "assets/main-B2SOIMth.js",
     "name": "main",
     "src": "resources/js/portal-react/main.tsx",
     "isEntry": true,
+    "imports": [
+      "_react-vendor-CHgWxtyW.js",
+      "_query-vendor-BZiUcLjj.js",
+      "_vendor-DqrfUV47.js"
+    ],
     "css": [
       "assets/main-MAS2i8S9.css"
     ]

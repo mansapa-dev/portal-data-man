@@ -18,4 +18,5 @@ final class PortalDataClient
     private function get(string $path, string $token): array { return $this->http->request('GET', $this->config->get('portal-data.base_url').$path, ['Authorization: Bearer '.$token], null, $this->timeout()); }
     private function data(array $response): array { if (($response['success'] ?? false) !== true || !array_key_exists('data', $response)) throw new RuntimeException('Payload Portal Data tidak sesuai kontrak.'); return $response['data']; }
     private function timeout(): int { return (int) $this->config->get('portal-data.timeout', 8); }
+    public function cacheTtl(): int { return (int) $this->config->get('portal-data.cache_ttl', 900); }
 }

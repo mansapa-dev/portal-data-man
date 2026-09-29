@@ -32,4 +32,16 @@ class StudentImportNormalizerTest extends TestCase
             'Kelas' => '10 - XII.1',
         ]);
     }
+
+    public function test_it_accepts_sipadu_class_format(): void
+    {
+        $result = (new StudentImportNormalizer)->normalize([
+            'NISN' => '0093473094',
+            'Nama Lengkap' => 'Siswa SIPADU',
+            'Tingkat - Rombel' => 'Kelas 12 - XII 1',
+        ]);
+
+        $this->assertSame('XII.1', $result['classCode']);
+        $this->assertSame(12, $result['gradeLevel']);
+    }
 }

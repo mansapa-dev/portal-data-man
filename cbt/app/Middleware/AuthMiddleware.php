@@ -25,6 +25,11 @@ final class AuthMiddleware
    }
    if(!$valid){unset($_SESSION[$this->type]);return Response::error('Akun sudah tidak aktif. Silakan hubungi pengawas.',401);}
   }
+  // Session data has been read and all authorization decisions are complete.
+  // Release PHP's per-session lock before database work (answer saves,
+  // heartbeats, and polling) so concurrent requests from the same student do
+  // not queue behind one another.
+  if(session_status()===PHP_SESSION_ACTIVE)session_write_close();
   return $next($r);
  }
 }

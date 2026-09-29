@@ -15,7 +15,6 @@ final class AnswerService
    if (!hash_equals($attempt['public_id'], $attemptId)) throw new DomainException('Antrean berasal dari sesi ujian berbeda.', 409);
    $answer = $answer === null || $answer === '' ? null : strtoupper($answer);
    if ($answer !== null && !in_array($answer, ['A', 'B', 'C', 'D', 'E'], true)) throw new DomainException('Jawaban tidak valid.', 422);
-   if (!in_array($questionId, array_map('intval', json_decode($attempt['question_order'], true, 512, JSON_THROW_ON_ERROR)), true)) throw new DomainException('Soal tidak termasuk sesi ujian ini.', 404);
    $statement = $this->db->pdo()->prepare('SELECT v.revision,v.mutation_id,a.answer,a.is_flagged FROM answer_write_versions v JOIN student_answers a ON a.attempt_id=v.attempt_id AND a.question_id=v.question_id WHERE v.attempt_id=:attempt AND v.question_id=:question');
    $statement->execute(['attempt' => $attempt['id'], 'question' => $questionId]);
    $current = $statement->fetch();
@@ -31,6 +30,9 @@ final class AnswerService
    $check = $this->db->pdo()->prepare('SELECT option_a,option_b,option_c,option_d,option_e FROM attempt_questions WHERE question_id=:question AND attempt_id=:attempt');
    $check->execute(['question' => $questionId, 'attempt' => $attempt['id']]);
    $question = $check->fetch();
+   // attempt_questions is the immutable snapshot for this attempt. Its
+   // composite primary key verifies membership without decoding the entire
+   // question-order JSON for every answer write.
    if (!$question) throw new DomainException('Soal tidak ditemukan.', 404);
    if ($answer !== null && ($question['option_'.strtolower($answer)] === null || $question['option_'.strtolower($answer)] === '')) throw new DomainException('Pilihan jawaban tidak tersedia.', 422);
    $this->db->pdo()->prepare('INSERT INTO student_answers(attempt_id,question_id,answer,is_flagged,answered_at) VALUES(:attempt,:question,:answer,:flagged,UTC_TIMESTAMP(3)) ON DUPLICATE KEY UPDATE answer=VALUES(answer),is_flagged=VALUES(is_flagged),answered_at=UTC_TIMESTAMP(3)')->execute(['attempt' => $attempt['id'], 'question' => $questionId, 'answer' => $answer, 'flagged' => (int)$flagged]);

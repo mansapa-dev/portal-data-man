@@ -88,7 +88,12 @@ final class HttpPortalDataClient implements PortalDataClientInterface
 
     private function decode(string $body): array
     {
-        try { $json = json_decode($body, true, 512, JSON_THROW_ON_ERROR); } catch (\JsonException) { throw new PortalDataException('Respons Portal Data bukan JSON yang valid.'); }
+        try { $json = json_decode($body, true, 512, JSON_THROW_ON_ERROR); } catch (\JsonException) {
+            $hint = preg_match('/^\s*<!doctype html|^\s*<html/i', $body)
+                ? ' Endpoint mengirim halaman HTML; periksa PORTAL_DATA_BASE_URL agar menunjuk ke domain Portal Data, bukan domain CBT.'
+                : '';
+            throw new PortalDataException('Respons Portal Data bukan JSON yang valid.'.$hint);
+        }
         if (! is_array($json)) throw new PortalDataException('Respons Portal Data tidak valid.');
         return $json;
     }

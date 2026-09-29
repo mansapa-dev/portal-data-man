@@ -10,7 +10,10 @@ final class ReferenceController
     public function periods(Request $request): Response { return $this->reference($request, 'periods'); }
     private function reference(Request $request, string $key): Response
     {
-        if ($request->input('refresh') === '1') {
+        $cacheTtl = max(0, $this->portal->cacheTtl());
+        $syncedAt = (int) ($_SESSION['portal_reference']['synced_at'] ?? 0);
+        $cacheFresh = $syncedAt > 0 && (time() - $syncedAt) < $cacheTtl && isset($_SESSION['portal_reference'][$key]);
+        if ($request->input('refresh') === '1' && ! $cacheFresh) {
             if (!isset($_SESSION['portal_access_token']) || (int)($_SESSION['portal_access_expires_at'] ?? 0) <= time()+5) {
                 return Response::json(['success'=>false,'message'=>'Token Portal Data berakhir. Silakan login kembali.'],401);
             }
@@ -21,7 +24,7 @@ final class ReferenceController
                 return Response::json(['success'=>false,'message'=>$error->getMessage()],502);
             }
         }
-        return Response::json(['success'=>true,'data'=>$_SESSION['portal_reference'][$key] ?? [],'meta'=>['syncedAt'=>$_SESSION['portal_reference']['synced_at'] ?? null]]);
+        return Response::json(['success'=>true,'data'=>$_SESSION['portal_reference'][$key] ?? [],'meta'=>['syncedAt'=>$_SESSION['portal_reference']['synced_at'] ?? null, 'cached'=>$cacheFresh]]);
     }
     public function students(Request $request):Response
     {

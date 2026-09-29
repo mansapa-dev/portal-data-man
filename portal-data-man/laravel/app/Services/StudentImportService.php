@@ -68,6 +68,7 @@ class StudentImportService
         $claimed = ImportBatch::query()->whereKey($batch->id)->where('status', 'READY')->update(['status' => 'PROCESSING', 'startedAt' => now()]);
         abort_unless($claimed === 1, 409, 'Batch sedang atau sudah diproses.');
         $counts = ['insertedRows' => 0, 'updatedRows' => 0, 'skippedRows' => 0];
+        $deactivatedRows = 0;
         try {
             $batch->rows()->whereNotNull('normalizedData')->orderBy('rowNumber')->chunkById((int) config('imports.chunk_size'), function ($rows) use ($semester, &$counts): void {
                 DB::transaction(function () use ($rows, $semester, &$counts): void {
@@ -90,16 +91,24 @@ class StudentImportService
                     }
                 });
             });
+            // SIPADU workbooks are authoritative snapshots. Preserve old
+            // records for audit/foreign-key history, but remove them from all
+            // active integrations when their NISN is absent from the snapshot.
+            if (($batch->summary['replaceSnapshot'] ?? false) === true) {
+                $incomingNisn = $batch->rows()->whereNotNull('normalizedData')->get()->pluck('normalizedData')->pluck('nisn')->all();
+                $deactivatedRows = Student::query()->where('status', 'ACTIVE')->whereNotIn('nisn', $incomingNisn)->update(['status' => 'INACTIVE']);
+            }
             $batch->update([
                 'status' => $batch->warningRows || $batch->failedRows ? 'COMPLETED_WITH_WARNINGS' : 'COMPLETED',
                 ...$counts,
                 'completedAt' => now(),
+                'summary' => [...$batch->summary, 'deactivatedRows' => $deactivatedRows],
             ]);
         } catch (Throwable $error) {
             $batch->update(['status' => 'FAILED', 'completedAt' => now()]);
             throw $error;
         }
-        $this->audit->write($request, 'IMPORT_COMMITTED', 'ImportBatch', $batch->publicId, null, ['filename' => $batch->originalFilename, ...$counts, 'warningRows' => $batch->warningRows, 'failedRows' => $batch->failedRows]);
+        $this->audit->write($request, 'IMPORT_COMMITTED', 'ImportBatch', $batch->publicId, null, ['filename' => $batch->originalFilename, ...$counts, 'deactivatedRows' => $deactivatedRows, 'warningRows' => $batch->warningRows, 'failedRows' => $batch->failedRows]);
 
         return $batch->fresh();
     }
@@ -116,7 +125,9 @@ class StudentImportService
                     $values = array_map(fn ($cell) => $cell->getValue(), $row->getCells());
                     if ($headers === null) {
                         $headers = array_map(fn ($value) => trim((string) $value), $values);
-                        if (array_slice($headers, 0, count(StudentImportNormalizer::HEADERS)) !== StudentImportNormalizer::HEADERS) {
+                        $isTemplate = array_slice($headers, 0, count(StudentImportNormalizer::HEADERS)) === StudentImportNormalizer::HEADERS;
+                        $isSipaduSnapshot = array_slice($headers, 0, count(StudentImportNormalizer::SIPADU_HEADERS)) === StudentImportNormalizer::SIPADU_HEADERS;
+                        if (! $isTemplate && ! $isSipaduSnapshot) {
                             throw new InvalidArgumentException('Header Excel tidak sesuai template.');
                         }
 
@@ -125,7 +136,8 @@ class StudentImportService
                     if (count(array_filter($values, fn ($value) => $value !== null && $value !== '')) === 0) {
                         continue;
                     }
-                    $original = array_combine(StudentImportNormalizer::HEADERS, array_pad(array_slice($values, 0, count(StudentImportNormalizer::HEADERS)), count(StudentImportNormalizer::HEADERS), null));
+                    $activeHeaders = $isSipaduSnapshot ? StudentImportNormalizer::SIPADU_HEADERS : StudentImportNormalizer::HEADERS;
+                    $original = array_combine($activeHeaders, array_pad(array_slice($values, 0, count($activeHeaders)), count($activeHeaders), null));
                     try {
                         $normalized = $this->normalizer->normalize($original);
                         $rows[] = ['rowNumber' => $number, 'identifier' => $normalized['nisn'], 'status' => $normalized['warnings'] ? 'WARNING' : 'VALID', 'messages' => $normalized['warnings'], 'originalData' => $original, 'normalizedData' => $normalized];
@@ -144,7 +156,7 @@ class StudentImportService
             $reader->close();
         }
         abort_if($headers === null, 422, 'Worksheet tidak ditemukan.');
-        $summary = ['totalRows' => count($rows), 'validRows' => count(array_filter($rows, fn ($row) => $row['status'] === 'VALID')), 'warningRows' => count(array_filter($rows, fn ($row) => $row['status'] === 'WARNING')), 'failedRows' => count(array_filter($rows, fn ($row) => $row['status'] === 'FAILED'))];
+        $summary = ['totalRows' => count($rows), 'validRows' => count(array_filter($rows, fn ($row) => $row['status'] === 'VALID')), 'warningRows' => count(array_filter($rows, fn ($row) => $row['status'] === 'WARNING')), 'failedRows' => count(array_filter($rows, fn ($row) => $row['status'] === 'FAILED')), 'replaceSnapshot' => $isSipaduSnapshot ?? false];
 
         return [$rows, $summary];
     }

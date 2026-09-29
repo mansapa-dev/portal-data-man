@@ -7,6 +7,7 @@ use InvalidArgumentException;
 class StudentImportNormalizer
 {
     public const HEADERS = ['No.', 'NISN', 'Nama Siswa', 'Kelas', 'No. Telepon Orang Tua', 'Alamat', 'RFID UID', 'Status'];
+    public const SIPADU_HEADERS = ['No', 'Nama Lengkap', 'Jenis Kelamin', 'NISN', 'Tempat Lahir', 'Tanggal Lahir', 'Tingkat - Rombel'];
 
     public function normalize(array $values): array
     {
@@ -18,12 +19,13 @@ class StudentImportNormalizer
         if (! preg_match('/^\d{10}$/', $nisn)) {
             throw new InvalidArgumentException('NISN harus terdiri dari 10 digit.');
         }
-        $fullName = preg_replace('/\s+/u', ' ', trim($this->text($values['Nama Siswa'] ?? null)));
+        $fullName = preg_replace('/\s+/u', ' ', trim($this->text($values['Nama Siswa'] ?? $values['Nama Lengkap'] ?? null)));
         if ($fullName === '') {
             throw new InvalidArgumentException('Nama siswa wajib diisi.');
         }
-        $rawClass = strtoupper((string) preg_replace('/XlI/i', 'XII', trim($this->text($values['Kelas'] ?? null))));
-        if (! preg_match('/^(10|11|12)\s*-\s*(X|XI|XII)\.(\d+)$/i', $rawClass, $match)
+        $rawClass = strtoupper((string) preg_replace('/XlI/i', 'XII', trim($this->text($values['Kelas'] ?? $values['Tingkat - Rombel'] ?? null))));
+        $rawClass = preg_replace('/^KELAS\s*/i', '', $rawClass);
+        if (! preg_match('/^(10|11|12)\s*-\s*(X|XI|XII)[.\s]+(\d+)$/i', $rawClass, $match)
             || ['10' => 'X', '11' => 'XI', '12' => 'XII'][$match[1]] !== strtoupper($match[2])) {
             throw new InvalidArgumentException('Format kelas tidak valid.');
         }

@@ -227,10 +227,26 @@ function loadDataAdminDash() {
 }
 
 function loadPortalReferences(onReady) {
+  if (portalReferencesLoaded) {
+    if (typeof onReady === 'function') onReady(portalReferences);
+    return;
+  }
+  if (typeof onReady === 'function') portalReferenceWaiters.push(onReady);
+  if (portalReferencesLoading) return;
+  portalReferencesLoading = true;
+  const resolve = () => {
+    const waiters = portalReferenceWaiters;
+    portalReferenceWaiters = [];
+    portalReferencesLoading = false;
+    waiters.forEach(callback => callback(portalReferences));
+  };
   cbtApi.withSuccessHandler(res => {
     if (res.success) { portalReferences = res; portalReferencesLoaded = true; }
-    if (typeof onReady === 'function') onReady(portalReferences);
-  }).withFailureHandler(err => showCustomAlert('Referensi Portal Data', err.message)).getPortalDataReferences();
+    resolve();
+  }).withFailureHandler(err => {
+    resolve();
+    showCustomAlert('Referensi Portal Data', err.message);
+  }).getPortalDataReferences();
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
