@@ -27,6 +27,11 @@ try {
  $session=$sessions->start(1,'0000000001',1);$attempt=$session['attempt_id'];
  $sessions->heartbeat(1,1);
  $monitor=new \Cbt\Repositories\AdminRepository($pdo);
+ $pdo->exec("INSERT INTO subjects(public_id,code,name,status) VALUES('test-subject','TST','Test Subject','ACTIVE')");
+ $pdo->exec("UPDATE exams SET subject_id=1 WHERE id=1");
+ $duplicateId=$monitor->duplicateExam(1,['subject_id'=>1,'portal_academic_year_id'=>null,'portal_semester_id'=>null,'nama_ujian'=>'Test Exam Copy','tingkat'=>'X','durasi_menit'=>60,'sesi'=>1,'starts_at'=>gmdate('Y-m-d H:i:s',time()+7200),'ends_at'=>gmdate('Y-m-d H:i:s',time()+10800),'tahun_ajaran'=>'2026','semester'=>'ODD','status'=>'INACTIVE','kelas_target'=>''],1);
+ $assert($duplicateId>1&&(int)$pdo->query('SELECT COUNT(*) FROM questions WHERE exam_id='.$duplicateId)->fetchColumn()===1,'exam duplication creates a new exam and copies its questions');
+ $pdo->exec('DELETE FROM exams WHERE id='.$duplicateId);
  $live=$monitor->liveSessions([1]);
  $assert(count($live)===1 && $live[0]['connectionState']==='ONLINE','heartbeat is visible in live monitoring');
  $assert($monitor->liveSessions([])===[],'unassigned teacher receives no sessions');
@@ -94,10 +99,11 @@ try {
  $assert($endedDashboard['can_start']&&$endedDashboard['availability_reason']==='AVAILABLE','student can continue a reset attempt after the schedule ends');
  $sessions->start(1,'0000000001',1);
  $pdo->exec("INSERT INTO exams(public_id,name,grade,duration_minutes,starts_at,ends_at,academic_year,semester,status,created_by) VALUES('upcoming','Upcoming','X',60,UTC_TIMESTAMP()+INTERVAL 1 DAY,UTC_TIMESTAMP()+INTERVAL 2 DAY,'2026','ODD','ACTIVE',1)");
+ $upcomingId=(int)$pdo->lastInsertId();
  $visible=$sessions->list(1,'0000000001');
- $future=array_values(array_filter($visible,fn($e)=>$e['id']===2))[0];
+ $future=array_values(array_filter($visible,fn($e)=>$e['id']===$upcomingId))[0];
  $assert(!$future['can_start']&&$future['availability_reason']==='UPCOMING','dashboard includes future exams but blocks starting early');
- $reject(fn()=>$sessions->start(1,'0000000001',2),403,'server rejects early starts even with direct request');
+ $reject(fn()=>$sessions->start(1,'0000000001',$upcomingId),403,'server rejects early starts even with direct request');
  $pdo->exec("UPDATE exam_attempts SET expires_at=UTC_TIMESTAMP()-INTERVAL 1 SECOND");
  $assert($monitor->liveSessions([1])===[],'expired attempt leaves live monitoring before background finalization');
  $reject(fn()=>$answers->save(1,1,1,'A',false,$attempt,2,str_repeat('d',32)),409,'late answer rejected');
