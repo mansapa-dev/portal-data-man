@@ -160,6 +160,7 @@ function applyFilterUjian() {
     u.tingkat, 
     u.sesi || 1, 
     u.tanggal_ujian || '', 
+    `${u.jam_mulai || ''} - ${u.jam_selesai || ''}`,
     formatTargetKelas(u.kelas_target, u.nama_kelas_target), 
     u.durasi_menit, 
     u.tahun_ajaran || '', 
@@ -182,7 +183,8 @@ function applyFilterUjian() {
         <td><span class="badge bg-blue">Tingkat ${u.tingkat}</span></td>
         <td>
           <span class="badge bg-gray">Sesi ${u.sesi || 1}</span><br>
-          <small style="color:var(--text-muted);"><i class="fa-regular fa-calendar"></i> ${u.tanggal_ujian || 'TBD'}</small>
+          <small style="color:var(--text-muted);"><i class="fa-regular fa-calendar"></i> ${u.tanggal_ujian || 'TBD'}</small><br>
+          <small style="color:var(--text-main); font-weight:700;"><i class="fa-regular fa-clock"></i> ${u.jam_mulai || '--:--'}–${u.jam_selesai || '--:--'} WIB</small>
         </td>
         <td>
           <span class="badge ${Number(u.target_student_count || 0) > 0 ? 'bg-blue' : (formattedKelas === 'Semua Kelas' ? 'bg-green' : 'bg-gray')}" style="max-width:200px; white-space:normal; line-height:1.35; text-align:left; display:inline-block;">
@@ -196,6 +198,7 @@ function applyFilterUjian() {
             <i class="fa-solid fa-pen"></i> Edit
           </button>
           ${Number(u.jumlah_soal || 0) > 0 ? '<button class="btn btn-secondary" style="padding:5px 10px; font-size:11.5px; margin-top:4px;" onclick="duplicateUjianById('+u.id+')" title="Salin jadwal dan '+Number(u.jumlah_soal)+' soal"><i class="fa-regular fa-copy"></i> Duplikat ('+Number(u.jumlah_soal)+')</button>' : ''}
+          <button class="btn btn-danger" style="padding:5px 10px; font-size:11.5px; margin-top:4px;" onclick="hapusUjianById(${u.id})" title="Hapus ujian dan seluruh soal di dalamnya"><i class="fa-solid fa-trash"></i> Hapus</button>
         </td>
       </tr>
     `;
@@ -214,6 +217,23 @@ function duplicateUjianById(id) {
     return;
   }
   bukaModalUjian(source, true);
+}
+
+function hapusUjianById(id) {
+  const exam = (cacheAdminUjianRows || []).find(row => String(row.id) === String(id));
+  if (!exam) return showCustomAlert('Ujian Tidak Ditemukan', 'Muat ulang daftar ujian lalu coba kembali.', 'warning');
+  const totalSoal = Number(exam.jumlah_soal || 0);
+  showCustomConfirm('Hapus Ujian Permanen', `Hapus "${exam.nama_ujian}" dan ${totalSoal} soal di dalamnya dari bank soal? Tindakan ini tidak dapat dibatalkan.`, () => {
+    showLoading('Menghapus ujian dan bank soal...');
+    cbtApi.withSuccessHandler(result => {
+      hideLoading();
+      showCustomAlert('Ujian Berhasil Dihapus', result.message || 'Ujian dan seluruh soalnya berhasil dihapus.', 'success');
+      loadDataAdminUjian();
+    }).withFailureHandler(error => {
+      hideLoading();
+      showCustomAlert('Ujian Tidak Dapat Dihapus', error.message, 'error');
+    }).hapusUjianAdmin(stPengelola, id);
+  });
 }
 
 function editUjian(u) {

@@ -128,6 +128,7 @@
     async hentikanSesiSiswaAdmin(session,attemptId) { const r=await api(`api/admin/live-sessions/${attemptId}/terminate`,'POST',{});return {success:true,...r.data,message:r.message}; },
     async akhiriSesiUjianAdmin(session,examId) { const r=await api(`api/admin/exams/${examId}/terminate`,'POST',{});return {success:true,...r.data,message:r.message}; },
     async simpanUjianAdmin(session,data) { await api('api/admin/exams','POST',data);return {success:true,message:'Ujian berhasil disimpan.'}; },
+    async hapusUjianAdmin(session,id) { const r=await api(`api/admin/exams/${id}`,'DELETE');return {success:true,...r.data,message:r.message}; },
     async simpanUjianLanjutanAdmin(session,data) { const r=await api('api/admin/follow-up-exams','POST',data);return {success:true,...r.data,message:r.message}; },
     async getKandidatUjianLanjutan() { const r=await api('api/admin/follow-up-exams/candidates');return r.data; },
     async setujuiKandidatUjianUlang(session,examId,studentIds) { const r=await api('api/admin/follow-up-exams/retake-candidates/approve','POST',{exam_id:examId,student_ids:studentIds});return {success:true,...r.data,message:r.message}; },

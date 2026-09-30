@@ -22,6 +22,13 @@ final class AdminService
   try{$this->db->transaction(fn()=>$duplicateFrom>0?$this->repo->duplicateExam($duplicateFrom,$data,$actor):$this->repo->saveExam($data,$actor));}catch(\UnexpectedValueException$e){throw new DomainException($e->getMessage(),422);}
   if($duplicateFrom>0){$this->forgetQuestionLists([]);$subjectId=(int)$data['subject_id'];$this->forgetQuestionSubject($subjectId>0?$subjectId:-1);}
  }
+ public function deleteExam(int$id):array
+ {
+  if($id<=0)throw new DomainException('Ujian tidak valid.',422);
+  $deleted=$this->db->transaction(function()use($id){$exam=$this->repo->examDeletionInfo($id)??throw new DomainException('Ujian tidak ditemukan.',404);if((int)$exam['attempt_count']>0)throw new DomainException('Ujian tidak dapat dihapus karena sudah memiliki sesi atau hasil siswa. Nonaktifkan ujian untuk mempertahankan riwayat.',409);if((int)$exam['follow_up_count']>0)throw new DomainException('Ujian tidak dapat dihapus karena masih menjadi sumber ujian susulan atau remedial.',409);if(!$this->repo->deleteExam($id))throw new DomainException('Ujian gagal dihapus.',409);return$exam;});
+  $this->forgetQuestionBanks([$id]);$this->forgetQuestionLists([$id]);$subjectId=(int)($deleted['subject_id']??0);if($subjectId>0)$this->forgetQuestionSubject($subjectId);RedisCache::forget('admin:dashboard:v1');
+  return['id'=>$id,'name'=>$deleted['name'],'deleted_questions'=>(int)$deleted['question_count']];
+ }
  public function scheduleFollowUpExam(array$d,int$actor):array
  {
   $sourceId=(int)($d['source_exam_id']??0);$studentIds=array_values(array_unique(array_filter(array_map('intval',(array)($d['student_ids']??[])))));

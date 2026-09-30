@@ -7,7 +7,7 @@
               <div class="card-subtitle">Pengaturan jadwal pelaksanaan ujian, sesi, target rombel, dan mata pelajaran</div>
             </div>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
-              <button class="ui-button btn btn-secondary" onclick="exportToExcel('tabel_ujian.xlsx', 'Ujian', ['ID', 'Nama Ujian', 'Tingkat', 'Sesi', 'Tanggal', 'Target Kelas', 'Durasi', 'Tahun Ajaran', 'Semester', 'Status'], window.cacheUjianExcel || [])"><i class="fa-solid fa-file-excel"></i> Download Excel</button>
+              <button class="ui-button btn btn-secondary" onclick="exportToExcel('tabel_ujian.xlsx', 'Ujian', ['ID', 'Nama Ujian', 'Tingkat', 'Sesi', 'Tanggal', 'Jam (WIB)', 'Target Kelas', 'Durasi', 'Tahun Ajaran', 'Semester', 'Status'], window.cacheUjianExcel || [])"><i class="fa-solid fa-file-excel"></i> Download Excel</button>
               <button class="ui-button btn btn-primary" onclick="bukaModalUjian()"><i class="fa-solid fa-plus"></i> Tambah Ujian</button>
             </div>
           </div>
@@ -46,7 +46,7 @@
 
           <div class="table-responsive">
             <table>
-              <thead><tr><th>ID</th><th>Nama Ujian & Mapel</th><th>Tingkat</th><th>Sesi & Tanggal</th><th>Target Kelas</th><th>Thn Ajaran / Semester</th><th>Status</th><th>Aksi</th></tr></thead>
+              <thead><tr><th>ID</th><th>Nama Ujian & Mapel</th><th>Tingkat</th><th>Sesi, Tanggal & Jam (WIB)</th><th>Target Kelas</th><th>Thn Ajaran / Semester</th><th>Status</th><th>Aksi</th></tr></thead>
               <tbody id="tblAdminUjian"><tr><td colspan="8" align="center">Memuat...</td></tr></tbody>
             </table>
           </div>

@@ -13,6 +13,7 @@ final class AdminController
  public function references(Request$r):Response{return Response::json($this->admin->references());}
  public function exams(Request$r):Response{return Response::json($this->admin->exams());}
  public function saveExam(Request$r):Response{$this->admin->saveExam($r->json(),(int)$_SESSION['auth']['user_id']);return Response::json(null,'Ujian berhasil disimpan.');}
+ public function deleteExam(Request$r):Response{$deleted=$this->admin->deleteExam((int)$r->attributes['id']);return Response::json($deleted,'Ujian dan '.$deleted['deleted_questions'].' soal di dalamnya berhasil dihapus.');}
  public function scheduleFollowUpExam(Request$r):Response{$exam=$this->admin->scheduleFollowUpExam($r->json(),(int)$_SESSION['auth']['user_id']);return Response::json($exam,'Jadwal ujian susulan/remedial berhasil dibuat.');}
  public function followUpCandidates(Request$r):Response{return Response::json($this->admin->followUpCandidates());}
  public function approveRetakeCandidates(Request$r):Response{$data=$r->json();$count=$this->admin->approveRetakeCandidates((array)($data['student_ids']??[]),(int)($data['exam_id']??0),(int)$_SESSION['auth']['user_id']);return Response::json(['approved'=>$count],'Kandidat ujian ulang telah disetujui.');}
