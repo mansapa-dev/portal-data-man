@@ -22,7 +22,9 @@ final class AdminRepository
   $questionColumn=$hasQuestionType?'question_type,':'';
   $questionValue=$hasQuestionType?':question_type,':'';
   $copy=$this->db->prepare("INSERT INTO questions(public_id,exam_id,{$questionColumn}question_text,option_a,option_b,option_c,option_d,option_e,correct_answer,points,status) VALUES(:public,:exam,{$questionValue}:text,:a,:b,:c,:d,:e,:answer,:points,'ACTIVE')");
-  $examId=$this->saveExam($data,$actor);
+  $this->saveExam($data,$actor);
+  $examId=(int)$this->db->lastInsertId();
+  if($examId<=0)throw new \RuntimeException('ID ujian hasil duplikasi tidak tersedia.');
   if($this->hasTable('exam_target_students'))$this->db->prepare('INSERT IGNORE INTO exam_target_students(exam_id,student_id) SELECT :target,student_id FROM exam_target_students WHERE exam_id=:source')->execute(['target'=>$examId,'source'=>$sourceExamId]);
   foreach($rows as$q){$params=['public'=>Id::ulid(),'exam'=>$examId,'text'=>$q['question_text'],'a'=>$q['option_a'],'b'=>$q['option_b'],'c'=>$q['option_c'],'d'=>$q['option_d'],'e'=>$q['option_e'],'answer'=>$q['correct_answer'],'points'=>$q['points']];if($hasQuestionType)$params['question_type']=$q['question_type'];$copy->execute($params);}
   return$examId;
