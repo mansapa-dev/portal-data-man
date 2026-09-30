@@ -134,7 +134,7 @@
     async getKandidatUjianSusulan() { const r=await api('api/admin/follow-up-exams/make-up-candidates');return r.data; },
     async getJadwalUjianLanjutan() { const r=await api('api/admin/follow-up-exams');return r.data; },
     async setStatusUjianLanjutan(session,id,active) { await api(`api/admin/follow-up-exams/${id}/status`,'POST',{active});return {success:true}; },
-    async getAdminSoalList(session,examId) { const r=await api(`api/admin/questions${examId?`?exam_id=${encodeURIComponent(examId)}`:''}`);return r.data; },
+    async getAdminSoalList(session,examId,subjectId) { const query=new URLSearchParams();if(examId)query.set('exam_id',examId);if(subjectId)query.set('subject_id',subjectId);const params=query.toString();const r=await api(`api/admin/questions${params?`?${params}`:''}`);return r.data; },
     async simpanSoalAdmin(session,data) { await api('api/admin/questions','POST',data);return {success:true,message:'Soal berhasil disimpan.'}; },
     async hapusSoalAdmin(session,id) { const r=await api(`api/admin/questions/${id}`,'DELETE');return {success:true,message:r.message}; },
     async getAdminAkunList() { const r=await api('api/admin/users');return r.data; },

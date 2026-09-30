@@ -1,14 +1,14 @@
 (function () {
   'use strict';
-  let pollTimer = null, clockTimer = null, generation = 0, lastPayload = null, fetchedAt = 0;
-  const PAGE_SIZE = 40, catalogState = new Map();
+  let pollTimer = null, clockTimer = null, generation = 0, lastPayload = null, fetchedAt = 0, visibilityHandler = null, activeLoad = null;
+  const PAGE_SIZE = 20, catalogState = new Map();
   const filterState = { exam: 'ALL', grade: 'ALL', className: 'ALL', subject: 'ALL', status: 'ALL', connection: 'ALL' };
   const element = (tag, text, className) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = String(text); if (className) node.className = className; return node; };
   const duration = seconds => { const safe = Math.max(0, Number(seconds) || 0), hours = Math.floor(safe / 3600), minutes = Math.floor((safe % 3600) / 60), secs = Math.floor(safe % 60); return hours > 0 ? `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}` : `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`; };
   const statusLabel = status => ({ IN_PROGRESS: 'Mengerjakan', TERMINATED: 'Dihentikan', EXPIRED: 'Waktu habis' }[status] || status);
   const scoreLabel = value => Number(value || 0).toLocaleString('id-ID', { maximumFractionDigits: 2 });
 
-  function stop() { generation += 1; clearTimeout(pollTimer); clearInterval(clockTimer); pollTimer = null; clockTimer = null; }
+  function stop() { generation += 1; clearTimeout(pollTimer); clearInterval(clockTimer); pollTimer = null; clockTimer = null; if (visibilityHandler) document.removeEventListener('visibilitychange', visibilityHandler); visibilityHandler = null; activeLoad = null; }
   function metric(label, value, tone = '') { const card = element('article', undefined, `live-metric ${tone}`.trim()); card.append(element('strong', value), element('span', label)); return card; }
   function sessionCard(session, options, refresh) {
     const card = element('article', undefined, 'session-card'), head = element('header'), identity = element('div');
@@ -68,7 +68,11 @@
   function startClock(root) { clearInterval(clockTimer); clockTimer = setInterval(() => { const elapsed = Math.floor((Date.now() - fetchedAt) / 1000); root.querySelectorAll('[data-remaining]').forEach(node => { node.textContent = duration(Number(node.dataset.remaining) - elapsed); }); }, 1000); }
   function mount(root, api, notice, options = {}) {
     stop(); lastPayload = null; options.notice=notice; const currentGeneration = generation;
-    const load = async () => { if (currentGeneration !== generation) return; try { const response = await api('api/teacher/live-sessions'); if (currentGeneration !== generation) return; lastPayload = response.data; fetchedAt = Date.now(); notice.textContent = ''; render(root, lastPayload, load, options); startClock(root); } catch (error) { notice.textContent = `Live Sessions gagal diperbarui: ${error.message}`; if (!lastPayload) root.replaceChildren(element('div', 'Data live session belum dapat dimuat.', 'live-empty')); } finally { if (currentGeneration === generation) pollTimer = setTimeout(load, 10000); } };
+    let inFlight = false;
+    const load = async () => { if (currentGeneration !== generation || document.hidden || inFlight) return; clearTimeout(pollTimer); inFlight = true; try { const response = await api('api/teacher/live-sessions'); if (currentGeneration !== generation) return; lastPayload = response.data; fetchedAt = Date.now(); notice.textContent = ''; render(root, lastPayload, load, options); startClock(root); } catch (error) { notice.textContent = `Live Sessions gagal diperbarui: ${error.message}`; if (!lastPayload) root.replaceChildren(element('div', 'Data live session belum dapat dimuat.', 'live-empty')); } finally { inFlight = false; if (currentGeneration === generation && !document.hidden) pollTimer = setTimeout(load, 15000 + Math.random() * 5000); } };
+    activeLoad = load;
+    visibilityHandler = () => { if (document.hidden) { clearTimeout(pollTimer); clearInterval(clockTimer); } else if (activeLoad) activeLoad(); };
+    document.addEventListener('visibilitychange', visibilityHandler);
     root.replaceChildren(element('div', 'Menghubungkan ke sesi ujian aktif…', 'live-loading')); load();
   }
   window.CbtLiveSessions = { mount, stop };

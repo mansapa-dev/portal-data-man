@@ -69,10 +69,10 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
     <section id="content" class="content-grid"></section>
   </main>
 
-  <script src="../assets/js/teacher/live-sessions.js?v=20260925-proctor-reset-1"></script>
+  <script src="../assets/js/teacher/live-sessions.js?v=20260930-ios-poll-load"></script>
   <script src="../assets/js/cbt/support-tickets.js?v=20260911-proctor-1"></script>
   <script src="../assets/js/cbt/staff-admin-chat.js?v=20260929-form-ui-2"></script>
-  <script src="../assets/js/teacher/dashboard.js?v=20260929-violation-ui-5"></script>
+  <script src="../assets/js/teacher/dashboard.js?v=20260930-ios-poll-load"></script>
   <script src="../assets/js/table-pagination.js?v=20260910-cleanup"></script>
 </body>
 </html>

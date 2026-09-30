@@ -20,7 +20,7 @@ final class AdminService
   $subject=$this->repo->subject((int)($d['subject_id']??0));if(!$subject)throw new DomainException('Mata pelajaran harus dipilih dari katalog mapel.',422);$yearId=trim((string)($d['portal_academic_year_id']??''));$semesterId=trim((string)($d['portal_semester_id']??''));$period=$this->repo->period($yearId,$semesterId);if(!$period)throw new DomainException('Tahun ajaran dan semester harus dipilih dari Portal Data.',422);$data=$d+['tahun_ajaran'=>$period['academic_year'],'semester'=>$period['semester']];$data['tahun_ajaran']=$period['academic_year'];$data['semester']=$period['semester'];$utc=new \DateTimeZone('UTC');$data['starts_at']=$start->setTimezone($utc)->format('Y-m-d H:i:s');$data['ends_at']=$end->setTimezone($utc)->format('Y-m-d H:i:s');$data['status']=filter_var($d['status_aktif']??false,FILTER_VALIDATE_BOOL)?'ACTIVE':'INACTIVE';
   $duplicateFrom=(int)($d['duplicate_from']??0);
   try{$this->db->transaction(fn()=>$duplicateFrom>0?$this->repo->duplicateExam($duplicateFrom,$data,$actor):$this->repo->saveExam($data,$actor));}catch(\UnexpectedValueException$e){throw new DomainException($e->getMessage(),422);}
-  if($duplicateFrom>0)$this->forgetQuestionLists([]);
+  if($duplicateFrom>0){$this->forgetQuestionLists([]);$subjectId=(int)$data['subject_id'];$this->forgetQuestionSubject($subjectId>0?$subjectId:-1);}
  }
  public function scheduleFollowUpExam(array$d,int$actor):array
  {
@@ -54,7 +54,7 @@ final class AdminService
   if($examId<=0)throw new DomainException('Ujian tidak valid.',422);
   return$this->db->transaction(function()use($examId){$attempts=$this->repo->activeAttemptsForExam($examId,true);if(!$this->repo->deactivateExam($examId)&&!$attempts)throw new DomainException('Ujian tidak ditemukan.',404);$this->repo->terminateAttempts(array_column($attempts,'id'));return$attempts;});
  }
- public function questions(?int$id):array{$key='admin:questions:v1:'.($id??'all');return RedisCache::remember($key,30,fn()=>array_map([\Cbt\Support\QuestionHtml::class,'row'],$this->repo->questions($id)),true);}
+ public function questions(?int$id,?int$subjectId=null):array{$key='admin:questions:v2:exam:'.($id??0).':subject:'.($subjectId??0);return RedisCache::remember($key,30,fn()=>array_map([\Cbt\Support\QuestionHtml::class,'row'],$this->repo->questions($id,$subjectId)),true);}
  public function saveQuestion(array$d):void
  {
   foreach(['ujian_id','pertanyaan','jawaban_benar']as$key)if(trim((string)($d[$key]??''))==='')throw new DomainException('Data soal belum lengkap.',422);
@@ -72,7 +72,8 @@ final class AdminService
  }
  public function deleteQuestion(int$id):void{$examId=$id>0?$this->repo->activeQuestionExamId($id):null;if($examId===null||!$this->repo->disableQuestion($id))throw new DomainException('Soal tidak ditemukan atau sudah dihapus.',404);$this->forgetQuestionBanks([$examId]);$this->forgetQuestionLists([$examId]);}
  private function forgetQuestionBanks(array$examIds):void{foreach(array_unique(array_map('intval',$examIds))as$examId)if($examId>0){RedisCache::forget('exam:question-bank:v1:'.$examId.':snapshot');RedisCache::forget('exam:question-bank:v1:'.$examId.':public');}}
- private function forgetQuestionLists(array$examIds):void{RedisCache::forget('admin:questions:v1:all');foreach(array_unique(array_map('intval',$examIds))as$examId)if($examId>0)RedisCache::forget('admin:questions:v1:'.$examId);}
+ private function forgetQuestionLists(array$examIds):void{RedisCache::forget('admin:questions:v1:all');RedisCache::forget('admin:questions:v2:exam:0:subject:0');foreach(array_unique(array_map('intval',$examIds))as$examId)if($examId>0){RedisCache::forget('admin:questions:v1:'.$examId);RedisCache::forget('admin:questions:v2:exam:'.$examId.':subject:0');$subjectId=$this->repo->subjectIdForExam($examId);if($subjectId)$this->forgetQuestionSubject($subjectId);}}
+ private function forgetQuestionSubject(int$subjectId):void{if($subjectId!==0)RedisCache::forget('admin:questions:v2:exam:0:subject:'.$subjectId);}
  public function users():array{return$this->repo->users();}
  public function saveUser(array$d):void{if(!preg_match('/^[A-Za-z0-9._-]{4,100}$/',(string)($d['username']??'')))throw new DomainException('Username administrator tidak valid.',422);if(empty($d['id'])&&strlen((string)($d['password']??''))<12)throw new DomainException('Password akun baru minimal 12 karakter.',422);if(!empty($d['password'])&&strlen((string)$d['password'])<12)throw new DomainException('Password minimal 12 karakter.',422);$role=strtoupper((string)($d['role']??'ADMIN'));if($role!=='ADMIN')throw new DomainException('Akun guru dikelola Portal Data dan tidak dapat dibuat di CBT.',422);$d['role']='ADMIN';$d['status_aktif']=filter_var($d['status_aktif']??false,FILTER_VALIDATE_BOOL);try{$this->repo->saveUser($d);}catch(\UnexpectedValueException$e){throw new DomainException($e->getMessage(),422);}}
  public function assignments():array{return$this->repo->assignments();}

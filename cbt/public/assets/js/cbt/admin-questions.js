@@ -1,6 +1,8 @@
 // Administrator question bank management (2-Level Subject Catalog & Detail View).
 let cacheAdminSoalRows = [], cacheAdminSoalUjianRows = [], currentSelectedMapelName = null;
 let adminQuestionLoadVersion = 0;
+let detailSoalPage = 1;
+let detailSoalSearchTimer = null;
 let attachedGambarSoalBase64 = '';
 let pendingQuestionImport = null;
 function escapeQuestionUiText(value) {
@@ -41,6 +43,39 @@ function getSubjectIcon(name) {
   }
   return 'fa-book-open';
 }
+function loadSelectedSubjectQuestions(loadVersion, onLoaded = null, onFailure = null) {
+  if (!currentSelectedMapelName) return;
+  const subjectKey = currentSelectedMapelName.trim().toLowerCase();
+  const subjectExams = cacheAdminSoalUjianRows.filter(row => String(row.nama_mapel || '').trim().toLowerCase() === subjectKey);
+  const exam = subjectExams.find(row => row.subject_id) || subjectExams[0];
+  const subject = (portalReferences?.subjects || []).find(row => String(row.name || '').trim().toLowerCase() === subjectKey && row.id);
+  const subjectId = exam ? (Number(exam.subject_id || 0) || -1) : Number(subject?.id || 0);
+  const table = document.getElementById('tblDetailSoalMapel');
+  if (!subjectId) {
+    cacheAdminSoalRows = [];
+    populateDetailSoalFilters(); applyFilterDetailSoal();
+    if (typeof onLoaded === 'function') onLoaded(cacheAdminSoalRows, cacheAdminSoalUjianRows);
+    return;
+  }
+  if (table) table.innerHTML = '<tr><td colspan="6" style="padding:28px;text-align:center">Memuat soal mata pelajaran…</td></tr>';
+  const fail = error => {
+    if (loadVersion !== adminQuestionLoadVersion) return;
+    cacheAdminSoalRows = [];
+    if (table) table.innerHTML = `<tr><td colspan="6" class="alert error">Bank soal gagal dimuat: ${escapeQuestionUiText(error?.message || 'Terjadi kesalahan.')}</td></tr>`;
+    if (typeof onFailure === 'function') onFailure(error);
+  };
+  cbtApi.withSuccessHandler(rows => {
+    if (loadVersion !== adminQuestionLoadVersion) return;
+    try {
+      cacheAdminSoalRows = Array.isArray(rows) ? rows : [];
+      populateDetailSoalFilters(); applyFilterDetailSoal();
+      if (typeof onLoaded === 'function') onLoaded(cacheAdminSoalRows, cacheAdminSoalUjianRows);
+    } catch (error) {
+      if (table) table.innerHTML = `<tr><td colspan="6" class="alert error">Bank soal gagal ditampilkan: ${escapeQuestionUiText(error?.message || 'Data tidak valid.')}</td></tr>`;
+      if (typeof onFailure === 'function') onFailure(error);
+    }
+  }).withFailureHandler(fail).getAdminSoalList(stPengelola, null, subjectId);
+}
 function loadDataAdminSoal(onLoaded = null, onFailure = null) {
   const loadVersion = ++adminQuestionLoadVersion;
   loadPortalReferences(() => {
@@ -60,24 +95,13 @@ function loadDataAdminSoal(onLoaded = null, onFailure = null) {
       </div>`;
   }
 
-  cbtApi.withSuccessHandler(exams => {if(loadVersion!==adminQuestionLoadVersion)return;cacheAdminSoalUjianRows=Array.isArray(exams)?exams:(exams?.data||[]);if(currentSelectedMapelName){populateDetailSoalFilters();applyFilterDetailSoal();}else renderKatalogMapelGrid();}).withFailureHandler(()=>{if(loadVersion===adminQuestionLoadVersion)cacheAdminSoalUjianRows=[];}).getAdminUjianList(stPengelola);
-
-  cbtApi
-    .withSuccessHandler(rows => {
-      if (loadVersion !== adminQuestionLoadVersion) return;
-      try {
-        cacheAdminSoalRows = Array.isArray(rows) ? rows : [];
-        if(currentSelectedMapelName){populateDetailSoalFilters();applyFilterDetailSoal();}else renderKatalogMapelGrid();
-        if (typeof onLoaded === 'function') onLoaded(cacheAdminSoalRows);
-      } catch (error) {
-        if (gridContainer) gridContainer.innerHTML=`<div class="alert error" style="grid-column:1/-1">Katalog gagal ditampilkan: ${escapeQuestionUiText(error?.message||'Data tidak valid.')}</div>`;
-        if (typeof onFailure === 'function') onFailure(error);
-      }
-    })
-    .withFailureHandler(error => {
+  const fail = error => {
       if (loadVersion !== adminQuestionLoadVersion) return;
       cacheAdminSoalRows = [];
-      if (gridContainer) {
+      if (currentSelectedMapelName) {
+        const table = document.getElementById('tblDetailSoalMapel');
+        if (table) table.innerHTML = `<tr><td colspan="6" class="alert error">Bank soal gagal dimuat: ${escapeQuestionUiText(error?.message || 'Terjadi kesalahan.')}</td></tr>`;
+      } else if (gridContainer) {
         gridContainer.innerHTML = `
           <div style="grid-column:1/-1; background:var(--surface); border:1px solid var(--danger); border-radius:12px; padding:24px; color:var(--text-main); text-align:center;">
             <i class="fa-solid fa-triangle-exclamation" style="font-size:28px; color:var(--danger); margin-bottom:10px; display:block;"></i>
@@ -87,8 +111,18 @@ function loadDataAdminSoal(onLoaded = null, onFailure = null) {
           </div>`;
       }
       if (typeof onFailure === 'function') onFailure(error);
-    })
-    .getAdminSoalList(stPengelola, null);
+  };
+  cbtApi.withSuccessHandler(exams => {
+    if (loadVersion !== adminQuestionLoadVersion) return;
+    cacheAdminSoalUjianRows = Array.isArray(exams) ? exams : (exams?.data || []);
+    if (!currentSelectedMapelName) {
+      cacheAdminSoalRows = [];
+      renderKatalogMapelGrid();
+      if (typeof onLoaded === 'function') onLoaded(cacheAdminSoalRows, cacheAdminSoalUjianRows);
+      return;
+    }
+    loadSelectedSubjectQuestions(loadVersion, onLoaded, onFailure);
+  }).withFailureHandler(fail).getAdminUjianList(stPengelola);
 }
 
 // ================= LEVEL 1: KATALOG MATA PELAJARAN =================
@@ -107,16 +141,14 @@ function renderKatalogMapelGrid() {
       const name = String(s?.name || '').trim();
       if (!name) return;
       if (!subjectMap[name]) {
-        subjectMap[name] = { id: s.id, code: String(s.code || ''), name, questions: [] };
+      subjectMap[name] = { id: s.id, code: String(s.code || ''), name, questions: [], exams: [] };
       }
     });
   }
 
   (Array.isArray(cacheAdminSoalRows)?cacheAdminSoalRows:[]).forEach(q => {
     const name = String(q?.nama_mapel || 'Mata Pelajaran Umum').trim() || 'Mata Pelajaran Umum';
-    if (!subjectMap[name]) {
-      subjectMap[name] = { id: q.subject_id || 0, code: String(q.kode_mapel || ''), name: name, questions: [] };
-    }
+    if (!subjectMap[name]) subjectMap[name] = { id: q.subject_id || 0, code: String(q.kode_mapel || ''), name: name, questions: [], exams: [] };
     subjectMap[name].questions.push(q);
   });
 
@@ -150,7 +182,8 @@ function renderKatalogMapelGrid() {
   }
 
   container.innerHTML = subjectList.map(s => {
-    const totalSoal = s.questions.length;
+    const examQuestionCount = (s.exams || []).reduce((total, exam) => total + Number(exam.jumlah_soal || 0), 0);
+    const totalSoal = Math.max(examQuestionCount, s.questions.length);
     const grades = [...new Set([...s.questions.map(q => q.tingkat), ...(s.exams || []).map(exam => exam.tingkat)].filter(Boolean))].sort().join(', ');
     const iconClass = getSubjectIcon(s.name);
 
@@ -191,9 +224,16 @@ function applyFilterKatalogMapel() {
   renderKatalogMapelGrid();
 }
 
+function scheduleFilterDetailSoal() {
+  clearTimeout(detailSoalSearchTimer);
+  detailSoalSearchTimer = setTimeout(() => applyFilterDetailSoal(), 180);
+}
+
 // ================= LEVEL 2: DETAIL BANK SOAL PER MAPEL =================
 function pilihDanBukaMapel(mapelName) {
   currentSelectedMapelName = mapelName;
+  cacheAdminSoalRows = [];
+  const pager = document.getElementById('detailSoalPager'); if (pager) { pager.hidden = true; pager.replaceChildren(); }
 
   document.getElementById('viewKatalogMapel').classList.add('hidden');
   document.getElementById('viewDetailMapelSoal').classList.remove('hidden');
@@ -203,7 +243,10 @@ function pilihDanBukaMapel(mapelName) {
   if (elTitle) elTitle.textContent = mapelName;
 
   populateDetailSoalFilters();
-  applyFilterDetailSoal();
+  const table = document.getElementById('tblDetailSoalMapel');
+  if (table) table.innerHTML = '<tr><td colspan="6" style="padding:28px;text-align:center">Memuat soal mata pelajaran…</td></tr>';
+  const loadVersion = ++adminQuestionLoadVersion;
+  loadSelectedSubjectQuestions(loadVersion);
 }
 
 function kembaliKeKatalogMapel() {
@@ -301,7 +344,7 @@ function populateDetailSoalFilters() {
   }
 }
 
-function applyFilterDetailSoal() {
+function applyFilterDetailSoal(resetPage = true) {
   if (!currentSelectedMapelName) return;
 
   const ting = document.getElementById('fltDetailSoalTingkat')?.value || 'ALL';
@@ -340,6 +383,7 @@ function applyFilterDetailSoal() {
   // Update banner badges
   const countBadge = document.getElementById('lblDetailMapelCountBadge');
   if (countBadge) countBadge.textContent = `${filtered.length} Soal Ditampilkan`;
+  if (resetPage) detailSoalPage = 1;
 
   const gradesSet = [...new Set(filtered.map(s => s.tingkat).filter(Boolean))].sort().join(', ');
   const tingkatBadge = document.getElementById('lblDetailMapelTingkatBadge');
@@ -365,6 +409,7 @@ function applyFilterDetailSoal() {
   if (!tb) return;
 
   if (filtered.length === 0) {
+    const pager = document.getElementById('detailSoalPager'); if (pager) { pager.hidden = true; pager.replaceChildren(); }
     tb.innerHTML = `
       <tr>
         <td colspan="6" align="center" style="padding:36px; color:var(--text-muted);">
@@ -377,10 +422,13 @@ function applyFilterDetailSoal() {
     return;
   }
 
-  tb.innerHTML = filtered.map((s, num) => {
+  const pageSize = 10;
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const pageRows = filtered.slice((detailSoalPage - 1) * pageSize, detailSoalPage * pageSize);
+  tb.innerHTML = pageRows.map((s, num) => {
     return `
       <tr data-question-id="${s.id}">
-        <td style="font-weight:700; color:var(--text-muted); text-align:center;">${num + 1}</td>
+        <td style="font-weight:700; color:var(--text-muted); text-align:center;">${(detailSoalPage - 1) * pageSize + num + 1}</td>
         <td style="max-width:380px;">
           <div class="question-rich-content" dir="auto" style="font-size:13px; color:var(--text-main); line-height:1.5;">
             ${s.pertanyaan}
@@ -418,6 +466,23 @@ function applyFilterDetailSoal() {
     `;
   }).join('');
   typesetQuestionMath(tb);
+  let pager = document.getElementById('detailSoalPager');
+  if (!pager) {
+    pager = document.createElement('nav'); pager.id = 'detailSoalPager'; pager.className = 'table-pagination'; pager.setAttribute('aria-label', 'Navigasi bank soal');
+    tb.closest('.table-responsive')?.insertAdjacentElement('afterend', pager);
+  }
+  if (filtered.length <= pageSize) { pager.hidden = true; pager.replaceChildren(); }
+  else {
+    pager.hidden = false;
+    const info = document.createElement('span'); info.textContent = `Menampilkan ${(detailSoalPage - 1) * pageSize + 1}–${Math.min(detailSoalPage * pageSize, filtered.length)} dari ${filtered.length} soal`;
+    const controls = document.createElement('div');
+    const previous = document.createElement('button'); previous.type = 'button'; previous.textContent = '‹'; previous.disabled = detailSoalPage <= 1; previous.setAttribute('aria-label', 'Halaman sebelumnya');
+    previous.onclick = () => { detailSoalPage--; applyFilterDetailSoal(false); };
+    const label = document.createElement('b'); label.textContent = `Halaman ${detailSoalPage} / ${pageCount}`;
+    const next = document.createElement('button'); next.type = 'button'; next.textContent = '›'; next.disabled = detailSoalPage >= pageCount; next.setAttribute('aria-label', 'Halaman berikutnya');
+    next.onclick = () => { detailSoalPage++; applyFilterDetailSoal(false); };
+    controls.append(previous, label, next); pager.replaceChildren(info, controls);
+  }
 }
 
 function lihatSoalById(id) {
@@ -673,25 +738,18 @@ function confirmQuestionImport() {
         const details = (res.summary?.errors || []).slice(0, 5).map(error => `Baris ${error.row}: ${error.reason}`).join('\n');
         const failed = Number(res.summary?.failed || 0);
         const saved = res.summary?.saved_questions || [];
-        loadDataAdminSoal(bankRows => {
-          const missing = saved.filter(item => {
-            const question = bankRows.find(row => Number(row.id) === Number(item.id) && Number(row.exam_id || row.ujian_id) === Number(item.exam_id));
-            if (!question) return true;
-            return (item.image_fields || []).some(key => !/<img\b/i.test(String(question[key] || '')));
-          });
+        if (saved.length) currentSelectedMapelName = null;
+        loadDataAdminSoal((_, exams) => {
           const lastSaved = saved[saved.length - 1];
-          const target = lastSaved ? bankRows.find(row => Number(row.id) === Number(lastSaved.id)) : null;
-          if (target?.nama_mapel) {
+          const targetExam = lastSaved ? exams.find(row => Number(row.id) === Number(lastSaved.exam_id)) : null;
+          if (targetExam?.nama_mapel) {
             ['fltDetailSoalTingkat','fltDetailSoalUjian','fltDetailSoalKelas'].forEach(id => { const field = document.getElementById(id); if (field) field.value = 'ALL'; });
             const search = document.getElementById('searchDetailSoal'); if (search) search.value = '';
-            pilihDanBukaMapel(target.nama_mapel);
-            document.querySelector(`#tblDetailSoalMapel [data-question-id="${Number(target.id)}"]`)?.scrollIntoView({ block: 'center' });
+            pilihDanBukaMapel(targetExam.nama_mapel);
           }
-          const destination = target ? `\nBank: ${target.nama_mapel} / ${target.nama_ujian} (soal #${target.id}).` : '';
-          const missingNote = missing.length ? `\n${missing.length} soal/gambar belum terlihat setelah bank dimuat ulang. ID: ${missing.map(item => item.id).join(', ')}.` : '';
-          const warning = failed > 0 || missing.length > 0;
-          showCustomAlert(warning ? 'Peringatan Hasil Import' : 'Import Soal Berhasil', res.message + (details ? `\n${details}` : '') + destination + missingNote, warning ? 'warning' : 'success');
-        }, error => showCustomAlert('Import Belum Terverifikasi', `${res.message}\nBank soal gagal dimuat ulang: ${error.message}`, 'warning'));
+          const destination = targetExam ? `\nBank: ${targetExam.nama_mapel} / ${targetExam.nama_ujian} (soal #${lastSaved.id}).` : '';
+          showCustomAlert(failed > 0 ? 'Peringatan Hasil Import' : 'Import Soal Berhasil', res.message + (details ? `\n${details}` : '') + destination, failed > 0 ? 'warning' : 'success');
+        }, error => showCustomAlert('Import Belum Terverifikasi', `${res.message}\nDaftar ujian gagal dimuat ulang: ${error.message}`, 'warning'));
         input.value = '';
       })
       .withFailureHandler(err => {

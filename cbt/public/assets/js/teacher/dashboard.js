@@ -608,7 +608,7 @@
     } catch (_) {
       // Pertahankan data terakhir ketika sinkronisasi latar belakang gagal.
     }
-  }, 15000);
+  }, 30000 + Math.random() * 15000);
 
   window.addEventListener('cbt:data-updated', async () => {
     try {

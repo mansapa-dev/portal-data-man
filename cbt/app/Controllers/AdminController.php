@@ -19,7 +19,7 @@ final class AdminController
  public function makeUpCandidates(Request$r):Response{return Response::json($this->admin->makeUpCandidates());}
  public function followUpSchedules(Request$r):Response{return Response::json($this->admin->followUpSchedules());}
  public function setFollowUpStatus(Request$r):Response{$data=$r->json();$this->admin->setFollowUpStatus((int)$r->attributes['id'],filter_var($data['active']??false,FILTER_VALIDATE_BOOL));return Response::json(null,'Status jadwal berhasil diperbarui.');}
- public function questions(Request$r):Response{return Response::json($this->admin->questions($r->input('exam_id')!==null?(int)$r->input('exam_id'):null));}
+ public function questions(Request$r):Response{return Response::json($this->admin->questions($r->input('exam_id')!==null?(int)$r->input('exam_id'):null,$r->input('subject_id')!==null?(int)$r->input('subject_id'):null));}
  public function saveQuestion(Request$r):Response{$this->admin->saveQuestion($r->json());return Response::json(null,'Soal berhasil disimpan.');}
  public function deleteQuestion(Request$r):Response{$this->admin->deleteQuestion((int)$r->attributes['id']);return Response::json(null,'Soal berhasil dihapus dari bank soal.');}
  public function users(Request$r):Response{return Response::json($this->admin->users());}
