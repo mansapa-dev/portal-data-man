@@ -649,7 +649,7 @@ body {
 
 .sb-item {
   display: flex;
-  text-decoration: none;
+  text-decoration: none !important;
   align-items: center;
   gap: 10px;
   padding: 9px 12px;
@@ -663,6 +663,14 @@ body {
   background: transparent;
   text-align: left;
   width: 100%;
+}
+
+.sb-item:link,
+.sb-item:visited,
+.sb-item:hover,
+.sb-item:active,
+.sb-item:focus {
+  text-decoration: none !important;
 }
 
 .sb-item:hover {
