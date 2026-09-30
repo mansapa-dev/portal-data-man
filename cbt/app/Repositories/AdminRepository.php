@@ -29,6 +29,9 @@ final class AdminRepository
  }
  public function examDeletionInfo(int$id):?array{$s=$this->db->prepare('SELECT e.id,e.name,e.subject_id,(SELECT COUNT(*) FROM questions q WHERE q.exam_id=e.id) question_count,(SELECT COUNT(*) FROM exam_attempts a WHERE a.exam_id=e.id) attempt_count,(SELECT COUNT(*) FROM exam_follow_up_meta m WHERE m.source_exam_id=e.id) follow_up_count FROM exams e WHERE e.id=:id FOR UPDATE');$s->execute(['id'=>$id]);return$s->fetch()?:null;}
  public function deleteExam(int$id):bool{$s=$this->db->prepare('DELETE FROM exams WHERE id=:id');$s->execute(['id'=>$id]);return$s->rowCount()===1;}
+ public function archiveExam(int$id):bool{$s=$this->db->prepare("UPDATE exams SET status='ARCHIVED' WHERE id=:id");$s->execute(['id'=>$id]);return$s->rowCount()===1;}
+ public function restoreExam(int$id):bool{$s=$this->db->prepare("UPDATE exams SET status='INACTIVE' WHERE id=:id AND status='ARCHIVED'");$s->execute(['id'=>$id]);return$s->rowCount()===1;}
+ public function archivedExamIds():array{return array_map('intval',$this->db->query("SELECT id FROM exams WHERE status='ARCHIVED'")->fetchAll(PDO::FETCH_COLUMN));}
  private function hasColumn(string$table,string$column):bool{try{$s=$this->db->query("SHOW COLUMNS FROM ".$table." LIKE ".$this->db->quote($column));return(bool)$s->fetch();}catch(\PDOException){return false;}}
  private function hasTable(string$table):bool{try{$s=$this->db->query('SHOW TABLES LIKE '.$this->db->quote($table));return(bool)$s->fetchColumn();}catch(\PDOException){return false;}}
  public function examForFollowUp(int$id):?array{$s=$this->db->prepare('SELECT e.* FROM exams e WHERE e.id=:id AND EXISTS(SELECT 1 FROM questions q WHERE q.exam_id=e.id AND q.status=\'ACTIVE\') LIMIT 1');$s->execute(['id'=>$id]);return$s->fetch()?:null;}

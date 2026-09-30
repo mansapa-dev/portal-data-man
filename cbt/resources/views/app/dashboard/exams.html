@@ -7,6 +7,7 @@
               <div class="card-subtitle">Pengaturan jadwal pelaksanaan ujian, sesi, target rombel, dan mata pelajaran</div>
             </div>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button id="btnToggleArsipUjian" class="ui-button btn btn-secondary" onclick="toggleArsipUjian()"><i class="fa-solid fa-box-archive"></i> Arsip Ujian</button>
               <button class="ui-button btn btn-secondary" onclick="exportToExcel('tabel_ujian.xlsx', 'Ujian', ['ID', 'Nama Ujian', 'Tingkat', 'Sesi', 'Tanggal', 'Jam (WIB)', 'Target Kelas', 'Durasi', 'Tahun Ajaran', 'Semester', 'Status'], window.cacheUjianExcel || [])"><i class="fa-solid fa-file-excel"></i> Download Excel</button>
               <button class="ui-button btn btn-primary" onclick="bukaModalUjian()"><i class="fa-solid fa-plus"></i> Tambah Ujian</button>
             </div>

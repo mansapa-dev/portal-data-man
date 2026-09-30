@@ -1,5 +1,6 @@
 // Administrator exam schedule management.
 let cacheAdminUjianRows = [];
+let showingArchivedExams = false;
 
 function formatTargetKelas(targetStr, targetNamesStr) {
   if (targetNamesStr && targetNamesStr.trim() !== '' && !targetNamesStr.startsWith('01M1')) {
@@ -192,13 +193,14 @@ function applyFilterUjian() {
           </span>
         </td>
         <td><small style="font-weight:700;">${u.tahun_ajaran || '2025/2026'}</small><br><small style="color:var(--text-muted);">Semester ${u.semester || 'Genap'}</small></td>
-        <td><span class="badge ${u.status_aktif ? 'bg-green' : 'bg-red'}">${u.status_aktif ? 'AKTIF' : 'NONAKTIF'}</span></td>
+        <td><span class="badge ${u.is_archived ? 'bg-gray' : (u.status_aktif ? 'bg-green' : 'bg-red')}">${u.is_archived ? 'ARSIP' : (u.status_aktif ? 'AKTIF' : 'NONAKTIF')}</span></td>
         <td>
-          <button class="btn btn-secondary" style="padding:5px 10px; font-size:11.5px;" onclick="editUjianById(${u.id})">
+          ${u.is_archived ? `<button class="btn btn-primary" style="padding:5px 10px; font-size:11.5px;" onclick="pulihkanUjianById(${u.id})"><i class="fa-solid fa-rotate-left"></i> Pulihkan</button>` : `<button class="btn btn-secondary" style="padding:5px 10px; font-size:11.5px;" onclick="editUjianById(${u.id})">
             <i class="fa-solid fa-pen"></i> Edit
           </button>
           ${Number(u.jumlah_soal || 0) > 0 ? '<button class="btn btn-secondary" style="padding:5px 10px; font-size:11.5px; margin-top:4px;" onclick="duplicateUjianById('+u.id+')" title="Salin jadwal dan '+Number(u.jumlah_soal)+' soal"><i class="fa-regular fa-copy"></i> Duplikat ('+Number(u.jumlah_soal)+')</button>' : ''}
           <button class="btn btn-danger" style="padding:5px 10px; font-size:11.5px; margin-top:4px;" onclick="hapusUjianById(${u.id})" title="Hapus ujian dan seluruh soal di dalamnya"><i class="fa-solid fa-trash"></i> Hapus</button>
+          `}
         </td>
       </tr>
     `;
@@ -223,7 +225,7 @@ function hapusUjianById(id) {
   const exam = (cacheAdminUjianRows || []).find(row => String(row.id) === String(id));
   if (!exam) return showCustomAlert('Ujian Tidak Ditemukan', 'Muat ulang daftar ujian lalu coba kembali.', 'warning');
   const totalSoal = Number(exam.jumlah_soal || 0);
-  showCustomConfirm('Hapus Ujian Permanen', `Hapus "${exam.nama_ujian}" dan ${totalSoal} soal di dalamnya dari bank soal? Tindakan ini tidak dapat dibatalkan.`, () => {
+  showCustomConfirm('Hapus Ujian', `Hapus "${exam.nama_ujian}" dan ${totalSoal} soal di dalamnya dari bank soal? Riwayat hasil siswa yang sudah mengerjakan akan tetap disimpan.`, () => {
     showLoading('Menghapus ujian dan bank soal...');
     cbtApi.withSuccessHandler(result => {
       hideLoading();
@@ -248,13 +250,32 @@ function loadDataAdminUjian() {
   const tb = document.getElementById('tblAdminUjian');
   if (tb) tb.innerHTML = `<tr><td colspan="8" align="center" style="padding:24px;">Memuat data jadwal ujian...</td></tr>`;
 
+  const request = showingArchivedExams ? 'getArsipUjianList' : 'getAdminUjianList';
   cbtApi
     .withSuccessHandler(rows => {
       cacheAdminUjianRows = Array.isArray(rows) ? rows : (rows?.data || []);
       populateAdminUjianFilters();
       applyFilterUjian();
     })
-    .getAdminUjianList(stPengelola);
+    [request](stPengelola);
+}
+
+function toggleArsipUjian() {
+  showingArchivedExams = !showingArchivedExams;
+  const button = document.getElementById('btnToggleArsipUjian');
+  if (button) button.innerHTML = showingArchivedExams ? '<i class="fa-solid fa-arrow-left"></i> Kembali ke Ujian' : '<i class="fa-solid fa-box-archive"></i> Arsip Ujian';
+  loadDataAdminUjian();
+}
+
+function pulihkanUjianById(id) {
+  const exam = (cacheAdminUjianRows || []).find(row => String(row.id) === String(id));
+  if (!exam) return;
+  showCustomConfirm('Pulihkan Ujian', `Pulihkan "${exam.nama_ujian}" beserta bank soalnya sebagai ujian nonaktif?`, () => {
+    showLoading('Memulihkan ujian...');
+    cbtApi.withSuccessHandler(result => { hideLoading(); showCustomAlert('Ujian Dipulihkan', result.message, 'success'); loadDataAdminUjian(); })
+      .withFailureHandler(error => { hideLoading(); showCustomAlert('Gagal Memulihkan', error.message, 'error'); })
+      .pulihkanUjianAdmin(stPengelola, id);
+  });
 }
 
 function bukaModalUjian(data = null, duplicate = false) {

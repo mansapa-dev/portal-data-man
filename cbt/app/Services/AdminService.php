@@ -12,7 +12,8 @@ final class AdminService
  public function adminLiveSessions():array{return$this->liveSessionPayload($this->repo->allExamIds());}
  public function teacherLiveSessions(int $teacherId,int$userId=0):array{$ids=$userId>0&&$this->repo->personnelIsProctor($userId)?$this->repo->allExamIds():($userId>0?$this->repo->personnelExamIds($userId):$this->repo->teacherExamIds($teacherId));return $this->liveSessionPayload($ids);}
  public function references():array{return$this->repo->references();}
- public function exams():array{return$this->repo->exams();}
+ public function exams():array{$archived=array_flip($this->repo->archivedExamIds());return array_values(array_filter($this->repo->exams(),fn(array$exam):bool=>!isset($archived[(int)$exam['id']])));}
+ public function archivedExams():array{$archived=array_flip($this->repo->archivedExamIds());return array_values(array_map(function(array$exam):array{$exam['is_archived']=true;return$exam;},array_filter($this->repo->exams(),fn(array$exam):bool=>isset($archived[(int)$exam['id']]))));}
  public function saveExam(array$d,int$actor):void
  {
   foreach(['nama_ujian','tingkat','durasi_menit']as$key)if(trim((string)($d[$key]??''))==='')throw new DomainException('Data ujian belum lengkap.',422);
@@ -25,9 +26,14 @@ final class AdminService
  public function deleteExam(int$id):array
  {
   if($id<=0)throw new DomainException('Ujian tidak valid.',422);
-  $deleted=$this->db->transaction(function()use($id){$exam=$this->repo->examDeletionInfo($id)??throw new DomainException('Ujian tidak ditemukan.',404);if((int)$exam['attempt_count']>0)throw new DomainException('Ujian tidak dapat dihapus karena sudah memiliki sesi atau hasil siswa. Nonaktifkan ujian untuk mempertahankan riwayat.',409);if((int)$exam['follow_up_count']>0)throw new DomainException('Ujian tidak dapat dihapus karena masih menjadi sumber ujian susulan atau remedial.',409);if(!$this->repo->deleteExam($id))throw new DomainException('Ujian gagal dihapus.',409);return$exam;});
+  $deleted=$this->db->transaction(function()use($id){$exam=$this->repo->examDeletionInfo($id)??throw new DomainException('Ujian tidak ditemukan.',404);$archive=(int)$exam['attempt_count']>0||(int)$exam['follow_up_count']>0;$ok=$archive?$this->repo->archiveExam($id):$this->repo->deleteExam($id);if(!$ok)throw new DomainException('Ujian gagal dihapus.',409);$exam['archived']=$archive;return$exam;});
   $this->forgetQuestionBanks([$id]);$this->forgetQuestionLists([$id]);$subjectId=(int)($deleted['subject_id']??0);if($subjectId>0)$this->forgetQuestionSubject($subjectId);RedisCache::forget('admin:dashboard:v1');
-  return['id'=>$id,'name'=>$deleted['name'],'deleted_questions'=>(int)$deleted['question_count']];
+  return['id'=>$id,'name'=>$deleted['name'],'deleted_questions'=>(int)$deleted['question_count'],'history_preserved'=>(bool)$deleted['archived']];
+ }
+ public function restoreExam(int$id):void
+ {
+  if($id<=0||!$this->repo->restoreExam($id))throw new DomainException('Arsip ujian tidak ditemukan atau sudah dipulihkan.',404);
+  $this->forgetQuestionBanks([$id]);$this->forgetQuestionLists([$id]);RedisCache::forget('admin:dashboard:v1');
  }
  public function scheduleFollowUpExam(array$d,int$actor):array
  {
@@ -61,7 +67,7 @@ final class AdminService
   if($examId<=0)throw new DomainException('Ujian tidak valid.',422);
   return$this->db->transaction(function()use($examId){$attempts=$this->repo->activeAttemptsForExam($examId,true);if(!$this->repo->deactivateExam($examId)&&!$attempts)throw new DomainException('Ujian tidak ditemukan.',404);$this->repo->terminateAttempts(array_column($attempts,'id'));return$attempts;});
  }
- public function questions(?int$id,?int$subjectId=null):array{$key='admin:questions:v2:exam:'.($id??0).':subject:'.($subjectId??0);return RedisCache::remember($key,30,fn()=>array_map([\Cbt\Support\QuestionHtml::class,'row'],$this->repo->questions($id,$subjectId)),true);}
+ public function questions(?int$id,?int$subjectId=null):array{$key='admin:questions:v2:exam:'.($id??0).':subject:'.($subjectId??0);return RedisCache::remember($key,30,function()use($id,$subjectId){$archived=array_flip($this->repo->archivedExamIds());$rows=array_filter($this->repo->questions($id,$subjectId),fn(array$row):bool=>!isset($archived[(int)$row['exam_id']]));return array_map([\Cbt\Support\QuestionHtml::class,'row'],array_values($rows));},true);}
  public function saveQuestion(array$d):void
  {
   foreach(['ujian_id','pertanyaan','jawaban_benar']as$key)if(trim((string)($d[$key]??''))==='')throw new DomainException('Data soal belum lengkap.',422);

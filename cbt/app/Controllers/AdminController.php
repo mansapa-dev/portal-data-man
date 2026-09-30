@@ -12,8 +12,10 @@ final class AdminController
  public function terminateExamSession(Request$r):Response{$attempts=$this->admin->terminateExamSession((int)$r->attributes['id']);$processed=0;foreach($attempts as$attempt){$this->scoring->submit((int)$attempt['student_id'],(int)$attempt['exam_id']);$processed++;}return Response::json(['terminated'=>$processed],'Sesi ujian diakhiri dan seluruh hasil aktif telah diproses.');}
  public function references(Request$r):Response{return Response::json($this->admin->references());}
  public function exams(Request$r):Response{return Response::json($this->admin->exams());}
+ public function archivedExams(Request$r):Response{return Response::json($this->admin->archivedExams());}
  public function saveExam(Request$r):Response{$this->admin->saveExam($r->json(),(int)$_SESSION['auth']['user_id']);return Response::json(null,'Ujian berhasil disimpan.');}
- public function deleteExam(Request$r):Response{$deleted=$this->admin->deleteExam((int)$r->attributes['id']);return Response::json($deleted,'Ujian dan '.$deleted['deleted_questions'].' soal di dalamnya berhasil dihapus.');}
+ public function deleteExam(Request$r):Response{$deleted=$this->admin->deleteExam((int)$r->attributes['id']);$message=$deleted['history_preserved']?'Ujian dan soalnya telah dihapus dari daftar. Riwayat hasil siswa tetap tersimpan.':'Ujian dan '.$deleted['deleted_questions'].' soal di dalamnya berhasil dihapus.';return Response::json($deleted,$message);}
+ public function restoreExam(Request$r):Response{$this->admin->restoreExam((int)$r->attributes['id']);return Response::json(null,'Ujian berhasil dipulihkan sebagai nonaktif beserta bank soalnya.');}
  public function scheduleFollowUpExam(Request$r):Response{$exam=$this->admin->scheduleFollowUpExam($r->json(),(int)$_SESSION['auth']['user_id']);return Response::json($exam,'Jadwal ujian susulan/remedial berhasil dibuat.');}
  public function followUpCandidates(Request$r):Response{return Response::json($this->admin->followUpCandidates());}
  public function approveRetakeCandidates(Request$r):Response{$data=$r->json();$count=$this->admin->approveRetakeCandidates((array)($data['student_ids']??[]),(int)($data['exam_id']??0),(int)$_SESSION['auth']['user_id']);return Response::json(['approved'=>$count],'Kandidat ujian ulang telah disetujui.');}
