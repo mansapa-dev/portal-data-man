@@ -7,6 +7,14 @@
   let activeSection = 'overview';
   let capabilities = { teacher: false, proctor: false };
 
+  document.querySelectorAll('button.nav-item[data-section]').forEach(button => {
+    const link = document.createElement('a');
+    for (const attribute of button.attributes) if (attribute.name !== 'type') link.setAttribute(attribute.name, attribute.value);
+    link.href = `#section=${encodeURIComponent(button.dataset.section)}`;
+    link.innerHTML = button.innerHTML;
+    button.replaceWith(link);
+  });
+
   const el = (tag, text, className) => {
     const node = document.createElement(tag);
     if (text !== undefined) node.textContent = String(text);
@@ -503,6 +511,7 @@
   }
 
   async function openSection(section) {
+    history.replaceState(null, '', `${location.pathname}${location.search}#section=${encodeURIComponent(section)}`);
     if (section === 'violations' && capabilities.proctor) {
       notice.style.color = 'var(--muted)';
       notice.textContent = 'Memuat log pelanggaran terbaru...';
@@ -553,8 +562,10 @@
     if (avatar) avatar.textContent = teacherLabel.trim().charAt(0).toUpperCase() || 'G';
     if (welcomeName) welcomeName.textContent = teacherLabel;
     document.querySelector('[data-section="admin-chat"]').hidden=!capabilities.proctor;
-    if(proctorOnly){data={ujianList:[],hasilList:[],pelanggaranList:[]};document.querySelectorAll('.nav-item').forEach(button=>{button.hidden=!['live','support','admin-chat'].includes(button.dataset.section)&&button.dataset.section!=='violations';});document.querySelectorAll('.nav-label').forEach(label=>label.hidden=true);document.querySelector('.welcome .eyebrow').textContent='DASHBOARD PETUGAS PIKET CBT';document.querySelector('.welcome p').textContent='Pantau sesi ujian, tangani pelanggaran dan tiket peserta, serta berkomunikasi dengan admin sekolah.';document.querySelector('.teacher-user-footer small').textContent='Petugas Piket Ujian';document.querySelector('.teacher-identity small').textContent='Portal Petugas';render('live');}
-    else{data = (await api('api/teacher/dashboard')).data;render('overview');}
+    const requested=new URLSearchParams(location.hash.slice(1)).get('section');
+    const requestedLink=()=>Array.from(document.querySelectorAll('.nav-item[data-section]:not([hidden])')).find(link=>link.dataset.section===requested);
+    if(proctorOnly){data={ujianList:[],hasilList:[],pelanggaranList:[]};document.querySelectorAll('.nav-item').forEach(button=>{button.hidden=!['live','support','admin-chat'].includes(button.dataset.section)&&button.dataset.section!=='violations';});document.querySelectorAll('.nav-label').forEach(label=>label.hidden=true);document.querySelector('.welcome .eyebrow').textContent='DASHBOARD PETUGAS PIKET CBT';document.querySelector('.welcome p').textContent='Pantau sesi ujian, tangani pelanggaran dan tiket peserta, serta berkomunikasi dengan admin sekolah.';document.querySelector('.teacher-user-footer small').textContent='Petugas Piket Ujian';document.querySelector('.teacher-identity small').textContent='Portal Petugas';await openSection(requestedLink()?requested:'live');}
+    else{data = (await api('api/teacher/dashboard')).data;await openSection(requestedLink()?requested:'overview');}
   } catch (error) {
     notice.textContent = error.message;
   }
@@ -570,7 +581,9 @@
     menuButton.setAttribute('aria-expanded', 'false');
   };
 
-  document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', () => {
+  document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', (event) => {
+    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
     openSection(button.dataset.section);
     if (mobileLayout.matches) {
       closeMobileSidebar();

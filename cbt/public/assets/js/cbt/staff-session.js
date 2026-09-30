@@ -1,4 +1,17 @@
 // Staff authentication, dashboard navigation, session restoration, and Portal references.
+function prepareAdminSidebarLinks() {
+  document.querySelectorAll('button.sb-item[onclick*="switchDashTab"]').forEach(button => {
+    const match = (button.getAttribute('onclick') || '').match(/switchDashTab\('([^']+)'/);
+    if (!match) return;
+    const link = document.createElement('a');
+    for (const attribute of button.attributes) if (attribute.name !== 'type') link.setAttribute(attribute.name, attribute.value);
+    link.href = `#menu=${encodeURIComponent(match[1])}`;
+    link.innerHTML = button.innerHTML;
+    button.replaceWith(link);
+  });
+}
+prepareAdminSidebarLinks();
+
 document.getElementById('formLoginPengelola').addEventListener('submit', function(e){
   e.preventDefault();
   const u = document.getElementById('inUserPengelola').value;
@@ -81,6 +94,9 @@ function initDashboardPengelola(nama, role) {
     loadDataGuru();
   }
   switchView('viewDashboardPengelola');
+  const requestedTab = new URLSearchParams(location.hash.slice(1)).get('menu');
+  const requestedLink = requestedTab ? document.querySelector(`.sb-item[href="#menu=${encodeURIComponent(requestedTab)}"]`) : null;
+  if (requestedLink && !requestedLink.closest('.hidden') && document.getElementById(requestedTab)) switchDashTab(requestedTab, requestedLink);
 }
 
 const tabTitles = {
@@ -111,6 +127,7 @@ function switchDashTab(tabId, btnEl) {
   window.scrollTo({top: 0, left: 0, behavior: 'auto'});
   document.querySelectorAll('.sb-item').forEach(b => b.classList.remove('active'));
   if (btnEl) btnEl.classList.add('active');
+  history.replaceState(null, '', `${location.pathname}${location.search}#menu=${encodeURIComponent(tabId)}`);
   if (window.innerWidth <= 900) closeMobileSidebar();
 
   const elCurrentTab = document.getElementById('topbarCurrentTab');

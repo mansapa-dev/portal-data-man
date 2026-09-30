@@ -649,6 +649,7 @@ body {
 
 .sb-item {
   display: flex;
+  text-decoration: none;
   align-items: center;
   gap: 10px;
   padding: 9px 12px;
