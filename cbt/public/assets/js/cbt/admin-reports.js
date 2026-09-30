@@ -210,7 +210,7 @@ function renderDataAdminKartu(rows) {
   const cardsHtml=ready.map(s => `
         <div class="card-ujian-print" style="border: 2px solid var(--border); padding: 14px; border-radius: 10px; background: white; margin-bottom: 12px;">
           <div class="card-print-letterhead" style="display:flex; align-items:center; gap:8px; border-bottom:2px solid var(--primary); padding-bottom:6px; margin-bottom:10px;">
-            <img src="assets/img/logo-man1-palembang.png" alt="Lambang MAN 1 Palembang" style="width:34px; height:34px; object-fit:contain;">
+            <img src="assets/img/logo-man1-palembang-print.jpg" alt="Lambang MAN 1 Palembang" style="width:34px; height:34px; object-fit:contain;">
             <div style="flex:1;"><b style="display:block; font-size:12px; color:var(--primary);">KARTU PESERTA UJIAN</b><span style="font-size:10px; font-weight:700;">MADRASAH ALIYAH NEGERI 1 PALEMBANG</span></div>
           </div>
           <table style="font-size:11px; width:100%;">

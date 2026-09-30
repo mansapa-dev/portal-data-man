@@ -225,7 +225,7 @@
 
       // Kop surat cetak
       const printHeader = el('header', undefined, 'teacher-print-header');
-      printHeader.innerHTML = '<img src="../assets/img/logo-man1-palembang.png" alt="Lambang MAN 1 Palembang"><div><h4>KEMENTERIAN AGAMA REPUBLIK INDONESIA</h4><h3>KANTOR KEMENTERIAN AGAMA KOTA PALEMBANG</h3><h2>MADRASAH ALIYAH NEGERI 1 PALEMBANG</h2><p>Jln. Gub. H. Bastari (Jln. Pendidikan), Jakabaring, Palembang, Sumatera Selatan</p></div>';
+      printHeader.innerHTML = '<img src="../assets/img/logo-man1-palembang-print.jpg" alt="Lambang MAN 1 Palembang"><div><h4>KEMENTERIAN AGAMA REPUBLIK INDONESIA</h4><h3>KANTOR KEMENTERIAN AGAMA KOTA PALEMBANG</h3><h2>MADRASAH ALIYAH NEGERI 1 PALEMBANG</h2><p>Jln. Gub. H. Bastari (Jln. Pendidikan), Jakabaring, Palembang, Sumatera Selatan</p></div>';
 
       // ---- Filter bar ----
       const controls = el('div', undefined, 'teacher-result-controls');

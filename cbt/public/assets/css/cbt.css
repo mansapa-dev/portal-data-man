@@ -1558,6 +1558,12 @@ tr:hover td {
 @media print {
   @page { size: A4 portrait; margin: 16mm 18mm; }
 
+  html,
+  body {
+    print-color-adjust: economy;
+    -webkit-print-color-adjust: economy;
+  }
+
   body * {
     visibility: hidden;
   }
