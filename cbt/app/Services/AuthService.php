@@ -9,14 +9,20 @@ final class AuthService
     public function __construct(private StudentRepository $students, private UserRepository $users) {}
     public function studentLogin(string $nisn, string $pin): array
     {
-        $nisn=preg_replace('/\s+/','',trim($nisn)) ?? '';
-        if(!preg_match('/^\d{8,20}$/',$nisn) || $pin==='') throw new DomainException('NISN atau PIN tidak valid.',422);
+        $nisn=$this->normalizeStudentDigits($nisn);
+        $pin=$this->normalizeStudentDigits($pin);
+        if(!preg_match('/^\d{8,20}$/',$nisn) || !preg_match('/^\d{4,12}$/',$pin)) throw new DomainException('NISN atau PIN tidak valid.',422);
         $student=$this->students->findActiveByNisn($nisn);
         if(!$student || $student['cbt_status']!=='ACTIVE' || !$student['pin_hash'] || !password_verify($pin,$student['pin_hash'])) throw new DomainException('NISN atau PIN salah.',401);
         Session::regenerate();
         unset($_SESSION['auth']);
         $_SESSION['student']=['student_id'=>(int)$student['id'],'portal_student_id'=>$student['portal_student_id'],'nisn'=>$student['nisn']];
         return ['nisn'=>$student['nisn'],'nama'=>$student['name_snapshot'],'kelas'=>$student['class_snapshot'],'tingkat'=>$student['grade_snapshot']];
+    }
+    private function normalizeStudentDigits(string$value):string
+    {
+        $value=strtr($value,['０'=>'0','１'=>'1','２'=>'2','３'=>'3','４'=>'4','５'=>'5','６'=>'6','７'=>'7','８'=>'8','９'=>'9','٠'=>'0','١'=>'1','٢'=>'2','٣'=>'3','٤'=>'4','٥'=>'5','٦'=>'6','٧'=>'7','٨'=>'8','٩'=>'9','۰'=>'0','۱'=>'1','۲'=>'2','۳'=>'3','۴'=>'4','۵'=>'5','۶'=>'6','۷'=>'7','۸'=>'8','۹'=>'9']);
+        return preg_replace('/[\s\x{00A0}\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{2069}\x{FEFF}]+/u','',$value)??'';
     }
     public function staffLogin(string $username,string $password):array
     {

@@ -3,8 +3,15 @@ let cacheStudentJadwal = [];
 
 document.getElementById('formLoginSiswa').addEventListener('submit', function(e) {
   e.preventDefault();
-  const no = document.getElementById('inNoUjian').value;
-  const pin = document.getElementById('inPin').value;
+  const normalizeStudentDigits = value => String(value || '').normalize('NFKC')
+    .replace(/[٠-٩]/g, digit => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
+    .replace(/[۰-۹]/g, digit => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
+    .replace(/[\s\u00a0\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]+/g, '');
+  const noField = document.getElementById('inNoUjian');
+  const pinField = document.getElementById('inPin');
+  const no = normalizeStudentDigits(noField.value);
+  const pin = normalizeStudentDigits(pinField.value);
+  noField.value = no; pinField.value = pin;
   const alert = document.getElementById('alertLoginSiswa'); alert.className = 'alert';
   
   showLoading('Verifikasi Kredensial...');
@@ -23,7 +30,10 @@ document.getElementById('formLoginSiswa').addEventListener('submit', function(e)
     })
     .withFailureHandler(err => {
       hideLoading();
-      alert.className = 'alert error'; alert.textContent = 'Gagal terhubung ke server: ' + err.message;
+      alert.className = 'alert error';
+      alert.textContent = Number(err.status) >= 400 && Number(err.status) < 500
+        ? err.message
+        : 'Gagal terhubung ke server: ' + err.message;
     })
     .loginSiswaAPI(no, pin);
 });

@@ -12,14 +12,14 @@
           <label class="ui-label" for="inNoUjian">Nomor Peserta (NISN)</label>
           <div class="input-wrapper">
             <i class="fa-regular fa-id-badge left-icon"></i>
-            <input type="text" id="inNoUjian" placeholder="Masukkan NISN" inputmode="numeric" required autocomplete="off" class="ui-control">
+            <input type="text" id="inNoUjian" placeholder="Masukkan NISN" inputmode="numeric" pattern="[0-9]*" maxlength="20" required autocomplete="off" autocapitalize="off" spellcheck="false" class="ui-control">
           </div>
         </div>
         <div class="input-group">
           <label class="ui-label" for="inPin">PIN Ujian (4 Digit)</label>
           <div class="input-wrapper">
             <i class="fa-solid fa-key left-icon"></i>
-            <input type="password" id="inPin" placeholder="••••" maxlength="4" required autocomplete="off" class="ui-control">
+            <input type="password" id="inPin" placeholder="••••" inputmode="numeric" pattern="[0-9]*" maxlength="12" required autocomplete="one-time-code" autocapitalize="off" spellcheck="false" class="ui-control">
             <button type="button" class="toggle-pw" aria-label="Tampilkan atau sembunyikan PIN" onclick="const x=document.getElementById('inPin'); x.type=x.type==='password'?'text':'password'; this.querySelector('i').classList.toggle('fa-eye'); this.querySelector('i').classList.toggle('fa-eye-slash');"><i class="fa-regular fa-eye"></i></button>
           </div>
         </div>
