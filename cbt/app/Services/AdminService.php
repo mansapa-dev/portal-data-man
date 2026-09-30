@@ -4,6 +4,7 @@ namespace Cbt\Services;
 use Cbt\Core\Database;
 use Cbt\Exceptions\DomainException;
 use Cbt\Repositories\AdminRepository;
+use Cbt\Core\RedisCache;
 final class AdminService
 {
  public function __construct(private Database$db,private AdminRepository$repo){}
@@ -33,13 +34,14 @@ final class AdminService
   $sourceEnds=new \DateTimeImmutable((string)$source['ends_at'],$utc);
   if($start->setTimezone($utc)<$sourceEnds)throw new DomainException('Jadwal ujian lanjutan harus dimulai setelah ujian asal selesai.',422);
   $name=trim((string)($d['name']??''));if($name==='')$name=$type==='REMEDIAL'?'Remedial - '.$source['name']:'Susulan - '.$source['name'];
-  return $this->db->transaction(function()use($source,$sourceId,$studentIds,$name,$type,$start,$end,$utc,$actor,$d){$result=$this->repo->cloneFollowUpExam($source,$studentIds,$name,$type,$start->setTimezone($utc)->format('Y-m-d H:i:s'),$end->setTimezone($utc)->format('Y-m-d H:i:s'),$actor,filter_var($d['active']??true,FILTER_VALIDATE_BOOL),trim((string)($d['room']??'')),trim((string)($d['notes']??'')));$this->repo->copyTeacherAssignments($sourceId,(int)$result['id'],$actor);return$result;});
+  $result=$this->db->transaction(function()use($source,$sourceId,$studentIds,$name,$type,$start,$end,$utc,$actor,$d){$result=$this->repo->cloneFollowUpExam($source,$studentIds,$name,$type,$start->setTimezone($utc)->format('Y-m-d H:i:s'),$end->setTimezone($utc)->format('Y-m-d H:i:s'),$actor,filter_var($d['active']??true,FILTER_VALIDATE_BOOL),trim((string)($d['room']??'')),trim((string)($d['notes']??'')));$this->repo->copyTeacherAssignments($sourceId,(int)$result['id'],$actor);return$result;});$this->forgetFollowUpCandidates();return$result;
  }
- public function makeUpCandidates():array{return$this->repo->makeUpCandidates();}
- public function followUpCandidates():array{return$this->repo->followUpCandidates();}
- public function approveRetakeCandidates(array$studentIds,int$examId,int$actor):int{$ids=array_values(array_unique(array_filter(array_map('intval',$studentIds))));if(!$examId||!$ids)throw new DomainException('Pilih minimal satu kandidat ujian ulang.',422);return$this->db->transaction(fn()=>$this->repo->approveRetakeCandidates($examId,$ids,$actor));}
+ public function makeUpCandidates():array{return RedisCache::remember('admin:make-up-candidates:v1',20,fn()=>$this->repo->makeUpCandidates());}
+ public function followUpCandidates():array{return RedisCache::remember('admin:retake-candidates:v1',20,fn()=>$this->repo->followUpCandidates());}
+ public function approveRetakeCandidates(array$studentIds,int$examId,int$actor):int{$ids=array_values(array_unique(array_filter(array_map('intval',$studentIds))));if(!$examId||!$ids)throw new DomainException('Pilih minimal satu kandidat ujian ulang.',422);$count=$this->db->transaction(fn()=>$this->repo->approveRetakeCandidates($examId,$ids,$actor));$this->forgetFollowUpCandidates();return$count;}
  public function followUpSchedules():array{return$this->repo->followUpSchedules();}
- public function setFollowUpStatus(int$id,bool$active):void{try{$this->db->transaction(fn()=>$this->repo->setFollowUpStatus($id,$active));}catch(\UnexpectedValueException$e){throw new DomainException($e->getMessage(),404);}}
+ public function setFollowUpStatus(int$id,bool$active):void{try{$this->db->transaction(fn()=>$this->repo->setFollowUpStatus($id,$active));$this->forgetFollowUpCandidates();}catch(\UnexpectedValueException$e){throw new DomainException($e->getMessage(),404);}}
+ private function forgetFollowUpCandidates():void{RedisCache::forget('admin:make-up-candidates:v1');RedisCache::forget('admin:retake-candidates:v1');}
  public function terminateStudentSession(string$publicId):array
  {
   if(!preg_match('/^[0-9A-HJKMNP-TV-Z]{26}$/',$publicId))throw new DomainException('Sesi siswa tidak valid.',422);
@@ -61,9 +63,12 @@ final class AdminService
   foreach($imageFields as$key)if(!preg_match('~<img\b~i',(string)($question[$key]??'')))throw new DomainException("Gambar {$key} hilang saat diproses server; soal tidak disimpan.",422);
   $duplicate=$this->findDuplicateQuestion((int)$question['ujian_id'],(string)$question['pertanyaan'],!empty($question['id'])?(int)$question['id']:null);
   if($duplicate!==null)throw new DomainException("Peringatan: soal duplikat dengan soal #{$duplicate} pada ujian yang sama.",409);
+  $previousExam=!empty($question['id'])?$this->repo->activeQuestionExamId((int)$question['id']):null;
   $this->repo->saveQuestion($question);
+  $this->forgetQuestionBanks(array_filter([(int)$question['ujian_id'],$previousExam]));
  }
- public function deleteQuestion(int$id):void{if($id<=0||!$this->repo->disableQuestion($id))throw new DomainException('Soal tidak ditemukan atau sudah dihapus.',404);}
+ public function deleteQuestion(int$id):void{$examId=$id>0?$this->repo->activeQuestionExamId($id):null;if($examId===null||!$this->repo->disableQuestion($id))throw new DomainException('Soal tidak ditemukan atau sudah dihapus.',404);$this->forgetQuestionBanks([$examId]);}
+ private function forgetQuestionBanks(array$examIds):void{foreach(array_unique(array_map('intval',$examIds))as$examId)if($examId>0){RedisCache::forget('exam:question-bank:v1:'.$examId.':snapshot');RedisCache::forget('exam:question-bank:v1:'.$examId.':public');}}
  public function users():array{return$this->repo->users();}
  public function saveUser(array$d):void{if(!preg_match('/^[A-Za-z0-9._-]{4,100}$/',(string)($d['username']??'')))throw new DomainException('Username administrator tidak valid.',422);if(empty($d['id'])&&strlen((string)($d['password']??''))<12)throw new DomainException('Password akun baru minimal 12 karakter.',422);if(!empty($d['password'])&&strlen((string)$d['password'])<12)throw new DomainException('Password minimal 12 karakter.',422);$role=strtoupper((string)($d['role']??'ADMIN'));if($role!=='ADMIN')throw new DomainException('Akun guru dikelola Portal Data dan tidak dapat dibuat di CBT.',422);$d['role']='ADMIN';$d['status_aktif']=filter_var($d['status_aktif']??false,FILTER_VALIDATE_BOOL);try{$this->repo->saveUser($d);}catch(\UnexpectedValueException$e){throw new DomainException($e->getMessage(),422);}}
  public function assignments():array{return$this->repo->assignments();}
@@ -96,6 +101,7 @@ final class AdminService
    $seen[$exam][$fingerprint]=['kind'=>'row','row'=>(int)($row['__excel_row']??($i+2))];$row['__image_fields']=$imageFields;$valid[]=$row;
   }catch(\Throwable$e){$errors[]=['row'=>(int)($row['__excel_row']??($i+2)),'reason'=>$e->getMessage()];}}
   $saved=$valid?$this->db->transaction(function()use($valid){$result=[];foreach($valid as$row){$id=$this->repo->saveQuestion($row);if(!$this->repo->questionStoredAs($id,(int)$row['ujian_id'],(string)$row['pertanyaan']))throw new \RuntimeException("Soal #{$id} tidak ditemukan lagi setelah disimpan.");$result[]=['row'=>(int)($row['__excel_row']??0),'id'=>$id,'exam_id'=>(int)$row['ujian_id'],'image_fields'=>$row['__image_fields'],'created'=>empty($row['id']),'recreated'=>!empty($row['__recreated'])];}return$result;}):[];
+  $this->forgetQuestionBanks(array_column($saved,'exam_id'));
   return['total'=>count($rows),'inserted'=>count($saved),'created'=>count(array_filter($saved,static fn(array$item):bool=>$item['created'])),'updated'=>count(array_filter($saved,static fn(array$item):bool=>!$item['created'])),'recreated'=>count(array_filter($saved,static fn(array$item):bool=>$item['recreated'])),'saved_questions'=>$saved,'failed'=>count($errors),'errors'=>$errors];
  }
  private function validateQuestionType(array$d):array

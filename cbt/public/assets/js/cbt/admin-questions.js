@@ -1,5 +1,6 @@
 // Administrator question bank management (2-Level Subject Catalog & Detail View).
 let cacheAdminSoalRows = [], cacheAdminSoalUjianRows = [], currentSelectedMapelName = null;
+let adminQuestionLoadVersion = 0;
 let attachedGambarSoalBase64 = '';
 let pendingQuestionImport = null;
 function escapeQuestionUiText(value) {
@@ -41,6 +42,7 @@ function getSubjectIcon(name) {
   return 'fa-book-open';
 }
 function loadDataAdminSoal(onLoaded = null, onFailure = null) {
+  const loadVersion = ++adminQuestionLoadVersion;
   loadPortalReferences(() => {
     if (currentSelectedMapelName) {
       applyFilterDetailSoal();
@@ -58,10 +60,11 @@ function loadDataAdminSoal(onLoaded = null, onFailure = null) {
       </div>`;
   }
 
-  cbtApi.withSuccessHandler(exams => {cacheAdminSoalUjianRows=Array.isArray(exams)?exams:(exams?.data||[]);if(currentSelectedMapelName){populateDetailSoalFilters();applyFilterDetailSoal();}else renderKatalogMapelGrid();}).withFailureHandler(()=>{cacheAdminSoalUjianRows=[];}).getAdminUjianList(stPengelola);
+  cbtApi.withSuccessHandler(exams => {if(loadVersion!==adminQuestionLoadVersion)return;cacheAdminSoalUjianRows=Array.isArray(exams)?exams:(exams?.data||[]);if(currentSelectedMapelName){populateDetailSoalFilters();applyFilterDetailSoal();}else renderKatalogMapelGrid();}).withFailureHandler(()=>{if(loadVersion===adminQuestionLoadVersion)cacheAdminSoalUjianRows=[];}).getAdminUjianList(stPengelola);
 
   cbtApi
     .withSuccessHandler(rows => {
+      if (loadVersion !== adminQuestionLoadVersion) return;
       try {
         cacheAdminSoalRows = Array.isArray(rows) ? rows : [];
         if(currentSelectedMapelName){populateDetailSoalFilters();applyFilterDetailSoal();}else renderKatalogMapelGrid();
@@ -72,6 +75,7 @@ function loadDataAdminSoal(onLoaded = null, onFailure = null) {
       }
     })
     .withFailureHandler(error => {
+      if (loadVersion !== adminQuestionLoadVersion) return;
       cacheAdminSoalRows = [];
       if (gridContainer) {
         gridContainer.innerHTML = `

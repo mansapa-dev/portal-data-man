@@ -135,6 +135,7 @@ function switchDashTab(tabId, btnEl) {
 }
 
 function refreshActiveDashboardTab() {
+  if (dashboardRefreshInFlight) return false;
   if (!stPengelola || document.getElementById('viewDashboardPengelola')?.classList.contains('hidden')) return false;
   if (document.hidden || document.querySelector('.modal.show')) return false;
   const focused = document.activeElement;
@@ -164,22 +165,24 @@ function refreshActiveDashboardTab() {
   };
   const loader = loaders[active.id];
   if (typeof loader !== 'function') return false;
-  loader();
+  dashboardRefreshInFlight = true;
+  try { loader(); } finally { setTimeout(() => { dashboardRefreshInFlight = false; }, 5000); }
   return true;
 }
 
 async function loadAdminStaffChat(){const root=document.getElementById('adminStaffChatRoot');if(!root||!window.CbtStaffAdminChat)return;const me=await fetch('api/auth/me',{credentials:'same-origin'}).then(r=>r.json());const token=me.data.csrf_token;const client=async(path,method='GET',body)=>{const response=await fetch(path,{method,credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':token},body:body===undefined?undefined:JSON.stringify(body)});const result=await response.json();if(!response.ok)throw new Error(result.message||'Permintaan gagal.');return result;};window.CbtStaffAdminChat.mount(root,client,{admin:true});}
 
 let dashboardRefreshTimer = null;
+let dashboardRefreshInFlight = false;
 function scheduleDashboardRefresh(delay = 500) {
   clearTimeout(dashboardRefreshTimer);
   dashboardRefreshTimer = setTimeout(() => {
-    if (!refreshActiveDashboardTab()) scheduleDashboardRefresh(1500);
+    refreshActiveDashboardTab();
   }, delay);
 }
 
 window.addEventListener('cbt:data-updated', () => scheduleDashboardRefresh());
-setInterval(() => refreshActiveDashboardTab(), 20000);
+setInterval(() => refreshActiveDashboardTab(), 45000);
 
 function loadDataAdminLiveSessions() {
   const root = document.getElementById('adminLiveSessionsContent');
@@ -221,7 +224,10 @@ function loadDataAdminDash() {
         document.getElementById('statJmlSubmit').textContent = (res.totalSubmit || 0).toLocaleString('id-ID');
         document.getElementById('statJmlPelanggaran').textContent = (res.totalPelanggaran || 0).toLocaleString('id-ID');
       }
-      if(typeof loadFollowUpDashboardActions==='function')loadFollowUpDashboardActions();
+      if (!window.followUpDashboardCandidatesLoaded && typeof loadFollowUpDashboardActions==='function') {
+        window.followUpDashboardCandidatesLoaded = true;
+        loadFollowUpDashboardActions();
+      }
     })
     .withFailureHandler(() => {
       document.getElementById('overviewScoreChart').textContent = 'Ringkasan gagal dimuat. Silakan perbarui untuk mencoba lagi.';

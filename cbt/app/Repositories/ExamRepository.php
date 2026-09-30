@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 namespace Cbt\Repositories;
+use Cbt\Core\RedisCache;
 use PDO;
 final class ExamRepository
 {
@@ -82,6 +83,11 @@ final class ExamRepository
     }
     private function hasStudentTargets():bool{try{$s=$this->db->query("SHOW TABLES LIKE 'exam_target_students'");return(bool)$s->fetchColumn();}catch(\PDOException){return false;}}
     public function questions(int $examId, bool $includeAnswers = false): array
+    {
+        $variant = $includeAnswers ? 'snapshot' : 'public';
+        return RedisCache::remember('exam:question-bank:v1:'.$examId.':'.$variant, 45, fn(): array => $this->loadQuestions($examId, $includeAnswers), $includeAnswers);
+    }
+    private function loadQuestions(int $examId, bool $includeAnswers): array
     {
         $columns = 'id, public_id, question_type, question_text, option_a, option_b, option_c, option_d, option_e, points';
         if ($includeAnswers) $columns .= ', correct_answer';

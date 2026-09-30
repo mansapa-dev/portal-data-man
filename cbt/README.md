@@ -28,6 +28,8 @@ Frontend utama dipisahkan berdasarkan domain di `public/assets/js/cbt/`. `core.j
 7. Ambil CSRF dari `GET /api/auth/me`, lalu buat admin pertama satu kali lewat `POST /api/setup/admin` dengan `setup_token`, `username`, `name`, dan password minimal 12 karakter.
 8. Setelah berhasil, kosongkan/hapus `SETUP_TOKEN` dari `.env`.
 
+Redis tidak diperlukan. Di VPS tanpa Redis, biarkan `REDIS_ENABLED=false`; CBT menggunakan MySQL dan tidak membutuhkan ekstensi PHP Redis.
+
 ## Portal Data
 
 CBT memanggil Portal Data hanya dari backend menggunakan access token OAuth Client Credentials. Contract default:

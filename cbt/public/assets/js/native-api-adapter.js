@@ -67,7 +67,7 @@
     let response, payload;
     try {
     try {
-      response = await fetch(path.replace(/^\//, ''), { method, signal: controller.signal, credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf }, body: body === undefined ? undefined : JSON.stringify(body) });
+      response = await fetch(path.replace(/^\//, ''), { method, signal: controller.signal, credentials: 'same-origin', cache: method === 'GET' ? 'no-store' : 'default', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf }, body: body === undefined ? undefined : JSON.stringify(body) });
       const responseText = await response.text();
       try { payload = JSON.parse(responseText); }
       catch (_) {
