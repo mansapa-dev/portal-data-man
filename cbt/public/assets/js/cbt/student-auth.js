@@ -50,7 +50,7 @@ function persiapkanUjianById(id) {
     }
     cbtApi.withSuccessHandler(result => { renderDaftarJadwal(result.jadwal); refreshStudentDashboard(); })
       .withFailureHandler(() => refreshStudentDashboard()).getStudentExamsAPI();
-  }, 15000 + Math.random() * 10000);
+  }, 25000 + Math.random() * 15000);
 })();
 
 function kembaliKeDashboardSiswa() {

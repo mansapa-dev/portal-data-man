@@ -195,6 +195,7 @@ function applyFilterUjian() {
           <button class="btn btn-secondary" style="padding:5px 10px; font-size:11.5px;" onclick="editUjianById(${u.id})">
             <i class="fa-solid fa-pen"></i> Edit
           </button>
+          ${Number(u.jumlah_soal || 0) > 0 ? '<button class="btn btn-secondary" style="padding:5px 10px; font-size:11.5px; margin-top:4px;" onclick="duplicateUjianById('+u.id+')" title="Salin jadwal dan '+Number(u.jumlah_soal)+' soal"><i class="fa-regular fa-copy"></i> Duplikat ('+Number(u.jumlah_soal)+')</button>' : ''}
         </td>
       </tr>
     `;
@@ -204,6 +205,15 @@ function applyFilterUjian() {
 function editUjianById(id) {
   const u = (cacheAdminUjianRows || []).find(x => String(x.id) === String(id));
   if (u) bukaModalUjian(u);
+}
+
+function duplicateUjianById(id) {
+  const source = (cacheAdminUjianRows || []).find(x => String(x.id) === String(id));
+  if (!source || Number(source.jumlah_soal || 0) < 1) {
+    showCustomAlert('Tidak Bisa Duplikasi', 'Ujian ini tidak memiliki soal aktif untuk disalin.', 'warning');
+    return;
+  }
+  bukaModalUjian(source, true);
 }
 
 function editUjian(u) {
@@ -227,17 +237,18 @@ function loadDataAdminUjian() {
     .getAdminUjianList(stPengelola);
 }
 
-function bukaModalUjian(data = null) {
+function bukaModalUjian(data = null, duplicate = false) {
   if (!portalReferencesLoaded) {
-    loadPortalReferences(() => bukaModalUjian(data));
+    loadPortalReferences(() => bukaModalUjian(data, duplicate));
     return;
   }
   document.getElementById('formUjian').reset();
+  document.getElementById('duplicateSourceExamId').value = duplicate && data ? data.id : '';
   populateExamPortalOptions(data);
   if (data) {
-    document.getElementById('titleModalUjian').textContent = "Edit Data Ujian & Arsip";
-    document.getElementById('editUjianId').value = data.id;
-    document.getElementById('inNamaUjian').value = data.nama_ujian;
+    document.getElementById('titleModalUjian').textContent = duplicate ? "Duplikasi Ujian & Soal" : "Edit Data Ujian & Arsip";
+    document.getElementById('editUjianId').value = duplicate ? '' : data.id;
+    document.getElementById('inNamaUjian').value = duplicate ? data.nama_ujian + ' (Salinan)' : data.nama_ujian;
     document.getElementById('inSubjectUjian').value = data.subject_id || '';
     document.getElementById('inTingkatUjian').value = data.tingkat;
     document.getElementById('inSesiUjian').value = data.sesi || 1;
@@ -270,6 +281,7 @@ document.getElementById('formUjian').addEventListener('submit', function (e) {
   const selectedClassOptions = Array.from(document.querySelectorAll('.cb-kelas-item:checked')).map(cb => cb.value);
   const payload = {
     id: document.getElementById('editUjianId').value || null,
+    duplicate_from: Number(document.getElementById('duplicateSourceExamId').value) || null,
     nama_ujian: document.getElementById('inNamaUjian').value,
     subject_id: document.getElementById('inSubjectUjian').value,
     tingkat: document.getElementById('inTingkatUjian').value,

@@ -23,6 +23,7 @@ final class RedisCache
                 }
             } catch (\Throwable) {
                 self::$connection = null;
+                $redis = null;
             }
         }
 

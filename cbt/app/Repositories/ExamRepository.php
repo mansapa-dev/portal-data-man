@@ -5,6 +5,7 @@ use Cbt\Core\RedisCache;
 use PDO;
 final class ExamRepository
 {
+    private ?bool $studentTargetsAvailable = null;
     public function __construct(private PDO $db) {}
     public function eligibleForStudent(array $student): array
     {
@@ -81,7 +82,12 @@ final class ExamRepository
         $statement->execute(['id' => $examId]);
         return $statement->fetch() ?: null;
     }
-    private function hasStudentTargets():bool{try{$s=$this->db->query("SHOW TABLES LIKE 'exam_target_students'");return(bool)$s->fetchColumn();}catch(\PDOException){return false;}}
+    private function hasStudentTargets():bool
+    {
+        if($this->studentTargetsAvailable!==null)return$this->studentTargetsAvailable;
+        try{$s=$this->db->query("SHOW TABLES LIKE 'exam_target_students'");return$this->studentTargetsAvailable=(bool)$s->fetchColumn();}
+        catch(\PDOException){return$this->studentTargetsAvailable=false;}
+    }
     public function questions(int $examId, bool $includeAnswers = false): array
     {
         $variant = $includeAnswers ? 'snapshot' : 'public';

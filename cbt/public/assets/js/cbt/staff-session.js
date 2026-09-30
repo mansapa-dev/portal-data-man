@@ -136,6 +136,7 @@ function switchDashTab(tabId, btnEl) {
 
 function refreshActiveDashboardTab() {
   if (dashboardRefreshInFlight) return false;
+  if (typeof isUjianJalan !== 'undefined' && isUjianJalan) return false;
   if (!stPengelola || document.getElementById('viewDashboardPengelola')?.classList.contains('hidden')) return false;
   if (document.hidden || document.querySelector('.modal.show')) return false;
   const focused = document.activeElement;

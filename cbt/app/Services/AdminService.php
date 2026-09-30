@@ -18,7 +18,9 @@ final class AdminService
   foreach(['nama_ujian','tingkat','durasi_menit']as$key)if(trim((string)($d[$key]??''))==='')throw new DomainException('Data ujian belum lengkap.',422);
   $date=(string)($d['tanggal_mulai']??$d['tanggal_ujian']??date('Y-m-d'));$endDate=(string)($d['tanggal_selesai']??$date);$timezone=new \DateTimeZone('Asia/Jakarta');$start=new \DateTimeImmutable($date.' '.((string)($d['jam_mulai']??'00:00')).':00',$timezone);$end=new \DateTimeImmutable($endDate.' '.((string)($d['jam_selesai']??'23:59')).':00',$timezone);if($end<=$start)throw new DomainException('Waktu selesai harus setelah waktu mulai.',422);
   $subject=$this->repo->subject((int)($d['subject_id']??0));if(!$subject)throw new DomainException('Mata pelajaran harus dipilih dari katalog mapel.',422);$yearId=trim((string)($d['portal_academic_year_id']??''));$semesterId=trim((string)($d['portal_semester_id']??''));$period=$this->repo->period($yearId,$semesterId);if(!$period)throw new DomainException('Tahun ajaran dan semester harus dipilih dari Portal Data.',422);$data=$d+['tahun_ajaran'=>$period['academic_year'],'semester'=>$period['semester']];$data['tahun_ajaran']=$period['academic_year'];$data['semester']=$period['semester'];$utc=new \DateTimeZone('UTC');$data['starts_at']=$start->setTimezone($utc)->format('Y-m-d H:i:s');$data['ends_at']=$end->setTimezone($utc)->format('Y-m-d H:i:s');$data['status']=filter_var($d['status_aktif']??false,FILTER_VALIDATE_BOOL)?'ACTIVE':'INACTIVE';
-  try{$this->db->transaction(fn()=>$this->repo->saveExam($data,$actor));}catch(\UnexpectedValueException$e){throw new DomainException($e->getMessage(),422);}
+  $duplicateFrom=(int)($d['duplicate_from']??0);
+  try{$this->db->transaction(fn()=>$duplicateFrom>0?$this->repo->duplicateExam($duplicateFrom,$data,$actor):$this->repo->saveExam($data,$actor));}catch(\UnexpectedValueException$e){throw new DomainException($e->getMessage(),422);}
+  if($duplicateFrom>0)$this->forgetQuestionLists([]);
  }
  public function scheduleFollowUpExam(array$d,int$actor):array
  {
@@ -52,7 +54,7 @@ final class AdminService
   if($examId<=0)throw new DomainException('Ujian tidak valid.',422);
   return$this->db->transaction(function()use($examId){$attempts=$this->repo->activeAttemptsForExam($examId,true);if(!$this->repo->deactivateExam($examId)&&!$attempts)throw new DomainException('Ujian tidak ditemukan.',404);$this->repo->terminateAttempts(array_column($attempts,'id'));return$attempts;});
  }
- public function questions(?int$id):array{return array_map([\Cbt\Support\QuestionHtml::class,'row'],$this->repo->questions($id));}
+ public function questions(?int$id):array{$key='admin:questions:v1:'.($id??'all');return RedisCache::remember($key,30,fn()=>array_map([\Cbt\Support\QuestionHtml::class,'row'],$this->repo->questions($id)),true);}
  public function saveQuestion(array$d):void
  {
   foreach(['ujian_id','pertanyaan','jawaban_benar']as$key)if(trim((string)($d[$key]??''))==='')throw new DomainException('Data soal belum lengkap.',422);
@@ -66,9 +68,11 @@ final class AdminService
   $previousExam=!empty($question['id'])?$this->repo->activeQuestionExamId((int)$question['id']):null;
   $this->repo->saveQuestion($question);
   $this->forgetQuestionBanks(array_filter([(int)$question['ujian_id'],$previousExam]));
+  $this->forgetQuestionLists(array_filter([(int)$question['ujian_id'],$previousExam]));
  }
- public function deleteQuestion(int$id):void{$examId=$id>0?$this->repo->activeQuestionExamId($id):null;if($examId===null||!$this->repo->disableQuestion($id))throw new DomainException('Soal tidak ditemukan atau sudah dihapus.',404);$this->forgetQuestionBanks([$examId]);}
+ public function deleteQuestion(int$id):void{$examId=$id>0?$this->repo->activeQuestionExamId($id):null;if($examId===null||!$this->repo->disableQuestion($id))throw new DomainException('Soal tidak ditemukan atau sudah dihapus.',404);$this->forgetQuestionBanks([$examId]);$this->forgetQuestionLists([$examId]);}
  private function forgetQuestionBanks(array$examIds):void{foreach(array_unique(array_map('intval',$examIds))as$examId)if($examId>0){RedisCache::forget('exam:question-bank:v1:'.$examId.':snapshot');RedisCache::forget('exam:question-bank:v1:'.$examId.':public');}}
+ private function forgetQuestionLists(array$examIds):void{RedisCache::forget('admin:questions:v1:all');foreach(array_unique(array_map('intval',$examIds))as$examId)if($examId>0)RedisCache::forget('admin:questions:v1:'.$examId);}
  public function users():array{return$this->repo->users();}
  public function saveUser(array$d):void{if(!preg_match('/^[A-Za-z0-9._-]{4,100}$/',(string)($d['username']??'')))throw new DomainException('Username administrator tidak valid.',422);if(empty($d['id'])&&strlen((string)($d['password']??''))<12)throw new DomainException('Password akun baru minimal 12 karakter.',422);if(!empty($d['password'])&&strlen((string)$d['password'])<12)throw new DomainException('Password minimal 12 karakter.',422);$role=strtoupper((string)($d['role']??'ADMIN'));if($role!=='ADMIN')throw new DomainException('Akun guru dikelola Portal Data dan tidak dapat dibuat di CBT.',422);$d['role']='ADMIN';$d['status_aktif']=filter_var($d['status_aktif']??false,FILTER_VALIDATE_BOOL);try{$this->repo->saveUser($d);}catch(\UnexpectedValueException$e){throw new DomainException($e->getMessage(),422);}}
  public function assignments():array{return$this->repo->assignments();}
@@ -102,6 +106,7 @@ final class AdminService
   }catch(\Throwable$e){$errors[]=['row'=>(int)($row['__excel_row']??($i+2)),'reason'=>$e->getMessage()];}}
   $saved=$valid?$this->db->transaction(function()use($valid){$result=[];foreach($valid as$row){$id=$this->repo->saveQuestion($row);if(!$this->repo->questionStoredAs($id,(int)$row['ujian_id'],(string)$row['pertanyaan']))throw new \RuntimeException("Soal #{$id} tidak ditemukan lagi setelah disimpan.");$result[]=['row'=>(int)($row['__excel_row']??0),'id'=>$id,'exam_id'=>(int)$row['ujian_id'],'image_fields'=>$row['__image_fields'],'created'=>empty($row['id']),'recreated'=>!empty($row['__recreated'])];}return$result;}):[];
   $this->forgetQuestionBanks(array_column($saved,'exam_id'));
+  $this->forgetQuestionLists(array_column($saved,'exam_id'));
   return['total'=>count($rows),'inserted'=>count($saved),'created'=>count(array_filter($saved,static fn(array$item):bool=>$item['created'])),'updated'=>count(array_filter($saved,static fn(array$item):bool=>!$item['created'])),'recreated'=>count(array_filter($saved,static fn(array$item):bool=>$item['recreated'])),'saved_questions'=>$saved,'failed'=>count($errors),'errors'=>$errors];
  }
  private function validateQuestionType(array$d):array
