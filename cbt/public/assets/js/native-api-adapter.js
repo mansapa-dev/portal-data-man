@@ -60,7 +60,7 @@
     try { await csrfPromise; } catch (_) { csrfPromise = refreshCsrf(); await csrfPromise; }
     const controller = new AbortController();
     // Login/start can queue during a mass arrival; accepted answers keep a short retry window.
-    const longRequest = /auth\/student\/login|student\/exams\/\d+\/start/.test(path) || method === 'POST' && (path === 'api/admin/exams' || path === 'api/admin/students/generate-pins' || /^api\/admin\/portal-data\/sync\/[a-z_]+$/.test(path)) || method === 'DELETE' && /^api\/admin\/exams\/\d+$/.test(path);
+    const longRequest = /auth\/student\/login|student\/exams\/\d+\/start/.test(path) || method === 'GET' && /^(?:api\/admin\/(?:exams(?:-archive)?|students|questions))(?:\?|$)/.test(path) || method === 'POST' && (path === 'api/admin/exams' || path === 'api/admin/students/generate-pins' || /^api\/admin\/portal-data\/sync\/[a-z_]+$/.test(path)) || method === 'DELETE' && /^api\/admin\/exams\/\d+$/.test(path);
     const mediumRequest = method === 'POST' && /student\/exams\/\d+\/submit|admin\/questions(?:\/import)?$/.test(path) || path === 'api/admin/students' && method === 'GET';
     const timeoutMs = longRequest ? 120000 : mediumRequest ? 60000 : 15000;
     const timeout = setTimeout(() => controller.abort(), timeoutMs);

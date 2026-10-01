@@ -257,6 +257,12 @@ function loadDataAdminUjian() {
       populateAdminUjianFilters();
       applyFilterUjian();
     })
+    .withFailureHandler(error => {
+      const message = error?.code === 'REQUEST_TIMEOUT' || error?.status === 408
+        ? 'Server belum selesai menyiapkan daftar ujian. Pastikan migration terbaru sudah dijalankan, lalu coba lagi.'
+        : (error?.message || 'Permintaan gagal.');
+      if (tb) tb.innerHTML = `<tr><td colspan="8" align="center" style="padding:28px;color:var(--danger)"><b>Daftar ujian belum dapat dimuat</b><div style="margin:6px 0 12px;color:var(--text-muted)">${message}</div><button type="button" class="btn btn-secondary" onclick="loadDataAdminUjian()"><i class="fa-solid fa-rotate"></i> Coba Lagi</button></td></tr>`;
+    })
     [request](stPengelola);
 }
 
