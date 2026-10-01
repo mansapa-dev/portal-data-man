@@ -1,14 +1,39 @@
 (function () {
   'use strict';
   let csrf = '';
-  const refreshCsrf = async () => {
-    const controller = new AbortController(), timer = setTimeout(() => controller.abort(),15000);
-    try {
-      const response = await fetch('api/auth/me',{credentials:'same-origin',signal:controller.signal});
-      const payload = await response.json();
-      if(!response.ok || !payload.data?.csrf_token) throw new Error('Sesi belum dapat dikonfirmasi. Periksa koneksi.');
-      csrf = payload.data.csrf_token;
+  async function fetchTextWithTimeout(url, options = {}, timeoutMs = 15000) {
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        if (controller) controller.abort();
+        const error = new Error('Server membutuhkan waktu terlalu lama untuk menyelesaikan proses. Silakan coba kembali.');
+        error.status = 408;
+        error.code = 'REQUEST_TIMEOUT';
+        reject(error);
+      }, timeoutMs);
+    });
+    const request = (async () => {
+      const response = await fetch(url, controller ? {...options, signal:controller.signal} : options);
+      return {response, responseText:await response.text()};
+    })();
+    try { return await Promise.race([request, timeout]); }
+    catch (error) {
+      if (error?.code === 'REQUEST_TIMEOUT') throw error;
+      if (error?.name === 'AbortError' || /\b(?:abort(?:ed)?|signal is aborted)\b/i.test(String(error?.message || ''))) {
+        const timeoutError = new Error('Server membutuhkan waktu terlalu lama untuk menyelesaikan proses. Silakan coba kembali.');
+        timeoutError.status = 408;
+        timeoutError.code = 'REQUEST_TIMEOUT';
+        throw timeoutError;
+      }
+      throw error;
     } finally { clearTimeout(timer); }
+  }
+  const refreshCsrf = async () => {
+    const {response,responseText}=await fetchTextWithTimeout('api/auth/me',{credentials:'same-origin',cache:'no-store'},15000);
+    const payload=JSON.parse(responseText);
+    if(!response.ok || !payload.data?.csrf_token) throw new Error('Sesi belum dapat dikonfirmasi. Periksa koneksi.');
+    csrf = payload.data.csrf_token;
   };
   let csrfPromise = refreshCsrf();
   csrfPromise.catch(() => {});
@@ -58,18 +83,16 @@
   window.cbtAnswerState = () => answerQueue?.state() || { pending: 0 };
   async function api(path, method = 'GET', body) {
     try { await csrfPromise; } catch (_) { csrfPromise = refreshCsrf(); await csrfPromise; }
-    const controller = new AbortController();
     // Login/start can queue during a mass arrival; accepted answers keep a short retry window.
     const adminListRequest = method === 'GET' && /^(?:api\/admin\/(?:exams(?:-archive)?|students|questions))(?:\?|$)/.test(path);
     const longRequest = /auth\/student\/login|student\/exams\/\d+\/start/.test(path) || method === 'POST' && (path === 'api/admin/exams' || path === 'api/admin/students/generate-pins' || /^api\/admin\/portal-data\/sync\/[a-z_]+$/.test(path)) || method === 'DELETE' && /^api\/admin\/exams\/\d+$/.test(path);
     const mediumRequest = method === 'POST' && /student\/exams\/\d+\/submit|admin\/questions(?:\/import)?$/.test(path) || path === 'api/admin/students' && method === 'GET';
     const timeoutMs = adminListRequest ? 20000 : longRequest ? 120000 : mediumRequest ? 60000 : 15000;
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     let response, payload;
     try {
-    try {
-      response = await fetch(path.replace(/^\//, ''), { method, signal: controller.signal, credentials: 'same-origin', cache: method === 'GET' ? 'no-store' : 'default', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf }, body: body === undefined ? undefined : JSON.stringify(body) });
-      const responseText = await response.text();
+      const result = await fetchTextWithTimeout(path.replace(/^\//, ''), { method, credentials: 'same-origin', cache: method === 'GET' ? 'no-store' : 'default', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf }, body: body === undefined ? undefined : JSON.stringify(body) }, timeoutMs);
+      response = result.response;
+      const responseText = result.responseText;
       try { payload = JSON.parse(responseText); }
       catch (_) {
         const contentType = response.headers.get('content-type') || '';
@@ -84,7 +107,6 @@
       if (error?.name === 'AbortError' || /\b(?:abort(?:ed)?|signal is aborted)\b/i.test(String(error?.message || ''))) { const timeoutError = new Error('Server membutuhkan waktu terlalu lama untuk menyelesaikan proses. Silakan coba kembali.'); timeoutError.status = 408; timeoutError.code = 'REQUEST_TIMEOUT'; throw timeoutError; }
       throw error;
     }
-    } finally { clearTimeout(timeout); }
     if (!response.ok) {
       if (response.status === 419) csrfPromise = refreshCsrf();
       const error = new Error(payload.message || 'Permintaan gagal.'); error.status = response.status; throw error;
