@@ -85,9 +85,10 @@
     try { await csrfPromise; } catch (_) { csrfPromise = refreshCsrf(); await csrfPromise; }
     // Login/start can queue during a mass arrival; accepted answers keep a short retry window.
     const adminListRequest = method === 'GET' && /^(?:api\/admin\/(?:exams(?:-archive)?|students|questions))(?:\?|$)/.test(path);
+    const answerRequest = method === 'PUT' && /^api\/student\/exams\/\d+\/answers\/\d+$/.test(path);
     const longRequest = /auth\/student\/login|student\/exams\/\d+\/start/.test(path) || method === 'POST' && (path === 'api/admin/exams' || path === 'api/admin/students/generate-pins' || /^api\/admin\/portal-data\/sync\/[a-z_]+$/.test(path)) || method === 'DELETE' && /^api\/admin\/exams\/\d+$/.test(path);
     const mediumRequest = method === 'POST' && /student\/exams\/\d+\/submit|admin\/questions(?:\/import)?$/.test(path) || path === 'api/admin/students' && method === 'GET';
-    const timeoutMs = adminListRequest ? 20000 : longRequest ? 120000 : mediumRequest ? 60000 : 15000;
+    const timeoutMs = adminListRequest ? 20000 : longRequest ? 120000 : mediumRequest ? 60000 : answerRequest ? 45000 : 15000;
     let response, payload;
     try {
       const result = await fetchTextWithTimeout(path.replace(/^\//, ''), { method, credentials: 'same-origin', cache: method === 'GET' ? 'no-store' : 'default', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf }, body: body === undefined ? undefined : JSON.stringify(body) }, timeoutMs);

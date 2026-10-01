@@ -46,6 +46,47 @@ final class RedisCache
         try { $redis->del($key); } catch (\Throwable) { self::$connection = null; }
     }
 
+    /**
+     * Atomically consume one fixed-window rate-limit token.
+     *
+     * Returning null means Redis is unavailable and the caller must use its
+     * correctness-preserving database fallback. Keeping the counter in Redis
+     * prevents a shared school NAT address from turning one MySQL row lock
+     * into a login bottleneck for every participant.
+     *
+     * @return array{allowed:bool,retry_after:int,attempts:int}|null
+     */
+    public static function consumeRateLimit(string $key, int $maximum, int $windowSeconds): ?array
+    {
+        $redis = self::connection();
+        if ($redis === null) return null;
+        try {
+            $script = <<<'LUA'
+local attempts = redis.call('INCR', KEYS[1])
+if attempts == 1 then
+  redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+local ttl = redis.call('TTL', KEYS[1])
+if ttl < 1 then
+  redis.call('EXPIRE', KEYS[1], ARGV[1])
+  ttl = tonumber(ARGV[1])
+end
+return {attempts, ttl}
+LUA;
+            $result = $redis->eval($script, [$key, max(1, $windowSeconds)], 1);
+            if (!is_array($result) || count($result) < 2) return null;
+            $attempts = (int) $result[0];
+            return [
+                'allowed' => $attempts <= max(1, $maximum),
+                'retry_after' => max(1, (int) $result[1]),
+                'attempts' => $attempts,
+            ];
+        } catch (\Throwable) {
+            self::$connection = null;
+            return null;
+        }
+    }
+
     private static function connection(): ?\Redis
     {
         if (self::$resolved) return self::$connection;

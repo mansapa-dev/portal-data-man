@@ -31,7 +31,7 @@ final class AttemptRepository
     }
     public function questions(int $attemptId): array
     {
-        $statement = $this->db->prepare('SELECT question_id id,question_text,option_a,option_b,option_c,option_d,option_e,points FROM attempt_questions WHERE attempt_id=:id');
+        $statement = $this->db->prepare('SELECT question_id id,question_type,question_text,option_a,option_b,option_c,option_d,option_e,points FROM attempt_questions WHERE attempt_id=:id');
         $statement->execute(['id'=>$attemptId]);
         return $statement->fetchAll();
     }

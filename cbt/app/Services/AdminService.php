@@ -9,8 +9,8 @@ final class AdminService
 {
  public function __construct(private Database$db,private AdminRepository$repo){}
  public function dashboard():array{return$this->repo->dashboard();}
- public function adminLiveSessions():array{return$this->liveSessionPayload($this->repo->allExamIds());}
- public function teacherLiveSessions(int $teacherId,int$userId=0):array{$ids=$userId>0&&$this->repo->personnelIsProctor($userId)?$this->repo->allExamIds():($userId>0?$this->repo->personnelExamIds($userId):$this->repo->teacherExamIds($teacherId));return $this->liveSessionPayload($ids);}
+ public function adminLiveSessions():array{return$this->liveSessionPayload($this->repo->liveExamIds());}
+ public function teacherLiveSessions(int $teacherId,int$userId=0):array{$ids=$userId>0&&$this->repo->personnelIsProctor($userId)?$this->repo->liveExamIds():($userId>0?$this->repo->personnelExamIds($userId):$this->repo->teacherExamIds($teacherId));return $this->liveSessionPayload($ids);}
  public function references():array{return$this->repo->references();}
  public function exams():array{return$this->repo->exams(false);}
  public function examPage(array$query,bool$archived=false):array{return$this->repo->examPage($query,$archived);}
@@ -96,11 +96,17 @@ final class AdminService
  public function saveAssignment(array$d,int$actor):void{$duty=strtoupper((string)($d['duty_role']??'TEACHER'));if(!in_array($duty,['TEACHER','PROCTOR'],true))throw new DomainException('Jenis penugasan tidak valid.',422);try{$this->repo->saveAssignment(!empty($d['id'])?(int)$d['id']:null,(int)($d['person_id']??$d['guru_id']??0),(int)($d['ujian_id']??0),$duty,(string)($d['person_type']??'TEACHER'),$actor);}catch(\PDOException$e){if($e->getCode()==='23000')throw new DomainException('Personel sudah ditugaskan pada ujian tersebut.',409);throw$e;}catch(\UnexpectedValueException$e){throw new DomainException($e->getMessage(),422);}}
  public function setTeacherProctorEligibility(int$id,bool$eligible):void{try{$this->repo->setTeacherProctorEligibility($id,$eligible);}catch(\UnexpectedValueException$e){throw new DomainException($e->getMessage(),422);}}
  public function deleteAssignment(int$id):void{$this->repo->deleteAssignment($id);}
- public function results():array{return$this->repo->results();}
- public function violations():array{return$this->repo->violations();}
+ public function results():array{return RedisCache::remember('admin:results:v1',15,fn():array=>$this->repo->results(),true);}
+ public function violations():array{return RedisCache::remember('admin:violations:v1',10,fn():array=>$this->repo->violations(),true);}
  public function proctorViolations(int$userId):array{if(!$this->repo->personnelIsProctor($userId))throw new DomainException('Log pelanggaran hanya dapat diakses petugas piket.',403);return$this->repo->violations();}
- public function teacherDashboard(int$teacherId,int$userId,string$role):array{$ids=$role==='ADMIN'?$this->repo->allExamIds():$this->repo->personnelExamIds($userId);$all=$this->repo->exams();$list=array_values(array_filter($all,fn($e)=>in_array((int)$e['id'],$ids,true)));return['ujianList'=>$list,'hasilList'=>$this->repo->results($ids),'pelanggaranList'=>$this->repo->violations($ids),'syncedAt'=>gmdate(DATE_ATOM)];}
- private function liveSessionPayload(array$examIds):array{$sessions=$this->repo->liveSessions($examIds);return['sessions'=>$sessions,'summary'=>['active'=>count(array_filter($sessions,fn(array$s):bool=>$s['status']==='IN_PROGRESS')),'online'=>count(array_filter($sessions,fn(array$s):bool=>$s['status']==='IN_PROGRESS'&&$s['connectionState']==='ONLINE')),'terminated'=>count(array_filter($sessions,fn(array$s):bool=>$s['status']==='TERMINATED')),'total'=>count($sessions)],'serverTime'=>gmdate(DATE_ATOM),'refreshSeconds'=>10];}
+ public function teacherDashboard(int$teacherId,int$userId,string$role):array{$ids=$role==='ADMIN'?$this->repo->allExamIds():$this->repo->personnelExamIds($userId);sort($ids);$key='teacher:dashboard:v2:'.$role.':'.$userId.':'.hash('sha256',implode(',',$ids));$payload=RedisCache::remember($key,15,function()use($ids):array{$all=$this->repo->exams();$list=array_values(array_filter($all,fn($e)=>in_array((int)$e['id'],$ids,true)));return['ujianList'=>$list,'hasilList'=>$this->repo->results($ids),'pelanggaranList'=>$this->repo->violations($ids)];},true);return$payload+['syncedAt'=>gmdate(DATE_ATOM)];}
+ private function liveSessionPayload(array$examIds):array
+ {
+  $examIds=array_values(array_unique(array_map('intval',$examIds)));sort($examIds);
+  $key='live-sessions:v2:'.hash('sha256',implode(',',$examIds));
+  $payload=RedisCache::remember($key,4,function()use($examIds):array{$sessions=$this->repo->liveSessions($examIds);return['sessions'=>$sessions,'summary'=>['active'=>count(array_filter($sessions,fn(array$s):bool=>$s['status']==='IN_PROGRESS')),'online'=>count(array_filter($sessions,fn(array$s):bool=>$s['status']==='IN_PROGRESS'&&$s['connectionState']==='ONLINE')),'terminated'=>count(array_filter($sessions,fn(array$s):bool=>$s['status']==='TERMINATED')),'total'=>count($sessions)]];},true);
+  return$payload+['serverTime'=>gmdate(DATE_ATOM),'refreshSeconds'=>10];
+ }
  public function importQuestions(array$rows):array
  {
   $valid=[];$errors=[];$seen=[];

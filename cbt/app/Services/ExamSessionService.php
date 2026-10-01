@@ -21,7 +21,7 @@ final class ExamSessionService
     }
     public function start(int$studentId,string$nisn,int$examId):array
     {
-        return $this->database->transaction(function()use($studentId,$nisn,$examId){
+        $state=$this->database->transaction(function()use($studentId,$nisn,$examId){
             $student=$this->students->findActiveByNisn($nisn)??throw new DomainException('Siswa tidak ditemukan.',404);
             if((int)$student['id']!==$studentId)throw new DomainException('Sesi siswa tidak valid.',401);
             $attempt=$this->attempts->find($studentId,$examId,true);
@@ -32,9 +32,15 @@ final class ExamSessionService
             if(!$questions)throw new DomainException('Soal ujian belum tersedia.',409);
             if(!$attempt){$seed=hash('sha256',$studentId.':'.$examId.':'.random_bytes(16));$ids=array_map(fn($q)=>(int)$q['id'],$questions);$ids=$this->stableShuffle($ids,$seed);$mapping=[];foreach($ids as$id)$mapping[(string)$id]=$this->stableShuffle(['A','B','C','D','E'],hash('sha256',$seed.':'.$id));$attempt=$this->attempts->create($student,$exam,$ids,$mapping,$seed,$questions);}
             if(strtotime($attempt['expires_at'].' UTC')<=time())throw new DomainException('Waktu ujian telah habis. Muat ulang untuk mengambil hasil.',409);
-            $byId=[];foreach($questions as$q)$byId[(int)$q['id']]=$q;$ordered=[];$mapping=json_decode($attempt['option_mapping'],true,512,JSON_THROW_ON_ERROR);foreach(json_decode($attempt['question_order'],true,512,JSON_THROW_ON_ERROR)as$id){$q=$byId[(int)$id];$type=$q['question_type']??'MULTIPLE_CHOICE';$options=[];if($type!=='SHORT_ANSWER')foreach($mapping[(string)$id]as$letter){$value=$q['option_'.strtolower($letter)]??null;if($value!==null&&$value!=='')$options[]=['key'=>$letter,'text'=>\Cbt\Support\QuestionHtml::clean($value)];}$ordered[]=['id'=>(int)$q['id'],'tipe'=>$type,'pertanyaan'=>\Cbt\Support\QuestionHtml::clean($q['question_text']),'opsi'=>$options,'poin'=>(float)$q['points']];}
-            return ['attempt_id'=>$attempt['public_id'],'exam'=>['id'=>(int)$exam['id'],'nama_ujian'=>$exam['name']],'expires_at'=>$attempt['expires_at'].'Z','server_time'=>gmdate('Y-m-d H:i:s').'Z','soal'=>$ordered,'jawaban'=>$this->attempts->answers((int)$attempt['id'])];
+            return['exam'=>$exam,'attempt'=>$attempt,'questions'=>$questions,'answers'=>$this->attempts->answers((int)$attempt['id'])];
         });
+        // Rendering and HTML sanitization are CPU work. Do them only after the
+        // attempt transaction commits so a large question payload never keeps
+        // row locks or a database transaction open while PHP builds JSON.
+        $exam=$state['exam'];$attempt=$state['attempt'];$questions=$state['questions'];
+        $byId=[];foreach($questions as$q)$byId[(int)$q['id']]=$q;$ordered=[];$mapping=json_decode($attempt['option_mapping'],true,512,JSON_THROW_ON_ERROR);
+        foreach(json_decode($attempt['question_order'],true,512,JSON_THROW_ON_ERROR)as$id){$q=$byId[(int)$id];$type=$q['question_type']??'MULTIPLE_CHOICE';$options=[];if($type!=='SHORT_ANSWER')foreach($mapping[(string)$id]as$letter){$value=$q['option_'.strtolower($letter)]??null;if($value!==null&&$value!=='')$options[]=['key'=>$letter,'text'=>\Cbt\Support\QuestionHtml::clean($value)];}$ordered[]=['id'=>(int)$q['id'],'tipe'=>$type,'pertanyaan'=>\Cbt\Support\QuestionHtml::clean($q['question_text']),'opsi'=>$options,'poin'=>(float)$q['points']];}
+        return['attempt_id'=>$attempt['public_id'],'exam'=>['id'=>(int)$exam['id'],'nama_ujian'=>$exam['name']],'expires_at'=>$attempt['expires_at'].'Z','server_time'=>gmdate('Y-m-d H:i:s').'Z','soal'=>$ordered,'jawaban'=>$state['answers']];
     }
     private function stableShuffle(array$values,string$seed):array{usort($values,fn($a,$b)=>strcmp(hash('sha256',$seed.':'.$a),hash('sha256',$seed.':'.$b)));return$values;}
 }
