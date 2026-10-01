@@ -47,7 +47,10 @@ final class ScoringService
 
    $this->ensureAttemptQuestions($attempt);
 
-   $sql='SELECT q.question_id id,q.question_type,q.correct_answer,q.option_a,q.option_b,q.option_c,q.option_d,q.option_e,q.points,a.answer FROM attempt_questions q LEFT JOIN student_answers a ON a.question_id=q.question_id AND a.attempt_id=q.attempt_id WHERE q.attempt_id=:attempt';
+   // Only multiple-response scoring needs option contents to count available
+   // distractors. Do not transfer image/HTML options for ordinary questions.
+   $optionFields=implode(',',array_map(static fn(string $letter):string=>"CASE WHEN q.question_type='MULTIPLE_RESPONSE' THEN q.option_{$letter} ELSE NULL END option_{$letter}",['a','b','c','d','e']));
+   $sql='SELECT q.question_id id,q.question_type,q.correct_answer,'.$optionFields.',q.points,a.answer FROM attempt_questions q LEFT JOIN student_answers a ON a.question_id=q.question_id AND a.attempt_id=q.attempt_id WHERE q.attempt_id=:attempt';
    $statement=$this->db->pdo()->prepare($sql);
    $statement->execute(['attempt'=>$attempt['id']]);
    $rows=$statement->fetchAll();
@@ -132,7 +135,7 @@ final class ScoringService
 
  private function ensureAttemptQuestions(array $attempt):void
  {
-  $count=$this->db->pdo()->prepare('SELECT COUNT(*) FROM attempt_questions WHERE attempt_id=:attempt');
+  $count=$this->db->pdo()->prepare('SELECT 1 FROM attempt_questions WHERE attempt_id=:attempt LIMIT 1');
   $count->execute(['attempt'=>$attempt['id']]);
   if((int)$count->fetchColumn()>0)return;
   // Compatibility for attempts created before question snapshots existed. Current

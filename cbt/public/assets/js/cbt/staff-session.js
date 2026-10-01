@@ -200,7 +200,7 @@ function scheduleDashboardRefresh(delay = 500) {
 }
 
 window.addEventListener('cbt:data-updated', () => scheduleDashboardRefresh());
-setInterval(() => refreshActiveDashboardTab(), 45000);
+// Dashboard refresh is manual; data-updated only follows a user mutation.
 
 function loadDataAdminLiveSessions() {
   const root = document.getElementById('adminLiveSessionsContent');
@@ -214,7 +214,7 @@ function loadDataAdminLiveSessions() {
   };
   window.CbtLiveSessions.mount(root, api, notice, {
     title: 'Live Sessions Seluruh Ujian',
-    description: 'Pantau progres peserta dari seluruh ujian secara otomatis setiap 10 detik.',
+    description: 'Klik Perbarui sekarang untuk mengambil progres terbaru seluruh ujian.',
     enableFilters: true,
     groupByExam: true,
     allowAdminActions: true

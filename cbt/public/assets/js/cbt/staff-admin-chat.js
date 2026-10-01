@@ -11,7 +11,7 @@
 
   function mount(root, api, { admin = false } = {}) {
     if (typeof root.__staffChatDestroy === 'function') root.__staffChatDestroy();
-    let selected = null, timer = null, threads = [], loading = false;
+    let selected = null, threads = [], loading = false;
     root.replaceChildren();
     const layout = el('div', undefined, 'staff-chat-layout'), side = el('section', undefined, 'staff-chat-side'), main = el('section', undefined, 'staff-chat-main');
     const head = el('div', undefined, 'staff-chat-head'), heading = el('div');
@@ -90,8 +90,12 @@
     tools.querySelector('select')?.addEventListener('change', renderThreads);
     refreshButton.onclick = admin ? () => loadThreads() : compose;
     if (admin) showWelcome(); else compose();
-    loadThreads(); timer = setInterval(() => loadThreads({ quiet: true }), 15000);
-    root.__staffChatDestroy = () => clearInterval(timer);
+    if (!admin) {
+      const reload = el('button', 'Perbarui', 'btn btn-secondary');
+      reload.type = 'button'; reload.onclick = () => loadThreads(); head.append(reload);
+    }
+    loadThreads();
+    root.__staffChatDestroy = () => {};
     return root.__staffChatDestroy;
   }
   window.CbtStaffAdminChat = { mount };

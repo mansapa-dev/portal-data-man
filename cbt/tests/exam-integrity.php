@@ -55,6 +55,11 @@ try {
  $reject(fn()=>$answers->save(1,1,1,'E',false,$attempt,2,str_repeat('c',32)),422,'missing option rejected');
  $reject(fn()=>$answers->save(1,1,1,'A',false,'other-attempt',2,str_repeat('c',32)),409,'different attempt rejected');
  $reject(fn()=>$answers->save(1,1,2,'A',false,$attempt,2,str_repeat('c',32)),404,'question outside snapshot order rejected');
+ $pdo->exec("UPDATE student_answers SET answered_at='2026-01-01 00:00:00.000' WHERE attempt_id=1 AND question_id=1");
+ $unchanged=$answers->save(1,1,1,'B',true,$attempt,2,str_repeat('e',32));
+ $assert($unchanged['revision']===3,'identical content with a new mutation advances revision');
+ $assert(str_starts_with((string)$pdo->query('SELECT answered_at FROM student_answers WHERE attempt_id=1 AND question_id=1')->fetchColumn(),'2026-01-01'),'identical content does not rewrite answer timestamp');
+ $assert($answers->save(1,1,1,'B',true,$attempt,2,str_repeat('e',32))['duplicate'],'unchanged answer retry remains idempotent');
  $pdo->exec("UPDATE questions SET question_text='Changed question',correct_answer='A',points=99 WHERE id=1");
  $pdo->exec((string)file_get_contents(dirname(__DIR__).'/database/migrations/20260907_attempt_questions.sql'));
  $resumed=$sessions->start(1,'0000000001',1);
@@ -113,7 +118,7 @@ try {
  $pdo->exec("UPDATE exam_attempts SET expires_at=UTC_TIMESTAMP()-INTERVAL 1 SECOND");
  $assert($monitor->liveSessions([1])===[],'expired attempt leaves live monitoring before background finalization');
  $reject(fn()=>$answers->save(1,1,1,'A',false,$attempt,2,str_repeat('d',32)),409,'late answer rejected');
- $assert($answers->save(1,1,1,'B',true,$attempt,1,str_repeat('b',32))['duplicate'],'previously saved write acknowledged after deadline');
+ $assert($answers->save(1,1,1,'B',true,$attempt,2,str_repeat('e',32))['duplicate'],'previously saved write acknowledged after deadline');
  $summary=$scoring->finalizeDue();$assert($summary['completed']===1&&$summary['failed']===0,'server finalizes expired attempt without browser');
  $result=$scoring->submit(1,1);$assert((float)$result['nilai']===100.0,'score uses latest accepted answer');
  $reject(fn()=>$reset->reset(1,1,1,'completed'),409,'completed exams cannot be reset for another attempt');
@@ -199,5 +204,16 @@ try {
  $_SESSION['auth']=['user_id'=>2,'role'=>'TEACHER'];$allowed=false;
  (new \Cbt\Middleware\AuthMiddleware('auth','TEACHER',$pdo))($r1,function()use(&$allowed){$allowed=true;return \Cbt\Core\Response::json(null);});
  $assert(!$allowed,'deactivated Portal teacher loses access on next protected request');
+ $pdo->exec("INSERT INTO exams(public_id,name,grade,duration_minutes,starts_at,ends_at,academic_year,semester,status,created_by) VALUES('mixed-scoring','Mixed','X',60,UTC_TIMESTAMP()-INTERVAL 1 MINUTE,UTC_TIMESTAMP()+INTERVAL 1 HOUR,'2026','ODD','ACTIVE',1)");
+ $mixedExam=(int)$pdo->lastInsertId();
+ $insertMixed=$pdo->prepare('INSERT INTO questions(public_id,exam_id,question_type,question_text,option_a,option_b,option_c,option_d,correct_answer) VALUES(?,?,?,?,?,?,?,?,?)');
+ $insertMixed->execute(['mixed-mc',$mixedExam,'MULTIPLE_CHOICE','MC',str_repeat('large ',10000),'B','C','D','B']);$mc=(int)$pdo->lastInsertId();
+ $insertMixed->execute(['mixed-mr',$mixedExam,'MULTIPLE_RESPONSE','MR','A','B','C','D','A,B']);$mr=(int)$pdo->lastInsertId();
+ $insertMixed->execute(['mixed-short',$mixedExam,'SHORT_ANSWER','Short',null,null,null,null,'palembang']);$short=(int)$pdo->lastInsertId();
+ $mixed=$sessions->start(1,'0000000001',$mixedExam);
+ foreach([$mc=>'B',$mr=>'A,C',$short=>'Palembang'] as $questionId=>$answer) $answers->save(1,$mixedExam,$questionId,$answer,false,$mixed['attempt_id'],0,bin2hex(random_bytes(16)));
+ $mixedResult=$scoring->submit(1,$mixedExam);
+ $assert($mixedResult['benar']===2 && $mixedResult['salah']===1 && abs($mixedResult['nilai']-66.67)<0.001,'lean scoring preserves MC, short answer and multiple-response distractor penalties');
+ $assert($scoring->submit(1,$mixedExam)['nilai']===$mixedResult['nilai'],'mixed scoring repeated submit returns the same score');
  echo "{$passed} integration checks passed.\n";
 } finally { $connection->exec('DROP DATABASE `'.$name.'`'); }

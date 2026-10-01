@@ -12,6 +12,13 @@ final class AttemptRepository
         $statement = $this->db->prepare($sql); $statement->execute(['student_id'=>$studentId,'exam_id'=>$examId]);
         return $statement->fetch() ?: null;
     }
+    /** Answer writes need the lock and status, not the full randomized question JSON. */
+    public function lockForAnswer(int $studentId, int $examId): ?array
+    {
+        $statement = $this->db->prepare('SELECT id,public_id,status,expires_at FROM exam_attempts WHERE student_id=:student_id AND exam_id=:exam_id LIMIT 1 FOR UPDATE');
+        $statement->execute(['student_id'=>$studentId,'exam_id'=>$examId]);
+        return $statement->fetch() ?: null;
+    }
     public function create(array $student, array $exam, array $questionOrder, array $optionMapping, string $seed, array $questions): array
     {
         $expires = min(strtotime($exam['ends_at'].' UTC'), time() + ((int)$exam['duration_minutes'] * 60));

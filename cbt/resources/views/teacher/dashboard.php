@@ -47,7 +47,8 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
     <header class="topbar">
       <div class="teacher-topbar-left"><button id="menu" class="menu" aria-label="Buka menu navigasi" aria-expanded="true"><i class="fa-solid fa-bars"></i></button><div class="teacher-topbar-brand"><img src="../assets/img/logo-man1-palembang.png" alt="Lambang MAN 1 Palembang"><div><strong>MANSAPA ARENA</strong><span id="teacherPageTitle">Dashboard</span></div></div></div>
       <div class="teacher-topbar-actions"><button type="button" class="theme-toggle" data-theme-toggle aria-label="Aktifkan mode gelap" aria-pressed="false">◐</button>
-        <span class="teacher-online"><span></span>Sistem Online</span>
+        <button id="teacherRefresh" type="button" class="teacher-print-button">Perbarui data</button>
+        <span class="teacher-online"><span></span>Refresh manual</span>
         <div class="teacher-identity"><small>Portal Guru</small><strong id="teacherName"><?=htmlspecialchars($nip, ENT_QUOTES, 'UTF-8')?></strong></div>
         <button id="topbarLogoutGuru" type="button" class="topbar-logout" title="Keluar dari dashboard guru"><i class="fa-solid fa-arrow-right-from-bracket"></i><span>Keluar</span></button>
       </div>
@@ -69,10 +70,10 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
     <section id="content" class="content-grid"></section>
   </main>
 
-  <script src="../assets/js/teacher/live-sessions.js?v=20260930-ios-poll-load"></script>
-  <script src="../assets/js/cbt/support-tickets.js?v=20260911-proctor-1"></script>
-  <script src="../assets/js/cbt/staff-admin-chat.js?v=20260929-form-ui-2"></script>
-  <script src="../assets/js/teacher/dashboard.js?v=20261001-no-blank-print-1"></script>
+  <script src="../assets/js/teacher/live-sessions.js?v=20261001-manual-refresh-1"></script>
+  <script src="../assets/js/cbt/support-tickets.js?v=20261001-manual-refresh-1"></script>
+  <script src="../assets/js/cbt/staff-admin-chat.js?v=20261001-manual-refresh-1"></script>
+  <script src="../assets/js/teacher/dashboard.js?v=20261001-manual-refresh-1"></script>
   <script src="../assets/js/table-pagination.js?v=20260910-cleanup"></script>
 </body>
 </html>

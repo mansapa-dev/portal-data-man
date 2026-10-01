@@ -1,6 +1,6 @@
 (function () {
   'use strict';
-  let pollTimer = null, clockTimer = null, generation = 0, lastPayload = null, fetchedAt = 0, visibilityHandler = null, activeLoad = null;
+  let clockTimer = null, generation = 0, lastPayload = null, fetchedAt = 0;
   const PAGE_SIZE = 20, catalogState = new Map();
   const filterState = { exam: 'ALL', grade: 'ALL', className: 'ALL', subject: 'ALL', status: 'ALL', connection: 'ALL' };
   const element = (tag, text, className) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = String(text); if (className) node.className = className; return node; };
@@ -8,7 +8,7 @@
   const statusLabel = status => ({ IN_PROGRESS: 'Mengerjakan', TERMINATED: 'Dihentikan', EXPIRED: 'Waktu habis' }[status] || status);
   const scoreLabel = value => Number(value || 0).toLocaleString('id-ID', { maximumFractionDigits: 2 });
 
-  function stop() { generation += 1; clearTimeout(pollTimer); clearInterval(clockTimer); pollTimer = null; clockTimer = null; if (visibilityHandler) document.removeEventListener('visibilitychange', visibilityHandler); visibilityHandler = null; activeLoad = null; }
+  function stop() { generation += 1; clearInterval(clockTimer); clockTimer = null; }
   function metric(label, value, tone = '') { const card = element('article', undefined, `live-metric ${tone}`.trim()); card.append(element('strong', value), element('span', label)); return card; }
   function sessionCard(session, options, refresh) {
     const card = element('article', undefined, 'session-card'), head = element('header'), identity = element('div');
@@ -55,13 +55,13 @@
   }
   function render(root, payload, refresh, options = {}) {
     root.replaceChildren(); const heading = element('div', undefined, 'live-heading'), copy = element('div'), actions = element('div', undefined, 'live-actions');
-    copy.append(element('h2', options.title || 'Live Sessions'), element('p', options.description || 'Diperbarui otomatis setiap 10 detik untuk ujian yang Anda ampu.'));
-    actions.append(element('span', `Terakhir diperbarui ${new Date().toLocaleTimeString('id-ID')}`)); const button = element('button', 'Perbarui sekarang', 'refresh-live'); button.type = 'button'; button.addEventListener('click', refresh); actions.append(button); heading.append(copy, actions);
+    copy.append(element('h2', options.title || 'Live Sessions'), element('p', options.description || 'Klik Perbarui sekarang untuk mengambil data terbaru. Hitung mundur hanya perkiraan lokal.'));
+    actions.append(element('span', `Terakhir diperbarui ${new Date(fetchedAt).toLocaleTimeString('id-ID')}`)); const button = element('button', 'Perbarui sekarang', 'refresh-live'); button.type = 'button'; button.addEventListener('click', refresh); actions.append(button); heading.append(copy, actions);
     const visible=options.enableFilters?filteredPayload(payload):payload;
     if(options.enableFilters)root.append(heading,filterBar(payload,()=>render(root,payload,refresh,options),options.filterFields,options.filterOptions));else root.append(heading);
     const summary = element('section', undefined, 'live-summary'); summary.append(metric('Sedang mengerjakan', visible.summary.active, 'active'), metric('Peserta dipantau', visible.summary.total), metric('Terhubung', visible.summary.online ?? visible.sessions.filter(s=>s.connectionState==='ONLINE').length), metric('Dihentikan', visible.summary.terminated ?? visible.sessions.filter(s=>s.status==='TERMINATED').length, (visible.summary.terminated ?? 0) ? 'danger' : ''));
     const grid = element('section', undefined, 'session-grid');
-    if (!visible.sessions.length) { const empty = element('div', undefined, 'live-empty'); empty.append(element('strong', 'Belum ada sesi aktif'), element('p', options.enableFilters?'Tidak ada sesi yang sesuai dengan filter saat ini.':'Sesi siswa akan muncul otomatis setelah mereka mulai mengerjakan ujian yang Anda ampu.')); grid.append(empty); }
+    if (!visible.sessions.length) { const empty = element('div', undefined, 'live-empty'); empty.append(element('strong', 'Belum ada sesi aktif'), element('p', options.enableFilters?'Tidak ada sesi yang sesuai dengan filter saat ini.':'Klik Perbarui sekarang setelah siswa mulai mengerjakan ujian yang Anda ampu.')); grid.append(empty); }
     root.append(summary);
     if(!visible.sessions.length)root.append(grid);else appendSessions(root,visible.sessions,options.groupByExam===true,()=>render(root,payload,refresh,options),options,refresh);
   }
@@ -69,10 +69,24 @@
   function mount(root, api, notice, options = {}) {
     stop(); lastPayload = null; options.notice=notice; const currentGeneration = generation;
     let inFlight = false;
-    const load = async () => { if (currentGeneration !== generation || document.hidden || inFlight) return; clearTimeout(pollTimer); inFlight = true; try { const response = await api('api/teacher/live-sessions'); if (currentGeneration !== generation) return; lastPayload = response.data; fetchedAt = Date.now(); notice.textContent = ''; render(root, lastPayload, load, options); startClock(root); } catch (error) { notice.textContent = `Live Sessions gagal diperbarui: ${error.message}`; if (!lastPayload) root.replaceChildren(element('div', 'Data live session belum dapat dimuat.', 'live-empty')); } finally { inFlight = false; if (currentGeneration === generation && !document.hidden) pollTimer = setTimeout(load, 15000 + Math.random() * 5000); } };
-    activeLoad = load;
-    visibilityHandler = () => { if (document.hidden) { clearTimeout(pollTimer); clearInterval(clockTimer); } else if (activeLoad) activeLoad(); };
-    document.addEventListener('visibilitychange', visibilityHandler);
+    const load = async () => {
+      if (currentGeneration !== generation || inFlight) return;
+      inFlight = true;
+      try {
+        const response = await api('api/teacher/live-sessions');
+        if (currentGeneration !== generation) return;
+        lastPayload = response.data; fetchedAt = Date.now(); notice.textContent = '';
+        render(root, lastPayload, load, options); startClock(root);
+      } catch (error) {
+        if (currentGeneration !== generation) return;
+        notice.textContent = `Live Sessions gagal diperbarui: ${error.message}`;
+        if (!lastPayload) {
+          const retry = element('button', 'Coba lagi', 'refresh-live');
+          retry.type = 'button'; retry.addEventListener('click', load);
+          root.replaceChildren(element('div', 'Data live session belum dapat dimuat.', 'live-empty'), retry);
+        }
+      } finally { inFlight = false; }
+    };
     root.replaceChildren(element('div', 'Menghubungkan ke sesi ujian aktif…', 'live-loading')); load();
   }
   window.CbtLiveSessions = { mount, stop };

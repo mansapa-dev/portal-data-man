@@ -1,6 +1,6 @@
 (function(){
   'use strict';
-  let studentTimer=null,staffTimer=null,staffGeneration=0;
+  let studentTimer=null,staffGeneration=0;
   const labels={ACCOUNT_ACCESS:'Akun / login',EXAM_LOCKED:'Ujian terkunci',PIN:'PIN',CONNECTION:'Koneksi',TECHNICAL:'Teknis',OTHER:'Lainnya'};
   const statuses={OPEN:'Baru',IN_PROGRESS:'Sedang ditangani',RESOLVED:'Selesai',CLOSED:'Ditutup'};
   const el=(tag,text,className)=>{const node=document.createElement(tag);if(text!==undefined)node.textContent=String(text);if(className)node.className=className;return node;};
@@ -51,25 +51,21 @@
   }
   async function act(button,request,refresh){button.disabled=true;try{await request();await refresh();}catch(error){alert(error.message);}finally{button.disabled=false;}}
   function escapeSupportText(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);}
-  function stopStaff(){staffGeneration+=1;clearTimeout(staffTimer);staffTimer=null;}
+  function stopStaff(){staffGeneration+=1;}
   function mountStaff(root,client,canReset=false,notice=null,statusGetter=()=> 'ALL'){
     stopStaff();const generation=staffGeneration;let loading=false;
-    const schedule=()=>{if(generation===staffGeneration){clearTimeout(staffTimer);staffTimer=setTimeout(()=>load(),10000);}};
-    const mayRefresh=()=>!document.hidden&&!root.closest('.dash-tab')?.classList.contains('hidden')&&!root.contains(document.activeElement);
     const load=async(force=false)=>{
-      clearTimeout(staffTimer);
       if(generation!==staffGeneration||loading)return;
-      if(!force&&!mayRefresh()){schedule();return;}
       loading=true;
       try{
         const tickets=await client.list(statusGetter());
         if(generation!==staffGeneration)return;
         root.replaceChildren(...tickets.map(ticket=>staffCard(ticket,client,canReset,()=>load(true))));
         if(!tickets.length)root.append(el('div','Belum ada tiket pada status ini.','support-empty'));
-        if(notice){notice.className='alert support-auto-refresh';notice.innerHTML='<i class="fa-solid fa-arrows-rotate"></i> Diperbarui otomatis setiap 10 detik · Sinkron terakhir '+new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}
+        if(notice){notice.className='alert support-auto-refresh';notice.innerHTML='<i class="fa-solid fa-arrows-rotate"></i> Refresh manual: gunakan tombol Perbarui · Sinkron terakhir '+new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}
       }
       catch(error){if(notice){notice.className='alert error';notice.textContent=error.message;}if(!root.children.length)root.append(el('div','Tiket belum dapat dimuat.','support-empty'));}
-      finally{loading=false;schedule();}
+      finally{loading=false;}
     };
     load(true);return()=>load(true);
   }

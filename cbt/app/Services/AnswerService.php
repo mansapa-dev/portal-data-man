@@ -11,7 +11,7 @@ final class AnswerService
  {
   if ($revision < 0 || !preg_match('/^[A-Za-z0-9_-]{16,100}$/', $mutationId)) throw new DomainException('Versi penyimpanan tidak valid. Muat ulang halaman ujian.', 422);
   return $this->db->transaction(function () use ($studentId, $examId, $questionId, $answer, $flagged, $attemptId, $revision, $mutationId) {
-   $attempt = $this->attempts->find($studentId, $examId, true) ?? throw new DomainException('Sesi ujian tidak ditemukan.', 404);
+   $attempt = $this->attempts->lockForAnswer($studentId, $examId) ?? throw new DomainException('Sesi ujian tidak ditemukan.', 404);
    if (!hash_equals($attempt['public_id'], $attemptId)) throw new DomainException('Antrean berasal dari sesi ujian berbeda.', 409);
    $statement = $this->db->pdo()->prepare('SELECT q.question_type,q.option_a,q.option_b,q.option_c,q.option_d,q.option_e,v.revision,v.mutation_id,a.id answer_id,a.answer,a.is_flagged FROM attempt_questions q LEFT JOIN answer_write_versions v ON v.attempt_id=q.attempt_id AND v.question_id=q.question_id LEFT JOIN student_answers a ON a.attempt_id=q.attempt_id AND a.question_id=q.question_id WHERE q.attempt_id=:attempt AND q.question_id=:question');
    $statement->execute(['attempt' => $attempt['id'], 'question' => $questionId]);
@@ -39,7 +39,11 @@ final class AnswerService
    // The attempt lock serializes writers and submit. Update an existing row
    // by PRIMARY KEY rather than entering the duplicate-secondary-key insert path.
    if ($question['answer_id'] !== null) {
-    $this->db->pdo()->prepare('UPDATE student_answers SET answer=:answer,is_flagged=:flagged,answered_at=UTC_TIMESTAMP(3) WHERE id=:id')->execute(['id'=>$question['answer_id'],'answer'=>$answer,'flagged'=>(int)$flagged]);
+    // A new mutation with identical content still advances its revision below,
+    // but need not rewrite the answer or its timestamp.
+    if ($question['answer'] !== $answer || (bool)$question['is_flagged'] !== $flagged) {
+     $this->db->pdo()->prepare('UPDATE student_answers SET answer=:answer,is_flagged=:flagged,answered_at=UTC_TIMESTAMP(3) WHERE id=:id')->execute(['id'=>$question['answer_id'],'answer'=>$answer,'flagged'=>(int)$flagged]);
+    }
    } else {
     $this->db->pdo()->prepare('INSERT INTO student_answers(attempt_id,question_id,answer,is_flagged,answered_at) VALUES(:attempt,:question,:answer,:flagged,UTC_TIMESTAMP(3))')->execute(['attempt'=>$attempt['id'],'question'=>$questionId,'answer'=>$answer,'flagged'=>(int)$flagged]);
    }

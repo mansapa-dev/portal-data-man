@@ -622,39 +622,35 @@
   });
   if (sidebarBackdrop) sidebarBackdrop.addEventListener('click', closeMobileSidebar);
 
-  // Sinkronkan seluruh menu guru secara berkala tanpa perlu memuat ulang halaman.
-  setInterval(async () => {
-    if (document.hidden || document.querySelector('.modal.show')) return;
+  const manualRefresh = document.getElementById('teacherRefresh');
+  if (manualRefresh) manualRefresh.addEventListener('click', async () => {
+    if (manualRefresh.disabled) return;
+    manualRefresh.disabled = true;
     try {
-      const me = await fetch('../api/auth/me', { credentials: 'same-origin', cache: 'no-store' }).then((response) => response.json());
+      const response = await fetch('../api/auth/me', { credentials: 'same-origin', cache: 'no-store' });
+      const me = await response.json();
+      if (!response.ok) throw new Error(me.message || 'Sesi belum dapat dikonfirmasi.');
       if (!['TEACHER','EMPLOYEE'].includes(me.data?.staff?.role)) { location.href = '../guru'; return; }
-      const previousProctor = capabilities.proctor === true;
-      capabilities = me.data.staff.capabilities || {teacher:me.data.staff.role==='TEACHER',proctor:false};
+      capabilities = me.data.staff.capabilities || { teacher: me.data.staff.role === 'TEACHER', proctor: false };
       csrf = me.data.csrf_token || csrf;
       applyCapabilityVisibility();
-      if (previousProctor && !capabilities.proctor && ['support','admin-chat'].includes(activeSection)) {
-        notice.style.color = '#c0392b';
-        notice.textContent = 'Penugasan petugas piket Anda telah berakhir. Akses tiket bantuan ditutup.';
+      if (!capabilities.proctor && ['support','admin-chat'].includes(activeSection)) {
         await openSection(capabilities.teacher ? 'overview' : 'live');
+        notice.textContent = 'Penugasan petugas piket telah berakhir. Akses bantuan ditutup.';
         return;
       }
-      const fresh = (await api('api/teacher/dashboard')).data;
-      const changed = JSON.stringify(fresh.ujianList) !== JSON.stringify(data.ujianList)
-        || JSON.stringify(fresh.hasilList) !== JSON.stringify(data.hasilList)
-        || JSON.stringify(fresh.pelanggaranList) !== JSON.stringify(data.pelanggaranList);
-      data = fresh;
-      if (changed) render(activeSection);
-    } catch (_) {
-      // Pertahankan data terakhir ketika sinkronisasi latar belakang gagal.
-    }
-  }, 30000 + Math.random() * 15000);
+      await openSection(activeSection);
+    } catch (error) { notice.textContent = error.message; }
+    finally { manualRefresh.disabled = false; }
+  });
 
+  // Data is refreshed on navigation, manual actions, and successful mutations only.
   window.addEventListener('cbt:data-updated', async () => {
     try {
       data = (await api('api/teacher/dashboard')).data;
       render(activeSection);
     } catch (_) {
-      // Refresh berkala akan mencoba kembali.
+      // Pengguna dapat mencoba kembali melalui navigasi atau muat ulang.
     }
   });
 
