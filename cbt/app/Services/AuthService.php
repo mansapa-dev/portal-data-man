@@ -17,6 +17,7 @@ final class AuthService
         Session::regenerate();
         unset($_SESSION['auth']);
         $_SESSION['student']=['student_id'=>(int)$student['id'],'portal_student_id'=>$student['portal_student_id'],'nisn'=>$student['nisn']];
+        Session::close();
         return ['nisn'=>$student['nisn'],'nama'=>$student['name_snapshot'],'kelas'=>$student['class_snapshot'],'tingkat'=>$student['grade_snapshot']];
     }
     private function normalizeStudentDigits(string$value):string
@@ -29,6 +30,7 @@ final class AuthService
         $user=$this->users->findActiveByUsername(trim($username));
         if(!$user || $user['role']!=='ADMIN' || !password_verify($password,$user['password_hash'])) throw new DomainException('Username atau password administrator salah.',401);
         Session::regenerate();unset($_SESSION['student']);$_SESSION['auth']=['user_id'=>(int)$user['id'],'teacher_id'=>$user['teacher_id']?(int)$user['teacher_id']:null,'employee_id'=>$user['employee_id']?(int)$user['employee_id']:null,'role'=>$user['role']];
+        Session::close();
         $this->users->touchLogin((int)$user['id']);
         return ['id'=>(int)$user['id'],'nama'=>$user['name'],'username'=>$user['username'],'role'=>strtolower($user['role'])];
     }

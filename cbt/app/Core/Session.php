@@ -13,9 +13,11 @@ final class Session
   $sameSite=(string)Config::get('SESSION_SAME_SITE','Lax');if(!in_array($sameSite,['Lax','Strict','None'],true))$sameSite='Lax';
   ini_set('session.gc_maxlifetime',(string)$lifetime);ini_set('session.use_strict_mode','1');ini_set('session.use_only_cookies','1');
   session_name('cbt_session');session_set_cookie_params(['lifetime'=>$lifetime,'path'=>'/','secure'=>$secureCookie,'httponly'=>true,'samesite'=>$sameSite]);
-  session_start();if(!isset($_SESSION['csrf']))$_SESSION['csrf']=bin2hex(random_bytes(32));
+  if(!session_start())throw new \Cbt\Exceptions\DomainException('Sesi tidak dapat dibaca. Hubungi pengawas; jangan hapus data browser.',503);
+  if(!isset($_SESSION['csrf']))$_SESSION['csrf']=bin2hex(random_bytes(32));
  }
  public static function regenerate():void{session_regenerate_id(true);}
  public static function csrf():string{return(string)($_SESSION['csrf']??'');}
+ public static function close():void{if(session_status()===PHP_SESSION_ACTIVE&&!session_write_close())throw new \Cbt\Exceptions\DomainException('Sesi belum berhasil disimpan. Silakan coba kembali.',503);}
  public static function destroy():void{$_SESSION=[];if(ini_get('session.use_cookies')){$p=session_get_cookie_params();setcookie(session_name(),'',time()-42000,$p['path'],$p['domain'],$p['secure'],$p['httponly']);}session_destroy();}
 }

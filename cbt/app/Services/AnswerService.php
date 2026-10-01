@@ -13,7 +13,7 @@ final class AnswerService
   return $this->db->transaction(function () use ($studentId, $examId, $questionId, $answer, $flagged, $attemptId, $revision, $mutationId) {
    $attempt = $this->attempts->find($studentId, $examId, true) ?? throw new DomainException('Sesi ujian tidak ditemukan.', 404);
    if (!hash_equals($attempt['public_id'], $attemptId)) throw new DomainException('Antrean berasal dari sesi ujian berbeda.', 409);
-   $statement = $this->db->pdo()->prepare('SELECT q.question_type,q.option_a,q.option_b,q.option_c,q.option_d,q.option_e,v.revision,v.mutation_id,a.answer,a.is_flagged FROM attempt_questions q LEFT JOIN answer_write_versions v ON v.attempt_id=q.attempt_id AND v.question_id=q.question_id LEFT JOIN student_answers a ON a.attempt_id=q.attempt_id AND a.question_id=q.question_id WHERE q.attempt_id=:attempt AND q.question_id=:question');
+   $statement = $this->db->pdo()->prepare('SELECT q.question_type,q.option_a,q.option_b,q.option_c,q.option_d,q.option_e,v.revision,v.mutation_id,a.id answer_id,a.answer,a.is_flagged FROM attempt_questions q LEFT JOIN answer_write_versions v ON v.attempt_id=q.attempt_id AND v.question_id=q.question_id LEFT JOIN student_answers a ON a.attempt_id=q.attempt_id AND a.question_id=q.question_id WHERE q.attempt_id=:attempt AND q.question_id=:question');
    $statement->execute(['attempt' => $attempt['id'], 'question' => $questionId]);
    $question = $statement->fetch();
    if (!$question) throw new DomainException('Soal tidak ditemukan.', 404);
@@ -36,7 +36,13 @@ final class AnswerService
    if ($attempt['status'] !== 'IN_PROGRESS') throw new DomainException('Ujian sudah tidak aktif.', 409);
    if (strtotime($attempt['expires_at'].' UTC') <= time()) throw new DomainException('Waktu ujian telah habis. Jawaban baru tidak dapat diterima.', 409);
    if ($revision !== $currentRevision) throw new DomainException('Jawaban berubah di tab atau perangkat lain. Tutup tab lain dan hubungi pengawas; antrean lokal tetap disimpan.', 409);
-   $this->db->pdo()->prepare('INSERT INTO student_answers(attempt_id,question_id,answer,is_flagged,answered_at) VALUES(:attempt,:question,:answer,:flagged,UTC_TIMESTAMP(3)) ON DUPLICATE KEY UPDATE answer=VALUES(answer),is_flagged=VALUES(is_flagged),answered_at=UTC_TIMESTAMP(3)')->execute(['attempt' => $attempt['id'], 'question' => $questionId, 'answer' => $answer, 'flagged' => (int)$flagged]);
+   // The attempt lock serializes writers and submit. Update an existing row
+   // by PRIMARY KEY rather than entering the duplicate-secondary-key insert path.
+   if ($question['answer_id'] !== null) {
+    $this->db->pdo()->prepare('UPDATE student_answers SET answer=:answer,is_flagged=:flagged,answered_at=UTC_TIMESTAMP(3) WHERE id=:id')->execute(['id'=>$question['answer_id'],'answer'=>$answer,'flagged'=>(int)$flagged]);
+   } else {
+    $this->db->pdo()->prepare('INSERT INTO student_answers(attempt_id,question_id,answer,is_flagged,answered_at) VALUES(:attempt,:question,:answer,:flagged,UTC_TIMESTAMP(3))')->execute(['attempt'=>$attempt['id'],'question'=>$questionId,'answer'=>$answer,'flagged'=>(int)$flagged]);
+   }
    $this->db->pdo()->prepare('INSERT INTO answer_write_versions(attempt_id,question_id,revision,mutation_id) VALUES(:attempt,:question,:revision,:mutation) ON DUPLICATE KEY UPDATE revision=VALUES(revision),mutation_id=VALUES(mutation_id)')->execute(['attempt' => $attempt['id'], 'question' => $questionId, 'revision' => $currentRevision + 1, 'mutation' => $mutationId]);
    return ['question_id' => $questionId, 'answer' => $answer, 'is_flagged' => $flagged, 'revision' => $currentRevision + 1, 'saved_at' => gmdate(DATE_ATOM)];
   });

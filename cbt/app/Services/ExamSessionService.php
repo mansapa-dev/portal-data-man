@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 namespace Cbt\Services;
-use Cbt\Core\Database;
+use Cbt\Core\{Database,RedisCache};
 use Cbt\Exceptions\DomainException;
 use Cbt\Repositories\{AttemptRepository,ExamRepository,StudentRepository};
 final class ExamSessionService
@@ -9,8 +9,18 @@ final class ExamSessionService
     public function __construct(private Database $database,private StudentRepository $students,private ExamRepository $exams,private AttemptRepository $attempts){}
     public function heartbeat(int $studentId, int $examId):array
     {
-        $statement=$this->database->pdo()->prepare("INSERT INTO attempt_connections(attempt_id,last_seen_at) SELECT id,UTC_TIMESTAMP(3) FROM exam_attempts WHERE student_id=:student AND exam_id=:exam AND status='IN_PROGRESS' AND expires_at>UTC_TIMESTAMP(3) ON DUPLICATE KEY UPDATE last_seen_at=UTC_TIMESTAMP(3)");
-        $statement->execute(['student'=>$studentId,'exam'=>$examId]);
+        // Presence is approximate (monitoring allows 90 seconds). Cache only
+        // successful refreshes; never cache answers or exam completion.
+        RedisCache::remember('heartbeat:v2:'.$studentId.':'.$examId,40,function()use($studentId,$examId):bool{
+            // A plain read avoids INSERT...SELECT source locks on exam_attempts.
+            $statement=$this->database->pdo()->prepare("SELECT a.id,c.last_seen_at>=UTC_TIMESTAMP(3)-INTERVAL 40 SECOND AS recent FROM exam_attempts a LEFT JOIN attempt_connections c ON c.attempt_id=a.id WHERE a.student_id=:student AND a.exam_id=:exam AND a.status='IN_PROGRESS' AND a.expires_at>UTC_TIMESTAMP(3)");
+            $statement->execute(['student'=>$studentId,'exam'=>$examId]);
+            $attempt=$statement->fetch();
+            if($attempt&&!$attempt['recent']){
+                $this->database->pdo()->prepare('INSERT INTO attempt_connections(attempt_id,last_seen_at) VALUES(:attempt,UTC_TIMESTAMP(3)) ON DUPLICATE KEY UPDATE last_seen_at=UTC_TIMESTAMP(3)')->execute(['attempt'=>$attempt['id']]);
+            }
+            return true;
+        });
         return ['server_time'=>gmdate(DATE_ATOM)];
     }
     public function list(int $studentId,string $nisn):array

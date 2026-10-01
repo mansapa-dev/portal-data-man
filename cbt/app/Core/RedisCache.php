@@ -98,6 +98,7 @@ LUA;
             $port = (int) Config::get('REDIS_PORT', 6379);
             $timeout = max(0.05, (float) Config::get('REDIS_TIMEOUT', 0.15));
             if (!$redis->connect($host, $port, $timeout)) return null;
+            $redis->setOption(\Redis::OPT_READ_TIMEOUT, $timeout);
             $password = Config::get('REDIS_PASSWORD');
             if ($password !== null && !$redis->auth((string) $password)) return null;
             $database = max(0, (int) Config::get('REDIS_DATABASE', 0));

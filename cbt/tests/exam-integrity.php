@@ -26,6 +26,12 @@ try {
  $sessions=new ExamSessionService($db,$students,$exams,$attempts);
  $session=$sessions->start(1,'0000000001',1);$attempt=$session['attempt_id'];
  $sessions->heartbeat(1,1);
+ $seen=$pdo->query('SELECT last_seen_at FROM attempt_connections WHERE attempt_id=1')->fetchColumn();
+ $sessions->heartbeat(1,1);
+ $assert($pdo->query('SELECT last_seen_at FROM attempt_connections WHERE attempt_id=1')->fetchColumn()===$seen,'repeated heartbeat does not rewrite recent presence');
+ $pdo->exec('UPDATE attempt_connections SET last_seen_at=UTC_TIMESTAMP(3)-INTERVAL 2 MINUTE WHERE attempt_id=1');
+ $sessions->heartbeat(1,1);
+ $assert((int)$pdo->query('SELECT last_seen_at>UTC_TIMESTAMP(3)-INTERVAL 10 SECOND FROM attempt_connections WHERE attempt_id=1')->fetchColumn()===1,'stale heartbeat is refreshed without Redis');
  $monitor=new \Cbt\Repositories\AdminRepository($pdo);
  $pdo->exec("INSERT INTO subjects(public_id,code,name,status) VALUES('test-subject','TST','Test Subject','ACTIVE')");
  $pdo->exec("UPDATE exams SET subject_id=1 WHERE id=1");

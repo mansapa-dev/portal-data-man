@@ -29,11 +29,16 @@
       throw error;
     } finally { clearTimeout(timer); }
   }
-  const refreshCsrf = async () => {
-    const {response,responseText}=await fetchTextWithTimeout('api/auth/me',{credentials:'same-origin',cache:'no-store'},15000);
+  const fetchCsrf = async () => {
+    const {response,responseText}=await fetchTextWithTimeout('api/auth/me',{credentials:'same-origin',cache:'no-store'},45000);
     const payload=JSON.parse(responseText);
     if(!response.ok || !payload.data?.csrf_token) throw new Error('Sesi belum dapat dikonfirmasi. Periksa koneksi.');
     csrf = payload.data.csrf_token;
+  };
+  let csrfRefresh = null;
+  const refreshCsrf = () => {
+    if (!csrfRefresh) csrfRefresh = fetchCsrf().finally(() => { csrfRefresh = null; });
+    return csrfRefresh;
   };
   let csrfPromise = refreshCsrf();
   csrfPromise.catch(() => {});
@@ -81,12 +86,12 @@
     if (answerQueue?.state().pending) { event.preventDefault(); event.returnValue = ''; }
   });
   window.cbtAnswerState = () => answerQueue?.state() || { pending: 0 };
-  async function api(path, method = 'GET', body) {
+  async function api(path, method = 'GET', body, csrfRetried = false) {
     try { await csrfPromise; } catch (_) { csrfPromise = refreshCsrf(); await csrfPromise; }
     // Login/start can queue during a mass arrival; accepted answers keep a short retry window.
     const adminListRequest = method === 'GET' && /^(?:api\/admin\/(?:exams(?:-archive)?|students|questions))(?:\?|$)/.test(path);
     const answerRequest = method === 'PUT' && /^api\/student\/exams\/\d+\/answers\/\d+$/.test(path);
-    const longRequest = /auth\/student\/login|student\/exams\/\d+\/start/.test(path) || method === 'POST' && (path === 'api/admin/exams' || path === 'api/admin/students/generate-pins' || /^api\/admin\/portal-data\/sync\/[a-z_]+$/.test(path)) || method === 'DELETE' && /^api\/admin\/exams\/\d+$/.test(path);
+    const longRequest = /auth\/(?:student|staff)\/login|student\/exams\/\d+\/start/.test(path) || method === 'POST' && (path === 'api/admin/exams' || path === 'api/admin/students/generate-pins' || /^api\/admin\/portal-data\/sync\/[a-z_]+$/.test(path)) || method === 'DELETE' && /^api\/admin\/exams\/\d+$/.test(path);
     const mediumRequest = method === 'POST' && /student\/exams\/\d+\/submit|admin\/questions(?:\/import)?$/.test(path) || path === 'api/admin/students' && method === 'GET';
     const timeoutMs = adminListRequest ? 20000 : longRequest ? 120000 : mediumRequest ? 60000 : answerRequest ? 45000 : 15000;
     let response, payload;
@@ -109,7 +114,13 @@
       throw error;
     }
     if (!response.ok) {
-      if (response.status === 419) csrfPromise = refreshCsrf();
+      // Only replay an explicit CSRF rejection, never an ambiguous timeout.
+      // Preserve the original answer mutation/revision and bound this to once.
+      if (response.status === 419 && !csrfRetried) {
+        csrfPromise = refreshCsrf();
+        await csrfPromise;
+        return api(path, method, body, true);
+      }
       const error = new Error(payload.message || 'Permintaan gagal.'); error.status = response.status; throw error;
     }
     if (method !== 'GET') window.dispatchEvent(new CustomEvent('cbt:data-updated', { detail: { path, method } }));
