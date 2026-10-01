@@ -12,7 +12,7 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
   <title>Dashboard Guru - CBT MAN 1 Palembang</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <link rel="stylesheet" href="../assets/css/teacher.css?v=20260930-compact-pdf-1">
+  <link rel="stylesheet" href="../assets/css/teacher.css?v=20261001-hide-nonproctor-help">
   <link rel="stylesheet" href="../assets/css/ui-theme.css?v=20260911-3">
   <script src="../assets/js/dashboard-design.js?v=20260911-3"></script>
   <link rel="stylesheet" href="../assets/css/atomic-components.css?v=20260911-1">
@@ -35,7 +35,7 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
       <button class="nav-item" data-section="support"><i class="fa-solid fa-headset"></i><span>Tiket Bantuan</span></button>
       <button class="nav-item" data-section="admin-chat"><i class="fa-solid fa-comments"></i><span>Komunikasi Admin</span></button>
     </nav>
-    <div class="teacher-help-box">
+    <div class="teacher-help-box" hidden>
       <h5>Butuh Bantuan?</h5>
       <p>Tiket hanya tersedia saat Anda ditugaskan sebagai petugas piket ujian.</p>
       <button type="button" id="teacherHelpButton">Buka Tiket Siswa</button>
