@@ -1,6 +1,7 @@
 // Administrator exam schedule management.
 let cacheAdminUjianRows = [];
 let showingArchivedExams = false;
+let adminExamPage = 1, adminExamMeta = {page:1,pages:1,total:0}, adminExamSearchTimer;
 
 function formatTargetKelas(targetStr, targetNamesStr) {
   if (targetNamesStr && targetNamesStr.trim() !== '' && !targetNamesStr.startsWith('01M1')) {
@@ -101,50 +102,8 @@ function populateAdminUjianFilters() {
   }
 }
 
-function applyFilterUjian() {
-  const ting = document.getElementById('fltUjianTingkat')?.value || 'ALL';
-  const kelas = document.getElementById('fltUjianKelas')?.value || 'ALL';
-  const mapel = document.getElementById('fltUjianMapel')?.value || 'ALL';
-  const query = (document.getElementById('searchUjian')?.value || '').toLowerCase().trim();
-
-  const filtered = cacheAdminUjianRows.filter(u => {
-    // Filter Tingkat
-    if (ting !== 'ALL' && String(u.tingkat).toUpperCase() !== ting.toUpperCase()) {
-      return false;
-    }
-    // Filter Kelas
-    if (kelas !== 'ALL') {
-      const targetStr = String(u.kelas_target || '').trim();
-      const targetNames = String(u.nama_kelas_target || '').trim();
-      if (targetStr && targetStr.toLowerCase() !== 'semua') {
-        const ids = targetStr.split(',').map(s => s.trim().toLowerCase());
-        const names = targetNames.split(',').map(s => s.trim().toLowerCase());
-        const selectedClassObj = portalReferences.classes?.find(c => c.portal_class_id === kelas || c.name === kelas || c.code === kelas);
-        const selId = String(kelas).toLowerCase();
-        const selName = String(selectedClassObj?.name || '').toLowerCase();
-        const selCode = String(selectedClassObj?.code || '').toLowerCase();
-
-        const match = ids.includes(selId) || 
-                      names.includes(selId) || 
-                      (selName && (names.includes(selName) || ids.includes(selName))) ||
-                      (selCode && (names.includes(selCode) || ids.includes(selCode)));
-        if (!match) return false;
-      }
-    }
-    // Filter Mapel
-    if (mapel !== 'ALL') {
-      const matchSubject = String(u.subject_id) === String(mapel) || 
-                           (u.nama_mapel && portalReferences.subjects?.find(s => String(s.id) === String(mapel))?.name === u.nama_mapel);
-      if (!matchSubject) return false;
-    }
-    // Search Query
-    if (query !== '') {
-      const formatted = formatTargetKelas(u.kelas_target, u.nama_kelas_target);
-      const fullText = `${u.id} ${u.nama_ujian} ${u.nama_mapel || ''} ${u.tingkat} ${u.tanggal_ujian || ''} ${formatted} ${u.tahun_ajaran || ''}`.toLowerCase();
-      if (!fullText.includes(query)) return false;
-    }
-    return true;
-  });
+function renderAdminUjianPage() {
+  const filtered = cacheAdminUjianRows;
 
   const tb = document.getElementById('tblAdminUjian');
   if (!tb) return;
@@ -152,6 +111,7 @@ function applyFilterUjian() {
   if (filtered.length === 0) {
     tb.innerHTML = `<tr><td colspan="8" align="center" style="padding:24px; color:var(--text-muted);">Tidak ada jadwal ujian yang sesuai kriteria filter.</td></tr>`;
     window.cacheUjianExcel = [];
+    renderAdminListPager(tb,'adminExamPager',adminExamMeta,()=>{});
     return;
   }
 
@@ -205,7 +165,12 @@ function applyFilterUjian() {
       </tr>
     `;
   }).join('');
+  renderAdminListPager(tb,'adminExamPager',adminExamMeta,page=>{adminExamPage=page;loadDataAdminUjian(false);});
 }
+
+function applyFilterUjian() { clearTimeout(adminExamSearchTimer); adminExamSearchTimer=setTimeout(()=>{adminExamPage=1;loadDataAdminUjian(false);},250); }
+
+function renderAdminListPager(table,id,meta,onPage){let pager=document.getElementById(id);if(!pager){pager=document.createElement('nav');pager.id=id;pager.className='table-pagination';table.closest('.table-responsive')?.insertAdjacentElement('afterend',pager);}if(!meta||meta.pages<=1){pager.hidden=true;pager.replaceChildren();return;}pager.hidden=false;const size=meta.limit||25,info=document.createElement('span');const start=(meta.page-1)*size+1;info.textContent=`Menampilkan ${start}–${Math.min(start+size-1,meta.total)} dari ${meta.total}`;const controls=document.createElement('div');const prev=document.createElement('button');prev.type='button';prev.textContent='‹';prev.disabled=meta.page<=1;prev.onclick=()=>onPage(meta.page-1);const label=document.createElement('b');label.textContent=`Halaman ${meta.page} / ${meta.pages}`;const next=document.createElement('button');next.type='button';next.textContent='›';next.disabled=meta.page>=meta.pages;next.onclick=()=>onPage(meta.page+1);controls.append(prev,label,next);pager.replaceChildren(info,controls);}
 
 function editUjianById(id) {
   const u = (cacheAdminUjianRows || []).find(x => String(x.id) === String(id));
@@ -242,10 +207,10 @@ function editUjian(u) {
   bukaModalUjian(u);
 }
 
-function loadDataAdminUjian() {
+function loadDataAdminUjian(resetPage = true) {
+  if(resetPage) adminExamPage=1;
   loadPortalReferences(() => {
     populateAdminUjianFilters();
-    applyFilterUjian();
   });
   const tb = document.getElementById('tblAdminUjian');
   if (tb) tb.innerHTML = `<tr><td colspan="8" align="center" style="padding:24px;">Memuat data jadwal ujian...</td></tr>`;
@@ -253,9 +218,10 @@ function loadDataAdminUjian() {
   const request = showingArchivedExams ? 'getArsipUjianList' : 'getAdminUjianList';
   cbtApi
     .withSuccessHandler(rows => {
-      cacheAdminUjianRows = Array.isArray(rows) ? rows : (rows?.data || []);
+      cacheAdminUjianRows = Array.isArray(rows) ? rows : (rows?.items || []);
+      adminExamMeta = rows?.meta || {page:1,limit:25,pages:1,total:cacheAdminUjianRows.length};
       populateAdminUjianFilters();
-      applyFilterUjian();
+      renderAdminUjianPage();
     })
     .withFailureHandler(error => {
       const message = error?.code === 'REQUEST_TIMEOUT' || error?.status === 408
@@ -263,7 +229,7 @@ function loadDataAdminUjian() {
         : (error?.message || 'Permintaan gagal.');
       if (tb) tb.innerHTML = `<tr><td colspan="8" align="center" style="padding:28px;color:var(--danger)"><b>Daftar ujian belum dapat dimuat</b><div style="margin:6px 0 12px;color:var(--text-muted)">${message}</div><button type="button" class="btn btn-secondary" onclick="loadDataAdminUjian()"><i class="fa-solid fa-rotate"></i> Coba Lagi</button></td></tr>`;
     })
-    [request](stPengelola);
+    [request](stPengelola,{page:adminExamPage,limit:25,grade:document.getElementById('fltUjianTingkat')?.value||'ALL',class_id:document.getElementById('fltUjianKelas')?.value||'ALL',subject_id:document.getElementById('fltUjianMapel')?.value||'ALL',search:document.getElementById('searchUjian')?.value?.trim()||''});
 }
 
 function toggleArsipUjian() {

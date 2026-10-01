@@ -11,8 +11,8 @@ final class AdminController
  public function terminateStudentSession(Request$r):Response{$attempt=$this->admin->terminateStudentSession((string)$r->attributes['id']);$result=$this->scoring->submit((int)$attempt['student_id'],(int)$attempt['exam_id']);return Response::json(['result'=>$result],'Sesi siswa dihentikan dan hasil berhasil diproses.');}
  public function terminateExamSession(Request$r):Response{$attempts=$this->admin->terminateExamSession((int)$r->attributes['id']);$processed=0;foreach($attempts as$attempt){$this->scoring->submit((int)$attempt['student_id'],(int)$attempt['exam_id']);$processed++;}return Response::json(['terminated'=>$processed],'Sesi ujian diakhiri dan seluruh hasil aktif telah diproses.');}
  public function references(Request$r):Response{return Response::json($this->admin->references());}
- public function exams(Request$r):Response{return Response::json($this->admin->exams());}
- public function archivedExams(Request$r):Response{return Response::json($this->admin->archivedExams());}
+ public function exams(Request$r):Response{return Response::json($r->input('page')!==null?$this->admin->examPage($r->query,false):$this->admin->exams());}
+ public function archivedExams(Request$r):Response{return Response::json($r->input('page')!==null?$this->admin->examPage($r->query,true):$this->admin->archivedExams());}
  public function saveExam(Request$r):Response{$this->admin->saveExam($r->json(),(int)$_SESSION['auth']['user_id']);return Response::json(null,'Ujian berhasil disimpan.');}
  public function deleteExam(Request$r):Response{$deleted=$this->admin->deleteExam((int)$r->attributes['id']);$message=$deleted['history_preserved']?'Ujian dan soalnya telah dihapus dari daftar. Riwayat hasil siswa tetap tersimpan.':'Ujian dan '.$deleted['deleted_questions'].' soal di dalamnya berhasil dihapus.';return Response::json($deleted,$message);}
  public function restoreExam(Request$r):Response{$this->admin->restoreExam((int)$r->attributes['id']);return Response::json(null,'Ujian berhasil dipulihkan sebagai nonaktif beserta bank soalnya.');}
@@ -22,7 +22,7 @@ final class AdminController
  public function makeUpCandidates(Request$r):Response{return Response::json($this->admin->makeUpCandidates());}
  public function followUpSchedules(Request$r):Response{return Response::json($this->admin->followUpSchedules());}
  public function setFollowUpStatus(Request$r):Response{$data=$r->json();$this->admin->setFollowUpStatus((int)$r->attributes['id'],filter_var($data['active']??false,FILTER_VALIDATE_BOOL));return Response::json(null,'Status jadwal berhasil diperbarui.');}
- public function questions(Request$r):Response{return Response::json($this->admin->questions($r->input('exam_id')!==null?(int)$r->input('exam_id'):null,$r->input('subject_id')!==null?(int)$r->input('subject_id'):null));}
+ public function questions(Request$r):Response{if(filter_var($r->input('catalog',false),FILTER_VALIDATE_BOOL))return Response::json($this->admin->questionCatalog($r->query));if($r->input('page')!==null)return Response::json($this->admin->questionPage($r->query));return Response::json($this->admin->questions($r->input('exam_id')!==null?(int)$r->input('exam_id'):null,$r->input('subject_id')!==null?(int)$r->input('subject_id'):null));}
  public function saveQuestion(Request$r):Response{$this->admin->saveQuestion($r->json());return Response::json(null,'Soal berhasil disimpan.');}
  public function deleteQuestion(Request$r):Response{$this->admin->deleteQuestion((int)$r->attributes['id']);return Response::json(null,'Soal berhasil dihapus dari bank soal.');}
  public function users(Request$r):Response{return Response::json($this->admin->users());}

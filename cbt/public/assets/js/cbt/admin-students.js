@@ -1,7 +1,8 @@
 // Administrator student controls backed by Portal Data synchronization and batch PIN generation.
 
-let adminStudentLoadInFlight = false, adminStudentReloadQueued = false;
-function loadDataAdminSiswa() {
+let adminStudentLoadInFlight = false, adminStudentReloadQueued = false, adminStudentPage = 1, adminStudentMeta = {page:1,pages:1,total:0}, adminStudentSearchTimer;
+function loadDataAdminSiswa(resetPage = true) {
+  if(resetPage) adminStudentPage=1;
   if (adminStudentLoadInFlight) { adminStudentReloadQueued = true; return; }
   adminStudentLoadInFlight = true;
   const tb = document.getElementById('tblAdminSiswa');
@@ -9,15 +10,15 @@ function loadDataAdminSiswa() {
 
   loadPortalReferences(() => {
     populateAdminSiswaFilters();
-    applyFilterSiswa();
   });
 
   cbtApi
     .withSuccessHandler(rows => {
       adminStudentLoadInFlight = false;
-      cacheSiswaGlobal = Array.isArray(rows) ? rows : (rows?.data || []);
+      cacheSiswaGlobal = Array.isArray(rows) ? rows : (rows?.items || []);
+      adminStudentMeta = rows?.meta || {page:1,limit:25,pages:1,total:cacheSiswaGlobal.length};
       populateAdminSiswaFilters();
-      applyFilterSiswa();
+      renderAdminSiswaPage();
       if (adminStudentReloadQueued) { adminStudentReloadQueued = false; setTimeout(loadDataAdminSiswa, 0); }
     })
     .withFailureHandler(err => {
@@ -26,7 +27,7 @@ function loadDataAdminSiswa() {
       if (tb) tb.innerHTML = `<tr><td colspan="8" align="center" style="padding:28px; color:var(--danger);"><i class="fa-solid fa-triangle-exclamation" style="display:block;font-size:24px;margin-bottom:8px"></i><b>Data siswa belum dapat dimuat</b><div style="margin:6px 0 12px;color:var(--text-muted)">${message}</div><button type="button" class="btn btn-secondary" onclick="loadDataAdminSiswa()"><i class="fa-solid fa-rotate"></i> Coba Lagi</button></td></tr>`;
       if (adminStudentReloadQueued) adminStudentReloadQueued = false;
     })
-    .getAdminSiswaList(stPengelola);
+    .getAdminSiswaList(stPengelola,{page:adminStudentPage,limit:25,grade:document.getElementById('fltSiswaTingkat')?.value||'ALL',class_name:document.getElementById('fltSiswaKelas')?.value||'ALL',status:document.getElementById('fltSiswaStatus')?.value||'ALL',sort:document.getElementById('fltSiswaSort')?.value||'nama_asc',search:document.getElementById('searchSiswa')?.value?.trim()||''});
 }
 
 function populateAdminSiswaFilters() {
@@ -68,63 +69,8 @@ function populateAdminSiswaFilters() {
   }
 }
 
-function applyFilterSiswa() {
-  const ting = document.getElementById('fltSiswaTingkat')?.value || 'ALL';
-  const kelas = document.getElementById('fltSiswaKelas')?.value || 'ALL';
-  const status = document.getElementById('fltSiswaStatus')?.value || 'ALL';
-  const sort = document.getElementById('fltSiswaSort')?.value || 'nama_asc';
-  const query = (document.getElementById('searchSiswa')?.value || '').toLowerCase().trim();
-
-  const allClasses = portalReferences?.classes || [];
-
-  // 1. Filter base list
-  let filtered = (cacheSiswaGlobal || []).filter(s => {
-    // Filter Tingkat
-    if (ting !== 'ALL') {
-      const sTingkat = String(s.tingkat || '').trim().toUpperCase();
-      if (sTingkat !== ting.toUpperCase()) return false;
-    }
-    // Filter Kelas
-    if (kelas !== 'ALL') {
-      const studentClass = String(s.kelas || '').trim().toLowerCase();
-      const targetClass = String(kelas || '').trim().toLowerCase();
-      
-      const matchedRef = allClasses.find(c => 
-        String(c.name || '').toLowerCase() === targetClass || 
-        String(c.code || '').toLowerCase() === targetClass || 
-        String(c.portal_class_id || '').toLowerCase() === targetClass
-      );
-      const refName = String(matchedRef?.name || '').toLowerCase();
-      const refCode = String(matchedRef?.code || '').toLowerCase();
-      const refId = String(matchedRef?.portal_class_id || '').toLowerCase();
-
-      const match = studentClass === targetClass ||
-                    (refName && studentClass === refName) ||
-                    (refCode && studentClass === refCode) ||
-                    (refId && studentClass === refId) ||
-                    studentClass.includes(targetClass);
-      if (!match) return false;
-    }
-    // Filter Status Ujian
-    if (status !== 'ALL') {
-      const st = String(s.ujian_status || 'belum').toLowerCase();
-      if (st !== status.toLowerCase()) return false;
-    }
-    // Search Query (NISN / Nama)
-    if (query !== '') {
-      const qText = `${s.nomor_ujian || ''} ${s.nisn || ''} ${s.nama || ''} ${s.kelas || ''} ${s.pin || ''}`.toLowerCase();
-      if (!qText.includes(query)) return false;
-    }
-    return true;
-  });
-
-  filtered.sort((a, b) => {
-    const left = String(a.nama || '').trim();
-    const right = String(b.nama || '').trim();
-    return sort === 'nama_desc'
-      ? right.localeCompare(left, 'id', { sensitivity: 'base' })
-      : left.localeCompare(right, 'id', { sensitivity: 'base' });
-  });
+function renderAdminSiswaPage() {
+  const filtered = cacheSiswaGlobal || [];
 
   // 2. Update Excel Cache
   window.cacheSiswaExcel = filtered.map(s => [
@@ -141,6 +87,8 @@ function applyFilterSiswa() {
   renderTabelSiswa(filtered);
 }
 
+function applyFilterSiswa(){clearTimeout(adminStudentSearchTimer);adminStudentSearchTimer=setTimeout(()=>{adminStudentPage=1;loadDataAdminSiswa(false);},250);}
+
 function renderTabelSiswa(rows) {
   const tb = document.getElementById('tblAdminSiswa');
   if (!tb) return;
@@ -154,6 +102,7 @@ function renderTabelSiswa(rows) {
           <p style="font-size:12px; margin-top:4px;">Silakan sesuaikan filter tingkat, kelas, status, atau pencarian siswa.</p>
         </td>
       </tr>`;
+    renderAdminListPager(tb,'adminStudentPager',adminStudentMeta,()=>{});
     return;
   }
 
@@ -180,7 +129,7 @@ function renderTabelSiswa(rows) {
 
     return `
       <tr>
-        <td style="font-weight:700; color:var(--text-muted); text-align:center;">${idx + 1}</td>
+        <td style="font-weight:700; color:var(--text-muted); text-align:center;">${(adminStudentMeta.page-1)*adminStudentMeta.limit+idx + 1}</td>
         <td>
           <div style="font-weight:800; color:var(--text-main); font-size:13px; font-family:monospace;">${s.nomor_ujian || s.nisn}</div>
         </td>
@@ -206,6 +155,7 @@ function renderTabelSiswa(rows) {
       </tr>
     `;
   }).join('');
+  renderAdminListPager(tb,'adminStudentPager',adminStudentMeta,page=>{adminStudentPage=page;loadDataAdminSiswa(false);});
 }
 
 // SINGLE STUDENT PIN GENERATION

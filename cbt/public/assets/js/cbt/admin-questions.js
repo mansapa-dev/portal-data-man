@@ -2,6 +2,7 @@
 let cacheAdminSoalRows = [], cacheAdminSoalUjianRows = [], currentSelectedMapelName = null;
 let adminQuestionLoadVersion = 0;
 let detailSoalPage = 1;
+let detailSoalMeta = {page:1,limit:10,pages:1,total:0};
 let detailSoalSearchTimer = null;
 let attachedGambarSoalBase64 = '';
 let pendingQuestionImport = null;
@@ -64,17 +65,19 @@ function loadSelectedSubjectQuestions(loadVersion, onLoaded = null, onFailure = 
     if (table) table.innerHTML = `<tr><td colspan="6" class="alert error">Bank soal gagal dimuat: ${escapeQuestionUiText(error?.message || 'Terjadi kesalahan.')}</td></tr>`;
     if (typeof onFailure === 'function') onFailure(error);
   };
+  const params={page:detailSoalPage,limit:10,subject_id:subjectId,grade:document.getElementById('fltDetailSoalTingkat')?.value||'ALL',exam_id:document.getElementById('fltDetailSoalUjian')?.value||'ALL',class_id:document.getElementById('fltDetailSoalKelas')?.value||'ALL',search:document.getElementById('searchDetailSoal')?.value?.trim()||''};
   cbtApi.withSuccessHandler(rows => {
     if (loadVersion !== adminQuestionLoadVersion) return;
     try {
-      cacheAdminSoalRows = Array.isArray(rows) ? rows : [];
-      populateDetailSoalFilters(); applyFilterDetailSoal();
+      cacheAdminSoalRows = Array.isArray(rows) ? rows : (rows?.items || []);
+      detailSoalMeta = rows?.meta || {page:1,limit:10,pages:1,total:cacheAdminSoalRows.length};
+      populateDetailSoalFilters(); applyFilterDetailSoal(false,true);
       if (typeof onLoaded === 'function') onLoaded(cacheAdminSoalRows, cacheAdminSoalUjianRows);
     } catch (error) {
       if (table) table.innerHTML = `<tr><td colspan="6" class="alert error">Bank soal gagal ditampilkan: ${escapeQuestionUiText(error?.message || 'Data tidak valid.')}</td></tr>`;
       if (typeof onFailure === 'function') onFailure(error);
     }
-  }).withFailureHandler(fail).getAdminSoalList(stPengelola, null, subjectId);
+  }).withFailureHandler(fail).getAdminSoalPage(stPengelola,params);
 }
 function loadDataAdminSoal(onLoaded = null, onFailure = null) {
   const loadVersion = ++adminQuestionLoadVersion;
@@ -115,7 +118,7 @@ function loadDataAdminSoal(onLoaded = null, onFailure = null) {
   };
   cbtApi.withSuccessHandler(exams => {
     if (loadVersion !== adminQuestionLoadVersion) return;
-    cacheAdminSoalUjianRows = Array.isArray(exams) ? exams : (exams?.data || []);
+    cacheAdminSoalUjianRows = Array.isArray(exams) ? exams : (exams?.items || []);
     if (!currentSelectedMapelName) {
       cacheAdminSoalRows = [];
       renderKatalogMapelGrid();
@@ -123,7 +126,7 @@ function loadDataAdminSoal(onLoaded = null, onFailure = null) {
       return;
     }
     loadSelectedSubjectQuestions(loadVersion, onLoaded, onFailure);
-  }).withFailureHandler(fail).getAdminUjianList(stPengelola);
+  }).withFailureHandler(fail).getAdminSoalCatalog(stPengelola,{grade:document.getElementById('fltKatalogTingkat')?.value||'ALL',search:document.getElementById('searchKatalogMapel')?.value?.trim()||''});
 }
 
 // ================= LEVEL 1: KATALOG MATA PELAJARAN =================
@@ -159,7 +162,7 @@ function renderKatalogMapelGrid() {
 
   if (tingVal !== 'ALL') {
     subjectList = subjectList.filter(s => {
-      return s.questions.some(q => String(q.tingkat).toUpperCase() === tingVal.toUpperCase()) || (s.exams || []).some(exam => String(exam.tingkat).toUpperCase() === tingVal.toUpperCase());
+      return s.questions.some(q => String(q.tingkat).toUpperCase() === tingVal.toUpperCase()) || (s.exams || []).some(exam => String(exam.tingkat).toUpperCase().split(',').includes(tingVal.toUpperCase()));
     });
   }
 
@@ -221,18 +224,18 @@ function renderKatalogMapelGrid() {
   }).join('');
 }
 
-function applyFilterKatalogMapel() {
-  renderKatalogMapelGrid();
-}
+let adminQuestionCatalogTimer;
+function applyFilterKatalogMapel() { clearTimeout(adminQuestionCatalogTimer);adminQuestionCatalogTimer=setTimeout(()=>loadDataAdminSoal(),250); }
 
 function scheduleFilterDetailSoal() {
   clearTimeout(detailSoalSearchTimer);
-  detailSoalSearchTimer = setTimeout(() => applyFilterDetailSoal(), 180);
+  detailSoalSearchTimer = setTimeout(() => applyFilterDetailSoal(), 250);
 }
 
 // ================= LEVEL 2: DETAIL BANK SOAL PER MAPEL =================
 function pilihDanBukaMapel(mapelName) {
   currentSelectedMapelName = mapelName;
+  detailSoalPage = 1;
   cacheAdminSoalRows = [];
   const pager = document.getElementById('detailSoalPager'); if (pager) { pager.hidden = true; pager.replaceChildren(); }
 
@@ -287,7 +290,7 @@ function populateDetailSoalFilters() {
   if (fltUjian) {
     const currentVal = fltUjian.value;
     const examsMap = {};
-    examsForMapel.forEach(exam=>{if(tingVal==='ALL'||String(exam.tingkat||'').toUpperCase()===tingVal.toUpperCase())examsMap[exam.id]=exam.nama_ujian||`Ujian #${exam.id}`;});
+    examsForMapel.forEach(exam=>{if(exam.id&&(tingVal==='ALL'||String(exam.tingkat||'').toUpperCase()===tingVal.toUpperCase()))examsMap[exam.id]=exam.nama_ujian||`Ujian #${exam.id}`;});
     questionsForMapel.forEach(q => {
       if (tingVal === 'ALL' || String(q.tingkat || '').toUpperCase() === tingVal.toUpperCase()) {
         const eid = q.exam_id || q.ujian_id;
@@ -345,8 +348,9 @@ function populateDetailSoalFilters() {
   }
 }
 
-function applyFilterDetailSoal(resetPage = true) {
+function applyFilterDetailSoal(resetPage = true, serverRender = false) {
   if (!currentSelectedMapelName) return;
+  if(!serverRender){if(resetPage)detailSoalPage=1;loadSelectedSubjectQuestions(++adminQuestionLoadVersion);return;}
 
   const ting = document.getElementById('fltDetailSoalTingkat')?.value || 'ALL';
   const ujianId = document.getElementById('fltDetailSoalUjian')?.value || 'ALL';
@@ -383,8 +387,8 @@ function applyFilterDetailSoal(resetPage = true) {
 
   // Update banner badges
   const countBadge = document.getElementById('lblDetailMapelCountBadge');
-  if (countBadge) countBadge.textContent = `${filtered.length} Soal Ditampilkan`;
-  if (resetPage) detailSoalPage = 1;
+  if (countBadge) countBadge.textContent = `${detailSoalMeta.total} Soal Ditemukan`;
+  detailSoalPage=detailSoalMeta.page||1;
 
   const gradesSet = [...new Set(filtered.map(s => s.tingkat).filter(Boolean))].sort().join(', ');
   const tingkatBadge = document.getElementById('lblDetailMapelTingkatBadge');
@@ -423,9 +427,9 @@ function applyFilterDetailSoal(resetPage = true) {
     return;
   }
 
-  const pageSize = 10;
-  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const pageRows = filtered.slice((detailSoalPage - 1) * pageSize, detailSoalPage * pageSize);
+  const pageSize = detailSoalMeta.limit||10;
+  const pageCount = detailSoalMeta.pages||1;
+  const pageRows = filtered;
   tb.innerHTML = pageRows.map((s, num) => {
     return `
       <tr data-question-id="${s.id}">
@@ -472,16 +476,16 @@ function applyFilterDetailSoal(resetPage = true) {
     pager = document.createElement('nav'); pager.id = 'detailSoalPager'; pager.className = 'table-pagination'; pager.setAttribute('aria-label', 'Navigasi bank soal');
     tb.closest('.table-responsive')?.insertAdjacentElement('afterend', pager);
   }
-  if (filtered.length <= pageSize) { pager.hidden = true; pager.replaceChildren(); }
+  if (detailSoalMeta.total <= pageSize) { pager.hidden = true; pager.replaceChildren(); }
   else {
     pager.hidden = false;
-    const info = document.createElement('span'); info.textContent = `Menampilkan ${(detailSoalPage - 1) * pageSize + 1}–${Math.min(detailSoalPage * pageSize, filtered.length)} dari ${filtered.length} soal`;
+    const info = document.createElement('span'); info.textContent = `Menampilkan ${(detailSoalPage - 1) * pageSize + 1}–${Math.min(detailSoalPage * pageSize, detailSoalMeta.total)} dari ${detailSoalMeta.total} soal`;
     const controls = document.createElement('div');
     const previous = document.createElement('button'); previous.type = 'button'; previous.textContent = '‹'; previous.disabled = detailSoalPage <= 1; previous.setAttribute('aria-label', 'Halaman sebelumnya');
-    previous.onclick = () => { detailSoalPage--; applyFilterDetailSoal(false); };
+    previous.onclick = () => { detailSoalPage--; loadSelectedSubjectQuestions(++adminQuestionLoadVersion); };
     const label = document.createElement('b'); label.textContent = `Halaman ${detailSoalPage} / ${pageCount}`;
     const next = document.createElement('button'); next.type = 'button'; next.textContent = '›'; next.disabled = detailSoalPage >= pageCount; next.setAttribute('aria-label', 'Halaman berikutnya');
-    next.onclick = () => { detailSoalPage++; applyFilterDetailSoal(false); };
+    next.onclick = () => { detailSoalPage++; loadSelectedSubjectQuestions(++adminQuestionLoadVersion); };
     controls.append(previous, label, next); pager.replaceChildren(info, controls);
   }
 }
