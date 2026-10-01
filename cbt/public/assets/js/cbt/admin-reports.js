@@ -188,7 +188,7 @@ function cetakLaporanResmiPDF() {
   document.body.classList.add('mode-cetak-laporan');
   const cleanup=()=>{document.body.classList.remove('mode-cetak-laporan');pageStyle.remove();};
   window.addEventListener('afterprint',cleanup,{once:true});
-  window.print();
+  requestAnimationFrame(()=>requestAnimationFrame(()=>window.print()));
   setTimeout(cleanup,2000);
 }
 
@@ -240,8 +240,10 @@ function loadDataAdminKartu(force=false) {
 function cetakKartuPesertaUjian() {
   if(!document.getElementById('printAreaKartuContainer').children.length)return showCustomAlert('Kartu Belum Siap','Sinkronkan data dan pastikan siswa sudah memiliki PIN.','warning');
   document.body.classList.add('mode-cetak-kartu');
-  window.print();
-  document.body.classList.remove('mode-cetak-kartu');
+  const cleanup=()=>document.body.classList.remove('mode-cetak-kartu');
+  window.addEventListener('afterprint',cleanup,{once:true});
+  requestAnimationFrame(()=>requestAnimationFrame(()=>window.print()));
+  setTimeout(cleanup,2000);
 }
 
 function exportKartuPesertaExcel() {

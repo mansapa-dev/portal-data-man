@@ -326,7 +326,13 @@
 
       [grade, studentClass, subject, yearSel, semesterSel].forEach((s) => s.addEventListener('change', updateResults));
 
-      print.addEventListener('click', () => window.print());
+      print.addEventListener('click', () => {
+        document.body.classList.add('mode-cetak-hasil-guru');
+        const cleanup = () => document.body.classList.remove('mode-cetak-hasil-guru');
+        window.addEventListener('afterprint', cleanup, { once: true });
+        requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
+        setTimeout(cleanup, 2000);
+      });
       excel.addEventListener('click', () => {
         if (!window.XLSX) {
           notice.textContent = 'Fitur Excel belum termuat. Periksa koneksi internet lalu muat ulang halaman.';

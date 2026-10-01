@@ -1560,43 +1560,38 @@ tr:hover td {
 
   html,
   body {
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
     print-color-adjust: economy;
     -webkit-print-color-adjust: economy;
   }
 
-  body * {
-    visibility: hidden;
-  }
-
-  body.mode-cetak-kartu .print-kartu-only,
-  body.mode-cetak-kartu .print-kartu-only * {
-    visibility: visible;
+  body.mode-cetak-kartu > :not(.print-kartu-only),
+  body.mode-cetak-laporan > :not(.print-laporan-only) {
+    display: none !important;
   }
 
   body.mode-cetak-kartu .print-kartu-only {
-    position: absolute;
-    left: 0;
-    top: 0;
+    position: static;
     width: 100%;
     display: grid !important;
     grid-template-columns: 1fr 1fr;
     gap: 15px;
     padding: 10px;
+    box-sizing: border-box;
     background: white;
   }
 
-  body.mode-cetak-laporan .print-laporan-only,
-  body.mode-cetak-laporan .print-laporan-only * {
-    visibility: visible;
-  }
-
   body.mode-cetak-laporan .print-laporan-only {
-    position: absolute;
-    left: 0;
-    top: 0;
+    position: static;
     width: 100%;
     display: block !important;
     padding: 0;
+    box-sizing: border-box;
     background: white;
     color: black;
     font-family: "Times New Roman", Times, serif;
@@ -1673,6 +1668,11 @@ tr:hover td {
     border-radius: 8px;
     background: white;
     page-break-inside: avoid;
+  }
+
+  .card-ujian-print:last-child {
+    break-after: auto;
+    page-break-after: auto;
   }
 
   .card-print-letterhead img { width: 34px !important; height: 34px !important; object-fit: contain; }
