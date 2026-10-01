@@ -72,7 +72,7 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
   <script src="../assets/js/teacher/live-sessions.js?v=20260930-ios-poll-load"></script>
   <script src="../assets/js/cbt/support-tickets.js?v=20260911-proctor-1"></script>
   <script src="../assets/js/cbt/staff-admin-chat.js?v=20260929-form-ui-2"></script>
-  <script src="../assets/js/teacher/dashboard.js?v=20260930-compact-pdf-1"></script>
+  <script src="../assets/js/teacher/dashboard.js?v=20261001-proctor-capability-refresh"></script>
   <script src="../assets/js/table-pagination.js?v=20260910-cleanup"></script>
 </body>
 </html>

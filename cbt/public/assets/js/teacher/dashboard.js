@@ -7,6 +7,13 @@
   let activeSection = 'overview';
   let capabilities = { teacher: false, proctor: false };
 
+  function applyCapabilityVisibility() {
+    const proctor = capabilities.proctor === true;
+    document.querySelectorAll('[data-section="support"], [data-section="admin-chat"]').forEach((item) => { item.hidden = !proctor; });
+    const helpBox = document.querySelector('.teacher-help-box');
+    if (helpBox) helpBox.hidden = !proctor;
+  }
+
   document.querySelectorAll('button.nav-item[data-section]').forEach(button => {
     const link = document.createElement('a');
     for (const attribute of button.attributes) if (attribute.name !== 'type') link.setAttribute(attribute.name, attribute.value);
@@ -164,6 +171,7 @@
       return;
     }
     if(section==='support'){
+      if(!capabilities.proctor){content.append(el('div','Tiket Bantuan hanya tersedia untuk petugas piket yang masih aktif.','message'));return;}
       const heading=panel('Tiket Bantuan Siswa','Hanya petugas piket yang ditugaskan pada ujian ini yang menerima tiket dan dapat mereset CBT siswa.');
       const list=el('div',undefined,'teacher-support-list');heading.append(list);content.append(heading);
       const client={list:async status=>(await api(`api/staff/support-tickets?status=${encodeURIComponent(status)}`)).data,update:async(id,status,note)=>(await api(`api/staff/support-tickets/${id}/status`,'POST',{status,note})).data,reset:async(id,reason)=>(await api(`api/staff/support-tickets/${id}/reset`,'POST',{reason})).data};
@@ -552,6 +560,7 @@
     }
     csrf = me.data.csrf_token;
     capabilities = me.data.staff.capabilities || {teacher:me.data.staff.role==='TEACHER',proctor:false};
+    applyCapabilityVisibility();
     const proctorOnly=capabilities.proctor&&!capabilities.teacher;
     const teacherLabel = me.data.staff.nama || me.data.staff.name || me.data.staff.nama_lengkap || me.data.staff.nip || me.data.staff.username || 'Guru';
     document.getElementById('teacherName').textContent = teacherLabel;
@@ -561,7 +570,6 @@
     if (sidebarName) sidebarName.textContent = teacherLabel;
     if (avatar) avatar.textContent = teacherLabel.trim().charAt(0).toUpperCase() || 'G';
     if (welcomeName) welcomeName.textContent = teacherLabel;
-    document.querySelector('[data-section="admin-chat"]').hidden=!capabilities.proctor;
     const requested=new URLSearchParams(location.hash.slice(1)).get('section');
     const requestedLink=()=>Array.from(document.querySelectorAll('.nav-item[data-section]:not([hidden])')).find(link=>link.dataset.section===requested);
     if(proctorOnly){data={ujianList:[],hasilList:[],pelanggaranList:[]};document.querySelectorAll('.nav-item').forEach(button=>{button.hidden=!['live','support','admin-chat'].includes(button.dataset.section)&&button.dataset.section!=='violations';});document.querySelectorAll('.nav-label').forEach(label=>label.hidden=true);document.querySelector('.welcome .eyebrow').textContent='DASHBOARD PETUGAS PIKET CBT';document.querySelector('.welcome p').textContent='Pantau sesi ujian, tangani pelanggaran dan tiket peserta, serta berkomunikasi dengan admin sekolah.';document.querySelector('.teacher-user-footer small').textContent='Petugas Piket Ujian';document.querySelector('.teacher-identity small').textContent='Portal Petugas';await openSection(requestedLink()?requested:'live');}
@@ -612,6 +620,18 @@
   setInterval(async () => {
     if (document.hidden || document.querySelector('.modal.show')) return;
     try {
+      const me = await fetch('../api/auth/me', { credentials: 'same-origin', cache: 'no-store' }).then((response) => response.json());
+      if (!['TEACHER','EMPLOYEE'].includes(me.data?.staff?.role)) { location.href = '../guru'; return; }
+      const previousProctor = capabilities.proctor === true;
+      capabilities = me.data.staff.capabilities || {teacher:me.data.staff.role==='TEACHER',proctor:false};
+      csrf = me.data.csrf_token || csrf;
+      applyCapabilityVisibility();
+      if (previousProctor && !capabilities.proctor && ['support','admin-chat'].includes(activeSection)) {
+        notice.style.color = '#c0392b';
+        notice.textContent = 'Penugasan petugas piket Anda telah berakhir. Akses tiket bantuan ditutup.';
+        await openSection(capabilities.teacher ? 'overview' : 'live');
+        return;
+      }
       const fresh = (await api('api/teacher/dashboard')).data;
       const changed = JSON.stringify(fresh.ujianList) !== JSON.stringify(data.ujianList)
         || JSON.stringify(fresh.hasilList) !== JSON.stringify(data.hasilList)
@@ -637,5 +657,5 @@
   const btnLogoutTop = document.getElementById('topbarLogoutGuru');
   if (btnLogoutTop) btnLogoutTop.addEventListener('click', handleLogout);
   const helpButton = document.getElementById('teacherHelpButton');
-  if (helpButton) helpButton.addEventListener('click', () => openSection('support'));
+  if (helpButton) helpButton.addEventListener('click', () => { if(capabilities.proctor)openSection('support'); });
 })();
