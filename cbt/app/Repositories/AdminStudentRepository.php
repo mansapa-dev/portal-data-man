@@ -17,9 +17,8 @@ final class AdminStudentRepository
         END ujian_status
         FROM students s
         LEFT JOIN (SELECT student_id,COUNT(*) active_attempts FROM exam_attempts WHERE status='IN_PROGRESS' AND expires_at>UTC_TIMESTAMP(3) GROUP BY student_id) active ON active.student_id=s.id
-        LEFT JOIN (SELECT student_id,SUBSTRING_INDEX(GROUP_CONCAT(status ORDER BY updated_at DESC,id DESC),',',1) status FROM exam_attempts GROUP BY student_id) latest ON latest.student_id=s.id
-        LEFT JOIN (SELECT student_id,MAX(id) id FROM exam_attempts WHERE status='TERMINATED' AND violation_count>=3 GROUP BY student_id) latest_reset ON latest_reset.student_id=s.id
-        LEFT JOIN exam_attempts reset_attempt ON reset_attempt.id=latest_reset.id
+        LEFT JOIN exam_attempts latest ON latest.id=(SELECT latest_lookup.id FROM exam_attempts latest_lookup WHERE latest_lookup.student_id=s.id ORDER BY latest_lookup.updated_at DESC,latest_lookup.id DESC LIMIT 1)
+        LEFT JOIN exam_attempts reset_attempt ON reset_attempt.id=(SELECT reset_lookup.id FROM exam_attempts reset_lookup WHERE reset_lookup.student_id=s.id AND reset_lookup.status='TERMINATED' AND reset_lookup.violation_count>=3 ORDER BY reset_lookup.id DESC LIMIT 1)
         LEFT JOIN exams reset_exam ON reset_exam.id=reset_attempt.exam_id
         WHERE s.is_active=1 ORDER BY s.id DESC";
   return$this->db->query($sql)->fetchAll();

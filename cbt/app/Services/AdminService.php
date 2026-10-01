@@ -12,8 +12,8 @@ final class AdminService
  public function adminLiveSessions():array{return$this->liveSessionPayload($this->repo->allExamIds());}
  public function teacherLiveSessions(int $teacherId,int$userId=0):array{$ids=$userId>0&&$this->repo->personnelIsProctor($userId)?$this->repo->allExamIds():($userId>0?$this->repo->personnelExamIds($userId):$this->repo->teacherExamIds($teacherId));return $this->liveSessionPayload($ids);}
  public function references():array{return$this->repo->references();}
- public function exams():array{$archived=array_flip($this->repo->archivedExamIds());return array_values(array_filter($this->repo->exams(),fn(array$exam):bool=>!isset($archived[(int)$exam['id']])));}
- public function archivedExams():array{$archived=array_flip($this->repo->archivedExamIds());return array_values(array_map(function(array$exam):array{$exam['is_archived']=true;return$exam;},array_filter($this->repo->exams(),fn(array$exam):bool=>isset($archived[(int)$exam['id']]))));}
+ public function exams():array{return$this->repo->exams(false);}
+ public function archivedExams():array{return array_map(function(array$exam):array{$exam['is_archived']=true;return$exam;},$this->repo->exams(true));}
  public function saveExam(array$d,int$actor):void
  {
   foreach(['nama_ujian','tingkat','durasi_menit']as$key)if(trim((string)($d[$key]??''))==='')throw new DomainException('Data ujian belum lengkap.',422);

@@ -224,7 +224,7 @@ CREATE TABLE IF NOT EXISTS exam_attempts (
  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
  UNIQUE KEY uq_attempts_public (public_id), UNIQUE KEY uq_attempt_student_exam (student_id,exam_id),
- KEY idx_attempt_exam_status (exam_id,status), KEY idx_attempt_expiry (status,expires_at), KEY idx_attempt_student_status (student_id,status,id),
+ KEY idx_attempt_exam_status (exam_id,status), KEY idx_attempt_expiry (status,expires_at), KEY idx_attempt_student_status (student_id,status,id), KEY idx_attempt_student_updated (student_id,updated_at,id),
  CONSTRAINT fk_attempt_student FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE RESTRICT,
  CONSTRAINT fk_attempt_exam FOREIGN KEY (exam_id) REFERENCES exams(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
