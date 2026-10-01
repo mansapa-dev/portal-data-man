@@ -102,11 +102,12 @@ function loadDataAdminSoal(onLoaded = null, onFailure = null) {
         const table = document.getElementById('tblDetailSoalMapel');
         if (table) table.innerHTML = `<tr><td colspan="6" class="alert error">Bank soal gagal dimuat: ${escapeQuestionUiText(error?.message || 'Terjadi kesalahan.')}</td></tr>`;
       } else if (gridContainer) {
+        const message = error?.code === 'REQUEST_TIMEOUT' || error?.status === 408 ? 'Katalog belum selesai dalam 20 detik. Silakan coba lagi.' : (error?.message || 'Terjadi kesalahan saat mengambil bank soal.');
         gridContainer.innerHTML = `
           <div style="grid-column:1/-1; background:var(--surface); border:1px solid var(--danger); border-radius:12px; padding:24px; color:var(--text-main); text-align:center;">
             <i class="fa-solid fa-triangle-exclamation" style="font-size:28px; color:var(--danger); margin-bottom:10px; display:block;"></i>
             <h4 style="margin-bottom:5px;">Data soal gagal dimuat</h4>
-            <p style="color:var(--text-muted); margin-bottom:14px;">${escapeQuestionUiText(error?.message || 'Terjadi kesalahan saat mengambil bank soal.')}</p>
+            <p style="color:var(--text-muted); margin-bottom:14px;">${escapeQuestionUiText(message)}</p>
             <button type="button" class="ui-button btn btn-secondary" onclick="loadDataAdminSoal()">Coba Lagi</button>
           </div>`;
       }
