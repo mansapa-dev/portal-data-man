@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
 use Cbt\Controllers\{AdminController,AdminStudentController,AuthController,StudentExamController,SupportTicketController,StaffAdminCommunicationController,SyncController,SetupController,TeacherController,TeacherSsoController};
-use Cbt\Core\{Config,Database,Request,Response,Router,ViewRenderer};
+use Cbt\Core\{Config,Database,RedisCache,Request,Response,Router,ViewRenderer};
 use Cbt\Middleware\{AuditMiddleware,AuthMiddleware,CsrfMiddleware,RateLimitMiddleware};
 use Cbt\Repositories\{AdminRepository,AdminStudentRepository,AttemptRepository,ExamRepository,StudentRepository,UserRepository};
 use Cbt\Services\{AnswerService,AttemptResetService,AuthService,ExamSessionService,ScoringService,StaffAdminCommunicationService,SupportTicketService,ViolationService};
@@ -25,7 +25,7 @@ if($request->path==='/guru/dashboard'){
  Response::html((string)include dirname(__DIR__).'/resources/views/teacher/dashboard.php')->send();
 }
 if($request->path==='/health'){
- try{(new Database())->pdo()->query('SELECT 1');Response::json(['status'=>'ok','database'=>'ok','time'=>gmdate(DATE_ATOM)])->send();}
+ try{$redis=RedisCache::health();(new Database())->pdo()->query('SELECT 1');$healthy=!$redis['enabled']||$redis['available'];Response::json(['status'=>$healthy?'ok':'degraded','database'=>'ok','redis'=>$redis['status'],'time'=>gmdate(DATE_ATOM)])->send();}
  catch(Throwable){Response::error('CBT belum siap menerima trafik.',503)->send();}
 }
 $database=new Database();$pdo=$database->pdo();

@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
-use Cbt\Core\{Config,Database};
+use Cbt\Core\{Config,Database,RedisCache};
 $errors=[];$warnings=[];$ok=[];
 $check=function(bool$condition,string$message,bool$warning=false)use(&$errors,&$warnings,&$ok):void{if($condition)$ok[]=$message;elseif($warning)$warnings[]=$message;else$errors[]=$message;};
 $check(version_compare(PHP_VERSION,'8.2.0','>='),'PHP 8.2+');
@@ -12,6 +12,9 @@ $check(strlen((string)Config::get('PORTAL_DATA_SYNC_CLIENT_SECRET'))>=32,'PORTAL
 $check(!Config::bool('APP_DEBUG',true),'APP_DEBUG=false');$check(Config::bool('SESSION_SECURE_COOKIE',false),'Secure session cookie');
 foreach(['storage/logs','storage/cache','storage/imports']as$directory){$path=dirname(__DIR__).'/'.$directory;$check(is_dir($path)&&is_writable($path),"Writable {$directory}");}
 try{(new Database())->pdo()->query('SELECT 1');$ok[]='Koneksi database CBT';}catch(Throwable$e){$errors[]='Koneksi database CBT gagal: '.$e->getMessage();}
+$redis=RedisCache::health();
+if($redis['enabled'])$check($redis['available'],'Koneksi Redis (wajib ketika REDIS_ENABLED=true)');
+else$warnings[]='Redis nonaktif; aktifkan untuk login ujian massal';
 $url=(string)Config::get('PORTAL_DATA_BASE_URL');$check(str_starts_with($url,'https://'),'Portal Data memakai HTTPS',true);
 foreach($ok as$message)echo"PASS {$message}\n";foreach($warnings as$message)echo"WARN {$message}\n";foreach($errors as$message)echo"FAIL {$message}\n";
 echo sprintf("\n%d pass, %d warning, %d fail.\n",count($ok),count($warnings),count($errors));exit($errors?1:0);

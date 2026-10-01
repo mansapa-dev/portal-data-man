@@ -8,6 +8,23 @@ final class RedisCache
     private static ?\Redis $connection = null;
     private static bool $resolved = false;
 
+    /** @return array{enabled:bool,available:bool,status:string} */
+    public static function health(): array
+    {
+        $enabled = Config::bool('REDIS_ENABLED', false);
+        if (!$enabled) return ['enabled'=>false,'available'=>false,'status'=>'disabled'];
+        if (!class_exists(\Redis::class)) return ['enabled'=>true,'available'=>false,'status'=>'extension_missing'];
+        $redis = self::connection();
+        if ($redis === null) return ['enabled'=>true,'available'=>false,'status'=>'unavailable'];
+        try {
+            $redis->ping();
+            return ['enabled'=>true,'available'=>true,'status'=>'ok'];
+        } catch (\Throwable) {
+            self::$connection = null;
+            return ['enabled'=>true,'available'=>false,'status'=>'unavailable'];
+        }
+    }
+
     public static function remember(string $key, int $ttl, callable $loader, bool $sensitive = false): mixed
     {
         $cipher = $sensitive ? new \Cbt\Support\SecretCipher() : null;

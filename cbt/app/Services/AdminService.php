@@ -87,7 +87,7 @@ final class AdminService
   $this->forgetQuestionLists(array_filter([(int)$question['ujian_id'],$previousExam]));
  }
  public function deleteQuestion(int$id):void{$examId=$id>0?$this->repo->activeQuestionExamId($id):null;if($examId===null||!$this->repo->disableQuestion($id))throw new DomainException('Soal tidak ditemukan atau sudah dihapus.',404);$this->forgetQuestionBanks([$examId]);$this->forgetQuestionLists([$examId]);}
- private function forgetQuestionBanks(array$examIds):void{foreach(array_unique(array_map('intval',$examIds))as$examId)if($examId>0){RedisCache::forget('exam:question-bank:v1:'.$examId.':snapshot');RedisCache::forget('exam:question-bank:v1:'.$examId.':public');}}
+ private function forgetQuestionBanks(array$examIds):void{foreach(array_unique(array_map('intval',$examIds))as$examId)if($examId>0){RedisCache::forget('exam:question-ids:v1:'.$examId);RedisCache::forget('exam:question-bank:v1:'.$examId.':snapshot');RedisCache::forget('exam:question-bank:v1:'.$examId.':public');}}
  private function forgetQuestionLists(array$examIds):void{RedisCache::forget('admin:questions:v1:all');RedisCache::forget('admin:questions:v2:exam:0:subject:0');foreach(array_unique(array_map('intval',$examIds))as$examId)if($examId>0){RedisCache::forget('admin:questions:v1:'.$examId);RedisCache::forget('admin:questions:v2:exam:'.$examId.':subject:0');$subjectId=$this->repo->subjectIdForExam($examId);if($subjectId)$this->forgetQuestionSubject($subjectId);}}
  private function forgetQuestionSubject(int$subjectId):void{if($subjectId!==0)RedisCache::forget('admin:questions:v2:exam:0:subject:'.$subjectId);}
  public function users():array{return$this->repo->users();}

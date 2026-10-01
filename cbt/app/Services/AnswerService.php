@@ -13,7 +13,19 @@ final class AnswerService
   return $this->db->transaction(function () use ($studentId, $examId, $questionId, $answer, $flagged, $attemptId, $revision, $mutationId) {
    $attempt = $this->attempts->lockForAnswer($studentId, $examId) ?? throw new DomainException('Sesi ujian tidak ditemukan.', 404);
    if (!hash_equals($attempt['public_id'], $attemptId)) throw new DomainException('Antrean berasal dari sesi ujian berbeda.', 409);
-   $statement = $this->db->pdo()->prepare('SELECT q.question_type,q.option_a,q.option_b,q.option_c,q.option_d,q.option_e,v.revision,v.mutation_id,a.id answer_id,a.answer,a.is_flagged FROM attempt_questions q LEFT JOIN answer_write_versions v ON v.attempt_id=q.attempt_id AND v.question_id=q.question_id LEFT JOIN student_answers a ON a.attempt_id=q.attempt_id AND a.question_id=q.question_id WHERE q.attempt_id=:attempt AND q.question_id=:question');
+   // Validation only needs to know which choices exist. Avoid reading large
+   // HTML/image option payloads on every autosave request.
+   $statement = $this->db->pdo()->prepare("SELECT q.question_type,
+    (q.option_a IS NOT NULL AND q.option_a<>'') option_a_available,
+    (q.option_b IS NOT NULL AND q.option_b<>'') option_b_available,
+    (q.option_c IS NOT NULL AND q.option_c<>'') option_c_available,
+    (q.option_d IS NOT NULL AND q.option_d<>'') option_d_available,
+    (q.option_e IS NOT NULL AND q.option_e<>'') option_e_available,
+    v.revision,v.mutation_id,a.id answer_id,a.answer,a.is_flagged
+    FROM attempt_questions q
+    LEFT JOIN answer_write_versions v ON v.attempt_id=q.attempt_id AND v.question_id=q.question_id
+    LEFT JOIN student_answers a ON a.attempt_id=q.attempt_id AND a.question_id=q.question_id
+    WHERE q.attempt_id=:attempt AND q.question_id=:question");
    $statement->execute(['attempt' => $attempt['id'], 'question' => $questionId]);
    $question = $statement->fetch();
    if (!$question) throw new DomainException('Soal tidak ditemukan.', 404);
@@ -24,7 +36,7 @@ final class AnswerService
    }elseif($answer!==null){
     $letters=array_values(array_unique(array_filter(explode(',',strtoupper($answer)))));sort($letters);
     if(!$letters||($type==='MULTIPLE_CHOICE'&&count($letters)!==1))throw new DomainException('Jawaban tidak valid.',422);
-    foreach($letters as$letter)if(!in_array($letter,['A','B','C','D','E'],true)||empty($question['option_'.strtolower($letter)]))throw new DomainException('Pilihan jawaban tidak tersedia.',422);
+    foreach($letters as$letter)if(!in_array($letter,['A','B','C','D','E'],true)||empty($question['option_'.strtolower($letter).'_available']))throw new DomainException('Pilihan jawaban tidak tersedia.',422);
     $answer=implode(',',$letters);
    }
    $current = $question['revision'] !== null && $question['mutation_id'] !== null ? $question : null;

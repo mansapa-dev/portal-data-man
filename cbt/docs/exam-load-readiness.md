@@ -14,6 +14,17 @@
   maju agar deteksi konflik dan retry tetap benar.
 - Submit tidak mengambil isi opsi HTML/gambar untuk soal pilihan tunggal/isian.
   Soal pilihan kompleks tetap mengambil opsi untuk menghitung penalti dengan benar.
+- Start attempt hanya mengambil ID soal ke PHP. Snapshot isi dan kunci disalin
+  langsung di MySQL dengan `INSERT ... SELECT`, kemudian payload publik dibaca
+  dari snapshot. Ini menghindari pengiriman ulang HTML soal MySQLâ†’PHPâ†’MySQL
+  untuk setiap peserta ketika tombol Mulai ditekan serentak.
+- Autosave hanya mengambil flag ketersediaan opsi, bukan isi lima opsi `TEXT`.
+  Protokol revision, mutation ID, row lock, dan snapshot tetap sama.
+- Dengan Redis aktif, daftar ID soal per ujian disimpan 60 detik dan dibuang
+  langsung ketika soal berubah. Pemeriksaan akun aktif pada request terlindungi
+  memakai cache maksimal `AUTH_STATUS_CACHE_TTL` (default 10 detik), sehingga
+  autosave dan heartbeat tidak selalu mengulang query status akun. Jawaban,
+  revision, deadline, submit, dan hasil tidak disimpan di cache.
 
 Setelah deploy, staf harus memuat ulang tab dashboard yang sudah terbuka agar
 polling JavaScript versi lama berhenti. Jangan memaksa reload tab ujian siswa.

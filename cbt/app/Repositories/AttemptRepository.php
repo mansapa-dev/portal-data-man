@@ -19,7 +19,7 @@ final class AttemptRepository
         $statement->execute(['student_id'=>$studentId,'exam_id'=>$examId]);
         return $statement->fetch() ?: null;
     }
-    public function create(array $student, array $exam, array $questionOrder, array $optionMapping, string $seed, array $questions): array
+    public function create(array $student, array $exam, array $questionOrder, array $optionMapping, string $seed): array
     {
         $expires = min(strtotime($exam['ends_at'].' UTC'), time() + ((int)$exam['duration_minutes'] * 60));
         $sql = 'INSERT INTO exam_attempts(public_id,student_id,exam_id,status,started_at,expires_at,random_seed,question_order,option_mapping,nisn_snapshot,name_snapshot,class_snapshot,grade_snapshot,academic_year_snapshot)
@@ -27,13 +27,20 @@ final class AttemptRepository
         $statement = $this->db->prepare($sql);
         $statement->execute(['public_id'=>Id::ulid(),'student_id'=>$student['id'],'exam_id'=>$exam['id'],'expires_at'=>gmdate('Y-m-d H:i:s',$expires),'seed'=>$seed,'question_order'=>json_encode($questionOrder,JSON_THROW_ON_ERROR),'option_mapping'=>json_encode($optionMapping,JSON_THROW_ON_ERROR),'nisn'=>$student['nisn'],'name'=>$student['name_snapshot'],'class_name'=>$student['class_snapshot'],'grade'=>$student['grade_snapshot'],'academic_year'=>$student['academic_year_snapshot']]);
         $attempt = $this->find((int)$student['id'], (int)$exam['id'], true) ?? throw new \RuntimeException('Attempt gagal dibuat.');
-        // Batch snapshots to avoid one database round trip per question at mass start.
-        foreach (array_chunk($questions, 100) as $batch) {
-            $values = [];
-            foreach ($batch as $q) array_push($values, $attempt['id'], $q['id'], $q['question_type']??'MULTIPLE_CHOICE', $q['question_text'], $q['option_a'], $q['option_b'], $q['option_c'], $q['option_d'], $q['option_e'], $q['correct_answer'], $q['points']);
-            $sql = 'INSERT INTO attempt_questions(attempt_id,question_id,question_type,question_text,option_a,option_b,option_c,option_d,option_e,correct_answer,points) VALUES '.implode(',', array_fill(0, count($batch), '(?,?,?,?,?,?,?,?,?,?,?)'));
-            $this->db->prepare($sql)->execute($values);
+        // Keep large question HTML inside MySQL. Sending it from MySQL to PHP
+        // and back once per student multiplies network and memory pressure at
+        // the exact moment a mass exam starts.
+        $inserted = 0;
+        foreach (array_chunk($questionOrder, 100) as $questionIds) {
+            $marks = implode(',', array_fill(0, count($questionIds), '?'));
+            $sql = "INSERT INTO attempt_questions(attempt_id,question_id,question_type,question_text,option_a,option_b,option_c,option_d,option_e,correct_answer,points)
+                    SELECT ?,q.id,COALESCE(q.question_type,'MULTIPLE_CHOICE'),q.question_text,q.option_a,q.option_b,q.option_c,q.option_d,q.option_e,q.correct_answer,q.points
+                    FROM questions q WHERE q.exam_id=? AND q.status='ACTIVE' AND q.id IN ({$marks})";
+            $statement = $this->db->prepare($sql);
+            $statement->execute(array_merge([(int)$attempt['id'], (int)$exam['id']], array_map('intval', $questionIds)));
+            $inserted += $statement->rowCount();
         }
+        if ($inserted !== count($questionOrder)) throw new \RuntimeException('Snapshot soal ujian tidak lengkap.');
         return $attempt;
     }
     public function questions(int $attemptId): array

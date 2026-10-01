@@ -93,6 +93,15 @@ final class ExamRepository
         $variant = $includeAnswers ? 'snapshot' : 'public';
         return RedisCache::remember('exam:question-bank:v1:'.$examId.':'.$variant, 45, fn(): array => $this->loadQuestions($examId, $includeAnswers), $includeAnswers);
     }
+    /** Starting an attempt only needs IDs before MySQL copies the snapshot. */
+    public function questionIds(int $examId): array
+    {
+        return RedisCache::remember('exam:question-ids:v1:'.$examId, 60, function() use ($examId): array {
+            $statement = $this->db->prepare("SELECT id FROM questions WHERE exam_id=:exam_id AND status='ACTIVE'");
+            $statement->execute(['exam_id'=>$examId]);
+            return array_map('intval', $statement->fetchAll(PDO::FETCH_COLUMN));
+        });
+    }
     private function loadQuestions(int $examId, bool $includeAnswers): array
     {
         $columns = 'id, public_id, question_type, question_text, option_a, option_b, option_c, option_d, option_e, points';

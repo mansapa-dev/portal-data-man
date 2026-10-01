@@ -38,7 +38,12 @@ CBT tidak membutuhkan Docker, Redis, Supervisor, WebSocket, queue worker, atau a
 
 Redis is optional. If the host provides Redis and the PHP `redis` extension, set `REDIS_ENABLED=true` and configure `REDIS_HOST`, `REDIS_PORT`, and `REDIS_PASSWORD` in `.env`. CBT uses it for short lived admin summaries, candidate lists, and per-exam question reads. Question snapshots that include answer keys are encrypted with `APP_KEY` before they enter Redis. Exam answers and attempt state remain in MySQL. If Redis or `APP_KEY` is unavailable, the application reads questions from MySQL.
 
-For a VPS without Redis, set `REDIS_ENABLED=false` (the default). Do not install a PHP Redis extension or add a Composer package; all reads use MySQL and exam writes continue to use MySQL.
+For a small VPS without Redis, set `REDIS_ENABLED=false` (the default). For a
+mass exam, Redis is strongly recommended because the database fallback for a
+shared-school-IP login limit intentionally serializes updates to one row. With
+`REDIS_ENABLED=true`, deployment preflight requires a working PHP Redis
+extension and connection, and `/health` reports `degraded` if Redis becomes
+unavailable. Exam answers and attempt state still remain in MySQL.
 
 ## 3. Struktur folder aman
 
