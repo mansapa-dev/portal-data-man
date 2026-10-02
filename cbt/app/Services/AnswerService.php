@@ -2,6 +2,7 @@
 declare(strict_types=1);
 namespace Cbt\Services;
 use Cbt\Core\Database;
+use Cbt\Core\TransactionProfile;
 use Cbt\Exceptions\DomainException;
 use Cbt\Repositories\AttemptRepository;
 final class AnswerService
@@ -10,25 +11,32 @@ final class AnswerService
  public function save(int $studentId, int $examId, int $questionId, ?string $answer, bool $flagged, string $attemptId, int $revision, string $mutationId): array
  {
   if ($revision < 0 || !preg_match('/^[A-Za-z0-9_-]{16,100}$/', $mutationId)) throw new DomainException('Versi penyimpanan tidak valid. Muat ulang halaman ujian.', 422);
-  return $this->db->transaction(function () use ($studentId, $examId, $questionId, $answer, $flagged, $attemptId, $revision, $mutationId) {
-   $attempt = $this->attempts->lockForAnswer($studentId, $examId) ?? throw new DomainException('Sesi ujian tidak ditemukan.', 404);
-   if (!hash_equals($attempt['public_id'], $attemptId)) throw new DomainException('Antrean berasal dari sesi ujian berbeda.', 409);
+  $profile=TransactionProfile::sample('autosave');$outcome='error';
+  $measure=static fn(string $phase,callable $action):mixed=>$profile?$profile->measure($phase,$action):$action();
+  try {
+   // One autocommit snapshot, scoped by the authenticated student and exam.
+   // Only a matching duplicate may return here; new writes always re-read
+   // mutable state AFTER acquiring the attempt lock in a fresh transaction.
+   $question=$measure('question_validation_ms',function()use($studentId,$examId,$questionId,$attemptId,&$answer){
    // Validation only needs to know which choices exist. Avoid reading large
    // HTML/image option payloads on every autosave request.
-   $statement = $this->db->pdo()->prepare("SELECT q.question_type,
+   $statement = $this->db->pdo()->prepare("SELECT t.id attempt_pk,t.public_id,q.question_id,q.question_type,
     (q.option_a IS NOT NULL AND q.option_a<>'') option_a_available,
     (q.option_b IS NOT NULL AND q.option_b<>'') option_b_available,
     (q.option_c IS NOT NULL AND q.option_c<>'') option_c_available,
     (q.option_d IS NOT NULL AND q.option_d<>'') option_d_available,
     (q.option_e IS NOT NULL AND q.option_e<>'') option_e_available,
     v.revision,v.mutation_id,a.id answer_id,a.answer,a.is_flagged
-    FROM attempt_questions q
+    FROM exam_attempts t
+    LEFT JOIN attempt_questions q ON q.attempt_id=t.id AND q.question_id=:question
     LEFT JOIN answer_write_versions v ON v.attempt_id=q.attempt_id AND v.question_id=q.question_id
     LEFT JOIN student_answers a ON a.attempt_id=q.attempt_id AND a.question_id=q.question_id
-    WHERE q.attempt_id=:attempt AND q.question_id=:question");
-   $statement->execute(['attempt' => $attempt['id'], 'question' => $questionId]);
+    WHERE t.student_id=:student AND t.exam_id=:exam");
+   $statement->execute(['student'=>$studentId,'exam'=>$examId,'question'=>$questionId]);
    $question = $statement->fetch();
-   if (!$question) throw new DomainException('Soal tidak ditemukan.', 404);
+   if (!$question) throw new DomainException('Sesi ujian tidak ditemukan.', 404);
+   if (!hash_equals($question['public_id'], $attemptId)) throw new DomainException('Antrean berasal dari sesi ujian berbeda.', 409);
+   if ($question['question_id']===null) throw new DomainException('Soal tidak ditemukan.', 404);
    $type=(string)($question['question_type']??'MULTIPLE_CHOICE');
    $answer=$answer===null||trim($answer)===''?null:trim($answer);
    if($answer!==null&&$type==='SHORT_ANSWER'){
@@ -39,6 +47,31 @@ final class AnswerService
     foreach($letters as$letter)if(!in_array($letter,['A','B','C','D','E'],true)||empty($question['option_'.strtolower($letter).'_available']))throw new DomainException('Pilihan jawaban tidak tersedia.',422);
     $answer=implode(',',$letters);
    }
+   return $question;
+   });
+   if($question['revision']!==null && $question['mutation_id']!==null && hash_equals($question['mutation_id'],$mutationId)){
+    if($question['answer']!==$answer || (bool)$question['is_flagged']!==$flagged)throw new DomainException('Identitas pengiriman telah digunakan untuk jawaban berbeda.',409);
+    $outcome='duplicate';
+    return ['question_id'=>$questionId,'revision'=>(int)$question['revision'],'duplicate'=>true];
+   }
+   $validatedAttempt=(int)$question['attempt_pk'];
+   $result=$this->db->transaction(function () use ($studentId,$examId,$questionId,$answer,$flagged,$attemptId,$revision,$mutationId,$validatedAttempt,$measure) {
+   $attempt=$measure('lock_attempt_ms',fn()=>$this->attempts->lockForAnswer($studentId,$examId))??throw new DomainException('Sesi ujian tidak ditemukan.',404);
+   if((int)$attempt['id']!==$validatedAttempt || !hash_equals($attempt['public_id'],$attemptId))throw new DomainException('Antrean berasal dari sesi ujian berbeda.',409);
+   // attempt_questions is immutable for this attempt in normal application
+   // flows. Keep membership and ALL mutable answer/version reads under the
+   // attempt lock. Never move a consistent read before this lock: on RR that
+   // would establish an old snapshot while waiting for another writer.
+   $question=$measure('answer_state_ms',function()use($attempt,$questionId){
+    $statement=$this->db->pdo()->prepare('SELECT v.revision,v.mutation_id,a.id answer_id,a.answer,a.is_flagged
+     FROM attempt_questions q
+     LEFT JOIN answer_write_versions v ON v.attempt_id=q.attempt_id AND v.question_id=q.question_id
+     LEFT JOIN student_answers a ON a.attempt_id=q.attempt_id AND a.question_id=q.question_id
+     WHERE q.attempt_id=:attempt AND q.question_id=:question');
+    $statement->execute(['attempt'=>$attempt['id'],'question'=>$questionId]);
+    return $statement->fetch();
+   });
+   if(!$question)throw new DomainException('Soal tidak ditemukan.',404);
    $current = $question['revision'] !== null && $question['mutation_id'] !== null ? $question : null;
    $currentRevision = $current ? (int)$current['revision'] : 0;
    if ($current && hash_equals($current['mutation_id'], $mutationId)) {
@@ -50,6 +83,7 @@ final class AnswerService
    if ($revision !== $currentRevision) throw new DomainException('Jawaban berubah di tab atau perangkat lain. Tutup tab lain dan hubungi pengawas; antrean lokal tetap disimpan.', 409);
    // The attempt lock serializes writers and submit. Update an existing row
    // by PRIMARY KEY rather than entering the duplicate-secondary-key insert path.
+   $measure('answer_write_ms',function()use($question,$attempt,$questionId,$answer,$flagged){
    if ($question['answer_id'] !== null) {
     // A new mutation with identical content still advances its revision below,
     // but need not rewrite the answer or its timestamp.
@@ -59,8 +93,17 @@ final class AnswerService
    } else {
     $this->db->pdo()->prepare('INSERT INTO student_answers(attempt_id,question_id,answer,is_flagged,answered_at) VALUES(:attempt,:question,:answer,:flagged,UTC_TIMESTAMP(3))')->execute(['attempt'=>$attempt['id'],'question'=>$questionId,'answer'=>$answer,'flagged'=>(int)$flagged]);
    }
-   $this->db->pdo()->prepare('INSERT INTO answer_write_versions(attempt_id,question_id,revision,mutation_id) VALUES(:attempt,:question,:revision,:mutation) ON DUPLICATE KEY UPDATE revision=VALUES(revision),mutation_id=VALUES(mutation_id)')->execute(['attempt' => $attempt['id'], 'question' => $questionId, 'revision' => $currentRevision + 1, 'mutation' => $mutationId]);
+   });
+   $measure('version_write_ms',function()use($current,$attempt,$questionId,$currentRevision,$mutationId){
+    // Existing keys never change, so avoid the INSERT/duplicate/FK-check path.
+    $sql=$current
+     ?'UPDATE answer_write_versions SET revision=:revision,mutation_id=:mutation WHERE attempt_id=:attempt AND question_id=:question'
+     :'INSERT INTO answer_write_versions(attempt_id,question_id,revision,mutation_id) VALUES(:attempt,:question,:revision,:mutation)';
+    $this->db->pdo()->prepare($sql)->execute(['attempt'=>$attempt['id'],'question'=>$questionId,'revision'=>$currentRevision+1,'mutation'=>$mutationId]);
+   });
    return ['question_id' => $questionId, 'answer' => $answer, 'is_flagged' => $flagged, 'revision' => $currentRevision + 1, 'saved_at' => gmdate(DATE_ATOM)];
-  });
+   },$profile);
+   $outcome=isset($result['duplicate'])?'duplicate':'saved';return $result;
+  }finally{$profile?->finish($outcome);}
  }
 }

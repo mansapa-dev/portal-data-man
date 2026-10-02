@@ -12,16 +12,28 @@ final class Database
   $this->pdo->exec("SET time_zone = '+00:00'");
  }
  public function pdo():PDO{return $this->pdo;}
- public function transaction(callable $callback):mixed
+ public function transaction(callable $callback, ?TransactionProfile $profile=null):mixed
  {
-  for($retry=0;;$retry++){
-   $this->pdo->beginTransaction();
-   try{$result=$callback($this->pdo);$this->pdo->commit();return $result;}
-   catch(\Throwable $error){
-    if($this->pdo->inTransaction())$this->pdo->rollBack();
-    if($error instanceof \PDOException && in_array((int)($error->errorInfo[1]??0),[1205,1213],true) && $retry<2){usleep(random_int(10000,40000));continue;}
-    throw $error;
+  // An explicit null means the caller already decided not to sample.
+  $owned=func_num_args()<2;
+  if($owned)$profile=TransactionProfile::sample('transaction');
+  $started=hrtime(true);$outcome='error';
+  try{
+   for($retry=0;;$retry++){
+    $this->pdo->beginTransaction();
+    try{
+     $result=$callback($this->pdo);
+     if($profile)$profile->measure('commit_ms',fn()=>$this->pdo->commit());else $this->pdo->commit();
+     $outcome='committed';return $result;
+    }catch(\Throwable $error){
+     if($this->pdo->inTransaction())$this->pdo->rollBack();
+     if($error instanceof \PDOException && in_array((int)($error->errorInfo[1]??0),[1205,1213],true) && $retry<2){$profile?->add('retries',1);usleep(random_int(10000,40000));continue;}
+     throw $error;
+    }
    }
+  }finally{
+   $profile?->add('transaction_total_ms',(hrtime(true)-$started)/1e6);
+   if($owned)$profile?->finish($outcome);
   }
  }
 }

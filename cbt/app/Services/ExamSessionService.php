@@ -31,9 +31,12 @@ final class ExamSessionService
     }
     public function start(int$studentId,string$nisn,int$examId):array
     {
-        $state=$this->database->transaction(function()use($studentId,$nisn,$examId){
-            $student=$this->students->findActiveByNisn($nisn)??throw new DomainException('Siswa tidak ditemukan.',404);
-            if((int)$student['id']!==$studentId)throw new DomainException('Sesi siswa tidak valid.',401);
+        // This nonlocking identity lookup must not establish a RR read view
+        // before waiting for an autosave's attempt lock. Otherwise resume can
+        // return answer revisions from before that autosave committed.
+        $student=$this->students->findActiveByNisn($nisn)??throw new DomainException('Siswa tidak ditemukan.',404);
+        if((int)$student['id']!==$studentId)throw new DomainException('Sesi siswa tidak valid.',401);
+        $state=$this->database->transaction(function()use($studentId,$student,$examId){
             $attempt=$this->attempts->find($studentId,$examId,true);
             if($attempt&&in_array($attempt['status'],['COMPLETED','TERMINATED','EXPIRED'],true))throw new DomainException('Ujian ini tidak dapat dilanjutkan.',409);
             $resuming=$attempt&&$attempt['status']==='IN_PROGRESS'&&strtotime($attempt['expires_at'].' UTC')>time();
