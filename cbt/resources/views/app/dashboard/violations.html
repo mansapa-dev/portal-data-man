@@ -16,12 +16,16 @@
             <label class="ui-label"><span>Jenis Pelanggaran</span><select id="fltPelanggaranJenis" class="ui-control form-control" onchange="applyFilterPelanggaran()"><option value="ALL">Semua Jenis Pelanggaran</option></select></label>
             <label class="ui-label violation-search"><span>Cari Siswa</span><div class="search-box"><i class="fa-solid fa-search"></i><input type="search" id="searchPelanggaran" placeholder="Nama atau NISN..." oninput="applyFilterPelanggaran()" class="ui-control" aria-label="Nama atau NISN..."></div></label>
           </div>
+          <div class="violation-bulk-actions" role="group" aria-label="Reset CBT massal">
+            <label><input id="selectAllResetViolations" type="checkbox" onchange="toggleSelectAllViolationResets(this.checked)"> Pilih semua yang bisa di-reset pada daftar ini</label>
+            <span id="selectedViolationResetCount">0 dipilih</span>
+            <button id="btnResetSelectedViolations" type="button" class="btn btn-warning" onclick="resetSelectedViolationAttempts()" disabled><i class="fa-solid fa-unlock"></i> Reset CBT terpilih</button>
+          </div>
           <div class="table-responsive">
             <table>
-              <thead><tr><th>Waktu</th><th>No Peserta</th><th>Nama Siswa</th><th>Kelas</th><th>Ujian</th><th>Pelanggaran</th><th>Keterangan</th></tr></thead>
-              <tbody id="tblAdminLogPelanggaran"><tr><td colspan="7" align="center">Memuat log...</td></tr></tbody>
+              <thead><tr><th><span class="sr-only">Pilih</span></th><th>Waktu</th><th>No Peserta</th><th>Nama Siswa</th><th>Kelas</th><th>Ujian</th><th>Pelanggaran</th><th>Keterangan</th></tr></thead>
+              <tbody id="tblAdminLogPelanggaran"><tr><td colspan="8" align="center">Memuat log...</td></tr></tbody>
             </table>
           </div>
         </div>
       </div>
-

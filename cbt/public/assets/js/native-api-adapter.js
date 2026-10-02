@@ -73,7 +73,9 @@
       const pulse = async () => {
         if (activeExam !== String(examId)) return;
         try { await api(`api/student/exams/${examId}/heartbeat`,'POST',{}); } catch (_) { /* Answers report connection failures separately. */ }
-        if (activeExam === String(examId)) heartbeatTimer = setTimeout(pulse,30000 + Math.random()*3000);
+        // Presence only needs to refresh inside the 90-second online window.
+        // Spread student heartbeats to avoid synchronized VPS/DB bursts.
+        if (activeExam === String(examId)) heartbeatTimer = setTimeout(pulse,45000 + Math.random()*15000);
       };
       pulse();
       const restored = answerQueue.restore(data.jawaban);
@@ -92,7 +94,7 @@
     const adminListRequest = method === 'GET' && /^(?:api\/admin\/(?:exams(?:-archive)?|students|questions))(?:\?|$)/.test(path);
     const answerRequest = method === 'PUT' && /^api\/student\/exams\/\d+\/answers\/\d+$/.test(path);
     const longRequest = /auth\/(?:student|staff)\/login|student\/exams\/\d+\/start/.test(path) || method === 'POST' && (path === 'api/admin/exams' || path === 'api/admin/students/generate-pins' || /^api\/admin\/portal-data\/sync\/[a-z_]+$/.test(path)) || method === 'DELETE' && /^api\/admin\/exams\/\d+$/.test(path);
-    const mediumRequest = method === 'POST' && /student\/exams\/\d+\/submit|admin\/questions(?:\/import)?$/.test(path) || path === 'api/admin/students' && method === 'GET';
+    const mediumRequest = method === 'POST' && /student\/exams\/\d+\/submit|admin\/questions(?:\/import)?$|admin\/students\/reset-batch$/.test(path) || path === 'api/admin/students' && method === 'GET';
     const timeoutMs = adminListRequest ? 20000 : longRequest ? 120000 : mediumRequest ? 60000 : answerRequest ? 45000 : 15000;
     let response, payload;
     try {
@@ -126,6 +128,7 @@
     if (method !== 'GET') window.dispatchEvent(new CustomEvent('cbt:data-updated', { detail: { path, method } }));
     return payload;
   }
+  window.cbtRequest = (path, method = 'GET', body) => api(path, method, body);
   const calls = {
     async loginSiswaAPI(nisn, pin) {
       const login = await api('api/auth/student/login', 'POST', { nisn, pin });
@@ -190,6 +193,7 @@
     async simpanSiswaSatuanAdmin(session,data) { const r=await api('api/admin/students/pin','POST',data);return {success:true,pin:r.data?.pin,message:r.message||'PIN CBT siswa berhasil disimpan.'}; },
     async generatePinsBatchAdmin(session,data) { const r=await api('api/admin/students/generate-pins','POST',data);return {success:true,...r.data,message:r.message}; },
     async adminBukaBlokirSiswa(session,id,examId,reason) { await api(`api/admin/students/${id}/reset`,'POST',{exam_id:examId,reason});return {success:true,message:'Siswa berhasil dibuka/reset.'}; },
+    async adminBukaBlokirSiswaBatch(attempts,reason) { const r=await api('api/admin/students/reset-batch','POST',{attempts,reason});return r.data; },
     async hapusSiswaAdmin() { return {success:false,message:'Identitas siswa dikelola Portal Data dan tidak dapat dihapus dari CBT.'}; },
     async hapusSiswaPertingkatAdmin() { return {success:false,message:'Data siswa dikelola Portal Data. Nonaktifkan di Portal lalu jalankan sinkronisasi.'}; },
     async prosesKenaikanKelasAdmin() { await api('api/admin/portal-data/sync/students','POST',{});return {success:true,dataXII:[],message:'Kelas diperbarui melalui sinkronisasi Portal Data.'}; },

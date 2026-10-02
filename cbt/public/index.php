@@ -16,7 +16,7 @@ $request=Request::capture();
 if($request->path==='/'||$request->path==='/index.php'){
  $html=file_get_contents(dirname(__DIR__).'/index.html')?:'';
  $html=(new ViewRenderer(dirname(__DIR__).'/resources/views/app'))->render($html);
- $html=str_replace('</body>','<script src="assets/js/native-api-adapter.js?v=20261001-server-pagination-answer-resilience-session-recovery-2"></script></body>',$html);
+ $html=str_replace('</body>','<script src="assets/js/native-api-adapter.js?v=20261002-api-best-practices-1"></script></body>',$html);
  Response::html($html)->send();
 }
 if($request->path==='/guru')Response::html((string)include dirname(__DIR__).'/resources/views/teacher/login.php')->send();
@@ -76,6 +76,7 @@ $router->get('/api/admin/students',[$adminStudents,'index'],[$adminAuth]);
 $router->post('/api/admin/students/pin',[$adminStudents,'setPin'],[$adminAuth,$csrf,$audit('STUDENT_PIN_CHANGED','Student')]);
 $router->post('/api/admin/students/generate-pins',[$adminStudents,'generateBatch'],[$adminAuth,$csrf,$audit('STUDENT_PINS_GENERATED','Student')]);
 $router->post('/api/admin/students/{id}/reset',[$adminStudents,'reset'],[$adminAuth,$csrf,$audit('STUDENT_ATTEMPT_RESET','Student')]);
+$router->post('/api/admin/students/reset-batch',[$adminStudents,'resetBatch'],[$adminAuth,$csrf,$audit('STUDENT_ATTEMPT_RESET_BATCH','Student')]);
 $router->get('/api/admin/exams',[$admin,'exams'],[$adminAuth]);
 $router->get('/api/admin/exams-archive',[$admin,'archivedExams'],[$adminAuth]);
 $router->post('/api/admin/exams',[$admin,'saveExam'],[$adminAuth,$csrf,$audit('EXAM_SAVED','Exam')]);

@@ -547,15 +547,24 @@
   }
 
   async function api(path, method = 'GET', body) {
-    const response = await fetch('../' + path, {
-      method,
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.message || 'Permintaan gagal.');
-    return result;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+    try {
+      const response = await fetch('../' + path, {
+        method,
+        credentials: 'same-origin',
+        cache: method === 'GET' ? 'no-store' : 'default',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: controller.signal,
+      });
+      const result = await response.json();
+      if (!response.ok) { const error = new Error(result.message || 'Permintaan gagal.'); error.status = response.status; throw error; }
+      return result;
+    } catch (error) {
+      if (error.name === 'AbortError') throw new Error('Server membutuhkan waktu terlalu lama. Silakan coba lagi.');
+      throw error;
+    } finally { clearTimeout(timeout); }
   }
 
   try {

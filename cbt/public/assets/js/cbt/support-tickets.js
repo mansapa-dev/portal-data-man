@@ -11,9 +11,10 @@
   async function loadStudentTickets(){
     clearTimeout(studentTimer);const section=document.getElementById('studentTicketStatusSection'),list=document.getElementById('studentTicketStatusList'),modal=document.getElementById('modalSupportTicket');
     if(!section||!list||typeof stSiswa==='undefined'||!stSiswa?.id)return;
+    if(document.hidden){if(modal?.classList.contains('show'))studentTimer=setTimeout(loadStudentTickets,30000);return;}
     try{const result=await runCbt('getStudentSupportTickets');list.replaceChildren(...result.tickets.slice(0,5).map(studentRow));section.classList.toggle('hidden',!result.tickets.length);}
     catch(_){section.classList.add('hidden');}
-    finally{if(modal?.classList.contains('show'))studentTimer=setTimeout(loadStudentTickets,10000);}
+    finally{if(modal?.classList.contains('show'))studentTimer=setTimeout(loadStudentTickets,20000+Math.random()*15000);}
   }
   window.openSupportTicket=function(category='OTHER',examId=null){
     const modal=document.getElementById('modalSupportTicket'),categoryInput=document.getElementById('supportCategory'),nisn=document.getElementById('supportNisn'),nisnGroup=document.getElementById('supportNisnGroup'),examGroup=document.getElementById('supportExamGroup'),examInput=document.getElementById('supportExam'),feedback=document.getElementById('supportTicketFeedback');
@@ -23,6 +24,7 @@
     feedback.className='alert';feedback.textContent='';modal.classList.add('show');if(loggedIn)loadStudentTickets();
   };
   function closeStudentModal(){document.getElementById('modalSupportTicket')?.classList.remove('show');clearTimeout(studentTimer);}
+  document.addEventListener('visibilitychange',()=>{const modal=document.getElementById('modalSupportTicket');if(!document.hidden&&modal?.classList.contains('show')){clearTimeout(studentTimer);studentTimer=setTimeout(loadStudentTickets,1500+Math.random()*5000);}});
   const form=document.getElementById('formSupportTicket');
   if(form){
     document.getElementById('btnCancelSupportTicket')?.addEventListener('click',closeStudentModal);

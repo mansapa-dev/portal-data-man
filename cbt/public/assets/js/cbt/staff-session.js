@@ -188,7 +188,7 @@ function refreshActiveDashboardTab() {
   return true;
 }
 
-async function loadAdminStaffChat(){const root=document.getElementById('adminStaffChatRoot');if(!root||!window.CbtStaffAdminChat)return;const me=await fetch('api/auth/me',{credentials:'same-origin'}).then(r=>r.json());const token=me.data.csrf_token;const client=async(path,method='GET',body)=>{const response=await fetch(path,{method,credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':token},body:body===undefined?undefined:JSON.stringify(body)});const result=await response.json();if(!response.ok)throw new Error(result.message||'Permintaan gagal.');return result;};window.CbtStaffAdminChat.mount(root,client,{admin:true});}
+function loadAdminStaffChat(){const root=document.getElementById('adminStaffChatRoot');if(!root||!window.CbtStaffAdminChat||!window.cbtRequest)return;window.CbtStaffAdminChat.mount(root,(path,method='GET',body)=>window.cbtRequest(path,method,body),{admin:true});}
 
 let dashboardRefreshTimer = null;
 let dashboardRefreshInFlight = false;
@@ -206,12 +206,7 @@ function loadDataAdminLiveSessions() {
   const root = document.getElementById('adminLiveSessionsContent');
   const notice = document.getElementById('adminLiveSessionsNotice');
   if (!root || !notice || !window.CbtLiveSessions) return;
-  const api = async () => {
-    const response = await fetch('api/admin/live-sessions', {credentials:'same-origin'});
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.message || 'Permintaan gagal.');
-    return payload;
-  };
+  const api = () => window.cbtRequest('api/admin/live-sessions');
   window.CbtLiveSessions.mount(root, api, notice, {
     title: 'Live Sessions Seluruh Ujian',
     description: 'Klik Perbarui sekarang untuk mengambil progres terbaru seluruh ujian.',

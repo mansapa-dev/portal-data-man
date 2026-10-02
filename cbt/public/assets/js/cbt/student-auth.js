@@ -60,7 +60,9 @@ function persiapkanUjianById(id) {
     }
     cbtApi.withSuccessHandler(result => { renderDaftarJadwal(result.jadwal); refreshStudentDashboard(); })
       .withFailureHandler(() => refreshStudentDashboard()).getStudentExamsAPI();
-  }, 25000 + Math.random() * 15000);
+  // Exam availability can tolerate a short delay; jitter spreads dashboard
+  // reads so a full cohort does not poll the database every few seconds.
+  }, 60000 + Math.random() * 30000);
 })();
 
 function kembaliKeDashboardSiswa() {

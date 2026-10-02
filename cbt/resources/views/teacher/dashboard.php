@@ -73,7 +73,7 @@ $nip = (string)($teacher['nip'] ?? $teacher['username'] ?? 'Guru');
   <script src="../assets/js/teacher/live-sessions.js?v=20261001-manual-refresh-1"></script>
   <script src="../assets/js/cbt/support-tickets.js?v=20261001-manual-refresh-1"></script>
   <script src="../assets/js/cbt/staff-admin-chat.js?v=20261001-manual-refresh-1"></script>
-  <script src="../assets/js/teacher/dashboard.js?v=20261001-manual-refresh-1"></script>
+  <script src="../assets/js/teacher/dashboard.js?v=20261002-api-best-practices-1"></script>
   <script src="../assets/js/table-pagination.js?v=20260910-cleanup"></script>
 </body>
 </html>

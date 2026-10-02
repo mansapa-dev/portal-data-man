@@ -1,13 +1,14 @@
 // Violation logs, result filtering, reports, and participant card printing.
 let cachePelanggaranRaw=[];
 let cacheKartuSiap=[];
+const selectedViolationResets=new Map();
 const violationReasonLabels={TAB_HIDDEN:'Halaman ujian tersembunyi',SCREENSHOT_ATTEMPT:'Percobaan screenshot',COPY_ATTEMPT:'Percobaan menyalin teks',SPLIT_SCREEN_SUSPECTED:'Layar terbagi/jendela kecil (indikasi)',WINDOW_BLUR:'Fokus jendela hilang',FULLSCREEN_EXIT:'Keluar layar penuh'};
 function loadDataAdminLogPelanggaran() {
-  const tb = document.getElementById('tblAdminLogPelanggaran'); tb.innerHTML = `<tr><td colspan="7" align="center">Memuat...</td></tr>`;
+  const tb = document.getElementById('tblAdminLogPelanggaran'); tb.innerHTML = `<tr><td colspan="8" align="center">Memuat...</td></tr>`;
   cbtApi
     .withSuccessHandler(res => {
       if(!res.success || !res.data || res.data.length === 0) {
-        tb.innerHTML = `<tr><td colspan="7" align="center">Tidak ada catatan pelanggaran.</td></tr>`;
+        tb.innerHTML = `<tr><td colspan="8" align="center">Tidak ada catatan pelanggaran.</td></tr>`;
         cachePelanggaranRaw=[];window.cachePelanggaranExcel = [];
         return;
       }
@@ -18,17 +19,25 @@ function loadDataAdminLogPelanggaran() {
 
 function populatePelanggaranFilters(){const option=(id,label,values)=>{const el=document.getElementById(id),current=el.value,items=[...new Set(values.filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'id',{numeric:true}));el.innerHTML=`<option value="ALL">${label} (${items.length})</option>`+items.map(x=>`<option value="${x}">${x}</option>`).join('');el.value=items.includes(current)?current:'ALL';};option('fltPelanggaranTingkat','Semua Tingkat',cachePelanggaranRaw.map(p=>p.tingkat));option('fltPelanggaranKelas','Semua Kelas',cachePelanggaranRaw.map(p=>p.kelas));option('fltPelanggaranUjian','Semua Ujian / Mapel',cachePelanggaranRaw.map(p=>p.nama_ujian));option('fltPelanggaranJenis','Semua Jenis Pelanggaran',cachePelanggaranRaw.map(p=>p.keterangan));}
 
-function applyFilterPelanggaran(){const date=document.getElementById('fltPelanggaranTanggal').value,grade=document.getElementById('fltPelanggaranTingkat').value,kelas=document.getElementById('fltPelanggaranKelas').value,ujian=document.getElementById('fltPelanggaranUjian').value,jenis=document.getElementById('fltPelanggaranJenis').value,query=document.getElementById('searchPelanggaran').value.trim().toLowerCase();const rows=cachePelanggaranRaw.filter(p=>(!date||String(p.waktu||'').slice(0,10)===date)&&(grade==='ALL'||String(p.tingkat)===grade)&&(kelas==='ALL'||p.kelas===kelas)&&(ujian==='ALL'||p.nama_ujian===ujian)&&(jenis==='ALL'||p.keterangan===jenis)&&(!query||`${p.nomor_ujian||''} ${p.nama_siswa||''} ${p.kelas||''} ${p.nama_ujian||''} ${p.keterangan||''}`.toLowerCase().includes(query)));window.cachePelanggaranExcel=rows.map(p=>[p.nomor_ujian,p.nama_siswa,p.kelas,p.nama_ujian,p.jumlah_pelanggaran,p.keterangan,p.waktu]);const tb=document.getElementById('tblAdminLogPelanggaran');tb.innerHTML=rows.length?rows.map(p=>`
-        <tr>
+function violationCanReset(p){return p.attempt_status==='TERMINATED'&&Number(p.jumlah_pelanggaran)>=3;}
+function violationAttemptKey(p){return `${Number(p.student_id)}:${Number(p.exam_id)}`;}
+function updateViolationResetSelection(){const count=document.getElementById('selectedViolationResetCount'),button=document.getElementById('btnResetSelectedViolations');if(count)count.textContent=`${selectedViolationResets.size} dipilih`;if(button)button.disabled=!selectedViolationResets.size;}
+function toggleViolationReset(key,studentId,examId,checked){if(checked)selectedViolationResets.set(key,{student_id:Number(studentId),exam_id:Number(examId)});else selectedViolationResets.delete(key);updateViolationResetSelection();}
+function toggleSelectAllViolationResets(checked){const rows=Array.from(document.querySelectorAll('#tblAdminLogPelanggaran tr[data-reset-key]'));rows.forEach(row=>{const box=row.querySelector('input[type="checkbox"]');if(box){box.checked=checked;toggleViolationReset(row.dataset.resetKey,row.dataset.studentId,row.dataset.examId,checked);}});}
+function applyFilterPelanggaran(){const date=document.getElementById('fltPelanggaranTanggal').value,grade=document.getElementById('fltPelanggaranTingkat').value,kelas=document.getElementById('fltPelanggaranKelas').value,ujian=document.getElementById('fltPelanggaranUjian').value,jenis=document.getElementById('fltPelanggaranJenis').value,query=document.getElementById('searchPelanggaran').value.trim().toLowerCase();const rows=cachePelanggaranRaw.filter(p=>(!date||String(p.waktu||'').slice(0,10)===date)&&(grade==='ALL'||String(p.tingkat)===grade)&&(kelas==='ALL'||p.kelas===kelas)&&(ujian==='ALL'||p.nama_ujian===ujian)&&(jenis==='ALL'||p.keterangan===jenis)&&(!query||`${p.nomor_ujian||''} ${p.nama_siswa||''} ${p.kelas||''} ${p.nama_ujian||''} ${p.keterangan||''}`.toLowerCase().includes(query)));window.cachePelanggaranExcel=rows.map(p=>[p.nomor_ujian,p.nama_siswa,p.kelas,p.nama_ujian,p.jumlah_pelanggaran,p.keterangan,p.waktu]);const tb=document.getElementById('tblAdminLogPelanggaran');tb.innerHTML=rows.length?rows.map(p=>{const canReset=violationCanReset(p),key=violationAttemptKey(p);return `
+        <tr ${canReset?`data-reset-key="${key}" data-student-id="${Number(p.student_id)}" data-exam-id="${Number(p.exam_id)}"`:''}>
+          <td>${canReset?`<input type="checkbox" aria-label="Pilih reset CBT ${p.nama_siswa} untuk ${p.nama_ujian}" ${selectedViolationResets.has(key)?'checked':''} onchange="toggleViolationReset('${key}',${Number(p.student_id)},${Number(p.exam_id)},this.checked)">`:''}</td>
           <td><small>${p.waktu}</small></td>
           <td><b>${p.nomor_ujian}</b></td>
           <td>${p.nama_siswa}</td>
           <td>${p.kelas}</td>
           <td>${p.nama_ujian}</td>
           <td><span class="badge bg-red">${p.jumlah_pelanggaran} Kali</span></td>
-          <td>${p.keterangan}${p.attempt_status === 'TERMINATED' && Number(p.jumlah_pelanggaran) >= 3 ? `<br><button class="btn btn-warning" onclick="resetCbtAttempt(${Number(p.student_id)},${Number(p.exam_id)})"><i class="fa-solid fa-unlock"></i> Reset CBT</button>` : ''}</td>
+          <td>${p.keterangan}${canReset ? `<br><button class="btn btn-warning" onclick="resetCbtAttempt(${Number(p.student_id)},${Number(p.exam_id)})"><i class="fa-solid fa-unlock"></i> Reset CBT</button>` : ''}</td>
         </tr>
-      `).join(''):`<tr><td colspan="7" align="center">Tidak ada data sesuai filter.</td></tr>`;}
+      `}).join(''):`<tr><td colspan="8" align="center">Tidak ada data sesuai filter.</td></tr>`;const visibleKeys=new Set(rows.filter(violationCanReset).map(violationAttemptKey));const selectAll=document.getElementById('selectAllResetViolations');if(selectAll){const selectedVisible=[...visibleKeys].filter(key=>selectedViolationResets.has(key)).length;selectAll.checked=visibleKeys.size>0&&selectedVisible===visibleKeys.size;selectAll.indeterminate=selectedVisible>0&&selectedVisible<visibleKeys.size;}updateViolationResetSelection();}
+
+async function resetSelectedViolationAttempts(){const attempts=[...selectedViolationResets.values()];if(!attempts.length)return;const reason=window.prompt(`Alasan reset CBT untuk ${attempts.length} siswa. Jawaban tetap tersimpan dan sisa waktu ujian dipulihkan:`);if(!reason?.trim())return;if(!window.confirm(`Reset CBT untuk ${attempts.length} siswa terpilih? Hanya attempt yang masih dihentikan karena minimal 3 pelanggaran yang akan dibuka.`))return;const button=document.getElementById('btnResetSelectedViolations');button.disabled=true;let succeeded=0,failed=[];try{for(let offset=0;offset<attempts.length;offset+=25){const batch=attempts.slice(offset,offset+25);button.innerHTML=`<i class="fa-solid fa-spinner fa-spin"></i> Memproses ${Math.min(offset+batch.length,attempts.length)}/${attempts.length}`;const response=await new Promise((resolve,reject)=>cbtApi.withSuccessHandler(resolve).withFailureHandler(reject).adminBukaBlokirSiswaBatch(batch,reason.trim()));for(const result of response.results||[]){if(result.success){succeeded++;selectedViolationResets.delete(`${result.student_id}:${result.exam_id}`);cachePelanggaranRaw.filter(row=>Number(row.student_id)===Number(result.student_id)&&Number(row.exam_id)===Number(result.exam_id)).forEach(row=>{row.attempt_status='IN_PROGRESS';row.jumlah_pelanggaran=0;});}else failed.push(`${result.student_id}/${result.exam_id}: ${result.message}`);}applyFilterPelanggaran();}if(typeof loadDataAdminSiswa==='function')loadDataAdminSiswa();const detail=failed.length?` ${failed.length} gagal; periksa status terbaru dan coba lagi jika sesuai.`:'';showCustomAlert('Reset CBT Selesai',`${succeeded} siswa berhasil dibuka.${detail}`,failed.length?'warning':'success');if(failed.length)console.warn('Reset CBT massal gagal:',failed);}catch(error){showCustomAlert('Reset CBT Terhenti',`${succeeded} siswa berhasil dibuka sebelum proses terhenti. ${error.message||'Periksa koneksi lalu muat ulang log.'}`,'error');}finally{button.innerHTML='<i class="fa-solid fa-unlock"></i> Reset CBT terpilih';updateViolationResetSelection();}}
 
 function loadDataAdminHasil() {
   showLoading('Memuat rekap hasil...');
