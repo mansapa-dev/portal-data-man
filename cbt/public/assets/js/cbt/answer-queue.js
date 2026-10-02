@@ -6,6 +6,7 @@
       this.storage = storage; this.key = key; this.attemptId = attemptId;
       this.send = send; this.notify = notify; this.running = null; this.stopped = false;
       this.error = null; this.blocked = false; this.revisions = {};
+      this.lastAccepted = {};
       const raw = storage.getItem(key);
       this.items = raw ? JSON.parse(raw) : [];
       if (!Array.isArray(this.items) || this.items.some(item => !item || !Number.isInteger(item.question_id) || typeof item.mutation_id !== 'string')) {
@@ -18,7 +19,7 @@
     report() { this.notify(this.state()); }
     restore(answers) {
       const merged = new Map(answers.map(a => [Number(a.question_id), { ...a }]));
-      answers.forEach(a => { this.revisions[a.question_id] = Number(a.revision || 0); });
+      answers.forEach(a => { this.revisions[a.question_id] = Number(a.revision || 0); this.lastAccepted[a.question_id] = {answer:a.answer,is_flagged:!!Number(a.is_flagged)}; });
       // A response may have been lost after the server committed the head write.
       while (this.items.length) {
         const head = this.items[0], saved = merged.get(head.question_id);
@@ -34,6 +35,9 @@
     }
     enqueue(questionId, answer, flagged) {
       if (this.stopped || this.blocked) throw new Error(this.error || 'Penyimpanan dihentikan. Hubungi pengawas.');
+      const pendingForQuestion = [...this.items].reverse().find(i => i.question_id === Number(questionId));
+      const latest = pendingForQuestion || this.lastAccepted?.[Number(questionId)];
+      if (latest && latest.answer === answer && !!latest.is_flagged === !!flagged) return;
       const bytes = new Uint8Array(16); root.crypto.getRandomValues(bytes);
       const mutation = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
       const item = { question_id: Number(questionId), answer, is_flagged: !!flagged, mutation_id: mutation };
@@ -58,6 +62,8 @@
           const item = this.items[0];
           const result = await this.send({ ...item, attempt_id: this.attemptId });
           this.revisions[item.question_id] = Number(result.revision);
+          this.lastAccepted ||= {};
+          this.lastAccepted[item.question_id] = { answer: item.answer, is_flagged: item.is_flagged };
           this.items.shift();
           try { this.persist(); } catch (error) { this.items.unshift(item); throw error; }
           this.report();

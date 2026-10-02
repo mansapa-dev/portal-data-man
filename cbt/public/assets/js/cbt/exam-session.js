@@ -1,6 +1,7 @@
 // Exam lifecycle: deterministic questions, answers, timer, anti-cheat, and submission.
 let stTerminated = false;
 let stDeadline = 0, stClockOffset = 0, submitRetryTimer = null;
+let shortAnswerSaveTimer = null;
 function updateSaveStatus(state) {
   const element = document.getElementById('cbtSaveStatus');
   if (!element) return;
@@ -114,7 +115,7 @@ function renderSoal() {
   else { btnR.className = 'btn btn-secondary'; btnR.innerHTML = '<i class="fa-regular fa-flag"></i> Ragu-ragu'; }
 
   const svd = stJawab[s.id] || '';
-  if(s.tipe==='SHORT_ANSWER'){document.getElementById('cbtOptionList').innerHTML=`<label class="short-answer-box"><span>Jawaban singkat</span><input maxlength="500" value="${String(svd).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}" placeholder="Ketik jawaban Anda" onchange="simpanIsianSingkat('${s.id}',this.value,${stIdx+1})"></label>`;return;}
+  if(s.tipe==='SHORT_ANSWER'){document.getElementById('cbtOptionList').innerHTML=`<label class="short-answer-box"><span>Jawaban singkat</span><input id="cbtShortAnswer" maxlength="500" autocomplete="off" value="${String(svd).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}" placeholder="Ketik jawaban Anda"></label>`;const input=document.getElementById('cbtShortAnswer');input.addEventListener('input',()=>jadwalkanSimpanIsianSingkat(s.id,input.value,stIdx+1));input.addEventListener('blur',()=>simpanIsianSingkat(s.id,input.value,stIdx+1));return;}
   const selected=String(svd).split(',').filter(Boolean);
   document.getElementById('cbtOptionList').innerHTML = s.opts.map((opt, i) => {
     const visualLabel = String.fromCharCode(65 + i);
@@ -126,7 +127,8 @@ function renderSoal() {
   typesetQuestionMath([document.getElementById('cbtSoalText'), document.getElementById('cbtOptionList')]);
 }
 function toggleJawabanKompleks(soalId,key,nomorSoal){const selected=new Set(String(stJawab[soalId]||'').split(',').filter(Boolean));selected.has(key)?selected.delete(key):selected.add(key);simpanJawaban(soalId,[...selected].sort().join(','),nomorSoal);}
-function simpanIsianSingkat(soalId,value,nomorSoal){simpanJawaban(soalId,String(value).trim(),nomorSoal);}
+function jadwalkanSimpanIsianSingkat(soalId,value,nomorSoal){clearTimeout(shortAnswerSaveTimer);shortAnswerSaveTimer=setTimeout(()=>simpanIsianSingkat(soalId,value,nomorSoal),450);}
+function simpanIsianSingkat(soalId,value,nomorSoal){clearTimeout(shortAnswerSaveTimer);shortAnswerSaveTimer=null;const answer=String(value).trim();if(stJawab[soalId]===answer)return;simpanJawaban(soalId,answer,nomorSoal);}
 
 function simpanJawaban(soalId, originalKey, nomorSoal) {
   if (!isUjianJalan || isSubmitting) return;
@@ -382,6 +384,8 @@ function prosesKumpulFinal() { submitUjianKeServer(true); }
 
 function submitUjianKeServer(finalizeOnly = false) {
   if (isSubmitting) return;
+  const shortInput=document.getElementById('cbtShortAnswer');
+  if(shortInput&&stSoal[stIdx]?.tipe==='SHORT_ANSWER')simpanIsianSingkat(stSoal[stIdx].id,shortInput.value,stIdx+1);
   finalizeOnly = finalizeOnly || stTerminated || Date.now() + stClockOffset >= stDeadline;
   document.getElementById('modalSubmitUjian').classList.remove('show');
   isSubmitting = true;
