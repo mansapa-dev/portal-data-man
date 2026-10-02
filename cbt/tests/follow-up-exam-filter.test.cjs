@@ -7,9 +7,9 @@ const vm = require('node:vm');
 const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'assets', 'js', 'cbt', 'follow-up-exams.js'), 'utf8');
 const form = {addEventListener() {}};
 const controls = {
-  fltMakeupExam: {value: '2'}, fltMakeupDate: {value: ''}, fltMakeupClass: {value: 'ALL'}, fltMakeupSubject: {value: 'ALL'}, fltMakeupStatus: {value: 'ALL'},
+  fltMakeupExam: {value: '2'}, fltMakeupGrade: {value: 'XII'}, fltMakeupDate: {value: ''}, fltMakeupClass: {value: 'ALL'}, fltMakeupSubject: {value: 'ALL'}, fltMakeupStatus: {value: 'ALL'},
   fltRetakeExam: {value: '1'}, fltRetakeSearch: {value: ''}, fltRetakeGrade: {value: 'ALL'}, fltRetakeClass: {value: 'ALL'}, fltRetakeStatus: {value: 'ALL'},
-  fltScheduleExam: {value: '11'}, fltScheduleSearch: {value: ''}, fltScheduleType: {value: 'ALL'}, fltScheduleState: {value: 'ALL'},
+  fltScheduleExam: {value: '11'}, fltScheduleGrade: {value: 'XI'}, fltScheduleSearch: {value: ''}, fltScheduleType: {value: 'ALL'}, fltScheduleState: {value: 'ALL'},
 };
 const context = vm.createContext({
   console,
@@ -31,9 +31,9 @@ vm.runInContext(`${source}\nglobalThis.testFilters = (makeup, retake, schedules)
 
 test('filter nama ujian memakai ID agar ujian bernama sama tidak tercampur', () => {
   context.testFilters(
-    [{exam_id: 1, exam_name: 'PAS', status_susulan: 'BELUM_UJIAN'}, {exam_id: 2, exam_name: 'PAS', status_susulan: 'BELUM_UJIAN'}],
+    [{exam_id: 1, exam_name: 'PAS', grade: 'XII', status_susulan: 'BELUM_UJIAN'}, {exam_id: 2, exam_name: 'PAS', grade: 'XI', status_susulan: 'BELUM_UJIAN'}, {exam_id: 2, exam_name: 'PAS', grade: 'XII', status_susulan: 'BELUM_UJIAN'}],
     [{exam_id: 1, exam_name: 'PAS', status_retake: 'PENDING'}, {exam_id: 2, exam_name: 'PAS', status_retake: 'PENDING'}],
-    [{id: 10, name: 'PAS - Susulan', type: 'SUSULAN', execution_state: 'UPCOMING'}, {id: 11, name: 'PAS - Susulan', type: 'SUSULAN', execution_state: 'UPCOMING'}],
+    [{id: 10, name: 'PAS - Susulan', grade: 'XI', type: 'SUSULAN', execution_state: 'UPCOMING'}, {id: 11, name: 'PAS - Susulan', grade: 'X', type: 'SUSULAN', execution_state: 'UPCOMING'}, {id: 11, name: 'PAS - Susulan', grade: 'XI', type: 'SUSULAN', execution_state: 'UPCOMING'}],
   );
 
   assert.deepEqual(Array.from(context.makeupResult, item => item.exam_id), [2]);

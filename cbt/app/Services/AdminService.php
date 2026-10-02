@@ -27,7 +27,7 @@ final class AdminService
  public function deleteExam(int$id):array
  {
   if($id<=0)throw new DomainException('Ujian tidak valid.',422);
-  $deleted=$this->db->transaction(function()use($id){$exam=$this->repo->examDeletionInfo($id)??throw new DomainException('Ujian tidak ditemukan.',404);$archive=(int)$exam['attempt_count']>0||(int)$exam['follow_up_count']>0;$ok=$archive?$this->repo->archiveExam($id):$this->repo->deleteExam($id);if(!$ok)throw new DomainException('Ujian gagal dihapus.',409);$exam['archived']=$archive;return$exam;});
+  $deleted=$this->db->transaction(function()use($id){$exam=$this->repo->examDeletionInfo($id)??throw new DomainException('Ujian tidak ditemukan.',404);$archive=(int)$exam['attempt_count']>0||(int)$exam['follow_up_count']>0;$ok=$archive?$this->repo->archiveExam($id):$this->repo->deleteExam($id);if(!$ok)throw new DomainException('Ujian gagal dihapus.',409);$this->repo->deleteExamAssignments($id);$exam['archived']=$archive;return$exam;});
   $this->forgetQuestionBanks([$id]);$this->forgetQuestionLists([$id]);$subjectId=(int)($deleted['subject_id']??0);if($subjectId>0)$this->forgetQuestionSubject($subjectId);RedisCache::forget('admin:dashboard:v1');
   return['id'=>$id,'name'=>$deleted['name'],'deleted_questions'=>(int)$deleted['question_count'],'history_preserved'=>(bool)$deleted['archived']];
  }
@@ -99,7 +99,7 @@ final class AdminService
  public function results():array{return RedisCache::remember('admin:results:v1',15,fn():array=>$this->repo->results(),true);}
  public function violations():array{return RedisCache::remember('admin:violations:v1',10,fn():array=>$this->repo->violations(),true);}
  public function proctorViolations(int$userId):array{if(!$this->repo->personnelIsProctor($userId))throw new DomainException('Log pelanggaran hanya dapat diakses petugas piket.',403);return$this->repo->violations();}
- public function teacherDashboard(int$teacherId,int$userId,string$role):array{$ids=$role==='ADMIN'?$this->repo->allExamIds():$this->repo->personnelExamIds($userId);sort($ids);$key='teacher:dashboard:v2:'.$role.':'.$userId.':'.hash('sha256',implode(',',$ids));$payload=RedisCache::remember($key,15,function()use($ids):array{$all=$this->repo->exams(false);$list=array_values(array_filter($all,fn($e)=>in_array((int)$e['id'],$ids,true)));return['ujianList'=>$list,'hasilList'=>$this->repo->results($ids),'pelanggaranList'=>$this->repo->violations($ids)];},true);return$payload+['syncedAt'=>gmdate(DATE_ATOM)];}
+ public function teacherDashboard(int$teacherId,int$userId,string$role):array{$ids=$role==='ADMIN'?$this->repo->allExamIds():$this->repo->personnelExamIds($userId);sort($ids);$key='teacher:dashboard:v3:'.$role.':'.$userId.':'.hash('sha256',implode(',',$ids));$payload=RedisCache::remember($key,15,function()use($ids):array{$all=$this->repo->exams(false);$list=array_values(array_filter($all,fn($e)=>in_array((int)$e['id'],$ids,true)));return['ujianList'=>$list,'hasilList'=>$this->repo->results($ids),'pelanggaranList'=>$this->repo->violations($ids)];},true);return$payload+['syncedAt'=>gmdate(DATE_ATOM)];}
  private function liveSessionPayload(array$examIds):array
  {
   $examIds=array_values(array_unique(array_map('intval',$examIds)));sort($examIds);
