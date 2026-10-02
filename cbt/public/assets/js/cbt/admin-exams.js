@@ -1,5 +1,6 @@
 // Administrator exam schedule management.
 let cacheAdminUjianRows = [];
+let adminExamOptions = [];
 let showingArchivedExams = false;
 let adminExamPage = 1, adminExamMeta = {page:1,pages:1,total:0}, adminExamSearchTimer;
 
@@ -99,6 +100,19 @@ function populateAdminUjianFilters() {
     } else {
       fltMapel.value = 'ALL';
     }
+  }
+
+  // 3. Populate Nama Ujian Filter
+  const fltNama = document.getElementById('fltUjianNama');
+  if (fltNama) {
+    const currentVal = fltNama.value;
+    fltNama.replaceChildren(new Option('Semua Ujian', 'ALL'));
+    adminExamOptions.forEach(exam => {
+      const session = Number(exam.sesi || 0);
+      const label = session > 0 ? `${exam.nama_ujian} (Sesi ${session})` : exam.nama_ujian;
+      fltNama.add(new Option(label, String(exam.id)));
+    });
+    fltNama.value = adminExamOptions.some(exam => String(exam.id) === currentVal) ? currentVal : 'ALL';
   }
 }
 
@@ -219,6 +233,7 @@ function loadDataAdminUjian(resetPage = true) {
   cbtApi
     .withSuccessHandler(rows => {
       cacheAdminUjianRows = Array.isArray(rows) ? rows : (rows?.items || []);
+      adminExamOptions = Array.isArray(rows?.options) ? rows.options : cacheAdminUjianRows.map(row => ({id:row.id,nama_ujian:row.nama_ujian,sesi:row.sesi}));
       adminExamMeta = rows?.meta || {page:1,limit:25,pages:1,total:cacheAdminUjianRows.length};
       populateAdminUjianFilters();
       renderAdminUjianPage();
@@ -229,12 +244,14 @@ function loadDataAdminUjian(resetPage = true) {
         : (error?.message || 'Permintaan gagal.');
       if (tb) tb.innerHTML = `<tr><td colspan="8" align="center" style="padding:28px;color:var(--danger)"><b>Daftar ujian belum dapat dimuat</b><div style="margin:6px 0 12px;color:var(--text-muted)">${message}</div><button type="button" class="btn btn-secondary" onclick="loadDataAdminUjian()"><i class="fa-solid fa-rotate"></i> Coba Lagi</button></td></tr>`;
     })
-    [request](stPengelola,{page:adminExamPage,limit:25,grade:document.getElementById('fltUjianTingkat')?.value||'ALL',class_id:document.getElementById('fltUjianKelas')?.value||'ALL',subject_id:document.getElementById('fltUjianMapel')?.value||'ALL',search:document.getElementById('searchUjian')?.value?.trim()||''});
+    [request](stPengelola,{page:adminExamPage,limit:25,grade:document.getElementById('fltUjianTingkat')?.value||'ALL',class_id:document.getElementById('fltUjianKelas')?.value||'ALL',subject_id:document.getElementById('fltUjianMapel')?.value||'ALL',exam_id:document.getElementById('fltUjianNama')?.value||'ALL'});
 }
 
 function toggleArsipUjian() {
   showingArchivedExams = !showingArchivedExams;
   const button = document.getElementById('btnToggleArsipUjian');
+  const examFilter = document.getElementById('fltUjianNama');
+  if (examFilter) examFilter.value = 'ALL';
   if (button) button.innerHTML = showingArchivedExams ? '<i class="fa-solid fa-arrow-left"></i> Kembali ke Ujian' : '<i class="fa-solid fa-box-archive"></i> Arsip Ujian';
   loadDataAdminUjian();
 }
