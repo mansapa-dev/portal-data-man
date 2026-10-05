@@ -15,6 +15,8 @@ import { portalSyncRoutes } from './routes/portal-sync.js';
 import { readToken } from './lib/auth.js';
 import { setupRoutes } from './routes/setup.js';
 import { staffRoutes } from './routes/staff.js';
+import { ScoringService } from './services/scoring.js';
+import { ExpiredAttemptFinalizer } from './services/expired-attempt-finalizer.js';
 
 const env = z.object({
   HOST: z.string().default('0.0.0.0'),
@@ -22,6 +24,9 @@ const env = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   TRUST_PROXY: z.enum(['true', 'false']).default('false'),
   REDIS_URL: z.string().url().optional(),
+  ATTEMPT_FINALIZER_ENABLED: z.enum(['true','false']).default('true'),
+  ATTEMPT_FINALIZER_INTERVAL_MS: z.coerce.number().int().min(5_000).max(300_000).default(30_000),
+  ATTEMPT_FINALIZER_BATCH_SIZE: z.coerce.number().int().min(1).max(100).default(25),
 }).parse(process.env);
 
 const app = Fastify({
@@ -35,6 +40,9 @@ const app = Fastify({
 await app.register(helmet);
 await app.register(sensible);
 const redis = env.REDIS_URL ? new Redis(env.REDIS_URL, { maxRetriesPerRequest: 1, enableOfflineQueue: false }) : null;
+const finalizer = pool && env.ATTEMPT_FINALIZER_ENABLED === 'true'
+  ? new ExpiredAttemptFinalizer(pool, new ScoringService(pool), app.log, env.ATTEMPT_FINALIZER_INTERVAL_MS, env.ATTEMPT_FINALIZER_BATCH_SIZE)
+  : null;
 await app.register(rateLimit, redis
   ? { hook: 'preHandler', max: 180, timeWindow: '1 minute', redis, keyGenerator: (request) => { const bearer=request.headers.authorization?.startsWith('Bearer ')?request.headers.authorization.slice(7):'';const claims=bearer?readToken(bearer):null;return claims?`${claims.role}:${claims.sub}`:`ip:${request.ip}`; } }
   : { hook: 'preHandler', max: 180, timeWindow: '1 minute', keyGenerator: (request) => { const bearer=request.headers.authorization?.startsWith('Bearer ')?request.headers.authorization.slice(7):'';const claims=bearer?readToken(bearer):null;return claims?`${claims.role}:${claims.sub}`:`ip:${request.ip}`; } });
@@ -71,6 +79,7 @@ app.setErrorHandler((error, request, reply) => {
 });
 
 const close = async () => {
+  await finalizer?.stop();
   await app.close();
   await pool?.end();
   await redis?.quit();
@@ -78,3 +87,4 @@ const close = async () => {
 process.once('SIGINT', () => void close().then(() => process.exit(0)));
 process.once('SIGTERM', () => void close().then(() => process.exit(0)));
 await app.listen({ host: env.HOST, port: env.PORT });
+finalizer?.start();

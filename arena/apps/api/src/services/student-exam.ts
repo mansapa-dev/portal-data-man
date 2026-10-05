@@ -132,7 +132,7 @@ export class StudentExamService {
       }
       await connection.beginTransaction();
       try {
-        const [lockedRows] = await connection.execute<RowDataPacket[]>('SELECT id,public_id,status,expires_at FROM exam_attempts WHERE student_id=? AND exam_id=? FOR UPDATE', [claims.sub, examId]);
+        const [lockedRows] = await connection.execute<RowDataPacket[]>('SELECT id,public_id,status,expires_at,(expires_at<=UTC_TIMESTAMP(3)) expired FROM exam_attempts WHERE student_id=? AND exam_id=? FOR UPDATE', [claims.sub, examId]);
         const attempt = lockedRows[0];
         if (!attempt) throw Object.assign(new Error('Sesi ujian tidak ditemukan'), { statusCode: 404 });
         if (attempt.public_id !== input.attempt_id || attempt.id !== first.attempt_pk) throw Object.assign(new Error('Sesi ujian berubah; muat ulang halaman'), { statusCode: 409 });
@@ -145,7 +145,7 @@ export class StudentExamService {
           await connection.commit();
           return { question_id: questionId, revision, duplicate: true };
         }
-        if (attempt.status !== 'IN_PROGRESS' || new Date(attempt.expires_at).getTime() <= Date.now()) throw Object.assign(new Error('Ujian sudah tidak aktif'), { statusCode: 409 });
+        if (attempt.status !== 'IN_PROGRESS' || Number(attempt.expired)) throw Object.assign(new Error('Ujian sudah tidak aktif'), { statusCode: 409 });
         if (revision !== input.base_revision) throw Object.assign(new Error('Versi jawaban berubah di tab lain'), { statusCode: 409 });
         if (current.answer_id !== null) {
           if (current.answer !== answer || Boolean(current.is_flagged) !== input.is_flagged) await connection.execute('UPDATE student_answers SET answer=?,is_flagged=?,answered_at=UTC_TIMESTAMP(3) WHERE id=?', [answer, Number(input.is_flagged), current.answer_id]);
