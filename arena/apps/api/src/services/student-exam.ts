@@ -19,11 +19,11 @@ export class StudentExamService {
 
   async list(studentId: number) {
     const [rows] = await this.pool.execute<RowDataPacket[]>(`SELECT e.id,e.name,e.grade,e.duration_minutes,e.session_number,e.starts_at,e.ends_at,e.academic_year,e.semester,m.type follow_up_type,
-      a.status attempt_status, (e.status='ACTIVE' AND UTC_TIMESTAMP(3) BETWEEN e.starts_at AND e.ends_at AND (NOT EXISTS (SELECT 1 FROM exam_target_classes all_tc WHERE all_tc.exam_id=e.id) OR EXISTS (SELECT 1 FROM exam_target_classes tc WHERE tc.exam_id=e.id AND tc.portal_class_id=s.portal_class_id)) AND (NOT EXISTS(SELECT 1 FROM exam_target_students all_ts WHERE all_ts.exam_id=e.id) OR EXISTS(SELECT 1 FROM exam_target_students ts WHERE ts.exam_id=e.id AND ts.student_id=s.id))) can_start
+      a.status attempt_status, (e.status='ACTIVE' AND UTC_TIMESTAMP(3) BETWEEN e.starts_at AND e.ends_at AND (a.id IS NULL OR a.status='IN_PROGRESS') AND (NOT EXISTS (SELECT 1 FROM exam_target_classes all_tc WHERE all_tc.exam_id=e.id) OR EXISTS (SELECT 1 FROM exam_target_classes tc WHERE tc.exam_id=e.id AND tc.portal_class_id=s.portal_class_id)) AND (NOT EXISTS(SELECT 1 FROM exam_target_students all_ts WHERE all_ts.exam_id=e.id) OR EXISTS(SELECT 1 FROM exam_target_students ts WHERE ts.exam_id=e.id AND ts.student_id=s.id))) can_start
       FROM students s JOIN exams e ON e.grade=s.grade_snapshot LEFT JOIN exam_attempts a ON a.student_id=s.id AND a.exam_id=e.id LEFT JOIN exam_follow_up_meta m ON m.exam_id=e.id
-      WHERE s.id=? AND s.is_active=1 AND s.cbt_status='ACTIVE' AND e.status='ACTIVE' AND UTC_TIMESTAMP(3) BETWEEN e.starts_at AND e.ends_at
+      WHERE s.id=? AND s.is_active=1 AND s.cbt_status='ACTIVE' AND ((e.status='ACTIVE' AND UTC_TIMESTAMP(3) BETWEEN e.starts_at AND e.ends_at
       AND (NOT EXISTS (SELECT 1 FROM exam_target_classes all_tc WHERE all_tc.exam_id=e.id) OR EXISTS (SELECT 1 FROM exam_target_classes tc WHERE tc.exam_id=e.id AND tc.portal_class_id=s.portal_class_id))
-      AND (NOT EXISTS(SELECT 1 FROM exam_target_students all_ts WHERE all_ts.exam_id=e.id) OR EXISTS(SELECT 1 FROM exam_target_students ts WHERE ts.exam_id=e.id AND ts.student_id=s.id)) ORDER BY e.starts_at,e.id`, [studentId]);
+      AND (NOT EXISTS(SELECT 1 FROM exam_target_students all_ts WHERE all_ts.exam_id=e.id) OR EXISTS(SELECT 1 FROM exam_target_students ts WHERE ts.exam_id=e.id AND ts.student_id=s.id))) OR a.id IS NOT NULL) ORDER BY e.starts_at DESC,e.id`, [studentId]);
     return rows.map((row) => ({ id: Number(row.id), nama_ujian: row.name, tingkat: row.grade, durasi: Number(row.duration_minutes), sesi: Number(row.session_number), tanggal_mulai: row.starts_at, tanggal_selesai: row.ends_at, tahun_ajaran: row.academic_year, semester: row.semester, status_attempt: row.attempt_status, can_start: Boolean(row.can_start), is_special: Boolean(row.follow_up_type), special_type: row.follow_up_type ?? null }));
   }
 

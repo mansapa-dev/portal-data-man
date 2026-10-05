@@ -13,6 +13,13 @@ Panel staf/admin juga memiliki alur susulan dan remedial: susulan mengusulkan si
 
 Panel staf/admin juga menyediakan daftar siswa dengan pencarian dan seleksi reset/PIN massal, editor ujian beserta jadwal dan target kelas/siswa, manajemen akun, status sinkronisasi, impor soal JSON, penanganan tiket, percakapan staf-admin, tabel hasil, dan ringkasan distribusi nilai per ujian. PIN ditampilkan sekali pada respons dan harus dibagikan secara aman. Akun guru/pegawai terikat ke personel tersinkron; admin aktif terakhir dan akun sendiri tidak dapat dinonaktifkan, dan perubahan password lokal tidak mengubah kredensial SSO Portal Data. Editor ujian menolak perubahan saat masih ada attempt berjalan. Ini belum mencakup seluruh formulir/editor seperti CBT. Belum ada migrasi data historis otomatis, gambar impor soal, ekspor Excel/PDF, pelampiran komunikasi, penonaktifan akun melalui rekonsiliasi penuh, dan pengujian kesetaraan semua aturan CBT. Karena itu Arena belum menggantikan CBT dan belum siap untuk peserta produksi.
 
+### Bank soal, pemantauan, dan tampilan peserta
+
+- Admin dapat menambah, mengubah, menghapus, dan mempratinjau soal; mengimpor/mengekspor CSV yang dapat dibuka di Excel; serta mengunggah gambar soal PNG/JPEG/WebP/GIF maksimal 2 MB. Gambar disimpan sebagai berkas dan dikirim ke peserta lewat URL dengan cache panjang, bukan sebagai base64 di setiap respons ujian. Set `ARENA_UPLOAD_DIR` ke direktori persisten yang dibackup bersama database saat deployment.
+- Impor CSV memeriksa baris di browser sebelum dikirim. API memproses impor dalam batch kecil; gambar yang tertanam di XLSX lama belum otomatis ikut terimpor. Untuk migrasi soal bergambar, unggah gambarnya lewat editor setelah impor CSV.
+- Panel guru/pengawas menampilkan ujian, hasil per ujian, sesi aktif, dan pelanggaran; admin dapat mengelola penugasan dan kelayakan pengawas. Sesi, pelanggaran, dan hasil dibatasi 100 baris per halaman. Pemantauan memperbarui setiap 45 detik hanya ketika tab terbuka.
+- Waktu ujian dihitung mundur di browser dengan acuan waktu server, tanpa request per detik. Saat habis, klien meminta finalisasi; finalizer API tetap menangani peserta yang putus koneksi. Pelanggaran dikirim hanya saat browser mengamati pindah tab, salin, shortcut tangkapan layar, keluar mode layar penuh, atau viewport mobile yang sangat menyempit. Browser tidak dapat mendeteksi tangkapan layar dari luar halaman.
+
 ## Jalankan lokal
 
 Butuh Node.js 22+ dan MySQL 8/MariaDB. Buat database Arena baru; jangan arahkan ke database CBT.

@@ -15,6 +15,7 @@ import { portalSyncRoutes } from './routes/portal-sync.js';
 import { readToken } from './lib/auth.js';
 import { setupRoutes } from './routes/setup.js';
 import { staffRoutes } from './routes/staff.js';
+import { questionImageRoutes } from './routes/question-images.js';
 import { ScoringService } from './services/scoring.js';
 import { ExpiredAttemptFinalizer } from './services/expired-attempt-finalizer.js';
 
@@ -69,6 +70,7 @@ if (pool) {
   await app.register(supportRoutes);
   await app.register(portalSyncRoutes);
   await app.register(staffRoutes);
+  await app.register(questionImageRoutes);
 }
 
 app.setErrorHandler((error, request, reply) => {

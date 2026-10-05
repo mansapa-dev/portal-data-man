@@ -4,6 +4,7 @@ import { assertCsrf, claimsFromRequest } from '../lib/auth.js';
 import { requirePool } from '../lib/db.js';
 import { ScoringService } from '../services/scoring.js';
 import { StudentExamService } from '../services/student-exam.js';
+import type { RowDataPacket } from 'mysql2/promise';
 
 const examId = z.coerce.number().int().positive();
 const answerSchema = z.object({ answer: z.string().max(500).nullable(), is_flagged: z.boolean().default(false), attempt_id: z.string().length(26), base_revision: z.number().int().nonnegative(), mutation_id: z.string().regex(/^[A-Za-z0-9_-]{16,100}$/) }).strict();
@@ -42,4 +43,11 @@ export async function studentExamRoutes(app: FastifyInstance) {
     return scoring.submit(claims.sub, examId.parse(request.params.id), body.finalize_only ?? false);
   });
   app.get<{ Params: { id: string } }>('/api/student/exams/:id/review', async (request) => scoring.review(studentClaims(request).sub, examId.parse(request.params.id)));
+  app.get<{ Params: { id: string } }>('/api/student/exams/:id/result', async (request) => {
+    const studentId=studentClaims(request).sub,id=examId.parse(request.params.id);
+    const [rows]=await pool.execute<RowDataPacket[]>(`SELECT a.status,r.question_count jumlah_soal,r.correct_count benar,r.wrong_count salah,r.blank_count kosong,r.score nilai,m.type follow_up_type FROM exam_attempts a LEFT JOIN exam_results r ON r.attempt_id=a.id LEFT JOIN exam_follow_up_meta m ON m.exam_id=a.exam_id WHERE a.student_id=? AND a.exam_id=? LIMIT 1`,[studentId,id]);
+    if(!rows[0])throw Object.assign(new Error('Hasil ujian tidak ditemukan'),{statusCode:404});
+    if(rows[0].status==='IN_PROGRESS')throw Object.assign(new Error('Ujian masih berlangsung'),{statusCode:409});
+    return rows[0];
+  });
 }

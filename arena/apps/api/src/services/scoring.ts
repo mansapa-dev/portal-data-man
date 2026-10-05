@@ -85,13 +85,13 @@ export class ScoringService {
     if (!['COMPLETED','EXPIRED'].includes(attempt.status)) throw Object.assign(new Error('Review hanya tersedia setelah ujian selesai'), { statusCode: 403 });
     const [attemptDetails] = await this.pool.execute<RowDataPacket[]>('SELECT question_order FROM exam_attempts WHERE id=?', [attempt.id]);
     const order = JSON.parse(attemptDetails[0]?.question_order ?? '[]') as number[];
-    const [rows] = await this.pool.execute<RowDataPacket[]>('SELECT q.question_id,q.question_type,q.correct_answer,q.option_a,q.option_b,q.option_c,q.option_d,q.option_e,a.answer FROM attempt_questions q LEFT JOIN student_answers a ON a.attempt_id=q.attempt_id AND a.question_id=q.question_id WHERE q.attempt_id=?', [attempt.id]);
+    const [rows] = await this.pool.execute<RowDataPacket[]>('SELECT q.question_id,q.question_text,q.question_type,q.correct_answer,q.option_a,q.option_b,q.option_c,q.option_d,q.option_e,a.answer FROM attempt_questions q LEFT JOIN student_answers a ON a.attempt_id=q.attempt_id AND a.question_id=q.question_id WHERE q.attempt_id=?', [attempt.id]);
     const rowByQuestion = new Map(rows.map((row) => [Number(row.question_id), row]));
     rows.splice(0, rows.length, ...order.map((id) => rowByQuestion.get(id)).filter((row): row is RowDataPacket => Boolean(row)));
     return { soal: rows.map((row) => {
       const available = [row.option_a,row.option_b,row.option_c,row.option_d,row.option_e].filter((value) => String(value ?? '').trim() !== '').length;
       const score = row.answer === null ? 0 : fraction(row.question_type, row.correct_answer, row.answer, available);
-      return { id: Number(row.question_id), status: row.answer === null ? 'KOSONG' : score >= 1 ? 'BENAR' : score > 0 ? 'SEBAGIAN' : 'SALAH' };
+      return { id: Number(row.question_id), pertanyaan: row.question_text, status: row.answer === null ? 'KOSONG' : score >= 1 ? 'BENAR' : score > 0 ? 'SEBAGIAN' : 'SALAH' };
     }) };
   }
 
@@ -102,6 +102,7 @@ export class ScoringService {
       const [rows] = await connection.execute<RowDataPacket[]>('SELECT id,status,violation_count FROM exam_attempts WHERE student_id=? AND exam_id=? FOR UPDATE', [studentId, examId]);
       const attempt = rows[0];
       if (!attempt) throw Object.assign(new Error('Sesi ujian tidak ditemukan'), { statusCode: 404 });
+      if (attempt.status !== 'IN_PROGRESS') { await connection.commit(); return { recorded: false, count: Number(attempt.violation_count), terminated: attempt.status === 'TERMINATED' }; }
       const [result] = await connection.execute('INSERT IGNORE INTO violations(attempt_id,event_key,type,occurred_at) VALUES(?,?,?,UTC_TIMESTAMP(3))', [attempt.id, eventKey, type]);
       const inserted = (result as { affectedRows: number }).affectedRows > 0;
       if (inserted) await connection.execute('UPDATE exam_attempts SET violation_count=LEAST(255,violation_count+1),status=IF(violation_count+1>=3,\'TERMINATED\',status) WHERE id=?', [attempt.id]);
