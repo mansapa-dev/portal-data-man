@@ -1,0 +1,7 @@
+import type { FastifyInstance } from 'fastify';
+import { timingSafeEqual } from 'node:crypto';
+import type { RowDataPacket } from 'mysql2/promise';
+import { z } from 'zod';
+import { requirePool } from '../lib/db.js';
+
+export async function setupRoutes(app:FastifyInstance){app.post('/api/setup/admin',async(request,reply)=>{const setupToken=process.env.SETUP_TOKEN;if(!setupToken)throw Object.assign(new Error('Setup admin sudah dinonaktifkan'),{statusCode:404});const body=z.object({setup_token:z.string().min(1),username:z.string().trim().min(3).max(100),name:z.string().trim().min(2).max(191),password:z.string().min(12).max(200)}).strict().parse(request.body);const supplied=Buffer.from(body.setup_token);const expected=Buffer.from(setupToken);if(supplied.length!==expected.length||!timingSafeEqual(supplied,expected))throw Object.assign(new Error('Setup token tidak valid'),{statusCode:403});const pool=requirePool();const c=await pool.getConnection();try{await c.beginTransaction();const[rows]=await c.query<RowDataPacket[]>('SELECT id FROM users WHERE role=\'ADMIN\' LIMIT 1 FOR UPDATE');if(rows.length)throw Object.assign(new Error('Admin sudah dibuat'),{statusCode:409});const{hash}=await import('bcryptjs');await c.execute("INSERT INTO users(username,password_hash,name,role,status) VALUES(?,?,?,'ADMIN','ACTIVE')",[body.username,await hash(body.password,12),body.name]);await c.commit();reply.code(201);return{success:true};}catch(error){try{await c.rollback();}catch{}throw error;}finally{c.release();}});}
