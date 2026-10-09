@@ -2,7 +2,10 @@
   "name": "arena-platform",
   "private": true,
   "version": "0.1.0",
-  "workspaces": ["apps/api", "apps/web"],
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
   "scripts": {
     "dev": "concurrently -k -n api,web -c blue,green \"npm run dev -w @arena/api\" \"npm run dev -w @arena/web\"",
     "build": "npm run build -w @arena/api && npm run build -w @arena/web",
@@ -11,5 +14,10 @@
   "devDependencies": {
     "concurrently": "^9.2.1"
   },
-  "engines": { "node": ">=22.0.0" }
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@arena/web": "^0.1.0"
+  }
 }
