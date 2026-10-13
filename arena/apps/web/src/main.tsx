@@ -47,6 +47,10 @@ function App() {
   const pending = useRef(new Map<number, Promise<void>>());
   const latestDraft = useRef(new Map<number, {question:Question;answer:string;flagged:boolean}>());
   const revisionState = useRef<Record<number, number>>({});
+  const failedSaves = useRef(new Set<number>());
+  function refreshSaveState() {
+    setSaveState(failedSaves.current.size ? 'error' : pending.current.size || timers.current.size ? 'saving' : 'saved');
+  }
 
   const loadExams = async () => setExams(await api<Exam[]>('/api/student/exams'));
   async function login(event: React.FormEvent) {
@@ -71,7 +75,7 @@ function App() {
       const savedAnswers: Record<number, string> = {}; const savedRevisions: Record<number, number> = {};
       const savedFlags: Record<number, boolean> = {};
       result.jawaban.forEach((item) => { savedAnswers[item.question_id] = item.answer ?? ''; savedRevisions[item.question_id] = item.revision; savedFlags[item.question_id] = item.is_flagged; });
-      revisionState.current = savedRevisions; setAnswers(savedAnswers); setFlags(savedFlags);
+      revisionState.current = savedRevisions; failedSaves.current.clear(); setSaveState('saved'); setAnswers(savedAnswers); setFlags(savedFlags);
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Tidak dapat membuka ujian'); }
     finally { setBusy(false); }
   }
@@ -83,28 +87,36 @@ function App() {
     const request = (async () => {
       try {
         while(latestDraft.current.has(question.id)){
-          const draft=latestDraft.current.get(question.id)!;latestDraft.current.delete(question.id);setSaveState('saving');
+          const draft=latestDraft.current.get(question.id)!;latestDraft.current.delete(question.id);setSaveState(failedSaves.current.size?'error':'saving');
           const result=await api<{revision:number}>(`/api/student/exams/${attempt.exam.id}/answers/${question.id}`,{method:'PUT',body:{answer:draft.answer||null,is_flagged:draft.flagged,attempt_id:attempt.attempt_id,base_revision:revisionState.current[question.id]??0,mutation_id:mutationId()}});
           revisionState.current={...revisionState.current,[question.id]:result.revision};
+          failedSaves.current.delete(question.id);
+          if (!failedSaves.current.size) setMessage('');
         }
-        setSaveState('saved');
-      }catch(error){setSaveState('error');setMessage(error instanceof Error?error.message:'Jawaban belum tersimpan');throw error;}
+      }catch(error){failedSaves.current.add(question.id);setMessage(error instanceof Error?error.message:'Jawaban belum tersimpan');throw error;}
     })();
     pending.current.set(question.id, request);
-    try { await request; } finally { if (pending.current.get(question.id) === request) pending.current.delete(question.id); }
+    try { await request; } finally { if (pending.current.get(question.id) === request) pending.current.delete(question.id); refreshSaveState(); }
   }
   function change(question: Question, value: string) {
     setAnswers((current) => ({ ...current, [question.id]: value }));
-    setSaveState('saving');
     const old = timers.current.get(question.id); if (old) window.clearTimeout(old);
     timers.current.set(question.id, window.setTimeout(() => { timers.current.delete(question.id); void save(question, value).catch(() => undefined); }, 350));
+    refreshSaveState();
   }
   function toggleFlag(question: Question) {
     const next = !(flags[question.id] ?? false);
     setFlags((current) => ({ ...current, [question.id]: next }));
-    setSaveState('saving');
     const old = timers.current.get(question.id); if (old) window.clearTimeout(old);
     timers.current.set(question.id, window.setTimeout(() => { timers.current.delete(question.id); void save(question, answers[question.id] ?? '', next).catch(() => undefined); }, 350));
+    refreshSaveState();
+  }
+  async function retrySave() {
+    if (!attempt) return;
+    await Promise.allSettled([...failedSaves.current].map(questionId => {
+      const question = attempt.soal.find(item => item.id === questionId);
+      return question ? save(question, answers[questionId] ?? '', flags[questionId] ?? false) : Promise.resolve();
+    }));
   }
   async function submit(finalizeOnly = false) {
     if (!attempt) return;
@@ -143,11 +155,11 @@ function App() {
 
   const card: React.CSSProperties = {};
   if(sessionLoading)return <main className="center-wrapper"><div className="auth-card" role="status">Memeriksa sesi…</div></main>;
-  return <main className="arena-app">
+  return <main className={attempt?'arena-app exam-active':'arena-app'}>
     {!staff&&<header className="topbar public-topbar"><div className="dashboard-home-brand"><img src="/assets/img/logo-man1-palembang.png" alt="Lambang MAN 1 Palembang"/><div><strong>MANSAPA ARENA</strong><span>Area Evaluasi dan Asesmen</span></div></div><div className="public-topbar-actions"><button type="button" className="theme-toggle" aria-label="Aktifkan mode gelap" aria-pressed={darkMode} onClick={()=>{setDarkMode(current=>{document.documentElement.dataset.theme=current?'':'dark';return !current;});}}>◐</button><span className="topbar-pill hide-on-mobile"><span className="dot"/><span>Sistem Online</span></span><a href="/auth/sso/start" className="topbar-guru-link"><i className="fa-solid fa-chalkboard-user"/><span className="hide-on-mobile">Portal Guru</span></a>{student?<button className="btn btn-danger" onClick={() => void logout()}><i className="fa-solid fa-arrow-right-from-bracket"/><span className="hide-on-mobile">Keluar</span></button>:<button className="admin-lock" type="button" aria-label="Login pengelola" title="Login Pengelola" onClick={()=>setStaffLoginOpen(true)}><i className="fa-solid fa-lock"/></button>}</div></header>}
-    {message && <p role="status" style={{ ...card, background: '#fff8e1' }}>{message}</p>}
+    {message && !attempt && <p role="status" style={{ ...card, background: '#fff8e1' }}>{message}</p>}
     {staff ? <StaffPanel staff={staff} onLogout={()=>void logout()} /> : student ? attempt ?
-      <StudentExam attempt={attempt} studentName={student.nama} answers={answers} flags={flags} busy={busy} saveState={saveState} change={change} toggleFlag={toggleFlag} submit={submit} onTerminated={terminated}><StudentSupport examId={attempt.exam.id}/></StudentExam>
+      <StudentExam attempt={attempt} studentName={student.nama} answers={answers} flags={flags} busy={busy} saveState={saveState} message={message} change={change} toggleFlag={toggleFlag} retrySave={retrySave} submit={submit} onTerminated={terminated}><StudentSupport examId={attempt.exam.id}/></StudentExam>
       : result ? <StudentResult result={result} review={review} onClose={()=>{setResult(null);setReview(null);}}/>
       : <StudentDashboard student={student} exams={exams} busy={busy} start={start} showResult={showResult}/>
       : <main className="center-wrapper"><div className="auth-card"><div className="auth-header"><i className="fa-solid fa-user-graduate auth-icon"/><span className="student-eyebrow">MANSAPA ARENA</span><h2>Siap untuk ujian?</h2><p>Masuk dengan nomor peserta dan PIN dari petugas.</p></div>{message&&<p className="arena-notice" role="alert">{message}</p>}<form onSubmit={(event) => void login(event)}><div className="input-group"><label className="ui-label" htmlFor="studentNisn">Nomor Peserta (NISN)</label><div className="input-wrapper"><i className="fa-regular fa-id-badge left-icon"/><input id="studentNisn" className="ui-control" required inputMode="numeric" pattern="[0-9]*" maxLength={20} autoComplete="off" autoCapitalize="off" spellCheck={false} value={nisn} onChange={(event) => setNisn(event.target.value)} placeholder="Masukkan NISN" /></div></div><div className="input-group"><label className="ui-label" htmlFor="studentPin">PIN Ujian (4 Digit)</label><div className="input-wrapper"><i className="fa-solid fa-key left-icon"/><input id="studentPin" className="ui-control" required type={showPin?'text':'password'} inputMode="numeric" pattern="[0-9]*" maxLength={12} autoComplete="one-time-code" autoCapitalize="off" spellCheck={false} value={pin} onChange={(event) => setPin(event.target.value)} placeholder="••••"/><button className="toggle-pw" type="button" aria-label={showPin?'Sembunyikan PIN':'Tampilkan PIN'} onClick={()=>setShowPin(value=>!value)}><i className={`fa-regular ${showPin?'fa-eye-slash':'fa-eye'}`}/></button></div></div><button className="ui-button btn btn-primary student-login-button" disabled={busy}>{busy ? 'Memproses…' : 'Masuk Ujian'} <i className="fa-solid fa-arrow-right"/></button></form><button type="button" className="support-link-button" onClick={()=>setLoginHelpOpen(true)}><i className="fa-solid fa-headset"/> Tidak bisa masuk? Kirim tiket bantuan</button></div></main>}
