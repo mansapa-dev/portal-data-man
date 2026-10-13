@@ -234,3 +234,61 @@ body{background:var(--bg-body);color:var(--text-main)}button,input,select,textar
   .student-exam .student-question-map .nav-grid{grid-template-columns:repeat(5,minmax(0,1fr))}
   .student-exam .finish-exam{min-height:48px}
 }
+
+/* Student result: the summary stays readable before the optional question review. */
+.student-result-page{min-height:calc(100dvh - 56px);padding:clamp(16px,3vw,36px) 16px 48px;background:var(--bg-body)}
+.student-result-page .student-result{box-sizing:border-box;width:min(100%,720px);min-height:0;margin:0 auto;padding:clamp(20px,4vw,36px);overflow:hidden}
+.student-result-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:17px}
+.student-result-symbol{display:grid;place-items:center;width:52px;height:52px;border-radius:16px;background:var(--primary-soft);color:var(--primary-dark);font-size:25px}
+.student-result-symbol.is-expired{background:#fff3dd;color:#9a6700}
+.student-result-symbol.is-terminated{background:#fee9e7;color:#a52b21}
+.student-result-status{padding:7px 11px;border-radius:999px;background:var(--primary-soft);color:var(--primary-dark);font-size:12px;font-weight:800}
+.student-result-status.is-expired{background:#fff3dd;color:#9a6700}
+.student-result-status.is-terminated{background:#fee9e7;color:#a52b21}
+.student-result-page .student-result>h1{margin:0;font-size:clamp(24px,4vw,30px);line-height:1.2;color:var(--text-main)}
+.student-result-exam{margin:8px 0 0;color:var(--text-main);font-size:15px;font-weight:750;overflow-wrap:anywhere}
+.student-result-description{max-width:60ch;margin:10px 0 22px;color:var(--text-muted);font-size:14px;line-height:1.6}
+.student-result-page .student-result-score{display:flex;align-items:baseline;gap:9px;width:auto;height:auto;margin:0 0 16px;padding:21px 24px;border:1px solid var(--primary-soft-border);border-radius:17px;background:var(--primary-soft)}
+.student-result-score span{align-self:center;margin-right:auto;color:var(--primary-dark);font-size:11px;font-weight:850;letter-spacing:.07em}
+.student-result-score strong{color:var(--primary-dark);font-size:clamp(36px,8vw,54px);line-height:1;font-variant-numeric:tabular-nums}
+.student-result-score small{color:var(--primary-dark);font-size:13px;font-weight:700}
+.student-result-pending{margin:0 0 16px;padding:15px;border:1px solid var(--border);border-radius:12px;background:var(--surface-subtle);color:var(--text-muted);font-size:13px}
+.student-result-counts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:19px}
+.student-result-counts>div{display:grid;gap:5px;padding:15px;border:1px solid var(--border);border-radius:13px;background:var(--surface-subtle)}
+.student-result-counts strong{color:var(--text-main);font-size:24px;line-height:1;font-variant-numeric:tabular-nums}
+.student-result-counts span{color:var(--text-muted);font-size:12px;font-weight:700}
+.student-result-remedial{display:flex;align-items:flex-start;gap:9px;margin:0 0 18px;padding:12px 14px;border-radius:11px;background:var(--surface-subtle);color:var(--text-main);font-size:12px;line-height:1.6}
+.student-result-remedial i{margin-top:3px;color:var(--primary-dark)}
+.student-result-review{margin:0 0 20px;border:1px solid var(--border);border-radius:14px;background:var(--surface)}
+.student-result-review summary{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:54px;padding:12px 15px;cursor:pointer;list-style:none}
+.student-result-review summary::-webkit-details-marker{display:none}
+.student-result-review summary:focus-visible{outline:3px solid var(--primary);outline-offset:2px}
+.student-result-review summary span{color:var(--text-main);font-size:14px;font-weight:800}
+.student-result-review summary small{color:var(--text-muted);font-size:11px;text-align:right}
+.student-result-review[open] summary{border-bottom:1px solid var(--border)}
+.student-result-review-note{margin:0 0 18px;color:var(--text-muted);font-size:12px;line-height:1.6}
+.student-result-review .student-result-review-note{padding:14px 15px 0;margin:0}
+.student-result-review ol{display:grid;gap:9px;margin:0;padding:13px 15px 16px;list-style:none;counter-reset:none}
+.student-result-review li{min-width:0;padding:13px;border:1px solid var(--border);border-radius:10px;background:var(--surface-subtle)}
+.student-result-review-title{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.student-result-review-title strong{color:var(--text-main);font-size:13px}
+.student-result-answer-status{padding:5px 9px;border-radius:999px;background:var(--surface);color:var(--text-muted);font-size:11px;font-weight:800}
+.student-result-answer-status.status-benar{background:var(--primary-soft);color:var(--primary-dark)}
+.student-result-answer-status.status-salah{background:#fee9e7;color:#a52b21}
+.student-result-answer-status.status-kosong{background:#edf0ed;color:#596158}
+.student-result-answer-status.status-sebagian{background:#fff3dd;color:#9a6700}
+.student-result-question{margin-top:8px;color:var(--text-main);font-size:13px;line-height:1.65;overflow-wrap:anywhere}
+.student-result-question :first-child{margin-top:0}
+.student-result-question :last-child{margin-bottom:0}
+.student-result-question :is(img,table){max-width:100%}
+.student-result-page .student-result-back{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:46px;padding:10px 16px;font-size:13px}
+@media(max-width:600px){
+  .student-result-page{padding:12px 10px calc(24px + env(safe-area-inset-bottom))}
+  .student-result-page .student-result{width:100%;margin:0;padding:20px 16px}
+  .student-result-page .student-result-score{padding:18px 16px}
+  .student-result-counts{gap:7px}
+  .student-result-counts>div{padding:12px 10px}
+  .student-result-counts strong{font-size:22px}
+  .student-result-review summary{align-items:flex-start;flex-direction:column;gap:3px}
+  .student-result-page .student-result-back{width:100%}
+}
