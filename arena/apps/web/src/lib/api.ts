@@ -4,7 +4,7 @@ export function setSession(nextToken: string | null, nextCsrf: string | null) { 
 export async function api<T>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
   const response = await fetch(path, {
     method: options.method ?? 'GET',
-    credentials: 'omit',
+    credentials: 'same-origin',
     headers: {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(csrf && options.method && options.method !== 'GET' ? { 'X-CSRF-Token': csrf } : {}),
@@ -13,6 +13,7 @@ export async function api<T>(path: string, options: { method?: string; body?: un
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
   });
   const data = await response.json().catch(() => null) as T & { error?: string } | null;
+  if (response.status === 401 && path.startsWith('/api/admin/')) window.dispatchEvent(new Event('arena:staff-session-expired'));
   if (!response.ok) throw new Error(data?.error ?? `Request gagal (${response.status})`);
   return data as T;
 }

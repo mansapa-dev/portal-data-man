@@ -3,5 +3,10 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  server: { proxy: { '/api': 'http://localhost:3001', '/auth': 'http://localhost:3001', '/health': 'http://localhost:3001' } },
+  server: {
+    host: process.env.ARENA_WEB_HOST ?? '0.0.0.0',
+    port: Number(process.env.ARENA_WEB_PORT ?? 5173),
+    strictPort: true,
+    proxy: Object.fromEntries(['/api', '/auth', '/health'].map((path) => [path, process.env.ARENA_API_URL ?? 'http://localhost:3001'])),
+  },
 });

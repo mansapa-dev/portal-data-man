@@ -28,8 +28,10 @@ export function readToken(token: string): Claims | null {
 
 export function claimsFromRequest(request: FastifyRequest): Claims {
   const header = request.headers.authorization;
-  if (!header?.startsWith('Bearer ')) throw Object.assign(new Error('Login diperlukan'), { statusCode: 401 });
-  const claims = readToken(header.slice(7));
+  const cookieToken=request.headers.cookie?.split(';').map((part)=>part.trim()).find((part)=>part.startsWith('arena_staff_session='))?.slice('arena_staff_session='.length);
+  const token=header?.startsWith('Bearer ')?header.slice(7):cookieToken;
+  if (!token) throw Object.assign(new Error('Login diperlukan'), { statusCode: 401 });
+  const claims = readToken(token);
   if (!claims) throw Object.assign(new Error('Sesi tidak valid atau sudah berakhir'), { statusCode: 401 });
   return claims;
 }

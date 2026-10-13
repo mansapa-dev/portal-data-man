@@ -25,13 +25,19 @@ export async function supportRoutes(app: FastifyInstance) {
     const token=request.headers.authorization?.startsWith('Bearer ')?claimsFromRequest(request):null;if(token){if(token.role!=='STUDENT')throw Object.assign(new Error('Sesi siswa diperlukan'),{statusCode:403});assertCsrf(request,token);}
     const body = z.object({ category:z.enum(ticketCategories).default('OTHER'),message:z.string().trim().min(5).max(1000),exam_id:z.number().int().positive().nullable().optional(),nisn:z.string().trim().regex(/^\d{8,20}$/).optional() }).strict().parse(request.body); const pool=requirePool();
     if(!token&&!body.nisn)throw Object.assign(new Error('Masukkan NISN untuk membuat tiket bantuan'),{statusCode:422});
-    const[students]=token?await pool.execute<RowDataPacket[]>('SELECT id FROM students WHERE id=? AND is_active=1',[token.sub]):await pool.execute<RowDataPacket[]>('SELECT id FROM students WHERE nisn=? AND is_active=1',[body.nisn??'']);const studentId=Number(students[0]?.id);if(!studentId)throw Object.assign(new Error('Siswa tidak ditemukan atau tidak aktif'),{statusCode:404});
-    const [open] = await pool.execute<RowDataPacket[]>(`SELECT t.public_id id FROM support_tickets t WHERE t.student_id=? AND t.category=? AND COALESCE(t.exam_id,0)=COALESCE(?,0) AND t.status IN ('OPEN','IN_PROGRESS') ORDER BY t.id DESC LIMIT 1`, [studentId,body.category,body.exam_id??null]);
-    if(open[0]) return open[0];
-    const [attempts] = body.exam_id ? await pool.execute<RowDataPacket[]>('SELECT id FROM exam_attempts WHERE student_id=? AND exam_id=?', [studentId,body.exam_id]) : [[] as RowDataPacket[], []];
-    if(body.exam_id&&!attempts[0]){const[eligibility]=await pool.execute<RowDataPacket[]>(`SELECT e.id FROM exams e JOIN students s ON s.id=? WHERE e.id=? AND e.status='ACTIVE' AND e.grade=s.grade_snapshot AND UTC_TIMESTAMP(3) BETWEEN e.starts_at AND e.ends_at AND (NOT EXISTS(SELECT 1 FROM exam_target_classes tc0 WHERE tc0.exam_id=e.id) OR EXISTS(SELECT 1 FROM exam_target_classes tc WHERE tc.exam_id=e.id AND tc.portal_class_id=s.portal_class_id)) AND (NOT EXISTS(SELECT 1 FROM exam_target_students ts0 WHERE ts0.exam_id=e.id) OR EXISTS(SELECT 1 FROM exam_target_students ts WHERE ts.exam_id=e.id AND ts.student_id=s.id))`,[studentId,body.exam_id]);if(!eligibility[0])throw Object.assign(new Error('Ujian tidak terkait dengan siswa ini'),{statusCode:422});}
-    const id=ulid();
-    await pool.execute('INSERT INTO support_tickets(public_id,student_id,exam_id,attempt_id,category,message) VALUES(?,?,?,?,?,?)', [id,studentId,body.exam_id??null,attempts[0]?.id??null,body.category,body.message]);
+    const connection=await pool.getConnection();let studentId=0,id='';
+    try{
+      await connection.beginTransaction();
+      const[students]=token?await connection.execute<RowDataPacket[]>('SELECT id FROM students WHERE id=? AND is_active=1 FOR UPDATE',[token.sub]):await connection.execute<RowDataPacket[]>('SELECT id FROM students WHERE nisn=? AND is_active=1 FOR UPDATE',[body.nisn??'']);
+      studentId=Number(students[0]?.id);if(!studentId)throw Object.assign(new Error('Siswa tidak ditemukan atau tidak aktif'),{statusCode:404});
+      const[open]=await connection.execute<RowDataPacket[]>(`SELECT public_id id FROM support_tickets WHERE student_id=? AND category=? AND exam_id <=> ? AND status IN ('OPEN','IN_PROGRESS') ORDER BY id DESC LIMIT 1`,[studentId,body.category,body.exam_id??null]);
+      if(open[0]){await connection.commit();return open[0];}
+      const[attempts]=body.exam_id?await connection.execute<RowDataPacket[]>('SELECT id FROM exam_attempts WHERE student_id=? AND exam_id=?',[studentId,body.exam_id]):[[] as RowDataPacket[],[]];
+      if(body.exam_id&&!attempts[0]){const[eligibility]=await connection.execute<RowDataPacket[]>(`SELECT e.id FROM exams e JOIN students s ON s.id=? WHERE e.id=? AND e.status='ACTIVE' AND e.grade=s.grade_snapshot AND UTC_TIMESTAMP(3) BETWEEN e.starts_at AND e.ends_at AND (NOT EXISTS(SELECT 1 FROM exam_target_classes tc0 WHERE tc0.exam_id=e.id) OR EXISTS(SELECT 1 FROM exam_target_classes tc WHERE tc.exam_id=e.id AND tc.portal_class_id=s.portal_class_id)) AND (NOT EXISTS(SELECT 1 FROM exam_target_students ts0 WHERE ts0.exam_id=e.id) OR EXISTS(SELECT 1 FROM exam_target_students ts WHERE ts.exam_id=e.id AND ts.student_id=s.id))`,[studentId,body.exam_id]);if(!eligibility[0])throw Object.assign(new Error('Ujian tidak terkait dengan siswa ini'),{statusCode:422});}
+      id=ulid();
+      await connection.execute('INSERT INTO support_tickets(public_id,student_id,exam_id,attempt_id,category,message) VALUES(?,?,?,?,?,?)',[id,studentId,body.exam_id??null,attempts[0]?.id??null,body.category,body.message]);
+      await connection.commit();
+    }catch(error){try{await connection.rollback();}catch{}throw error;}finally{connection.release();}
     await audit(pool,null,'STUDENT','SUPPORT_TICKET_CREATED','SupportTicket',id);
     return { id };
   });

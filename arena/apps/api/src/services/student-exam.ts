@@ -13,13 +13,16 @@ function shuffle<T>(items: T[], seed: string): T[] {
   return [...items].sort((a, b) => createHash('sha256').update(`${seed}:${a}`).digest('hex').localeCompare(createHash('sha256').update(`${seed}:${b}`).digest('hex')));
 }
 const options = ['A', 'B', 'C', 'D', 'E'];
+function jsonValue<T>(value: unknown): T {
+  return (typeof value === 'string' ? JSON.parse(value) : value) as T;
+}
 
 export class StudentExamService {
   constructor(private readonly pool: Pool) {}
 
   async list(studentId: number) {
     const [rows] = await this.pool.execute<RowDataPacket[]>(`SELECT e.id,e.name,e.grade,e.duration_minutes,e.session_number,e.starts_at,e.ends_at,e.academic_year,e.semester,m.type follow_up_type,
-      a.status attempt_status, (e.status='ACTIVE' AND UTC_TIMESTAMP(3) BETWEEN e.starts_at AND e.ends_at AND (a.id IS NULL OR a.status='IN_PROGRESS') AND (NOT EXISTS (SELECT 1 FROM exam_target_classes all_tc WHERE all_tc.exam_id=e.id) OR EXISTS (SELECT 1 FROM exam_target_classes tc WHERE tc.exam_id=e.id AND tc.portal_class_id=s.portal_class_id)) AND (NOT EXISTS(SELECT 1 FROM exam_target_students all_ts WHERE all_ts.exam_id=e.id) OR EXISTS(SELECT 1 FROM exam_target_students ts WHERE ts.exam_id=e.id AND ts.student_id=s.id))) can_start
+      a.status attempt_status, ((a.status='IN_PROGRESS' AND a.expires_at>UTC_TIMESTAMP(3)) OR (a.id IS NULL AND e.status='ACTIVE' AND UTC_TIMESTAMP(3) BETWEEN e.starts_at AND e.ends_at AND (NOT EXISTS (SELECT 1 FROM exam_target_classes all_tc WHERE all_tc.exam_id=e.id) OR EXISTS (SELECT 1 FROM exam_target_classes tc WHERE tc.exam_id=e.id AND tc.portal_class_id=s.portal_class_id)) AND (NOT EXISTS(SELECT 1 FROM exam_target_students all_ts WHERE all_ts.exam_id=e.id) OR EXISTS(SELECT 1 FROM exam_target_students ts WHERE ts.exam_id=e.id AND ts.student_id=s.id)))) can_start
       FROM students s JOIN exams e ON e.grade=s.grade_snapshot LEFT JOIN exam_attempts a ON a.student_id=s.id AND a.exam_id=e.id LEFT JOIN exam_follow_up_meta m ON m.exam_id=e.id
       WHERE s.id=? AND s.is_active=1 AND s.cbt_status='ACTIVE' AND ((e.status='ACTIVE' AND UTC_TIMESTAMP(3) BETWEEN e.starts_at AND e.ends_at
       AND (NOT EXISTS (SELECT 1 FROM exam_target_classes all_tc WHERE all_tc.exam_id=e.id) OR EXISTS (SELECT 1 FROM exam_target_classes tc WHERE tc.exam_id=e.id AND tc.portal_class_id=s.portal_class_id))
@@ -30,19 +33,25 @@ export class StudentExamService {
   async start(studentId:number,examId:number,retry=0):Promise<unknown>{try{return await this.startOnce(studentId,examId);}catch(error){const code=(error as {code?:string}).code;if(retry<2&&['ER_LOCK_DEADLOCK','ER_LOCK_WAIT_TIMEOUT','ER_DUP_ENTRY'].includes(code??'')){await new Promise((resolve)=>setTimeout(resolve,10+Math.floor(Math.random()*30)));return this.start(studentId,examId,retry+1);}throw error;}}
 
   private async startOnce(studentId: number, examId: number) {
+    // Keep the first consistent read outside the resume transaction. If resume
+    // waits on an autosave's attempt lock, the transaction must not retain a
+    // repeatable-read snapshot from before that save committed.
+    const [students] = await this.pool.execute<RowDataPacket[]>('SELECT id,portal_class_id,nisn,name_snapshot,class_snapshot,grade_snapshot,academic_year_snapshot FROM students WHERE id=? AND is_active=1 AND cbt_status=\'ACTIVE\'', [studentId]);
+    const student = students[0];
+    if (!student) throw Object.assign(new Error('Siswa tidak ditemukan atau tidak aktif'), { statusCode: 403 });
     const connection = await this.pool.getConnection();
     let state: { attempt: RowDataPacket; exam: RowDataPacket; questions: RowDataPacket[]; answers: RowDataPacket[] } | undefined;
     try {
       await connection.beginTransaction();
-      const [students] = await connection.execute<RowDataPacket[]>('SELECT id,portal_class_id,nisn,name_snapshot,class_snapshot,grade_snapshot,academic_year_snapshot FROM students WHERE id=? AND is_active=1 AND cbt_status=\'ACTIVE\'', [studentId]);
-      const student = students[0];
-      if (!student) throw Object.assign(new Error('Siswa tidak ditemukan atau tidak aktif'), { statusCode: 403 });
-      const [attemptRows] = await connection.execute<RowDataPacket[]>('SELECT * FROM exam_attempts WHERE student_id=? AND exam_id=? FOR UPDATE', [studentId, examId]);
+      const [attemptRows] = await connection.execute<RowDataPacket[]>(`SELECT *, (status='IN_PROGRESS' AND expires_at>UTC_TIMESTAMP(3)) can_resume FROM exam_attempts WHERE student_id=? AND exam_id=? FOR UPDATE`, [studentId, examId]);
       let attempt: RowDataPacket | undefined = attemptRows[0];
       if (attempt && ['COMPLETED', 'TERMINATED', 'EXPIRED'].includes(attempt.status)) throw Object.assign(new Error('Ujian ini tidak dapat dilanjutkan'), { statusCode: 409 });
-      const [examRows] = await connection.execute<RowDataPacket[]>(`SELECT e.* FROM exams e WHERE e.id=? AND e.status='ACTIVE' AND UTC_TIMESTAMP(3) BETWEEN e.starts_at AND e.ends_at
-        AND e.grade=? AND (NOT EXISTS(SELECT 1 FROM exam_target_classes all_tc WHERE all_tc.exam_id=e.id) OR EXISTS(SELECT 1 FROM exam_target_classes tc WHERE tc.exam_id=e.id AND tc.portal_class_id=?))
-        AND (NOT EXISTS(SELECT 1 FROM exam_target_students ts WHERE ts.exam_id=e.id) OR EXISTS(SELECT 1 FROM exam_target_students ts WHERE ts.exam_id=e.id AND ts.student_id=?))`, [examId, student.grade_snapshot, student.portal_class_id, studentId]);
+      const resuming = Boolean(attempt && Number(attempt.can_resume));
+      const [examRows] = resuming
+        ? await connection.execute<RowDataPacket[]>('SELECT e.* FROM exams e WHERE e.id=?', [examId])
+        : await connection.execute<RowDataPacket[]>(`SELECT e.* FROM exams e WHERE e.id=? AND e.status='ACTIVE' AND UTC_TIMESTAMP(3) BETWEEN e.starts_at AND e.ends_at
+          AND e.grade=? AND (NOT EXISTS(SELECT 1 FROM exam_target_classes all_tc WHERE all_tc.exam_id=e.id) OR EXISTS(SELECT 1 FROM exam_target_classes tc WHERE tc.exam_id=e.id AND tc.portal_class_id=?))
+          AND (NOT EXISTS(SELECT 1 FROM exam_target_students ts WHERE ts.exam_id=e.id) OR EXISTS(SELECT 1 FROM exam_target_students ts WHERE ts.exam_id=e.id AND ts.student_id=?))`, [examId, student.grade_snapshot, student.portal_class_id, studentId]);
       const exam = examRows[0];
       if (!exam) throw Object.assign(new Error('Ujian tidak tersedia untuk siswa ini'), { statusCode: 403 });
       if (!attempt) {
@@ -70,7 +79,8 @@ export class StudentExamService {
         await connection.query('INSERT INTO attempt_questions(attempt_id,question_id,question_type,question_text,option_a,option_b,option_c,option_d,option_e,correct_answer,option_mapping,points) VALUES ?', [snapshotRows]);
       }
       if (!attempt) throw Object.assign(new Error('Sesi ujian tidak ditemukan'), { statusCode: 404 });
-      if (new Date(attempt.expires_at).getTime() <= Date.now()) throw Object.assign(new Error('Waktu ujian sudah habis'), { statusCode: 409 });
+      const [stillActive] = await connection.execute<RowDataPacket[]>(`SELECT 1 active FROM exam_attempts WHERE id=? AND status='IN_PROGRESS' AND expires_at>UTC_TIMESTAMP(3)`, [attempt.id]);
+      if (!stillActive.length) throw Object.assign(new Error('Waktu ujian sudah habis. Jawaban yang tersimpan tetap aman.'), { statusCode: 409 });
       const [questions] = await connection.execute<RowDataPacket[]>('SELECT question_id id,question_type,question_text,option_a,option_b,option_c,option_d,option_e,points FROM attempt_questions WHERE attempt_id=?', [attempt.id]);
       const [answers] = await connection.execute<RowDataPacket[]>('SELECT v.question_id,a.answer,COALESCE(a.is_flagged,0) is_flagged,COALESCE(v.revision,0) revision FROM answer_write_versions v LEFT JOIN student_answers a ON a.attempt_id=v.attempt_id AND a.question_id=v.question_id WHERE v.attempt_id=?', [attempt.id]);
       await connection.commit();
@@ -81,8 +91,8 @@ export class StudentExamService {
     } finally { connection.release(); }
     const { attempt, exam, questions, answers } = state!;
     const byId = new Map(questions.map((q) => [Number(q.id), q]));
-    const mapping = JSON.parse(attempt.option_mapping) as Record<string, string[]>;
-    const ordered = (JSON.parse(attempt.question_order) as number[]).map((id) => {
+    const mapping = jsonValue<Record<string, string[]>>(attempt.option_mapping);
+    const ordered = jsonValue<number[]>(attempt.question_order).map((id) => {
       const q = byId.get(Number(id));
       if (!q) return null;
       const type = q.question_type as string;

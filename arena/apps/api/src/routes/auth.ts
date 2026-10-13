@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requirePool } from '../lib/db.js';
 import { assertCsrf, claimsFromRequest, issueToken, newCsrf } from '../lib/auth.js';
 import type { RowDataPacket } from 'mysql2/promise';
+import { audit } from '../services/audit.js';
 
 const loginSchema = z.object({ nisn: z.string().trim().min(8).max(20), pin: z.string().trim().min(4).max(12) }).strict();
 function normalizeDigits(value: string) { return value.replace(/[\s\u00a0\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/gu, '').replace(/[０-９٠-٩۰-۹]/gu, (digit) => String.fromCharCode((digit.codePointAt(0)! >= 0xff10 && digit.codePointAt(0)! <= 0xff19) ? digit.codePointAt(0)! - 0xff10 + 48 : digit.codePointAt(0)! >= 0x660 && digit.codePointAt(0)! <= 0x669 ? digit.codePointAt(0)! - 0x660 + 48 : digit.codePointAt(0)! - 0x6f0 + 48)); }
@@ -38,8 +39,23 @@ export async function authRoutes(app: FastifyInstance) {
   });
   app.post('/api/auth/logout', async (request, reply) => {
     const claims = claimsFromRequest(request); assertCsrf(request, claims);
+    if(['ADMIN','TEACHER','EMPLOYEE'].includes(claims.role))reply.header('Set-Cookie','arena_staff_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax'+(process.env.NODE_ENV==='production'?'; Secure':''));
     reply.header('Clear-Site-Data', 'cache');
     return { success: true };
+  });
+  app.post('/api/auth/password', async (request) => {
+    const claims=claimsFromRequest(request);
+    if(!['ADMIN','TEACHER','EMPLOYEE'].includes(claims.role))throw Object.assign(new Error('Fitur ini hanya untuk akun personel'),{statusCode:403});
+    assertCsrf(request,claims);
+    const body=z.object({old_password:z.string().min(1).max(200),new_password:z.string().min(12).max(200)}).strict().parse(request.body);
+    const pool=requirePool();
+    const[rows]=await pool.execute<RowDataPacket[]>('SELECT password_hash FROM users WHERE id=? AND status=\'ACTIVE\' LIMIT 1',[claims.sub]);
+    if(!rows[0])throw Object.assign(new Error('Akun tidak aktif'),{statusCode:404});
+    const{compare,hash}=await import('bcryptjs');
+    if(!(await compare(body.old_password,String(rows[0].password_hash))))throw Object.assign(new Error('Password lama tidak cocok'),{statusCode:401});
+    await pool.execute('UPDATE users SET password_hash=? WHERE id=?',[await hash(body.new_password,12),claims.sub]);
+    await audit(pool,claims.sub,claims.role,'PASSWORD_CHANGED','User',claims.sub);
+    return{success:true};
   });
 }
 
