@@ -86,9 +86,10 @@ export class ScoringService {
     const [attemptDetails] = await this.pool.execute<RowDataPacket[]>('SELECT question_order FROM exam_attempts WHERE id=?', [attempt.id]);
     const order = JSON.parse(attemptDetails[0]?.question_order ?? '[]') as number[];
     const [rows] = await this.pool.execute<RowDataPacket[]>('SELECT q.question_id,q.question_text,q.question_type,q.correct_answer,q.option_a,q.option_b,q.option_c,q.option_d,q.option_e,a.answer FROM attempt_questions q LEFT JOIN student_answers a ON a.attempt_id=q.attempt_id AND a.question_id=q.question_id WHERE q.attempt_id=?', [attempt.id]);
+    if (!rows.length) throw Object.assign(new Error('Data soal review belum tersedia. Hubungi petugas ujian.'), { statusCode: 404 });
     const rowByQuestion = new Map(rows.map((row) => [Number(row.question_id), row]));
-    rows.splice(0, rows.length, ...order.map((id) => rowByQuestion.get(id)).filter((row): row is RowDataPacket => Boolean(row)));
-    return { soal: rows.map((row) => {
+    const orderedRows = order.length ? [...order.map((id) => rowByQuestion.get(id)).filter((row): row is RowDataPacket => Boolean(row)),...rows.filter((row) => !order.includes(Number(row.question_id)))] : rows;
+    return { soal: orderedRows.map((row) => {
       const available = [row.option_a,row.option_b,row.option_c,row.option_d,row.option_e].filter((value) => String(value ?? '').trim() !== '').length;
       const score = row.answer === null ? 0 : fraction(row.question_type, row.correct_answer, row.answer, available);
       return { id: Number(row.question_id), pertanyaan: row.question_text, status: row.answer === null ? 'KOSONG' : score >= 1 ? 'BENAR' : score > 0 ? 'SEBAGIAN' : 'SALAH' };

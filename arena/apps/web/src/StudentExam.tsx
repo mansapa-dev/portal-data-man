@@ -29,7 +29,26 @@ export function StudentExam({attempt,studentName,answers,flags,busy,saveState='s
  <aside className="nav-panel student-question-map"><div className="nav-panel-title"><b><i className="fa-solid fa-border-all"/> Peta soal</b><span>Pilih nomor soal</span></div><div className="student-map-legend"><span>Hijau: dijawab</span><span>Kuning: ragu</span></div><nav className="nav-grid" aria-label="Nomor soal">{attempt.soal.map((item,index)=><button type="button" key={item.id} className={`btn-num ${answers[item.id]?.trim()?'answered ':''}${flags[item.id]?'flagged ':''}${index===current?'active':''}`} aria-label={'Soal '+(index+1)+(answers[item.id]?.trim()?', dijawab':', belum dijawab')+(flags[item.id]?', ragu-ragu':'')} aria-current={index===current?'step':undefined} onClick={()=>setCurrent(index)}>{index+1}</button>)}</nav><hr/><button className="btn btn-danger finish-exam" disabled={busy||remaining===0} onClick={()=>{if(saveState==='error'){setWarning('Ada jawaban yang belum tersimpan. Periksa koneksi sebelum menyelesaikan ujian.');return;}if(confirm('Selesaikan ujian sekarang?'+String.fromCharCode(10,10)+answered+' dijawab · '+unanswered+' kosong · '+flagged+' ragu-ragu.'+String.fromCharCode(10,10)+'Setelah dikirim, jawaban tidak dapat diubah.')){submitting.current=true;void submit(false).catch(()=>{submitting.current=false;});}}}><i className="fa-solid fa-paper-plane"/> SELESAI UJIAN</button></aside></div>{children}</section>;
 }
 
-export function StudentResult({examName,result,review,reviewLoading=false,onClose}:{examName:string;result:ExamResult;review:{soal:{id:number;pertanyaan?:string;status:string}[]}|null;reviewLoading?:boolean;onClose:()=>void}){
+export function StudentResult({examName,result,review,reviewLoading=false,reviewError='',onReview,onClose}:{examName:string;result:ExamResult;review:{soal:{id:number;pertanyaan?:string;status:string}[]}|null;reviewLoading?:boolean;reviewError?:string;onReview:()=>Promise<void>;onClose:()=>void}){
+ const [reviewOpen,setReviewOpen]=useState(false);
+ const reviewButton=useRef<HTMLButtonElement>(null);
+ const closeButton=useRef<HTMLButtonElement>(null);
+ useEffect(()=>{
+  if(!reviewOpen)return;
+  closeButton.current?.focus();
+  const onKeyDown=(event:KeyboardEvent)=>{
+   if(event.key==='Escape'){setReviewOpen(false);return;}
+   if(event.key!=='Tab')return;
+   const buttons=closeButton.current?.closest('.student-review-dialog')?.querySelectorAll<HTMLButtonElement>('button:not([disabled])');
+   if(!buttons?.length)return;
+   const first=buttons[0],last=buttons[buttons.length-1];
+   if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+   else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+  };
+  document.addEventListener('keydown',onKeyDown);
+  return()=>{document.removeEventListener('keydown',onKeyDown);reviewButton.current?.focus();};
+ },[reviewOpen]);
+ useEffect(()=>{if(reviewOpen&&review?.soal.length){const engine=(window as unknown as {MathJax?:{typesetPromise?:()=>Promise<void>}}).MathJax;void engine?.typesetPromise?.();}},[reviewOpen,review]);
  const status=String(result.status??'selesai').toUpperCase();
  const terminated=status==='TERMINATED';
  const expired=status==='EXPIRED';
@@ -47,7 +66,7 @@ export function StudentResult({examName,result,review,reviewLoading=false,onClos
   {hasScore?<div className="student-result-score"><span>NILAI AKHIR</span><strong>{new Intl.NumberFormat('id-ID',{maximumFractionDigits:2}).format(score)}</strong><small>dari 100</small></div>:<p className="student-result-pending" role="status">Nilai belum tersedia. Periksa kembali beberapa saat lagi.</p>}
   {hasCounts&&<div className="student-result-counts" aria-label="Ringkasan jawaban"><div><strong>{result.benar}</strong><span>Benar</span></div><div><strong>{result.salah}</strong><span>Belum benar</span></div><div><strong>{result.kosong}</strong><span>Kosong</span></div></div>}
   {(result.is_remedial||result.follow_up_type==='REMEDIAL')&&<p className="student-result-remedial"><i className="fa-solid fa-circle-info"/> Nilai remedial mengikuti batas maksimum yang berlaku{result.score_cap!=null?`: ${result.score_cap}`:''}.</p>}
-  {reviewLoading?<p className="student-result-review-note" role="status">Memuat rincian per soal…</p>:review&&review.soal.length>0?<details className="student-result-review" onToggle={event=>{if(event.currentTarget.open){const engine=(window as unknown as {MathJax?:{typesetPromise?:()=>Promise<void>}}).MathJax;void engine?.typesetPromise?.();}}}><summary><span>Rincian per soal</span><small>{review.soal.length} soal · tampilkan status</small></summary><p className="student-result-review-note">Rincian ini menampilkan status tiap soal, tanpa kunci jawaban.</p><ol>{review.soal.map((item,index)=><li key={item.id}><div className="student-result-review-title"><strong>Soal {index+1}</strong><span className={`student-result-answer-status status-${item.status.toLowerCase()}`}>{statusText[item.status]??item.status}</span></div>{item.pertanyaan&&<div className="student-result-question question-rich-content" dir="auto" dangerouslySetInnerHTML={{__html:item.pertanyaan}}/>}</li>)}</ol></details>:<p className="student-result-review-note">{terminated?'Rincian soal tidak tersedia untuk sesi yang dihentikan.':'Rincian per soal belum tersedia.'}</p>}
+  {terminated?<p className="student-result-review-note">Review tidak tersedia untuk sesi yang dihentikan.</p>:<button ref={reviewButton} className="btn btn-secondary student-result-review-button" type="button" onClick={()=>{setReviewOpen(true);if(!review&&!reviewLoading&&!reviewError)void onReview();}}><i className="fa-solid fa-list-check"/> Review Status (Benar/Salah) <i className="fa-solid fa-arrow-right"/></button>}
   <button className="btn btn-primary student-result-back" type="button" onClick={onClose}><i className="fa-solid fa-arrow-left"/> Kembali ke daftar ujian</button>
- </section></div>;
+ </section>{reviewOpen&&<div className="student-review-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget)setReviewOpen(false);}}><div className="student-review-dialog" role="dialog" aria-modal="true" aria-labelledby="student-review-title"><div className="student-review-header"><div><span>HASIL UJIAN</span><h2 id="student-review-title">Review Status Jawaban</h2></div><button ref={closeButton} type="button" aria-label="Tutup review" onClick={()=>setReviewOpen(false)}>&times;</button></div><div className="student-review-body"><p className="student-result-review-note">Status setiap soal ditampilkan tanpa kunci jawaban.</p>{reviewLoading?<p className="student-review-state" role="status">Memuat review soal…</p>:reviewError?<div className="student-review-error" role="alert">Review belum dapat ditampilkan. {reviewError}</div>:review?.soal.length?<ol className="student-result-review-list">{review.soal.map((item,index)=><li key={item.id}><div className="student-result-review-title"><strong>Soal {index+1}</strong><span className={`student-result-answer-status status-${item.status.toLowerCase()}`}>{statusText[item.status]??item.status}</span></div>{item.pertanyaan&&<div className="student-result-question question-rich-content" dir="auto" dangerouslySetInnerHTML={{__html:item.pertanyaan}}/>}</li>)}</ol>:<p className="student-review-state" role="status">Menyiapkan review soal…</p>}</div><div className="student-review-footer"><button className="btn btn-primary" type="button" onClick={()=>setReviewOpen(false)}>Tutup</button></div></div></div>}</div>;
 }

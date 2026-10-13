@@ -235,7 +235,7 @@ body{background:var(--bg-body);color:var(--text-main)}button,input,select,textar
   .student-exam .finish-exam{min-height:48px}
 }
 
-/* Student result: the summary stays readable before the optional question review. */
+/* Student result and answer status review. */
 .student-result-page{min-height:calc(100dvh - 56px);padding:clamp(16px,3vw,36px) 16px 48px;background:var(--bg-body)}
 .student-result-page .student-result{box-sizing:border-box;width:min(100%,720px);min-height:0;margin:0 auto;padding:clamp(20px,4vw,36px);overflow:hidden}
 .student-result-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:17px}
@@ -259,17 +259,23 @@ body{background:var(--bg-body);color:var(--text-main)}button,input,select,textar
 .student-result-counts span{color:var(--text-muted);font-size:12px;font-weight:700}
 .student-result-remedial{display:flex;align-items:flex-start;gap:9px;margin:0 0 18px;padding:12px 14px;border-radius:11px;background:var(--surface-subtle);color:var(--text-main);font-size:12px;line-height:1.6}
 .student-result-remedial i{margin-top:3px;color:var(--primary-dark)}
-.student-result-review{margin:0 0 20px;border:1px solid var(--border);border-radius:14px;background:var(--surface)}
-.student-result-review summary{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:54px;padding:12px 15px;cursor:pointer;list-style:none}
-.student-result-review summary::-webkit-details-marker{display:none}
-.student-result-review summary:focus-visible{outline:3px solid var(--primary);outline-offset:2px}
-.student-result-review summary span{color:var(--text-main);font-size:14px;font-weight:800}
-.student-result-review summary small{color:var(--text-muted);font-size:11px;text-align:right}
-.student-result-review[open] summary{border-bottom:1px solid var(--border)}
+.student-result-page .student-result-review-button{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;min-height:50px;margin:0 0 12px;padding:11px 16px;font-size:14px;font-weight:800}
+.student-result-review-button .fa-arrow-right{margin-left:auto}
 .student-result-review-note{margin:0 0 18px;color:var(--text-muted);font-size:12px;line-height:1.6}
-.student-result-review .student-result-review-note{padding:14px 15px 0;margin:0}
-.student-result-review ol{display:grid;gap:9px;margin:0;padding:13px 15px 16px;list-style:none;counter-reset:none}
-.student-result-review li{min-width:0;padding:13px;border:1px solid var(--border);border-radius:10px;background:var(--surface-subtle)}
+.student-review-backdrop{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:14px;background:rgba(15,23,42,.6)}
+.student-review-dialog{display:flex;flex-direction:column;width:min(100%,680px);max-height:min(88dvh,860px);overflow:hidden;border:1px solid var(--border);border-radius:18px;background:var(--surface);box-shadow:0 20px 65px rgba(0,0,0,.22)}
+.student-review-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:20px 22px 16px;border-bottom:1px solid var(--border)}
+.student-review-header span{color:var(--primary-dark);font-size:10px;font-weight:850;letter-spacing:.1em}
+.student-review-header h2{margin:5px 0 0;color:var(--text-main);font-size:20px;line-height:1.25}
+.student-review-header>button{display:grid;place-items:center;width:36px;height:36px;flex:none;border:0;border-radius:9px;background:var(--surface-subtle);color:var(--text-main);font-size:24px;cursor:pointer}
+.student-review-body{min-height:0;padding:18px 22px;overflow-y:auto;overscroll-behavior:contain}
+.student-review-body .student-result-review-note{margin-bottom:14px}
+.student-result-review-list{display:grid;gap:10px;margin:0;padding:0;list-style:none}
+.student-result-review-list li{min-width:0;padding:14px;border:1px solid var(--border);border-radius:11px;background:var(--surface-subtle)}
+.student-review-state{margin:0;padding:22px 15px;border-radius:11px;background:var(--surface-subtle);color:var(--text-muted);text-align:center;font-size:13px}
+.student-review-error{padding:15px;border:1px solid #efc6c3;border-radius:11px;background:#fff4f3;color:#8c2b25;font-size:13px;line-height:1.5}
+.student-review-footer{display:flex;justify-content:flex-end;padding:14px 22px;border-top:1px solid var(--border)}
+.student-review-footer .btn{min-width:100px}
 .student-result-review-title{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .student-result-review-title strong{color:var(--text-main);font-size:13px}
 .student-result-answer-status{padding:5px 9px;border-radius:999px;background:var(--surface);color:var(--text-muted);font-size:11px;font-weight:800}
@@ -289,6 +295,11 @@ body{background:var(--bg-body);color:var(--text-main)}button,input,select,textar
   .student-result-counts{gap:7px}
   .student-result-counts>div{padding:12px 10px}
   .student-result-counts strong{font-size:22px}
-  .student-result-review summary{align-items:flex-start;flex-direction:column;gap:3px}
+  .student-review-backdrop{align-items:end;padding:0}
+  .student-review-dialog{width:100%;max-height:92dvh;border-radius:18px 18px 0 0}
+  .student-review-header{padding:18px 16px 14px}
+  .student-review-body{padding:16px}
+  .student-review-footer{padding:12px 16px calc(12px + env(safe-area-inset-bottom))}
+  .student-review-footer .btn{width:100%;min-height:46px}
   .student-result-page .student-result-back{width:100%}
 }
