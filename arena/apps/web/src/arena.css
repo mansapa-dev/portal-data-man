@@ -303,3 +303,74 @@ body{background:var(--bg-body);color:var(--text-main)}button,input,select,textar
   .student-review-footer .btn{width:100%;min-height:46px}
   .student-result-page .student-result-back{width:100%}
 }
+
+/* CBT participant interactions */
+.student-exam-tag.is-blocked{color:var(--ui-danger,#b42318)}
+.student-exam-info .student-special{display:inline-block;margin-top:8px;padding:4px 9px;border-radius:8px;background:var(--primary-soft);color:var(--primary-dark);font-size:11px;font-weight:750}
+.student-exam-header-actions{display:flex;align-items:center;gap:8px}
+.student-fullscreen-button{display:grid;place-items:center;width:38px;height:38px;border:1px solid var(--border);border-radius:9px;background:var(--surface);color:var(--text-main);cursor:pointer}
+.student-submit-dialog{width:min(420px,calc(100vw - 32px));padding:26px;text-align:center}
+.student-submit-symbol{display:grid;place-items:center;width:64px;height:64px;margin:0 auto 16px;border-radius:50%;background:#fff3dd;color:#9a6700;font-size:28px}
+.student-submit-dialog h2{margin:0 0 9px;color:var(--text-main);font-size:20px}
+.student-submit-dialog>p{margin:0 0 16px;color:var(--text-muted);font-size:13px;line-height:1.6}
+.student-submit-counts{display:flex;justify-content:center;gap:7px;flex-wrap:wrap;margin:0 0 14px}
+.student-submit-counts span{padding:6px 9px;border-radius:8px;background:var(--surface-subtle);color:var(--text-main);font-size:11px;font-weight:750}
+.student-submit-dialog .student-submit-note{margin-bottom:18px;color:var(--text-main);font-weight:700}
+.student-submit-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.student-submit-actions .btn{min-height:46px}
+.student-support-dialog{width:min(440px,calc(100vw - 32px));max-height:90dvh;overflow-y:auto}
+.student-support-dialog h2{margin:0;color:var(--text-main);font-size:18px}
+.student-support-dialog h2 i{margin-right:8px;color:var(--primary-dark)}
+.student-support-dialog>p{margin:0 0 18px;color:var(--text-muted);font-size:13px;line-height:1.6}
+.student-support-dialog .support-topic{display:grid;gap:7px;margin:0 0 14px;color:var(--text-main);font-size:12px;font-weight:750}
+.student-support-dialog :is(select,textarea){width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text-main);font:inherit;font-size:14px}
+.student-support-dialog .modal-actions .btn{min-height:44px}
+.student-support-history{margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
+.student-support-history h3{margin:0 0 10px;color:var(--text-main);font-size:13px}
+.student-support-history article{display:grid;gap:4px;margin-top:7px;padding:10px;border-radius:9px;background:var(--surface-subtle)}
+.student-support-history strong{color:var(--text-main);font-size:11px;font-weight:700;overflow-wrap:anywhere}
+.student-support-history span{color:var(--text-muted);font-size:10px}
+.student-portal #student-schedule-title{scroll-margin-top:76px}
+.student-portal #student-home-start{scroll-margin-top:60px}
+.student-portal .student-bottom-nav button[aria-current=page]{background:var(--primary-soft);color:var(--primary-dark)}
+@media(max-width:600px){.student-exam-header-actions{margin-left:auto}.student-exam-header-actions .cbt-help-button{min-height:44px}.student-exam-header-actions .student-fullscreen-button{width:44px;height:44px}.student-submit-dialog{padding:22px 18px}.student-support-dialog .modal-actions{display:grid;grid-template-columns:1fr 1fr}}
+
+/* CBT style administrator overview */
+.arena-admin-overview{display:grid;gap:18px}
+.arena-overview-hero{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:24px;border:1px solid var(--border);border-radius:20px;background:linear-gradient(120deg,var(--surface),var(--primary-soft))}
+.arena-overview-hero h2{margin:6px 0;color:var(--text-main);font-size:clamp(22px,3vw,30px)}
+.arena-overview-hero p,.arena-overview-special p{margin:0;color:var(--text-muted);font-size:13px;line-height:1.5}
+.arena-overview-actions{display:flex;gap:9px;flex-wrap:wrap}
+.arena-admin-overview .staff-metric-grid{margin:0}
+.arena-admin-overview button.staff-metric{text-align:left;cursor:pointer}
+.arena-admin-overview button.staff-metric:hover{border-color:var(--primary);transform:translateY(-2px)}
+.arena-overview-quick{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}
+.arena-overview-quick button{display:flex;align-items:center;gap:9px;min-height:46px;padding:11px 13px;border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--text-main);font-size:12px;font-weight:750;text-align:left;cursor:pointer}
+.arena-overview-quick button:hover{border-color:var(--primary);background:var(--primary-soft)}
+.arena-overview-quick i{color:var(--primary-dark);font-size:15px}
+.arena-overview-special{display:grid;grid-template-columns:minmax(180px,.65fr) minmax(0,1.5fr);gap:18px;align-items:center;padding:21px;border:1px solid var(--border);border-radius:18px;background:var(--surface)}
+.arena-overview-special h3{margin:6px 0;color:var(--text-main);font-size:20px}
+.arena-overview-special-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+.arena-overview-special-cards button{display:grid;justify-items:start;gap:5px;padding:16px;border:1px solid var(--border);border-radius:13px;background:var(--surface-subtle);color:var(--text-main);text-align:left;cursor:pointer}
+.arena-overview-special-cards button>i{color:var(--primary-dark);font-size:19px}
+.arena-overview-special-cards strong{font-size:13px}
+.arena-overview-special-cards span{color:var(--text-muted);font-size:11px}
+.arena-overview-special-cards small{margin-top:4px;color:var(--primary-dark);font-size:11px;font-weight:800}
+.arena-overview-panels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.arena-overview-panel{min-width:0;padding:20px}
+.arena-overview-panel header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:18px}
+.arena-overview-panel h3{margin:0 0 4px;color:var(--text-main);font-size:16px}
+.arena-overview-panel header p{margin:0;color:var(--text-muted);font-size:11px}
+.arena-overview-panel header .btn{flex:none;min-height:34px;padding:7px 10px;font-size:10px}
+.arena-score-bars{display:grid;gap:13px}
+.arena-score-bars>div{display:grid;grid-template-columns:46px minmax(0,1fr) 28px;align-items:center;gap:8px;color:var(--text-muted);font-size:11px}
+.arena-score-bars strong{text-align:right;color:var(--text-main)}
+.arena-score-track{height:12px;overflow:hidden;border-radius:999px;background:var(--surface-subtle)}
+.arena-score-track span{display:block;height:100%;border-radius:999px;background:var(--primary)}
+.arena-schedule-list{display:grid;gap:9px;margin:0;padding:0;list-style:none}
+.arena-schedule-list li{display:grid;gap:5px;padding:11px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface-subtle)}
+.arena-schedule-list li span{color:var(--text-main);font-size:12px;font-weight:800}
+.arena-schedule-list li small{color:var(--text-muted);font-size:10px}
+.arena-overview-empty{margin:0;padding:15px;color:var(--text-muted);font-size:12px}
+@media(max-width:920px){.arena-overview-hero{align-items:flex-start;flex-direction:column}.arena-overview-special{grid-template-columns:1fr}.arena-overview-panels{grid-template-columns:1fr}.arena-overview-quick{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.arena-overview-hero{padding:18px}.arena-overview-actions{width:100%}.arena-overview-actions .btn{flex:1 1 130px}.arena-overview-quick button{min-height:44px;padding:9px;font-size:10px}.arena-overview-special{padding:16px}.arena-overview-special-cards{gap:7px}.arena-overview-special-cards button{padding:12px}.arena-overview-panel{padding:16px}.arena-overview-panel header{flex-wrap:wrap}}
