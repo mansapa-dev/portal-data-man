@@ -86,6 +86,7 @@ CREATE TABLE exam_attempts (
   updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   UNIQUE KEY uq_arena_attempt_public (public_id),
   UNIQUE KEY uq_arena_attempt_student_exam (student_id,exam_id),
+  KEY idx_arena_attempt_student_status (student_id,status,expires_at),
   KEY idx_arena_attempt_exam_status (exam_id,status),
   KEY idx_arena_attempt_expiry (status,expires_at),
   CONSTRAINT fk_arena_attempt_student FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE RESTRICT,
@@ -102,6 +103,7 @@ CREATE TABLE attempt_questions (
   option_mapping JSON NOT NULL,
   points DECIMAL(8,2) NOT NULL,
   PRIMARY KEY (attempt_id,question_id),
+  KEY idx_arena_attempt_question (question_id,attempt_id),
   CONSTRAINT fk_arena_snapshot_attempt FOREIGN KEY (attempt_id) REFERENCES exam_attempts(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

@@ -37,7 +37,7 @@ export async function studentExamRoutes(app: FastifyInstance) {
     const body = violationSchema.parse(request.body);
     return scoring.recordViolation(claims.sub, examId.parse(request.params.id), body.event_key, body.type);
   });
-  app.post<{ Params: { id: string } }>('/api/student/exams/:id/submit', { config: { rateLimit: { max: 8, timeWindow: '1 minute' } } }, async (request) => {
+  app.post<{ Params: { id: string } }>('/api/student/exams/:id/submit', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request) => {
     const claims = studentClaims(request); assertCsrf(request, claims);
     const body = z.object({ finalize_only: z.boolean().optional() }).strict().parse(request.body ?? {});
     return scoring.submit(claims.sub, examId.parse(request.params.id), body.finalize_only ?? false);

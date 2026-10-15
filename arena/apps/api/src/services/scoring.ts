@@ -79,12 +79,13 @@ export class ScoringService {
   }
 
   async review(studentId: number, examId: number) {
-    const [attempts] = await this.pool.execute<RowDataPacket[]>('SELECT id,status FROM exam_attempts WHERE student_id=? AND exam_id=?', [studentId, examId]);
+    const [attempts] = await this.pool.execute<RowDataPacket[]>('SELECT id,status,question_order FROM exam_attempts WHERE student_id=? AND exam_id=? LIMIT 1', [studentId, examId]);
     const attempt = attempts[0];
     if (!attempt) throw Object.assign(new Error('Sesi ujian tidak ditemukan'), { statusCode: 404 });
     if (!['COMPLETED','EXPIRED'].includes(attempt.status)) throw Object.assign(new Error('Review hanya tersedia setelah ujian selesai'), { statusCode: 403 });
-    const [attemptDetails] = await this.pool.execute<RowDataPacket[]>('SELECT question_order FROM exam_attempts WHERE id=?', [attempt.id]);
-    const order = JSON.parse(attemptDetails[0]?.question_order ?? '[]') as number[];
+    const rawOrder=attempt.question_order;
+    const parsedOrder=typeof rawOrder==='string'?JSON.parse(rawOrder):rawOrder;
+    const order=Array.isArray(parsedOrder)?parsedOrder.map(Number).filter(Number.isSafeInteger):[];
     const [rows] = await this.pool.execute<RowDataPacket[]>('SELECT q.question_id,q.question_text,q.question_type,q.correct_answer,q.option_a,q.option_b,q.option_c,q.option_d,q.option_e,a.answer FROM attempt_questions q LEFT JOIN student_answers a ON a.attempt_id=q.attempt_id AND a.question_id=q.question_id WHERE q.attempt_id=?', [attempt.id]);
     if (!rows.length) throw Object.assign(new Error('Data soal review belum tersedia. Hubungi petugas ujian.'), { statusCode: 404 });
     const rowByQuestion = new Map(rows.map((row) => [Number(row.question_id), row]));

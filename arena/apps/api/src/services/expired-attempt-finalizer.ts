@@ -53,17 +53,9 @@ export class ExpiredAttemptFinalizer {
          ORDER BY expires_at,id LIMIT ?`,
         [this.batchSize],
       );
-      let finalized = 0;
-      let failed = 0;
-      for (const attempt of attempts) {
-        try {
-          await this.scoring.submit(Number(attempt.student_id), Number(attempt.exam_id), true);
-          finalized++;
-        } catch (error) {
-          failed++;
-          this.logger.warn({ err: error, student_id: Number(attempt.student_id), exam_id: Number(attempt.exam_id) }, 'expired attempt finalization failed');
-        }
-      }
+      let finalized = 0,failed = 0,next = 0;
+      const worker=async()=>{while(true){const index=next++;if(index>=attempts.length)return;const attempt=attempts[index]!;try{await this.scoring.submit(Number(attempt.student_id),Number(attempt.exam_id),true);finalized++;}catch(error){failed++;this.logger.warn({err:error,student_id:Number(attempt.student_id),exam_id:Number(attempt.exam_id)},'expired attempt finalization failed');}}};
+      await Promise.all(Array.from({length:Math.min(4,attempts.length)},worker));
       if (finalized || failed) this.logger.info({ finalized, failed, scanned: attempts.length }, 'expired attempt finalization batch finished');
     } catch (error) {
       this.logger.error({ err: error }, 'expired attempt finalization batch failed');

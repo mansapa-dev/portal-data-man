@@ -28,8 +28,20 @@ export function readToken(token: string): Claims | null {
 
 export function claimsFromRequest(request: FastifyRequest): Claims {
   const header = request.headers.authorization;
-  const cookieToken=request.headers.cookie?.split(';').map((part)=>part.trim()).find((part)=>part.startsWith('arena_staff_session='))?.slice('arena_staff_session='.length);
-  const token=header?.startsWith('Bearer ')?header.slice(7):cookieToken;
+  const cookies=request.headers.cookie?.split(';').map((part)=>part.trim())??[];
+  const staffCookie=cookies.find((part)=>part.startsWith('arena_staff_session='))?.slice('arena_staff_session='.length);
+  const studentCookie=cookies.find((part)=>part.startsWith('arena_student_session='))?.slice('arena_student_session='.length);
+  let token=header?.startsWith('Bearer ')?header.slice(7):undefined;
+  if(!token){
+    const path=request.url.split('?')[0]??request.url;
+    const csrfHeader=request.headers['x-csrf-token'];
+    const studentRoute=path.startsWith('/api/student/')||path.startsWith('/api/auth/student/');
+    const staffRoute=path.startsWith('/api/admin/')||path.startsWith('/api/staff/')||path.startsWith('/api/teacher/')||path.startsWith('/api/auth/staff/');
+    if(studentRoute)token=studentCookie;
+    else if(staffRoute)token=staffCookie;
+    else if(typeof csrfHeader==='string')token=[staffCookie,studentCookie].find((candidate)=>candidate&&readToken(candidate)?.csrf===csrfHeader);
+    else token=staffCookie??studentCookie;
+  }
   if (!token) throw Object.assign(new Error('Login diperlukan'), { statusCode: 401 });
   const claims = readToken(token);
   if (!claims) throw Object.assign(new Error('Sesi tidak valid atau sudah berakhir'), { statusCode: 401 });

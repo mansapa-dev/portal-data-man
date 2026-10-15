@@ -4,26 +4,28 @@ import { requirePool } from '../lib/db.js';
 import { assertCsrf, claimsFromRequest, issueToken, newCsrf } from '../lib/auth.js';
 import type { RowDataPacket } from 'mysql2/promise';
 import { audit } from '../services/audit.js';
+import { createHash } from 'node:crypto';
 
 const loginSchema = z.object({ nisn: z.string().trim().min(8).max(20), pin: z.string().trim().min(4).max(12) }).strict();
+const studentSessionSeconds=12*60*60;
 function normalizeDigits(value: string) { return value.replace(/[\s\u00a0\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/gu, '').replace(/[０-９٠-٩۰-۹]/gu, (digit) => String.fromCharCode((digit.codePointAt(0)! >= 0xff10 && digit.codePointAt(0)! <= 0xff19) ? digit.codePointAt(0)! - 0xff10 + 48 : digit.codePointAt(0)! >= 0x660 && digit.codePointAt(0)! <= 0x669 ? digit.codePointAt(0)! - 0x660 + 48 : digit.codePointAt(0)! - 0x6f0 + 48)); }
+const loginInFlight = new Map<string,Promise<{token:string;csrf_token:string;expires_in:number;student:Record<string,unknown>}>>();
 
 export async function authRoutes(app: FastifyInstance) {
   app.post('/api/auth/student/login', {
-    config: { rateLimit: { max: 12, timeWindow: '10 minutes', keyGenerator: (request) => { const body=request.body as {nisn?:string}|undefined;return `student-login:${String(body?.nisn??'').replace(/\D/g,'').slice(0,20)}`; } } },
+    config: { rateLimit: { max: 20, timeWindow: '10 minutes', keyGenerator: (request) => { const body=request.body as {nisn?:string}|undefined;return `student-login:${String(body?.nisn??'').replace(/\D/g,'').slice(0,20)}`; } } },
   }, async (request, reply) => {
     const body = loginSchema.parse(request.body);
     const nisn = normalizeDigits(body.nisn); const pin = normalizeDigits(body.pin);
     if (!/^\d{8,20}$/.test(nisn) || !/^\d{4,12}$/.test(pin)) throw Object.assign(new Error('NISN atau PIN tidak valid'), { statusCode: 422 });
-    const pool = requirePool();
-    const [rows] = await pool.execute<RowDataPacket[]>('SELECT id,nisn,name_snapshot,class_snapshot,grade_snapshot,pin_hash,cbt_status FROM students WHERE nisn=? AND is_active=1 LIMIT 1', [nisn]);
-    const student = rows[0];
-    const valid = student?.cbt_status === 'ACTIVE' && typeof student.pin_hash === 'string' && await BunPassword.verify(pin, student.pin_hash);
-    if (!valid) throw Object.assign(new Error('NISN atau PIN salah'), { statusCode: 401 });
-    const csrf = newCsrf();
-    const token = issueToken({ sub: Number(student.id), role: 'STUDENT', exp: Math.floor(Date.now() / 1000) + 3600, csrf });
-    reply.header('Cache-Control', 'no-store');
-    return { token, csrf_token: csrf, expires_in: 3600, student: { id: Number(student.id), nisn: student.nisn, nama: student.name_snapshot, kelas: student.class_snapshot, tingkat: student.grade_snapshot } };
+    const requestKey=createHash('sha256').update(`${process.env.AUTH_TOKEN_SECRET??'local-development-only'}:${nisn}:${pin}`).digest('hex');const previous=loginInFlight.get(requestKey);if(previous){const response=await previous;reply.header('Set-Cookie',`arena_student_session=${response.token}; Path=/; Max-Age=${studentSessionSeconds}; HttpOnly; SameSite=Lax${process.env.NODE_ENV==='production'?'; Secure':''}`);reply.header('Cache-Control','no-store');return response;}
+    const task=(async()=>{const pool=requirePool();const[rows]=await pool.execute<RowDataPacket[]>('SELECT id,nisn,name_snapshot,class_snapshot,grade_snapshot,pin_hash,cbt_status FROM students WHERE nisn=? AND is_active=1 LIMIT 1',[nisn]);const student=rows[0];const valid=student?.cbt_status==='ACTIVE'&&typeof student.pin_hash==='string'&&await BunPassword.verify(pin,student.pin_hash);if(!valid)throw Object.assign(new Error('NISN atau PIN salah'),{statusCode:401});const csrf=newCsrf();const token=issueToken({sub:Number(student.id),role:'STUDENT',exp:Math.floor(Date.now()/1000)+studentSessionSeconds,csrf});return{token,csrf_token:csrf,expires_in:studentSessionSeconds,student:{id:Number(student.id),nisn:student.nisn,nama:student.name_snapshot,kelas:student.class_snapshot,tingkat:student.grade_snapshot}};})();loginInFlight.set(requestKey,task);try{const response=await task;reply.header('Set-Cookie',`arena_student_session=${response.token}; Path=/; Max-Age=${studentSessionSeconds}; HttpOnly; SameSite=Lax${process.env.NODE_ENV==='production'?'; Secure':''}`);reply.header('Cache-Control','no-store');return response;}finally{if(loginInFlight.get(requestKey)===task)loginInFlight.delete(requestKey);}
+  });
+  app.get('/api/auth/student/session', async (request,reply) => {
+    const claims=claimsFromRequest(request);if(claims.role!=='STUDENT')throw Object.assign(new Error('Sesi siswa diperlukan'),{statusCode:403});
+    const[rows]=await requirePool().execute<RowDataPacket[]>('SELECT id,nisn,name_snapshot,class_snapshot,grade_snapshot,cbt_status FROM students WHERE id=? AND is_active=1 LIMIT 1',[claims.sub]);const student=rows[0];
+    if(!student||student.cbt_status!=='ACTIVE')throw Object.assign(new Error('Akun siswa tidak aktif'),{statusCode:401});
+    const token=issueToken({sub:claims.sub,role:'STUDENT',exp:Math.floor(Date.now()/1000)+studentSessionSeconds,csrf:claims.csrf});reply.header('Set-Cookie',`arena_student_session=${token}; Path=/; Max-Age=${studentSessionSeconds}; HttpOnly; SameSite=Lax${process.env.NODE_ENV==='production'?'; Secure':''}`);reply.header('Cache-Control','no-store');return{csrf_token:claims.csrf,expires_in:studentSessionSeconds,student:{id:Number(student.id),nisn:student.nisn,nama:student.name_snapshot,kelas:student.class_snapshot,tingkat:student.grade_snapshot}};
   });
   app.get('/api/auth/me', async (request) => {
     const claims = claimsFromRequest(request);
@@ -39,7 +41,8 @@ export async function authRoutes(app: FastifyInstance) {
   });
   app.post('/api/auth/logout', async (request, reply) => {
     const claims = claimsFromRequest(request); assertCsrf(request, claims);
-    if(['ADMIN','TEACHER','EMPLOYEE'].includes(claims.role))reply.header('Set-Cookie','arena_staff_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax'+(process.env.NODE_ENV==='production'?'; Secure':''));
+    const secure=process.env.NODE_ENV==='production'?'; Secure':'';
+    reply.header('Set-Cookie',[`arena_staff_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax${secure}`,`arena_student_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax${secure}`]);
     reply.header('Clear-Site-Data', 'cache');
     return { success: true };
   });

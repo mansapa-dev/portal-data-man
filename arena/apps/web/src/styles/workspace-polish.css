@@ -1,0 +1,300 @@
+/* Shared staff workspace finish, using the same CBT green and surface tokens. */
+:where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout{
+  --workspace-sidebar:#0b3e2a;
+  --workspace-sidebar-mid:#075638;
+  --workspace-sidebar-active:#168656;
+  --workspace-content-max:1560px;
+}
+
+@media screen {
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout{
+    background:var(--bg-body);
+    color:var(--text-main);
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout>.sidebar{
+    background:linear-gradient(165deg,var(--workspace-sidebar),var(--workspace-sidebar-mid) 58%,#087049);
+    border:0;
+    color:#fff;
+    box-shadow:5px 0 24px #062b1b18;
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .sb-brand{border-color:#ffffff24!important}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .sb-brand-title,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .user-profile-name,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .user-profile-role{color:#fff}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .sb-brand-sub{color:#d6e7dc}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .sb-section-label,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .sb-nav-group-label{color:#c1d8c9}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .sidebar .sb-item{
+    min-height:42px;
+    border:1px solid transparent;
+    border-radius:12px;
+    color:#e5f0e8;
+    font-size:12px;
+    font-weight:600;
+    transition:background .16s ease,color .16s ease;
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .sidebar .sb-item:hover{background:#ffffff18;color:#fff}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .sidebar .sb-item.active{
+    background:linear-gradient(90deg,#35ab70,var(--workspace-sidebar-active));
+    box-shadow:0 5px 14px #031d1540;
+    color:#fff;
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .sb-item .sb-icon{color:#d3e8da}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .sb-item.active .sb-icon{color:#fff}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .sidebar-user-footer{border-color:#ffffff25}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .user-profile-card{border-color:#ffffff25;background:#ffffff12}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .user-profile-avatar{background:#ffffff20;color:#fff}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .sb-logout-btn{border-color:#ffffff2b;background:#ffffff12;color:#fff}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .sb-logout-btn:hover{background:#ffffff20;color:#fff}
+
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout>.dash-content{
+    background:var(--bg-body);
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dash-content>.topbar{
+    min-height:70px;
+    border-color:var(--border);
+    background:color-mix(in srgb,var(--surface) 94%,transparent);
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dashboard-top-title small{
+    font-size:10px;
+    letter-spacing:.12em;
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dashboard-top-title h1{
+    font-size:clamp(18px,1.55vw,22px);
+    letter-spacing:-.4px;
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dash-body{
+    width:min(100%,var(--workspace-content-max));
+    gap:20px;
+    padding:clamp(20px,2.4vw,36px) clamp(18px,2.7vw,42px) 48px;
+    font-size:13px;
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dash-body>div[style],
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dash-body>section[style],
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dash-body>form[style]{
+    border-radius:18px!important;
+    box-shadow:var(--shadow-sm)!important;
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dash-body :is(button,.btn){
+    min-height:40px;
+    border-radius:11px;
+    font-size:12px;
+    line-height:1.35;
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dash-body :is(input:not([type=checkbox]):not([type=radio]),select,textarea){
+    min-height:42px;
+    border-radius:11px;
+    font-size:13px;
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dash-body label{font-size:12px;line-height:1.5}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dash-body table{font-size:12px}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dash-body table th{font-size:11px;font-weight:750}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .operations-heading h2{font-size:clamp(20px,2vw,25px);letter-spacing:-.45px}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .operations-heading p{font-size:13px;line-height:1.65}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .operations-card,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .admin-page-card{
+    border-color:var(--border);
+    border-radius:18px;
+    background:var(--surface);
+    box-shadow:var(--shadow-sm);
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .operations-card-header{padding:18px 20px}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout :focus-visible{outline-color:var(--primary);outline-offset:3px}
+
+  /* Buttons: predictable height, alignment and hierarchy across admin pages. */
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dash-body :is(button,.btn){
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    white-space:normal;
+    text-align:center;
+    vertical-align:middle;
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dash-body .btn-primary{
+    border:1px solid var(--primary);
+    background:var(--primary);
+    color:#fff;
+    box-shadow:var(--shadow-primary);
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dash-body .btn-primary:hover:not(:disabled){
+    border-color:var(--primary-hover);
+    background:var(--primary-hover);
+    color:#fff;
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dash-body .btn-secondary{
+    border:1px solid var(--border);
+    background:var(--surface);
+    color:var(--text-main);
+    box-shadow:var(--shadow-sm);
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dash-body .btn-danger{
+    border:1px solid var(--ui-danger-border);
+    background:var(--ui-danger-bg);
+    color:var(--ui-danger);
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .staff-topbar-actions{display:flex;align-items:center;flex-wrap:wrap}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .staff-topbar-logout{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;
+    border:1px solid var(--border);border-radius:11px;background:var(--surface);
+    color:var(--text-main);font-size:12px;font-weight:700;
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .staff-identity{display:grid;gap:3px;min-width:0}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .staff-identity strong{font-size:12px;color:var(--text-main)}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .staff-identity small{font-size:10px;color:var(--text-muted)}
+
+  /* Cards and card headers. */
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .admin-page-card,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .operations-card,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .question-results-card,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .question-subject-catalog,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .question-template-catalog{
+    min-width:0;
+    padding:20px;
+    border:1px solid var(--border);
+    border-radius:18px;
+    background:var(--surface);
+    box-shadow:var(--shadow-sm);
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .admin-card-heading,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .operations-card-header,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .question-subject-catalog>header,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .question-template-heading,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .question-results-summary{
+    display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .admin-card-heading h2,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .admin-card-heading h3,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .operations-card-header h3{
+    margin:0;color:var(--text-main);font-size:16px;font-weight:800;letter-spacing:-.25px;
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .admin-card-heading p,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .operations-card-header p{
+    margin:5px 0 0;color:var(--text-muted);font-size:12px;line-height:1.6;
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .admin-count-pill{
+    display:inline-flex;align-items:center;justify-content:center;min-height:26px;padding:4px 10px;
+    border:1px solid var(--primary-soft-border);border-radius:999px;background:var(--primary-soft);
+    color:var(--primary-dark);font-size:11px;font-weight:750;white-space:nowrap;
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .admin-status{
+    display:inline-flex;align-items:center;justify-content:center;min-height:26px;padding:4px 10px;
+    border-radius:999px;font-size:11px;font-weight:750;white-space:nowrap;
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .admin-empty-state,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .operations-empty,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .teacher-empty-state{
+    display:grid;justify-items:center;gap:9px;padding:clamp(24px,5vw,48px) 18px;
+    border:1px dashed var(--border);border-radius:15px;background:var(--surface-subtle);color:var(--text-muted);text-align:center;
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .admin-empty-state strong,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .operations-empty strong,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .teacher-empty-state strong{color:var(--text-main);font-size:14px}
+
+  /* Table containers and row-level action groups stay tidy without shrinking content. */
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .admin-table-scroll,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .operations-table-wrap,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .question-results-card>div:has(>table),
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .admin-page-card>div:has(>table){
+    max-width:100%;overflow:auto;border:1px solid var(--border);border-radius:13px;overscroll-behavior-x:contain;
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dash-body table{margin:0;border-collapse:separate;border-spacing:0}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dash-body table th{white-space:nowrap}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dash-body table td{line-height:1.55}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .exam-row-actions,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .question-row-actions,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .admin-ticket-actions{
+    display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:160px;
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .exam-row-actions button,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .question-row-actions button{
+    min-width:72px;min-height:34px;padding:6px 9px;border-radius:9px;font-size:11px;
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .operations-pagination,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .question-pagination{
+    display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding-top:14px;color:var(--text-muted);font-size:12px;
+  }
+
+  /* Filters and toolbars use a shared grid rhythm instead of uneven inline rows. */
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .admin-sync-toolbar,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .exam-list-toolbar,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .question-bank-toolbar,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .question-filter-toolbar,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .question-catalog-filters{
+    display:flex;align-items:flex-end;flex-wrap:wrap;gap:12px;padding:15px;
+    border:1px solid var(--border);border-radius:14px;background:var(--surface-subtle);
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .admin-sync-toolbar>div:first-child{flex:1 1 300px}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .admin-sync-toolbar>div:last-child{display:flex;align-items:flex-end;flex-wrap:wrap;gap:10px}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .exam-list-toolbar label,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .question-filter-toolbar label{flex:1 1 170px}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .exam-list-toolbar :is(input,select),
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .question-filter-toolbar :is(input,select){width:100%}
+}
+
+@media(max-width:1000px) and (min-width:761px){
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout{grid-template-columns:220px minmax(0,1fr)}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout>.sidebar{width:220px;flex-basis:220px}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dash-content>.topbar{padding-inline:20px}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dash-body{padding-inline:20px}
+}
+
+@media(max-width:760px){
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout{display:block;height:auto;min-height:100dvh}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout>.sidebar{
+    position:sticky;
+    top:0;
+    z-index:30;
+    display:block;
+    width:100%;
+    height:auto;
+    padding:8px 12px 6px;
+    overflow:visible;
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .sb-brand,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .sb-section-label,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .sidebar-user-footer{display:none}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .sidebar nav{
+    display:flex;
+    gap:7px;
+    margin:0 -12px;
+    padding:2px 12px 5px;
+    overflow-x:auto;
+    overscroll-behavior-x:contain;
+    scrollbar-width:thin;
+  }
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .sb-nav-group{display:flex;flex:0 0 auto;gap:5px;margin:0;padding:0}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .sb-nav-group-label,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .sb-arrow{display:none}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .sidebar nav .sb-item{min-height:40px;padding:8px 12px;white-space:nowrap}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dash-content{height:auto;overflow:visible}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dash-content>.topbar{top:0;min-height:60px;padding:8px 14px}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .staff-topbar-actions{gap:6px}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dash-body{gap:15px;padding:17px 14px calc(30px + env(safe-area-inset-bottom))}
+}
+
+@media(max-width:480px){
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dashboard-top-title small{font-size:8px}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dashboard-top-title h1{font-size:16px}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .staff-topbar-logout{min-width:38px;min-height:38px;padding:8px;font-size:0}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .staff-topbar-logout i{margin:0;font-size:13px}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .theme-toggle{width:38px;height:38px;min-width:38px;min-height:38px}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dash-body{padding-inline:11px}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dash-body>div[style],
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dash-body>section[style],
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .dash-body>form[style]{padding:15px!important}
+  .teacher-metric-grid{grid-template-columns:1fr}
+  .teacher-welcome-card{min-height:0;padding:22px}
+  .teacher-welcome-icon{flex-basis:54px;width:54px;height:54px;border-radius:17px;font-size:22px}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .admin-page-card,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .operations-card,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .question-results-card,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .question-subject-catalog,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .question-template-catalog{padding:14px}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .admin-card-heading,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .operations-card-header,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .question-subject-catalog>header,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .question-template-heading{align-items:flex-start}
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .operations-pagination,
+  :where(.admin-workspace,.staff-workspace,.teacher-workspace).dashboard-layout .question-pagination{justify-content:center}
+}
