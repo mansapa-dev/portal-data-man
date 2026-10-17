@@ -48,7 +48,7 @@ function base64(bytes: Uint8Array) {
 function escapeXml(value: string) { return value.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
 function mathChildren(element: Element) { return Array.from(element.children).filter(child => child.namespaceURI === mathNamespace); }
 function mathText(element: Element | null) { return element ? Array.from(element.getElementsByTagNameNS(mathNamespace,'t')).map(node=>node.textContent??'').join('') : ''; }
-function convertOmml(element: Element): string {
+export function convertOmml(element: Element): string {
   const children=mathChildren(element), name=element.localName;
   const content=(child:Element|null)=>child?mathChildren(child).map(convertOmml).join('')||escapeXml(mathText(child)):'';
   if(name==='oMath'||name==='oMathPara'||name==='e'||name==='num'||name==='den'||name==='sub'||name==='sup'||name==='fName'||name==='deg'||name==='lim'||name==='mr'||name==='box'||name==='t')return name==='t'?escapeXml(element.textContent??''):children.map(convertOmml).join('')||escapeXml(mathText(element));
