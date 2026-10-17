@@ -310,4 +310,6 @@
 .student-card-preview{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;margin:16px 0}
 .student-card-preview article{border:2px solid #3e7651;border-radius:12px;padding:15px;display:grid;gap:7px;background:var(--surface,#fff)}
 .student-card-preview small{font-weight:800;border-bottom:1px solid #b8d2bf;padding-bottom:8px}.student-card-preview strong{font-size:1.1rem}
+.student-card-brand{display:flex;align-items:center;gap:10px;border-bottom:1px solid #b8d2bf;padding-bottom:8px}.student-card-brand img{width:38px;height:38px;object-fit:contain}.student-card-brand small{border:0;padding:0}
+.admin-print-preview{display:flex;align-items:center;gap:16px;border:1px solid #cbd5d1;border-bottom:3px double #315b3e;border-radius:10px;padding:15px;margin:14px 0;background:var(--surface,#fff);text-align:center}.admin-print-preview img{width:68px;height:68px;object-fit:contain}.admin-print-preview div{flex:1;display:grid;gap:2px}.admin-print-preview strong{font-size:1.1rem}.admin-print-preview small{font-size:.75rem}
 @media(max-width:640px){.operations-monitor-filters label,.admin-result-filters label{width:100%}.operations-monitor-summary span{flex:1}}
