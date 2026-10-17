@@ -5,6 +5,7 @@ import { assertCsrf, claimsFromRequest, issueToken, newCsrf } from '../lib/auth.
 import type { RowDataPacket } from 'mysql2/promise';
 import { audit } from '../services/audit.js';
 import { createHash } from 'node:crypto';
+import { staffCapabilities } from '../services/staff-capabilities.js';
 
 const loginSchema = z.object({ nisn: z.string().trim().min(8).max(20), pin: z.string().trim().min(4).max(12) }).strict();
 const studentSessionSeconds=12*60*60;
@@ -37,7 +38,7 @@ export async function authRoutes(app: FastifyInstance) {
     }
     const [rows] = await requirePool().execute<RowDataPacket[]>('SELECT id,username,name,role,status FROM users WHERE id=? LIMIT 1',[claims.sub]);
     const staff=rows[0];if(!staff||staff.status!=='ACTIVE'||staff.role!==claims.role)throw Object.assign(new Error('Akun personel tidak aktif'),{statusCode:401});
-    return { staff:{id:Number(staff.id),username:staff.username,nama:staff.name,role:staff.role},csrf_token:claims.csrf };
+    return { staff:{id:Number(staff.id),username:staff.username,nama:staff.name,role:staff.role,capabilities:await staffCapabilities(requirePool(),Number(staff.id),staff.role)},csrf_token:claims.csrf };
   });
   app.post('/api/auth/logout', async (request, reply) => {
     const claims = claimsFromRequest(request); assertCsrf(request, claims);

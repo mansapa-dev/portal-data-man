@@ -3,6 +3,7 @@ import type { RowDataPacket } from 'mysql2/promise';
 import { z } from 'zod';
 import { newCsrf, issueToken } from '../lib/auth.js';
 import { requirePool } from '../lib/db.js';
+import { staffCapabilities } from '../services/staff-capabilities.js';
 
 const schema = z.object({ username: z.string().trim().min(1).max(100), password: z.string().min(1).max(200) }).strict();
 const staffSessionSeconds=7*24*60*60;
@@ -21,7 +22,7 @@ export async function staffAuthRoutes(app: FastifyInstance) {
     const token = issueToken({ sub: Number(user.id), role: user.role, exp: Math.floor(Date.now() / 1000) + staffSessionSeconds, csrf });
     setStaffCookie(reply,token);
     reply.header('Cache-Control', 'no-store');
-    return { csrf_token: csrf, expires_in: staffSessionSeconds, staff: { id: Number(user.id), nama: user.name, username: user.username, role: user.role, nip: user.teacher_nip ?? user.employee_nip ?? null } };
+    return { csrf_token: csrf, expires_in: staffSessionSeconds, staff: { id: Number(user.id), nama: user.name, username: user.username, role: user.role, nip: user.teacher_nip ?? user.employee_nip ?? null, capabilities: await staffCapabilities(requirePool(), Number(user.id), user.role) } };
   });
   app.get('/api/auth/staff/session',async(request,reply)=>{
     const part=request.headers.cookie?.split(';').map(value=>value.trim()).find(value=>value.startsWith('arena_staff_session='));
@@ -32,6 +33,6 @@ export async function staffAuthRoutes(app: FastifyInstance) {
     const[rows]=await requirePool().execute<RowDataPacket[]>('SELECT id,username,name,role,status FROM users WHERE id=? LIMIT 1',[claims.sub]);const user=rows[0];
     if(!user||user.status!=='ACTIVE'||user.role!==claims.role)throw Object.assign(new Error('Akun personel tidak aktif'),{statusCode:401});
     const csrf=claims.csrf;const refreshed=issueToken({sub:Number(user.id),role:user.role,exp:Math.floor(Date.now()/1000)+staffSessionSeconds,csrf});setStaffCookie(reply,refreshed);reply.header('Cache-Control','no-store');
-    return{csrf_token:csrf,expires_in:staffSessionSeconds,staff:{id:Number(user.id),username:user.username,nama:user.name,role:user.role}};
+    return{csrf_token:csrf,expires_in:staffSessionSeconds,staff:{id:Number(user.id),username:user.username,nama:user.name,role:user.role,capabilities:await staffCapabilities(requirePool(),Number(user.id),user.role)}};
   });
 }
