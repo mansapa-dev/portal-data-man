@@ -153,8 +153,13 @@ function App() {
       const due = [...timers.current.entries()];
       due.forEach(([, timer]) => window.clearTimeout(timer)); timers.current.clear();
       if (finalizeOnly) {
-        await Promise.allSettled([...pending.current.values()]);
-        if (failedSaves.current.size) throw new Error('Ada jawaban yang belum tersimpan. Coba simpan lagi sebelum mengirim ujian.');
+        // The API rejects writes after expiry. Finalize the answers already stored
+        // even when a late autosave fails, so the student can still see a result.
+        await Promise.race([
+          Promise.allSettled([...pending.current.values()]),
+          new Promise<void>(resolve=>window.setTimeout(resolve,3000)),
+        ]);
+        latestDraft.current.clear();
       }
       else {
         for (const [questionId] of due) { const question = attempt.soal.find((item) => item.id === questionId); if (question) latestDraft.current.set(questionId,{question,answer:answers[questionId]??'',flagged:flags[questionId]??false}); }
@@ -168,7 +173,7 @@ function App() {
       const completed = await api<ExamResult>(`/api/student/exams/${attempt.exam.id}/submit`, { method: 'POST', body: finalizeOnly ? {finalize_only:true} : {} });
       const actual = await api<ExamResult>(`/api/student/exams/${attempt.exam.id}/result`).catch(() => completed);
       setMessage(''); setResultExamId(attempt.exam.id); setResultExamName(attempt.exam.nama_ujian); setReview(null); setReviewError(''); setResult({...completed,...actual}); setAttempt(null); await loadExams();
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'Submit gagal'); throw error; }
+    } catch (error) { setMessage(finalizeOnly?'Waktu habis. Hasil belum dapat dimuat; coba lagi saat koneksi tersedia.':error instanceof Error ? error.message : 'Submit gagal'); throw error; }
     finally { submittingAttempt.current=false;setBusy(false); }
   }
   async function showResult(examId:number){setBusy(true);setMessage('');setReview(null);setReviewError('');try{setResultExamId(examId);setResultExamName(exams.find(item=>item.id===examId)?.nama_ujian??'');setResult(await api<ExamResult>(`/api/student/exams/${examId}/result`));}catch(error){setMessage(error instanceof Error?error.message:'Hasil belum tersedia');}finally{setBusy(false);}}
@@ -204,7 +209,7 @@ function App() {
   const card: React.CSSProperties = {};
   if(sessionLoading)return <main className="center-wrapper"><div className="auth-card" role="status">Memeriksa sesi…</div></main>;
   return <main className={attempt?'arena-app exam-active':'arena-app'}>
-    {!staff&&<header className="topbar public-topbar"><div className="dashboard-home-brand"><img src="/assets/img/logo-man1-palembang.png" alt="Lambang MAN 1 Palembang"/><div><strong>MANSAPA ARENA</strong><span>Area Evaluasi dan Asesmen</span></div></div><div className="public-topbar-actions"><button type="button" className="theme-toggle" aria-label="Aktifkan mode gelap" aria-pressed={darkMode} onClick={()=>{setDarkMode(current=>{document.documentElement.dataset.theme=current?'':'dark';return !current;});}}>◐</button><span className="topbar-pill hide-on-mobile"><span className="dot"/><span>Sistem Online</span></span><a href="/auth/sso/start" className="topbar-guru-link"><i className="fa-solid fa-chalkboard-user"/><span className="hide-on-mobile">Portal Guru</span></a>{student?<button className="btn btn-danger" onClick={() => void logout()}><i className="fa-solid fa-arrow-right-from-bracket"/><span className="hide-on-mobile">Keluar</span></button>:<button className="admin-lock" type="button" aria-label="Login pengelola" title="Login Pengelola" onClick={()=>setStaffLoginOpen(true)}><i className="fa-solid fa-lock"/></button>}</div></header>}
+     {!staff&&<header className="topbar public-topbar"><div className="dashboard-home-brand"><img src="/assets/img/logo-man1-palembang.png" alt="Lambang MAN 1 Palembang"/><div><strong>MANSAPA ARENA</strong><span>Area Evaluasi dan Asesmen</span></div></div><div className="public-topbar-actions"><button type="button" className="theme-toggle" aria-label={darkMode?'Aktifkan mode terang':'Aktifkan mode gelap'} aria-pressed={darkMode} onClick={()=>{setDarkMode(current=>{document.documentElement.dataset.theme=current?'':'dark';return !current;});}}>◐</button><a href="/auth/sso/start" className="topbar-guru-link"><i className="fa-solid fa-chalkboard-user"/><span className="hide-on-mobile">Portal Guru</span></a>{student?<button className="btn btn-danger" onClick={() => void logout()}><i className="fa-solid fa-arrow-right-from-bracket"/><span className="hide-on-mobile">Keluar</span></button>:<button className="admin-lock" type="button" aria-label="Login pengelola" title="Login Pengelola" onClick={()=>setStaffLoginOpen(true)}><i className="fa-solid fa-lock"/></button>}</div></header>}
     {message && !attempt && <p role="status" style={{ ...card, background: '#fff8e1' }}>{message}</p>}
     {staff ? <StaffPanel staff={staff} onLogout={()=>void logout()} /> : student ? attempt ?
       <StudentExam attempt={attempt} studentName={student.nama} answers={answers} flags={flags} busy={busy} saveState={saveState} message={message} change={change} toggleFlag={toggleFlag} retrySave={retrySave} submit={submit} onTerminated={terminated} onHelp={()=>setExamHelpOpen(true)}>{examHelpOpen&&<StudentSupportModal examId={attempt.exam.id} onClose={()=>setExamHelpOpen(false)}/>}</StudentExam>

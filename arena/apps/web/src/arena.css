@@ -205,6 +205,11 @@ body{background:var(--bg-body);color:var(--text-main)}button,input,select,textar
 .student-exam .exam-save-error{margin:0 0 14px;padding:11px 13px;border:1px solid #f3b5a9;border-radius:10px;background:#fff1ee;color:#9a3412;font-size:13px;font-weight:700}
 .student-exam .exam-save-error{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:9px}
 .student-exam .exam-save-error button{min-height:40px;padding:7px 11px;border:1px solid currentColor;border-radius:8px;background:transparent;color:inherit;font:inherit;cursor:pointer}
+.student-exam .exam-expired-note{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:9px;margin:0 0 14px;padding:11px 13px;border:1px solid var(--border);border-radius:10px;background:var(--surface-subtle);color:var(--text-main);font-size:13px}
+.student-exam .exam-expired-note button{min-height:44px;padding:8px 12px;border:1px solid var(--primary);border-radius:8px;background:var(--surface);color:var(--primary-dark);font:inherit;font-weight:700;cursor:pointer}
+.student-exam .student-map-toggle{display:none}
+@media(max-width:800px){.student-exam .student-map-toggle{display:inline-flex;justify-content:center;min-height:44px;margin:0 0 12px}.student-exam .student-question-map:not(.is-open) :is(.nav-panel-title,.student-map-legend,.nav-grid,hr){display:none}}
+.student-unavailable-reason{margin-top:5px;color:var(--text-main);font-size:12px;line-height:1.5}
 .student-exam .timer-box.danger{background:#fff0ed;color:#a52b21}
 .student-exam .timer-box.danger .timer-time{color:inherit}
 .student-exam .opt-btn:focus-within{outline:3px solid var(--primary);outline-offset:2px}
