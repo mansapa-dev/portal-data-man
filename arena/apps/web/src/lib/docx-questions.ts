@@ -14,6 +14,47 @@ function packagePath(target:string){const parts=(target.startsWith('/')?target.s
 function base64(bytes:Uint8Array){let binary='';for(let index=0;index<bytes.length;index+=8192)binary+=String.fromCharCode(...bytes.subarray(index,index+8192));return btoa(binary);}
 function canonicalField(value:string){const key=value.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');const aliases:Record<string,string>={id_ujian:'exam_id',ujian_id:'exam_id',jenis_soal:'question_type',tipe_soal:'question_type',pertanyaan:'question_text',soal:'question_text',teks_soal:'question_text',kunci:'correct_answer',kunci_jawaban:'correct_answer',jawaban_benar:'correct_answer',bobot:'points',poin:'points'};return aliases[key]??key.replace(/^(?:opsi|pilihan)_([a-e])$/,'option_$1');}
 
+export type WordQuestionParagraph={html:string;plain:string;listFormat?:string;listLevel?:number};
+export function parseFreeformQuestionParagraphs(paragraphs:WordQuestionParagraph[]):unknown[][]{
+ const matrix:unknown[][]=[wordQuestionColumns];
+ let current:Record<string,string>|null=null;
+ let passage:string[]=[];
+ let activeOption='';
+ let optionIndex=0;
+ const append=(value:string,part:string)=>value?`${value}<br>${part}`:part;
+ const flush=()=>{if(current?.question_text?.trim())matrix.push(wordQuestionColumns.map(key=>current?.[key]??''));};
+ const addOption=(key:string,html:string)=>{if(!current)return;const field=`option_${key.toLowerCase()}`;current[field]=append(current[field]??'',html);activeOption=field;optionIndex=Math.max(optionIndex,key.toUpperCase().charCodeAt(0)-64);};
+ for(const paragraph of paragraphs){
+  const html=paragraph.html.trim(),plain=paragraph.plain.trim();
+  if(!html&&!plain)continue;
+  if(!current&&/^SOAL(?:\s+UNTUK)?\b/i.test(plain)&&plain.length<100)continue;
+  if(!current&&plain.length<100&&/^[A-Z0-9\s.,\-–]+$/.test(plain)&&/[A-Z]/.test(plain))continue;
+  const questionLabel=plain.match(/^(?:soal\s*)?(\d{1,3})[.)]\s*/i);
+  const optionLabel=plain.match(/^([A-Ea-e])[.)]\s*/);
+  const numberedQuestion=paragraph.listFormat==='decimal'&&(paragraph.listLevel??0)===0;
+  const numberedOption=['upperLetter','lowerLetter'].includes(paragraph.listFormat??'');
+  const keyLine=plain.match(/^(?:kunci(?:\s+jawaban)?|jawaban\s+benar)\s*[:=-]\s*([A-E](?:\s*[,;]\s*[A-E])*)\s*$/i);
+  if(keyLine&&current){current.correct_answer=keyLine[1].toUpperCase().replace(/\s*;\s*/g,',').replace(/\s+/g,'');activeOption='';continue;}
+  if(questionLabel||numberedQuestion){
+   flush();
+   const text=questionLabel?html.replace(/^(?:soal\s*)?\d{1,3}[.)]\s*/i,''):html;
+   current={question_type:'MULTIPLE_CHOICE',question_text:[...passage,text].filter(Boolean).join('<br>'),correct_answer:'',points:'1'};
+   passage=[];activeOption='';optionIndex=0;continue;
+  }
+  if(current&&(optionLabel||numberedOption)){
+   const fragments=[...html.matchAll(/(?:^|\s)([A-Ea-e])[.)]\s+/g)];
+   if(fragments.length>1){for(let index=0;index<fragments.length;index++){const fragment=fragments[index],start=(fragment.index??0)+fragment[0].length,end=fragments[index+1]?.index??html.length;addOption(fragment[1].toUpperCase(),html.slice(start,end).trim());}continue;}
+   const key=optionLabel?.[1].toUpperCase()??'ABCDE'[optionIndex];
+   if(key)addOption(key,optionLabel?html.replace(/^[A-Ea-e][.)]\s*/,''):html);
+   continue;
+  }
+  if(current){if(activeOption)current[activeOption]=append(current[activeOption]??'',html);else current.question_text=append(current.question_text??'',html);}
+  else passage.push(html);
+ }
+ flush();
+ return matrix;
+}
+
 export function parseWordQuestions(buffer:ArrayBuffer):unknown[][]{
  const files=unzipSync(new Uint8Array(buffer)),source=files['word/document.xml'];
  if(!source)throw new Error('File Word tidak memiliki word/document.xml. Simpan sebagai DOCX.');
@@ -22,6 +63,22 @@ export function parseWordQuestions(buffer:ArrayBuffer):unknown[][]{
  const relationships=new Map<string,string>();
  const relSource=files['word/_rels/document.xml.rels'];
  if(relSource){const relDoc=new DOMParser().parseFromString(strFromU8(relSource),'application/xml');for(const relation of Array.from(relDoc.getElementsByTagNameNS('*','Relationship'))){const id=relation.getAttribute('Id'),target=relation.getAttribute('Target');if(id&&target&&relation.getAttribute('TargetMode')!=='External')relationships.set(id,packagePath(target));}}
+ const listFormats=new Map<string,string>();
+ const numberingSource=files['word/numbering.xml'];
+ if(numberingSource){
+  const numbering=new DOMParser().parseFromString(strFromU8(numberingSource),'application/xml');
+  const abstracts=new Map<string,Map<string,string>>();
+  for(const item of Array.from(numbering.getElementsByTagNameNS(wordNs,'abstractNum'))){
+   const id=item.getAttributeNS(wordNs,'abstractNumId')??item.getAttribute('w:abstractNumId');if(!id)continue;
+   const levels=new Map<string,string>();
+   for(const level of Array.from(item.getElementsByTagNameNS(wordNs,'lvl'))){const index=level.getAttributeNS(wordNs,'ilvl')??level.getAttribute('w:ilvl')??'0';const format=level.getElementsByTagNameNS(wordNs,'numFmt')[0];const name=format?.getAttributeNS(wordNs,'val')??format?.getAttribute('w:val');if(name)levels.set(index,name);}
+   abstracts.set(id,levels);
+  }
+  for(const item of Array.from(numbering.getElementsByTagNameNS(wordNs,'num'))){
+   const id=item.getAttributeNS(wordNs,'numId')??item.getAttribute('w:numId');const abstract=item.getElementsByTagNameNS(wordNs,'abstractNumId')[0];const abstractId=abstract?.getAttributeNS(wordNs,'val')??abstract?.getAttribute('w:val');
+   if(id&&abstractId)for(const [level,format] of abstracts.get(abstractId)??[])listFormats.set(`${id}:${level}`,format);
+  }
+ }
  const image=(id:string|null)=>{if(!id)return '';const path=relationships.get(id);if(!path)return '';const data=files[path];if(!data)return '';const extension=path.split('.').pop()?.toLowerCase()??'',mime=imageTypes[extension];if(!mime)throw new Error(`Gambar Word ${extension||'tanpa format'} belum didukung. Gunakan PNG, JPEG, WebP, atau GIF.`);if(data.length>2*1024*1024)throw new Error('Gambar Word maksimal 2 MB per gambar.');return `<img src="data:${mime};base64,${base64(data)}" alt="Gambar dari Word">`;};
  const read=(element:Element):string=>{
   if(element.namespaceURI===mathNs&&element.localName==='oMath')return `<math xmlns="http://www.w3.org/1998/Math/MathML">${convertOmml(element)}</math>`;
@@ -32,7 +89,8 @@ export function parseWordQuestions(buffer:ArrayBuffer):unknown[][]{
   if(element.localName==='imagedata')return image(element.getAttributeNS(relNs,'id')??element.getAttribute('r:id'));
   if(element.namespaceURI===wordNs&&element.localName==='r'){
    const content=Array.from(element.children).filter(child=>child.localName!=='rPr').map(read).join('');
-   const alignment=children(element,'rPr')[0]?.getElementsByTagNameNS(wordNs,'vertAlign')[0]?.getAttributeNS(wordNs,'val');
+   const vertical=children(element,'rPr')[0]?.getElementsByTagNameNS(wordNs,'vertAlign')[0];
+   const alignment=vertical?.getAttributeNS(wordNs,'val')??vertical?.getAttribute('w:val');
    return alignment==='superscript'?`<sup>${content}</sup>`:alignment==='subscript'?`<sub>${content}</sub>`:content;
   }
   return Array.from(element.children).map(read).join('');
@@ -52,7 +110,18 @@ export function parseWordQuestions(buffer:ArrayBuffer):unknown[][]{
   for(const row of tableRows){const key=canonicalField((row[0]??'').replace(/<[^>]+>/g,''));if(!wordQuestionColumns.includes(key))continue;if((key==='exam_id'||key==='question_text')&&record.question_text){addRecord();record={};}record[key]=row.slice(1).join(' ').trim();}
   addRecord();
  }
- if(matrix.length===1)throw new Error('Soal belum ditemukan. Isi tabel template Word dengan pertanyaan, opsi, dan kunci jawaban.');
+ if(matrix.length===1){
+  const body=document.getElementsByTagNameNS(wordNs,'body')[0];
+  const paragraphs:WordQuestionParagraph[]=body?children(body,'p').map(paragraph=>{
+   const numPr=children(paragraph,'pPr')[0]?.getElementsByTagNameNS(wordNs,'numPr')[0];
+   const idElement=numPr?.getElementsByTagNameNS(wordNs,'numId')[0];const levelElement=numPr?.getElementsByTagNameNS(wordNs,'ilvl')[0];
+   const id=idElement?.getAttributeNS(wordNs,'val')??idElement?.getAttribute('w:val');
+   const level=Number(levelElement?.getAttributeNS(wordNs,'val')??levelElement?.getAttribute('w:val')??0);
+   return {html:read(paragraph),plain:paragraph.textContent??'',listFormat:id?listFormats.get(`${id}:${level}`):undefined,listLevel:level};
+  }):[];
+  matrix.push(...parseFreeformQuestionParagraphs(paragraphs).slice(1));
+ }
+ if(matrix.length===1)throw new Error('Soal belum ditemukan. Gunakan tabel template atau dokumen Word berisi soal bernomor 1., 2., dst. dan opsi A.–E.');
  if(matrix.length>1001)throw new Error('Maksimal 1.000 soal per file.');
  return matrix;
 }
