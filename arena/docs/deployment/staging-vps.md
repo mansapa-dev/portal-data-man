@@ -158,6 +158,7 @@ DB_POOL_SIZE=8
 DB_QUEUE_LIMIT=50
 
 AUTH_TOKEN_SECRET=<acak-minimal-32-karakter>
+PIN_ENCRYPTION_KEY=<acak-minimal-32-karakter-berbeda-dan-dipertahankan>
 SETUP_TOKEN=<acak-satu-kali-dan-simpan-aman>
 ATTEMPT_FINALIZER_ENABLED=true
 ATTEMPT_FINALIZER_INTERVAL_MS=30000
@@ -333,3 +334,33 @@ Lakukan sync Portal Data pertama hanya setelah credential staging diverifikasi, 
 9. [ ] Smoke test, sync awal terkontrol, backup, dan restore staging lulus.
 
 **Status saat dokumen dibuat:** belum ada koneksi atau perubahan pada VPS, DNS, MySQL server, Nginx, TLS, Portal Data client, maupun deployment.
+
+
+
+
+CREATE DATABASE arena_staging
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_0900_ai_ci;
+
+CREATE USER 'arena_app'@'localhost'
+  IDENTIFIED BY 'GANTI_PASSWORD_APP_RANDOM';
+
+CREATE USER 'arena_migrator'@'localhost'
+  IDENTIFIED BY 'GANTI_PASSWORD_MIGRATOR_RANDOM';
+
+GRANT SELECT, INSERT, UPDATE, DELETE
+  ON arena_staging.* TO 'arena_app'@'localhost';
+
+GRANT SELECT, INSERT, UPDATE, DELETE,
+  CREATE, ALTER, INDEX, DROP, REFERENCES
+  ON arena_staging.* TO 'arena_migrator'@'localhost';
+
+SHOW DATABASES LIKE 'arena_staging';
+
+SHOW GRANTS FOR 'arena_app'@'localhost';
+
+SHOW GRANTS FOR 'arena_migrator'@'localhost';
+
+
+
+PortaldataMan2026Staging#

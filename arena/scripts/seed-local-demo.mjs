@@ -1,15 +1,17 @@
 import mysql from 'mysql2/promise';
 import { hash } from 'bcryptjs';
+import { createCipheriv, createHash, randomBytes } from 'node:crypto';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL harus diatur lewat arena/.env');
 
 const pool = mysql.createPool({ uri: databaseUrl, connectionLimit: 2, timezone: 'Z' });
 const demo = {
-  admin: { username: 'admin.demo', password: 'ArenaAdmin!2026', name: 'Admin Demo Arena' },
+  admin: { username: 'admin.demo', password: 'nah n', name: 'Admin Demo Arena' },
   teacher: { username: 'guru.demo', password: 'ArenaGuru!2026', name: 'Guru Demo Arena' },
   student: { nisn: '0000000001', pin: '1234', name: 'Siswa Demo Arena', className: 'X Demo', grade: 'X' },
 };
+function encryptPin(pin){const secret=process.env.PIN_ENCRYPTION_KEY??process.env.AUTH_TOKEN_SECRET??'';const key=createHash('sha256').update(secret||'local-development-only').digest();const iv=randomBytes(12);const cipher=createCipheriv('aes-256-gcm',key,iv);const ciphertext=Buffer.concat([cipher.update(pin,'utf8'),cipher.final()]);return `v1:${Buffer.concat([iv,cipher.getAuthTag(),ciphertext]).toString('base64')}`;}
 
 async function getOrCreateStaff(connection, { username, password, name, role, teacherId = null }, encodedPassword) {
   await connection.execute(
@@ -38,10 +40,10 @@ try {
     const teacherUserId = await getOrCreateStaff(connection, { ...demo.teacher, role: 'TEACHER', teacherId }, await hash(demo.teacher.password, 10));
 
     await connection.execute(
-      `INSERT INTO students(portal_student_id,nisn,name_snapshot,class_snapshot,grade_snapshot,pin_hash,cbt_status,is_active)
-       VALUES('arena-local-demo-student',?,?,?,?,?,'ACTIVE',1)
-       ON DUPLICATE KEY UPDATE nisn=VALUES(nisn),name_snapshot=VALUES(name_snapshot),class_snapshot=VALUES(class_snapshot),grade_snapshot=VALUES(grade_snapshot),pin_hash=VALUES(pin_hash),cbt_status='ACTIVE',is_active=1`,
-      [demo.student.nisn, demo.student.name, demo.student.className, demo.student.grade, await hash(demo.student.pin, 10)],
+      `INSERT INTO students(portal_student_id,nisn,name_snapshot,class_snapshot,grade_snapshot,pin_hash,pin_encrypted,cbt_status,is_active)
+       VALUES('arena-local-demo-student',?,?,?,?,?,?,'ACTIVE',1)
+       ON DUPLICATE KEY UPDATE nisn=VALUES(nisn),name_snapshot=VALUES(name_snapshot),class_snapshot=VALUES(class_snapshot),grade_snapshot=VALUES(grade_snapshot),pin_hash=VALUES(pin_hash),pin_encrypted=VALUES(pin_encrypted),cbt_status='ACTIVE',is_active=1`,
+      [demo.student.nisn, demo.student.name, demo.student.className, demo.student.grade, await hash(demo.student.pin, 10), encryptPin(demo.student.pin)],
     );
 
     const [existingExams] = await connection.execute('SELECT id FROM exams WHERE public_id=? LIMIT 1', ['01JARENADEMO00000000000000']);

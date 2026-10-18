@@ -9,6 +9,7 @@ CREATE TABLE students (
   grade_snapshot VARCHAR(10) NULL,
   academic_year_snapshot VARCHAR(30) NULL,
   pin_hash VARCHAR(255) NULL,
+  pin_encrypted TEXT NULL,
   cbt_status ENUM('ACTIVE','INACTIVE','BLOCKED') NOT NULL DEFAULT 'ACTIVE',
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   last_synced_at DATETIME(3) NULL,

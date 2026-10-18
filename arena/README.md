@@ -17,7 +17,7 @@ Dokumen ini membandingkan fitur Arena dengan source dan dokumentasi CBT yang ada
 | Susulan dan remedial | Kandidat, persetujuan dan pembuatan jadwal lanjutan; soal dan assignment sumber disalin; cap nilai remedial dapat diatur | CBT memiliki alur sejenis; aturan sekolah wajib dicocokkan |
 | Bank soal | CRUD dan pratinjau; impor XLSX/XLS/ODS dan DOCX; ekspor XLSX; unggah gambar dan dukungan gambar/persamaan tertanam pada XLSX | CBT memiliki editor/impor spreadsheet. Format file nyata tetap perlu diuji bersama |
 | Hasil | Tabel hasil dan distribusi; ekspor XLSX; cetak laporan melalui browser dan opsi “Simpan sebagai PDF” | PDF tersedia sebagai alur cetak browser, bukan generator PDF server |
-| Kartu peserta | Penerbitan PIN batch dan kartu cetak/ekspor selama hasil penerbitan masih tersedia | CBT menyediakan kartu/PIN |
+| Kartu peserta | PIN tampil di kontrol siswa; PIN tersimpan terenkripsi untuk kartu cetak/ekspor admin | Format kartu Arena kini memuat nomor peserta, nama, kelas/tingkat, dan PIN seperti kartu CBT |
 | Bantuan peserta | Tiket bantuan siswa/tamu dan panel penanganan petugas, termasuk alur reset yang diaudit | Tiket bantuan tersedia di CBT |
 | Android peserta | Prototipe WebView Arena baru di `android-app/`; secure window dan pembatasan navigasi host | CBT memiliki prototipe Android sendiri. APK Arena belum dibangun atau diuji perangkat |
 | Percakapan staf/admin | **Dihapus dan tidak digunakan** | Fitur chat CBT sengaja tidak dimasukkan ke Arena sesuai keputusan produk |
@@ -32,7 +32,7 @@ Dokumen ini membandingkan fitur Arena dengan source dan dokumentasi CBT yang ada
 
 ## Keamanan dan sinkronisasi
 
-PIN tidak disimpan sebagai plaintext. Token, password, dan PIN tidak boleh ditulis ke log. Sinkronisasi Portal Data berjalan dari backend dengan OAuth client credentials, halaman diproses bertahap, dan jenis yang sama tidak boleh berjalan bersamaan. Arena hanya merekonsiliasi record yang tidak ditemukan setelah seluruh halaman sukses dan checksum Portal Data tidak berubah selama sinkronisasi. Jika endpoint revision gagal atau checksum berubah, proses gagal tanpa penonaktifan massal.
+PIN login disimpan sebagai bcrypt hash dan salinan untuk cetak ulang disimpan dengan enkripsi AES-256-GCM. PIN hanya dapat dibuka oleh admin melalui endpoint tanpa cache; aksesnya diaudit. Token, password, dan PIN tidak boleh ditulis ke log. Sinkronisasi Portal Data berjalan dari backend dengan OAuth client credentials, halaman diproses bertahap, dan jenis yang sama tidak boleh berjalan bersamaan. Arena hanya merekonsiliasi record yang tidak ditemukan setelah seluruh halaman sukses dan checksum Portal Data tidak berubah selama sinkronisasi. Jika endpoint revision gagal atau checksum berubah, proses gagal tanpa penonaktifan massal.
 
 Record siswa yang tidak lagi ditemukan dinonaktifkan untuk login/eligibility; guru, pegawai, kelas, tahun ajaran, atau semester ditandai tidak aktif sesuai hasil sinkronisasi. Riwayat ujian tidak dihapus oleh rekonsiliasi. Perubahan ini memerlukan migration aplikasi biasa untuk struktur chat lama, tetapi tidak membutuhkan perubahan skema untuk rekonsiliasi.
 
@@ -49,12 +49,13 @@ mysql -u root -p arena < database/migrations/003_exam_retake_candidates.sql
 mysql -u root -p arena < database/migrations/004_exam_lookup_indexes.sql
 mysql -u root -p arena < database/migrations/005_remove_staff_admin_communications.sql
 mysql -u root -p arena < database/migrations/006_exam_integrity_signals.sql
+mysql -u root -p arena < database/migrations/007_student_pin_ciphertext.sql
 npm run dev
 ```
 
 Migrasi `005` menghapus tabel percakapan staf/admin Arena yang lama beserta isinya. Tiket bantuan tidak dihapus. Untuk demo lokal terisolasi, gunakan `npm run local:setup` lalu `npm run dev`; database demo hanya terikat ke localhost port 3308 dan tidak memakai database CBT/Portal Data.
 
-Jika database demo sudah ada, jalankan `npm run local:setup` untuk menerapkan migrasi integritas `006` yang idempotent sebelum menjalankan ulang aplikasi. Hindari menjalankan ulang `npm run demo:migrate` pada database berisi data karena perintah tersebut ditujukan untuk database baru.
+Jika database demo sudah ada, jalankan `npm run local:setup` untuk menerapkan migrasi `006` dan `007` yang idempotent sebelum menjalankan ulang aplikasi. Hindari menjalankan ulang `npm run demo:migrate` pada database berisi data karena perintah tersebut ditujukan untuk database baru. Atur `PIN_ENCRYPTION_KEY` sebagai secret acak yang berbeda dari `AUTH_TOKEN_SECRET`, dan simpan backup key dengan aman; PIN kartu tidak dapat dibuka jika key hilang atau diganti.
 
 ### Batas deteksi dan prosedur pengawasan
 

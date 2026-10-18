@@ -1,4 +1,4 @@
-import { randomBytes, randomInt } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomInt } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { RowDataPacket } from 'mysql2/promise';
 import { z } from 'zod';
@@ -10,6 +10,9 @@ import { ScoringService } from '../services/scoring.js';
 import { resetTerminatedAttempt } from '../services/attempt-reset.js';
 
 const positive = z.coerce.number().int().positive();
+function pinEncryptionKey(){const secret=process.env.PIN_ENCRYPTION_KEY??process.env.AUTH_TOKEN_SECRET??'';if(secret.length<32)throw Object.assign(new Error('PIN_ENCRYPTION_KEY wajib berisi minimal 32 karakter untuk menampilkan PIN tersimpan'),{statusCode:503});return createHash('sha256').update(secret).digest();}
+function encryptPin(pin:string){const iv=randomBytes(12),cipher=createCipheriv('aes-256-gcm',pinEncryptionKey(),iv),ciphertext=Buffer.concat([cipher.update(pin,'utf8'),cipher.final()]),tag=cipher.getAuthTag();return `v1:${Buffer.concat([iv,tag,ciphertext]).toString('base64')}`;}
+function decryptPin(value:string|null){if(!value)return null;try{const [version,encoded]=value.split(':');if(version!=='v1'||!encoded)return null;const payload=Buffer.from(encoded,'base64');if(payload.length<29)return null;const decipher=createDecipheriv('aes-256-gcm',pinEncryptionKey(),payload.subarray(0,12));decipher.setAuthTag(payload.subarray(12,28));return Buffer.concat([decipher.update(payload.subarray(28)),decipher.final()]).toString('utf8');}catch{return null;}}
 async function mapLimit<T,R>(items:T[],limit:number,mapper:(item:T,index:number)=>Promise<R>):Promise<R[]>{const output=new Array<R>(items.length);let next=0;await Promise.all(Array.from({length:Math.min(limit,items.length)},async()=>{while(true){const index=next++;if(index>=items.length)return;output[index]=await mapper(items[index]!,index);}}));return output;}
 const questionRow = z.object({ exam_id: positive, question_type: z.enum(['MULTIPLE_CHOICE','MULTIPLE_RESPONSE','SHORT_ANSWER']).default('MULTIPLE_CHOICE'), question_text: z.string().trim().min(1).max(20000), option_a: z.string().max(20000).nullable().optional(), option_b: z.string().max(20000).nullable().optional(), option_c: z.string().max(20000).nullable().optional(), option_d: z.string().max(20000).nullable().optional(), option_e: z.string().max(20000).nullable().optional(), correct_answer: z.string().trim().min(1).max(500), points: z.coerce.number().positive().max(1000).default(1) }).strict();
 const mathTags=['math','mrow','mi','mn','mo','mtext','mspace','mfrac','msqrt','mroot','msub','msup','msubsup','munder','mover','munderover','mmultiscripts','mprescripts','none','mtable','mtr','mtd','menclose','mpadded','mphantom'];
@@ -42,6 +45,14 @@ export async function adminRoutes(app: FastifyInstance) {
     const [counts] = await pool.query<RowDataPacket[]>(`SELECT COUNT(*) total FROM students s WHERE ${where.join(' AND ')}`, params);
     return { items: rows, page: query.page, limit: query.limit, total: Number(counts[0]?.total ?? 0) };
   });
+  app.post('/api/admin/students/pins',async(request,reply)=>{
+    const claims=admin(request,true);pinEncryptionKey();const body=z.object({student_ids:z.array(positive).min(1).max(50)}).strict().parse(request.body);const ids=[...new Set(body.student_ids)];const[rows]=await requirePool().query<RowDataPacket[]>(`SELECT id,pin_encrypted FROM students WHERE id IN (${ids.map(()=>'?').join(',')})`,ids);const pins=rows.map(row=>({student_id:Number(row.id),pin:decryptPin(typeof row.pin_encrypted==='string'?row.pin_encrypted:null)}));await audit(requirePool(),claims.sub,claims.role,'STUDENT_PINS_VIEWED','Student','page',{count:pins.filter(row=>row.pin!==null).length});reply.header('Cache-Control','no-store, max-age=0, private');reply.header('Pragma','no-cache');return{items:pins};
+  });
+  app.get('/api/admin/student-cards',async(request,reply)=>{
+    const claims=admin(request);pinEncryptionKey();const query=z.object({grade:z.string().max(10).optional(),class_id:z.string().max(64).optional(),limit:z.coerce.number().int().min(1).max(5000).default(1000)}).strict().parse(request.query);const where=['s.is_active=1','s.cbt_status=\'ACTIVE\''];const params:(string|number)[]=[];if(query.grade){where.push('s.grade_snapshot=?');params.push(query.grade);}if(query.class_id){where.push('s.portal_class_id=?');params.push(query.class_id);}const[rows]=await requirePool().query<RowDataPacket[]>(`SELECT s.id,s.nisn,s.name_snapshot,s.class_snapshot,s.grade_snapshot,s.academic_year_snapshot,s.pin_encrypted FROM students s WHERE ${where.join(' AND ')} ORDER BY s.class_snapshot,s.name_snapshot,s.id LIMIT ?`,[...params,query.limit]);
+    const items=rows.flatMap(row=>{const pin=decryptPin(typeof row.pin_encrypted==='string'?row.pin_encrypted:null);return pin?[{id:Number(row.id),nisn:String(row.nisn),name_snapshot:String(row.name_snapshot),class_snapshot:row.class_snapshot===null?null:String(row.class_snapshot),grade_snapshot:row.grade_snapshot===null?null:String(row.grade_snapshot),academic_year_snapshot:row.academic_year_snapshot===null?null:String(row.academic_year_snapshot),pin}]:[];});
+    await audit(requirePool(),claims.sub,claims.role,'STUDENT_CARDS_VIEWED','Student','filtered',{count:items.length,grade:query.grade??null,class_id:query.class_id??null});reply.header('Cache-Control','no-store, max-age=0, private');reply.header('Pragma','no-cache');reply.header('X-Content-Type-Options','nosniff');return{items,total:items.length,limit:query.limit};
+  });
   app.post('/api/admin/students/pin-batch', async (request, reply) => {
     const claims=admin(request,true);
     const body=z.object({student_ids:z.array(positive).min(1).max(25)}).strict().parse(request.body);
@@ -51,20 +62,21 @@ export async function adminRoutes(app: FastifyInstance) {
     const[students]=await pool.query<RowDataPacket[]>(`SELECT id,nisn,name_snapshot FROM students WHERE id IN (${placeholders}) AND is_active=1 AND cbt_status='ACTIVE' ORDER BY id`,ids);
     if(students.length!==ids.length)throw Object.assign(new Error('Sebagian siswa tidak ditemukan atau tidak aktif; tidak ada PIN yang diubah'),{statusCode:409});
     const{hash}=await import('bcryptjs');
-    const issued=await Promise.all(students.map(async(student)=>({student_id:Number(student.id),nisn:String(student.nisn),name:String(student.name_snapshot),pin:String(randomInt(100000,1000000)),pin_hash:''})));
-    const prepared=await mapLimit(issued,4,async(item)=>({...item,pin_hash:await hash(item.pin,10)}));
+    const issued=await Promise.all(students.map(async(student)=>({student_id:Number(student.id),nisn:String(student.nisn),name:String(student.name_snapshot),pin:String(randomInt(1000,10000)),pin_hash:'',pin_encrypted:''})));
+    const prepared=await mapLimit(issued,4,async(item)=>({...item,pin_hash:await hash(item.pin,10),pin_encrypted:encryptPin(item.pin)}));
     const connection=await pool.getConnection();
     try{
       await connection.beginTransaction();
       const[locked]=await connection.query<RowDataPacket[]>(`SELECT id FROM students WHERE id IN (${placeholders}) AND is_active=1 AND cbt_status='ACTIVE' ORDER BY id FOR UPDATE`,ids);
       if(locked.length!==ids.length)throw Object.assign(new Error('Sebagian siswa berubah status; tidak ada PIN yang diubah'),{statusCode:409});
       const pinCase=prepared.map(()=> 'WHEN ? THEN ?').join(' ');
-      await connection.execute(`UPDATE students SET pin_hash=CASE id ${pinCase} ELSE pin_hash END WHERE id IN (${placeholders})`,[...prepared.flatMap((item)=>[item.student_id,item.pin_hash]),...ids]);
+      const pinCipherCase=prepared.map(()=> 'WHEN ? THEN ?').join(' ');
+      await connection.execute(`UPDATE students SET pin_hash=CASE id ${pinCase} ELSE pin_hash END,pin_encrypted=CASE id ${pinCipherCase} ELSE pin_encrypted END WHERE id IN (${placeholders})`,[...prepared.flatMap((item)=>[item.student_id,item.pin_hash]),...prepared.flatMap((item)=>[item.student_id,item.pin_encrypted]),...ids]);
       await connection.execute('INSERT INTO audit_logs(actor_user_id,actor_role,action,entity_type,entity_id,after_data) VALUES(?,?,\'STUDENT_PINS_ROTATED\',\'Student\',\'batch\',?)',[claims.sub,claims.role,JSON.stringify({count:ids.length})]);
       await connection.commit();
     }catch(error){try{await connection.rollback();}catch{}throw error;}finally{connection.release();}
     reply.header('Cache-Control','no-store, max-age=0');reply.header('Pragma','no-cache');
-    return{count:prepared.length,credentials:prepared.map(({pin_hash,...credential})=>credential)};
+    return{count:prepared.length,credentials:prepared.map(({pin_hash,pin_encrypted,...credential})=>credential)};
   });
   app.get('/api/admin/users', async (request) => { admin(request); const [rows] = await requirePool().query<RowDataPacket[]>('SELECT u.id,u.teacher_id,u.employee_id,u.username,u.name,u.role,u.status,t.nip teacher_nip,e.nip employee_nip FROM users u LEFT JOIN teachers t ON t.id=u.teacher_id LEFT JOIN employees e ON e.id=u.employee_id ORDER BY u.name LIMIT 500'); return rows; });
   app.get('/api/admin/personnel', async (request) => { admin(request); const pool=requirePool();const[teachers]=await pool.query<RowDataPacket[]>('SELECT t.id,t.nip,t.name_snapshot name,t.status,t.proctor_eligible,u.id account_id,u.username,u.status account_status FROM teachers t LEFT JOIN users u ON u.teacher_id=t.id ORDER BY t.name_snapshot LIMIT 500');const[employees]=await pool.query<RowDataPacket[]>('SELECT e.id,e.nip,e.name_snapshot name,e.status,NULL proctor_eligible,u.id account_id,u.username,u.status account_status FROM employees e LEFT JOIN users u ON u.employee_id=e.id ORDER BY e.name_snapshot LIMIT 500');return{teachers,employees}; });
