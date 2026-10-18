@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { assertCsrf, claimsFromRequest } from '../lib/auth.js';
+import { assertCsrf, claimsFromRequest, readToken } from '../lib/auth.js';
 import { requirePool } from '../lib/db.js';
 import { ScoringService } from '../services/scoring.js';
 import { StudentExamService } from '../services/student-exam.js';
@@ -8,7 +8,7 @@ import type { RowDataPacket } from 'mysql2/promise';
 
 const examId = z.coerce.number().int().positive();
 const answerSchema = z.object({ answer: z.string().max(500).nullable(), is_flagged: z.boolean().default(false), attempt_id: z.string().length(26), base_revision: z.number().int().nonnegative(), mutation_id: z.string().regex(/^[A-Za-z0-9_-]{16,100}$/) }).strict();
-const violationSchema = z.object({ event_key: z.string().min(8).max(100).regex(/^[A-Za-z0-9_-]+$/), type: z.enum(['TAB_HIDDEN','WINDOW_BLUR','FULLSCREEN_EXIT','SCREENSHOT_ATTEMPT','COPY_ATTEMPT','SPLIT_SCREEN_SUSPECTED','OTHER']) }).strict();
+const violationSchema = z.object({ event_key: z.string().min(8).max(100).regex(/^[A-Za-z0-9_-]+$/), type: z.enum(['TAB_HIDDEN','WINDOW_BLUR','FULLSCREEN_EXIT','SCREENSHOT_ATTEMPT','COPY_ATTEMPT','PASTE_ATTEMPT','CUT_ATTEMPT','CONTEXT_MENU_ATTEMPT','DEVTOOLS_SHORTCUT','BROWSER_SHORTCUT','SPLIT_SCREEN_SUSPECTED','OTHER']), client_occurred_at: z.string().datetime({ offset: true }).optional() }).strict();
 
 export async function studentExamRoutes(app: FastifyInstance) {
   const pool = requirePool();
@@ -32,10 +32,16 @@ export async function studentExamRoutes(app: FastifyInstance) {
     const claims = studentClaims(request); assertCsrf(request, claims);
     return exams.saveAnswer(claims, examId.parse(request.params.id), examId.parse(request.params.questionId), answerSchema.parse(request.body));
   });
-  app.post<{ Params: { id: string } }>('/api/student/exams/:id/violations', async (request) => {
+  app.post<{ Params: { id: string } }>('/api/student/exams/:id/violations', { config: { rateLimit: { max: 20, timeWindow: '1 minute', keyGenerator: (request) => {
+    const bearer=request.headers.authorization?.startsWith('Bearer ')?request.headers.authorization.slice(7):undefined;
+    const cookie=request.headers.cookie?.split(';').map((part)=>part.trim()).find((part)=>part.startsWith('arena_student_session='))?.slice('arena_student_session='.length);
+    const claims=readToken(bearer??cookie??'');
+    const routeId=(request.params as {id:string}).id;
+    return claims?.role==='STUDENT'?`violation:student:${claims.sub}:exam:${routeId}`:`violation:ip:${request.ip}`;
+  } } } }, async (request) => {
     const claims = studentClaims(request); assertCsrf(request, claims);
     const body = violationSchema.parse(request.body);
-    return scoring.recordViolation(claims.sub, examId.parse(request.params.id), body.event_key, body.type);
+    return scoring.recordViolation(claims.sub, examId.parse(request.params.id), body.event_key, body.type, { ip: request.ip, userAgent: request.headers['user-agent'] ?? '', clientOccurredAt: body.client_occurred_at ?? null });
   });
   app.post<{ Params: { id: string } }>('/api/student/exams/:id/submit', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request) => {
     const claims = studentClaims(request); assertCsrf(request, claims);

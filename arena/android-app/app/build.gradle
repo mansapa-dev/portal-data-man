@@ -1,0 +1,21 @@
+plugins { id 'com.android.application' }
+
+def arenaBaseUrl = providers.gradleProperty('ARENA_BASE_URL').orNull
+if (arenaBaseUrl == null || !arenaBaseUrl.startsWith('https://')) {
+    throw new GradleException('Set ARENA_BASE_URL to the HTTPS origin used by the Arena deployment.')
+}
+
+android {
+    namespace 'id.man1palembang.arena'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'id.man1palembang.arena'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '1.0.0'
+        buildConfigField 'String', 'ARENA_BASE_URL', '"' + arenaBaseUrl.replace('\\', '\\\\').replace('"', '\\"') + '"'
+    }
+    buildFeatures { buildConfig true }
+}

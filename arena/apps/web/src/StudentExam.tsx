@@ -6,19 +6,59 @@ export type ExamAttempt={attempt_id:string;exam:{id:number;nama_ujian:string};ex
 export type ExamResult={status?:string;nilai?:number|string|null;benar?:number|null;salah?:number|null;kosong?:number|null;jumlah_soal?:number|null;is_remedial?:boolean;score_cap?:number|null;follow_up_type?:string|null};
 
 export function StudentExam({attempt,studentName,answers,flags,busy,saveState='saved',message,change,toggleFlag,retrySave,submit,onTerminated,onHelp,children}:{attempt:ExamAttempt;studentName:string;answers:Record<number,string>;flags:Record<number,boolean>;busy:boolean;saveState?:'saved'|'saving'|'error';message?:string;change:(question:ExamQuestion,value:string)=>void;toggleFlag:(question:ExamQuestion)=>void;retrySave:()=>Promise<void>;submit:(finalizeOnly?:boolean)=>Promise<void>;onTerminated:(result:ExamResult|null)=>void;onHelp:()=>void;children?:React.ReactNode}){
- const [remaining,setRemaining]=useState(()=>Math.max(0,Math.ceil((Date.parse(attempt.expires_at)-Date.now()-(attempt.server_time?Date.parse(attempt.server_time)-Date.now():0))/1000))),[warning,setWarning]=useState(''),[current,setCurrent]=useState(0),[submitOpen,setSubmitOpen]=useState(false),[expiryFailed,setExpiryFailed]=useState(false),[mapOpen,setMapOpen]=useState(false);const lastEvent=useRef<Record<string,number>>({}),submitting=useRef(false),fullscreenRequested=useRef(false),submitRef=useRef(submit);
+ const [remaining,setRemaining]=useState(()=>Math.max(0,Math.ceil((Date.parse(attempt.expires_at)-Date.now()-(attempt.server_time?Date.parse(attempt.server_time)-Date.now():0))/1000))),[warning,setWarning]=useState(''),[current,setCurrent]=useState(0),[submitOpen,setSubmitOpen]=useState(false),[expiryFailed,setExpiryFailed]=useState(false),[mapOpen,setMapOpen]=useState(false);const lastEvent=useRef<Record<string,number>>({}),submitting=useRef(false),fullscreenRequested=useRef(false),submitRef=useRef(submit),terminationRef=useRef(onTerminated);
  const submitCancelButton=useRef<HTMLButtonElement>(null),submitTrigger=useRef<HTMLButtonElement|null>(null);
  submitRef.current=submit;
+ terminationRef.current=onTerminated;
  useEffect(()=>{if(!submitOpen)return;submitCancelButton.current?.focus();const onKeyDown=(event:KeyboardEvent)=>{if(event.key==='Escape'&&!busy)setSubmitOpen(false);if(event.key==='Tab'){const buttons=submitCancelButton.current?.closest('.student-submit-dialog')?.querySelectorAll<HTMLButtonElement>('button:not([disabled])');if(!buttons?.length)return;const first=buttons[0],last=buttons[buttons.length-1];if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}}};document.addEventListener('keydown',onKeyDown);return()=>{document.removeEventListener('keydown',onKeyDown);submitTrigger.current?.focus();};},[submitOpen,busy]);
  const offset=useRef(attempt.server_time?Date.parse(attempt.server_time)-Date.now():0);
  useEffect(()=>{offset.current=attempt.server_time?Date.parse(attempt.server_time)-Date.now():0;submitting.current=false;setExpiryFailed(false);let expiryStarted=false;const tick=()=>{const seconds=Math.max(0,Math.ceil((Date.parse(attempt.expires_at)-Date.now()-offset.current)/1000));setRemaining(seconds);if(seconds===0&&!expiryStarted&&!submitting.current){expiryStarted=true;submitting.current=true;setSubmitOpen(false);void submitRef.current(true).catch(()=>{submitting.current=false;setExpiryFailed(true);setWarning('Waktu habis. Hasil dihitung dari jawaban yang berhasil tersimpan.');});}};tick();const timer=window.setInterval(tick,1000);return()=>clearInterval(timer);},[attempt.attempt_id]);
- useEffect(()=>{let active=true;const record=(type:string)=>{if(busy||submitting.current)return;const now=Date.now();if(now-(lastEvent.current[type]??0)<5000)return;lastEvent.current[type]=now;void api<{count:number;terminated:boolean;hasil?:ExamResult}>(`/api/student/exams/${attempt.exam.id}/violations`,{method:'POST',body:{event_key:mutationId(),type}}).then(result=>{if(!active)return;if(result.terminated){submitting.current=true;onTerminated({...result.hasil,status:'TERMINATED'});}else setWarning(`Pelanggaran tercatat (${result.count}/3). Tetap di halaman ujian.`);}).catch(error=>{if(active)setWarning(`Pelanggaran belum tercatat: ${(error as Error).message}`);});};
- const visibility=()=>{if(document.hidden)record('TAB_HIDDEN');};
- const copy=(event:ClipboardEvent)=>{event.preventDefault();record('COPY_ATTEMPT');};
- const keydown=(event:KeyboardEvent)=>{const key=event.key.toLowerCase();const platform=navigator.platform.toLowerCase();const screenshot=event.key==='PrintScreen'||(platform.includes('win')&&event.metaKey&&event.shiftKey&&key==='s')||(platform.includes('mac')&&event.metaKey&&event.shiftKey&&['3','4','5'].includes(key));if(!event.repeat&&screenshot){event.preventDefault();record('SCREENSHOT_ATTEMPT');}};
- const fullscreen=()=>{if(fullscreenRequested.current&&!document.fullscreenElement)record('FULLSCREEN_EXIT');};
- let viewportTimer=0,constrained=false;const viewport=()=>{clearTimeout(viewportTimer);viewportTimer=window.setTimeout(()=>{if(document.hidden||navigator.maxTouchPoints<1||document.activeElement?.matches('input,textarea,select')||Math.min(screen.width,screen.height)>600||!screen.width||!screen.height)return;const current=window.innerWidth/screen.width<0.72||window.innerHeight/screen.height<0.58;if(current&&!constrained)record('SPLIT_SCREEN_SUSPECTED');constrained=current;},1500);};
- document.addEventListener('visibilitychange',visibility);document.addEventListener('copy',copy,true);document.addEventListener('keydown',keydown,true);document.addEventListener('fullscreenchange',fullscreen);window.addEventListener('resize',viewport);viewport();return()=>{active=false;document.removeEventListener('visibilitychange',visibility);document.removeEventListener('copy',copy,true);document.removeEventListener('keydown',keydown,true);document.removeEventListener('fullscreenchange',fullscreen);window.removeEventListener('resize',viewport);clearTimeout(viewportTimer);};},[attempt.attempt_id,busy]);
+ useEffect(()=>{
+  let active=true,constrained=false,viewportTimer=0;
+  const record=(type:'TAB_HIDDEN'|'FULLSCREEN_EXIT'|'SCREENSHOT_ATTEMPT'|'COPY_ATTEMPT'|'PASTE_ATTEMPT'|'CUT_ATTEMPT'|'CONTEXT_MENU_ATTEMPT'|'DEVTOOLS_SHORTCUT'|'BROWSER_SHORTCUT'|'SPLIT_SCREEN_SUSPECTED')=>{
+   if(submitting.current)return;
+   const now=Date.now();if(now-(lastEvent.current[type]??0)<5000)return;lastEvent.current[type]=now;
+   void api<{count:number;terminated:boolean;hasil?:ExamResult}>(`/api/student/exams/${attempt.exam.id}/violations`,{method:'POST',body:{event_key:mutationId(),type,client_occurred_at:new Date().toISOString()}}).then(result=>{
+    if(!active)return;
+    if(result.terminated){submitting.current=true;terminationRef.current({...result.hasil,status:'TERMINATED'});}
+    else if(['PASTE_ATTEMPT','CUT_ATTEMPT','CONTEXT_MENU_ATTEMPT','DEVTOOLS_SHORTCUT','BROWSER_SHORTCUT','SPLIT_SCREEN_SUSPECTED'].includes(type))setWarning(`Sinyal dicatat untuk ditinjau pengawas; hitungan pelanggaran otomatis tetap ${result.count}/3.`);
+    else setWarning(`Pelanggaran tercatat (${result.count}/3). Tetap di halaman ujian dan ikuti arahan pengawas.`);
+   }).catch(error=>{if(active)setWarning(`Sinyal belum tercatat: ${(error as Error).message}`);});
+  };
+  const visibility=()=>{if(document.hidden)record('TAB_HIDDEN');};
+  const clipboard=(type:'COPY_ATTEMPT'|'PASTE_ATTEMPT'|'CUT_ATTEMPT')=>(event:ClipboardEvent)=>{event.preventDefault();record(type);};
+  const contextMenu=(event:MouseEvent)=>{event.preventDefault();record('CONTEXT_MENU_ATTEMPT');};
+  const keydown=(event:KeyboardEvent)=>{
+   if(event.repeat)return;
+   const key=event.key.toLowerCase(),platform=navigator.platform.toLowerCase();
+   const screenshot=event.key==='PrintScreen'||event.code==='PrintScreen'||(platform.includes('win')&&event.metaKey&&event.shiftKey&&key==='s')||(platform.includes('mac')&&event.metaKey&&event.shiftKey&&['3','4','5'].includes(key));
+   if(screenshot){event.preventDefault();record('SCREENSHOT_ATTEMPT');return;}
+   const modifier=event.ctrlKey||event.metaKey;
+   if((modifier&&event.shiftKey&&['i','j','c'].includes(key))||key==='f12'){
+    event.preventDefault();record('DEVTOOLS_SHORTCUT');return;
+   }
+   if(modifier&&key==='c'){event.preventDefault();record('COPY_ATTEMPT');}
+   else if(modifier&&key==='x'){event.preventDefault();record('CUT_ATTEMPT');}
+   else if(modifier&&key==='v'){event.preventDefault();record('PASTE_ATTEMPT');}
+   else if(modifier&&['p','s','u'].includes(key)){event.preventDefault();record('BROWSER_SHORTCUT');}
+  };
+  const copy=clipboard('COPY_ATTEMPT'),paste=clipboard('PASTE_ATTEMPT'),cut=clipboard('CUT_ATTEMPT');
+  const fullscreen=()=>{if(fullscreenRequested.current&&!document.fullscreenElement)record('FULLSCREEN_EXIT');};
+  const viewport=()=>{
+   window.clearTimeout(viewportTimer);
+   viewportTimer=window.setTimeout(()=>{
+    const focused=typeof document.hasFocus!=='function'||document.hasFocus();
+    const editable=document.activeElement?.matches('input,textarea,select,[contenteditable="true"]');
+    const scale=window.visualViewport?.scale??1;
+    if(document.hidden||!focused||navigator.maxTouchPoints<1||editable||Math.abs(scale-1)>0.05||Math.min(screen.width,screen.height)>600||!screen.width||!screen.height){constrained=false;return;}
+    const next=window.innerWidth/screen.width<0.72||window.innerHeight/screen.height<0.58;
+    if(next&&!constrained)record('SPLIT_SCREEN_SUSPECTED');constrained=next;
+   },1500);
+  };
+  const orientation=()=>{constrained=false;window.clearTimeout(viewportTimer);viewportTimer=window.setTimeout(viewport,1800);};
+  document.addEventListener('visibilitychange',visibility);document.addEventListener('copy',copy,true);document.addEventListener('paste',paste,true);document.addEventListener('cut',cut,true);document.addEventListener('contextmenu',contextMenu,true);document.addEventListener('keydown',keydown,true);document.addEventListener('fullscreenchange',fullscreen);window.addEventListener('resize',viewport);window.addEventListener('orientationchange',orientation);viewport();
+  return()=>{active=false;document.removeEventListener('visibilitychange',visibility);document.removeEventListener('copy',copy,true);document.removeEventListener('paste',paste,true);document.removeEventListener('cut',cut,true);document.removeEventListener('contextmenu',contextMenu,true);document.removeEventListener('keydown',keydown,true);document.removeEventListener('fullscreenchange',fullscreen);window.removeEventListener('resize',viewport);window.removeEventListener('orientationchange',orientation);window.clearTimeout(viewportTimer);};
+ },[attempt.attempt_id]);
   const question=attempt.soal[current];const minutes=Math.floor(remaining/60),seconds=remaining%60;
   useEffect(()=>{const engine=(window as unknown as {MathJax?:{typesetPromise?:()=>Promise<void>}}).MathJax;void engine?.typesetPromise?.();},[question?.id]);
  const answered=attempt.soal.filter(item=>Boolean(answers[item.id]?.trim())).length;

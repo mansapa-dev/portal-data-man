@@ -1,5 +1,8 @@
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 
+const violationTypes = new Set(['TAB_HIDDEN','WINDOW_BLUR','FULLSCREEN_EXIT','SCREENSHOT_ATTEMPT','COPY_ATTEMPT','PASTE_ATTEMPT','CUT_ATTEMPT','CONTEXT_MENU_ATTEMPT','DEVTOOLS_SHORTCUT','BROWSER_SHORTCUT','SPLIT_SCREEN_SUSPECTED','OTHER']);
+const thresholdTypes = new Set(['TAB_HIDDEN','FULLSCREEN_EXIT','SCREENSHOT_ATTEMPT','COPY_ATTEMPT']);
+
 function normalize(text: string) { return text.trim().replace(/\s+/gu, ' ').toLocaleLowerCase('id-ID'); }
 function fraction(type: string, key: string, answer: string, optionCount: number) {
   if (type === 'SHORT_ANSWER') {
@@ -97,7 +100,7 @@ export class ScoringService {
     }) };
   }
 
-  async recordViolation(studentId: number, examId: number, eventKey: string, type: string) {
+  async recordViolation(studentId: number, examId: number, eventKey: string, type: string, metadata: { ip?: string; userAgent?: string; clientOccurredAt?: string | null } = {}) {
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
@@ -105,12 +108,15 @@ export class ScoringService {
       const attempt = rows[0];
       if (!attempt) throw Object.assign(new Error('Sesi ujian tidak ditemukan'), { statusCode: 404 });
       if (attempt.status !== 'IN_PROGRESS') { await connection.commit(); return { recorded: false, count: Number(attempt.violation_count), terminated: attempt.status === 'TERMINATED' }; }
-      const [result] = await connection.execute('INSERT IGNORE INTO violations(attempt_id,event_key,type,occurred_at) VALUES(?,?,?,UTC_TIMESTAMP(3))', [attempt.id, eventKey, type]);
+      const recordedType = violationTypes.has(type) ? type : 'OTHER';
+      const [result] = await connection.execute('INSERT IGNORE INTO violations(attempt_id,event_key,type,occurred_at,client_occurred_at,ip_address,user_agent) VALUES(?,?,?,UTC_TIMESTAMP(3),?,?,?)', [attempt.id, eventKey, recordedType, metadata.clientOccurredAt ? new Date(metadata.clientOccurredAt) : null, (metadata.ip ?? '').slice(0,45) || null, (metadata.userAgent ?? '').slice(0,500) || null]);
       const inserted = (result as { affectedRows: number }).affectedRows > 0;
-      if (inserted) await connection.execute('UPDATE exam_attempts SET violation_count=LEAST(255,violation_count+1),status=IF(violation_count+1>=3,\'TERMINATED\',status) WHERE id=?', [attempt.id]);
+      const counted = inserted && thresholdTypes.has(recordedType);
+      if (counted) await connection.execute('UPDATE exam_attempts SET violation_count=LEAST(255,violation_count+1),status=IF(violation_count+1>=3,\'TERMINATED\',status) WHERE id=?', [attempt.id]);
       await connection.commit();
-      const terminated = inserted && Number(attempt.violation_count) + 1 >= 3;
-      const outcome: { recorded: boolean; count: number; terminated: boolean; hasil?: unknown } = { recorded: inserted, count: Number(attempt.violation_count) + Number(inserted), terminated };
+      const count = Number(attempt.violation_count) + Number(counted);
+      const terminated = counted && count >= 3;
+      const outcome: { recorded: boolean; count: number; terminated: boolean; hasil?: unknown } = { recorded: inserted, count, terminated };
       if (terminated) outcome.hasil = await this.submit(studentId, examId, true);
       return outcome;
     } catch (error) {

@@ -1,30 +1,44 @@
-# Arena — platform ujian mandiri
+# Arena — platform ujian MAN 1 Palembang
 
-Arena adalah aplikasi di folder repo tersendiri dengan database dan deployment sendiri. CBT lama tetap berada di `cbt/`; Arena tidak menulis database CBT.
+Arena adalah aplikasi baru dengan API Fastify/TypeScript, UI React/Vite, dan database sendiri. CBT lama tetap berada di `../cbt`; Arena tidak memakai atau menulis database CBT. Implementasi Arena dibuat pada struktur dan kontrak Arena, bukan dengan menyalin source code CBT.
 
-## Fitur yang sudah dimigrasikan ke tahap awal
+Dokumen ini membandingkan fitur Arena dengan source dan dokumentasi CBT yang ada di repository. Status `Tersedia` berarti ada implementasi yang ditemukan, bukan jaminan sudah lulus verifikasi produksi. Kapasitas dan kesetaraan perilaku harus dibuktikan lewat pengujian.
 
-- Siswa: login NISN/PIN bcrypt, daftar dan buka/lanjutkan ujian, snapshot soal dan opsi acak, autosave berversi/idempotent, flag ragu, heartbeat, pelanggaran (attempt diterminasi pada pelanggaran ketiga), submit/scoring termasuk cap nilai remedial, dan review status jawaban.
-- Admin/staf: login password dan bootstrap admin satu kali, SSO Portal Data OIDC untuk guru/pegawai, pengelolaan akun admin serta akun guru/pegawai yang terhubung ke personel tersinkron, dashboard admin/guru, daftar dan pencarian siswa/ujian/session, penugasan guru/piket, live session dan log pelanggaran.
-- Operasional admin: sinkronisasi Portal Data per jenis dengan OAuth client credentials, pagination, upsert dan log status; penerbitan PIN acak untuk maksimal 25 siswa per batch (bcrypt di database, PIN hanya dikembalikan sekali dan tidak dicatat ke audit); impor soal dalam batch JSON (menerima nama field Arena atau field CBT Indonesia); reset batch hingga 50 siswa dalam request dengan transaksi dan audit terpisah per siswa.
-- Layanan: tiket bantuan siswa/tamu dan petugas, komunikasi staf-admin berbasis thread, laporan hasil dan distribusi nilai per ujian, serta finalisasi attempt kedaluwarsa dengan scoring yang sama.
+## Ringkasan fitur
 
-Panel staf/admin juga memiliki alur susulan dan remedial: susulan mengusulkan siswa aktif yang belum mengerjakan ujian sumber; remedial menampilkan attempt dengan sedikitnya tiga pelanggaran dan perlu persetujuan; pembuatan jadwal mengkloning soal serta penugasan guru secara batch. Jadwal harus setelah ujian sumber, selesai di tanggal WIB yang sama, dan jadwal aktif dalam periode memakai tanggal bersama. Batas nilai remedial X/XI/XII bisa disetel pada menu tersebut. Kandidat ditampilkan per ujian sumber (maksimal 1.000 baris per permintaan) agar halaman tidak memuat seluruh riwayat sekaligus.
+| Area | Arena | Referensi CBT / catatan |
+|---|---|---|
+| Login siswa | NISN + PIN yang diverifikasi dengan bcrypt; sesi dapat dipulihkan setelah refresh | CBT juga memakai NISN/PIN dan sesi server |
+| Login staf | Password lokal untuk admin; guru/pegawai melalui OIDC Portal Data | CBT mendukung akun staf dan SSO Portal Data; alur kredensial lokal berbeda |
+| Sinkronisasi akademik | Portal Data OAuth, pagination, upsert, log, penguncian per jenis, revision check sebelum rekonsiliasi, dan penonaktifan record yang hilang hanya setelah sync lengkap dan stabil | CBT memiliki sync dan rekonsiliasi serupa |
+| Ujian siswa | Daftar, mulai/lanjutkan, timer berbasis waktu server, snapshot urutan soal/opsi, autosave berversi dan idempotent, tandai ragu, heartbeat, submit, hasil dan review | Fitur inti CBT tersedia; aturan detail masih perlu uji kesetaraan |
+| Integritas ujian | Mencatat pindah tab, salin/tempel/potong, menu konteks, shortcut screenshot/DevTools/browser, keluar fullscreen, dan dugaan split-screen; metadata waktu klien, IP, dan user-agent disimpan untuk peninjauan | CBT juga mengamati sebagian sinyal ini. Semuanya indikator browser, bukan bukti pasti kecurangan |
+| Admin dan guru | Dashboard, akun, siswa, ujian, penugasan guru/pengawas, sesi langsung, pelanggaran, tiket bantuan, bank soal, hasil dan laporan | Sebagian besar alur panel CBT tersedia di Arena |
+| Susulan dan remedial | Kandidat, persetujuan dan pembuatan jadwal lanjutan; soal dan assignment sumber disalin; cap nilai remedial dapat diatur | CBT memiliki alur sejenis; aturan sekolah wajib dicocokkan |
+| Bank soal | CRUD dan pratinjau; impor XLSX/XLS/ODS dan DOCX; ekspor XLSX; unggah gambar dan dukungan gambar/persamaan tertanam pada XLSX | CBT memiliki editor/impor spreadsheet. Format file nyata tetap perlu diuji bersama |
+| Hasil | Tabel hasil dan distribusi; ekspor XLSX; cetak laporan melalui browser dan opsi “Simpan sebagai PDF” | PDF tersedia sebagai alur cetak browser, bukan generator PDF server |
+| Kartu peserta | Penerbitan PIN batch dan kartu cetak/ekspor selama hasil penerbitan masih tersedia | CBT menyediakan kartu/PIN |
+| Bantuan peserta | Tiket bantuan siswa/tamu dan panel penanganan petugas, termasuk alur reset yang diaudit | Tiket bantuan tersedia di CBT |
+| Android peserta | Prototipe WebView Arena baru di `android-app/`; secure window dan pembatasan navigasi host | CBT memiliki prototipe Android sendiri. APK Arena belum dibangun atau diuji perangkat |
+| Percakapan staf/admin | **Dihapus dan tidak digunakan** | Fitur chat CBT sengaja tidak dimasukkan ke Arena sesuai keputusan produk |
 
-Panel staf/admin juga menyediakan daftar siswa dengan pencarian dan seleksi reset/PIN massal, editor ujian beserta jadwal dan target kelas/siswa, arsip/pemulihan ujian, penghentian sesi beserta pemrosesan hasil, manajemen akun termasuk impor/ekspor Excel, status sinkronisasi, impor soal JSON/spreadsheet, penanganan tiket termasuk reset attempt, percakapan staf-admin, tabel hasil, ringkasan distribusi nilai per ujian, dan pengaturan batas nilai remedial. PIN hanya ditampilkan sekali saat diterbitkan; kartu cetak dan ekspor PIN tersedia selama respons penerbitan tersebut masih terbuka. Akun guru/pegawai terikat ke personel tersinkron; admin aktif terakhir dan akun sendiri tidak dapat dinonaktifkan, dan perubahan password lokal tidak mengubah kredensial SSO Portal Data. Editor ujian menolak perubahan saat masih ada attempt berjalan. Belum ada migrasi data historis otomatis, gambar impor soal, ekspor PDF, pelampiran komunikasi, penonaktifan akun melalui rekonsiliasi penuh, dan pengujian kesetaraan semua aturan CBT. Karena itu Arena belum menggantikan CBT dan belum siap untuk peserta produksi.
+## Belum tersedia atau belum dibuktikan
 
-### Bank soal, pemantauan, dan tampilan peserta
+- **Migrasi data historis otomatis dari CBT belum tersedia.** Perlu sumber ekspor yang disetujui, pemetaan skema, kebijakan untuk attempt yang sedang berjalan, dan rekonsiliasi hasil sebelum alat migrasi dibuat. Jangan mengimpor langsung ke database produksi.
+- **Kesetaraan seluruh aturan CBT belum dibuktikan.** Prioritas pencocokan: eligibility, randomisasi, scoring, remedial/susulan, reset, penanganan pelanggaran, tiket, assignment, audit, dan laporan.
+- **Aplikasi Android Arena masih prototipe sumber.** Belum ada APK bertanda tangan, distribusi, pengujian perangkat nyata, atau kebijakan agar peserta tidak beralih ke browser biasa. WebView juga memerlukan konfigurasi HTTPS origin saat build.
+- **Kapasitas ujian belum terukur.** Target 1.200/1.300 peserta bukan klaim kapasitas sampai alur end-to-end diuji pada staging yang menyerupai server tujuan.
+- **PDF adalah fitur cetak browser.** Browser peserta/admin harus memilih “Simpan sebagai PDF”; Arena belum menghasilkan berkas PDF langsung dari server.
 
-- Admin dapat menambah, mengubah, menghapus, dan mempratinjau soal; mengimpor XLSX/XLS/ODS dan mengekspor workbook XLSX standar; serta mengunggah gambar soal PNG/JPEG/WebP/GIF maksimal 2 MB. Gambar disimpan sebagai berkas dan dikirim ke peserta lewat URL dengan cache panjang, bukan sebagai base64 di setiap respons ujian. Set `ARENA_UPLOAD_DIR` ke direktori persisten yang dibackup bersama database saat deployment.
-- Editor soal visual mendukung gambar pada pertanyaan dan setiap opsi, superscript/subscript, simbol umum, serta equation MathML untuk pecahan, pangkat, indeks, akar, integral, sigma, limit, vektor, nilai mutlak, rumus kimia, isotop, dan matriks. Teks Arab dan harakat disimpan sebagai UTF-8, dideteksi otomatis sebagai RTL, dan ditampilkan dengan font Arab bila tersedia pada perangkat.
-- Impor spreadsheet memeriksa baris di browser sebelum dikirim. API memproses impor dalam batch kecil; gambar yang tertanam di XLSX lama belum otomatis ikut terimpor. Untuk migrasi soal bergambar, unggah gambarnya lewat editor setelah impor spreadsheet.
-- Panel guru/pengawas menampilkan ujian, hasil per ujian, sesi aktif, dan pelanggaran; admin dapat mengelola penugasan dan kelayakan pengawas. Sesi, pelanggaran, dan hasil dibatasi 100 baris per halaman. Pemantauan memperbarui setiap 45 detik hanya ketika tab terbuka.
-- Admin dapat mengunduh seluruh hasil peserta sebagai XLSX serta rekap per ujian yang berisi sheet ringkasan dan distribusi nilai. Guru dapat mengunduh seluruh hasil untuk ujian yang ditugaskan kepadanya; pembatasan akses yang sama dengan tampilan hasil tetap berlaku saat data Excel disusun.
-- Waktu ujian dihitung mundur di browser dengan acuan waktu server, tanpa request per detik. Saat habis, klien meminta finalisasi; finalizer API tetap menangani peserta yang putus koneksi. Pelanggaran dikirim hanya saat browser mengamati pindah tab, salin, shortcut tangkapan layar, keluar mode layar penuh, atau viewport mobile yang sangat menyempit. Browser tidak dapat mendeteksi tangkapan layar dari luar halaman.
+## Keamanan dan sinkronisasi
 
-## Jalankan lokal
+PIN tidak disimpan sebagai plaintext. Token, password, dan PIN tidak boleh ditulis ke log. Sinkronisasi Portal Data berjalan dari backend dengan OAuth client credentials, halaman diproses bertahap, dan jenis yang sama tidak boleh berjalan bersamaan. Arena hanya merekonsiliasi record yang tidak ditemukan setelah seluruh halaman sukses dan checksum Portal Data tidak berubah selama sinkronisasi. Jika endpoint revision gagal atau checksum berubah, proses gagal tanpa penonaktifan massal.
 
-Butuh Node.js 22+ dan MySQL 8/MariaDB. Buat database Arena baru; jangan arahkan ke database CBT.
+Record siswa yang tidak lagi ditemukan dinonaktifkan untuk login/eligibility; guru, pegawai, kelas, tahun ajaran, atau semester ditandai tidak aktif sesuai hasil sinkronisasi. Riwayat ujian tidak dihapus oleh rekonsiliasi. Perubahan ini memerlukan migration aplikasi biasa untuk struktur chat lama, tetapi tidak membutuhkan perubahan skema untuk rekonsiliasi.
+
+## Menjalankan Arena secara lokal
+
+Butuh Node.js 22+ dan MySQL 8 atau MariaDB. Gunakan database Arena baru; jangan arahkan konfigurasi ke database CBT atau Portal Data.
 
 ```sh
 cp .env.example .env
@@ -32,27 +46,39 @@ npm install
 mysql -u root -p arena < database/migrations/001_core.sql
 mysql -u root -p arena < database/migrations/002_staff_admin.sql
 mysql -u root -p arena < database/migrations/003_exam_retake_candidates.sql
+mysql -u root -p arena < database/migrations/004_exam_lookup_indexes.sql
+mysql -u root -p arena < database/migrations/005_remove_staff_admin_communications.sql
+mysql -u root -p arena < database/migrations/006_exam_integrity_signals.sql
 npm run dev
 ```
 
-UI Vite berjalan pada port 5173 dan API pada port 3001. Konfigurasikan `DATABASE_URL`, `AUTH_TOKEN_SECRET` acak minimal 32 karakter, dan alamat/credential integrasi di `.env`.
+Migrasi `005` menghapus tabel percakapan staf/admin Arena yang lama beserta isinya. Tiket bantuan tidak dihapus. Untuk demo lokal terisolasi, gunakan `npm run local:setup` lalu `npm run dev`; database demo hanya terikat ke localhost port 3308 dan tidak memakai database CBT/Portal Data.
 
-Untuk pratinjau UI lokal terisolasi dengan MySQL Docker dan data demo admin/guru/siswa, jalankan `npm run local:setup`, lalu `npm run dev`. Web berjalan di `http://localhost:5173`, API di port 3001, dan database demo hanya terikat ke localhost port 3308; database CBT/Portal Data tidak digunakan. Akun demo: `admin.demo` / `ArenaAdmin!2026`, `guru.demo` / `ArenaGuru!2026`, siswa NISN `0000000001` / PIN `1234`. Seed menambahkan satu ujian Bahasa Indonesia agar layar peserta dan hasil guru dapat dilihat. Akun demo hanya untuk database lokal ini.
+Jika database demo sudah ada, jalankan `npm run local:setup` untuk menerapkan migrasi integritas `006` yang idempotent sebelum menjalankan ulang aplikasi. Hindari menjalankan ulang `npm run demo:migrate` pada database berisi data karena perintah tersebut ditujukan untuk database baru.
 
-Untuk membuat admin pertama, isi `SETUP_TOKEN`, panggil `POST /api/setup/admin` satu kali dengan `setup_token`, `username`, `name`, dan password minimal 12 karakter, lalu kosongkan `SETUP_TOKEN`. Daftarkan client OIDC dengan callback `https://<domain-arena>/auth/sso/callback` dan isi `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_REDIRECT_URI`, serta `ARENA_WEB_URL`. Untuk sync, daftarkan OAuth client Portal Data dengan scope `portal_data.read` lalu isi `PORTAL_DATA_BASE_URL`, `PORTAL_DATA_SYNC_CLIENT_ID`, dan `PORTAL_DATA_SYNC_CLIENT_SECRET`.
+### Batas deteksi dan prosedur pengawasan
 
-Redis dipakai untuk rate limit lintas instance bila `REDIS_URL` tersedia. Health readiness melaporkan status DB dan Redis. Default pool API 10 koneksi dengan antrean 100; sesuaikan total koneksi seluruh instance dengan limit MySQL/VPS. Finalizer berjalan otomatis pada tiap instance API, tetapi MySQL advisory lock memastikan hanya satu instance memproses batch pada satu waktu; maksimal empat attempt dinilai bersamaan. Default interval 30 detik dan ukuran batch 50 (`ATTEMPT_FINALIZER_INTERVAL_MS`, `ATTEMPT_FINALIZER_BATCH_SIZE`); set `ATTEMPT_FINALIZER_ENABLED=false` untuk menonaktifkannya. Login password memakai hash bcrypt; kredensial dan token tidak boleh dicatat ke log.
+Halaman web hanya dapat mengirim sinyal yang tersedia melalui API browser. Arena tidak dapat memastikan apakah siswa memakai ponsel/perangkat kedua, menerima bantuan orang lain, memakai kamera atau aplikasi jarak jauh, mengambil screenshot melalui OS/perangkat lain, atau membuka DevTools dengan cara yang tidak menghasilkan event keyboard. Sinyal pindah tab, keluar fullscreen, screenshot shortcut, dan salin masuk ke hitungan pelanggaran yang ada. Dugaan split-screen, tempel/potong, menu konteks, dan shortcut DevTools/browser direkam untuk peninjauan tetapi tidak menaikkan hitungan terminasi otomatis karena sinyal tersebut lebih mudah memiliki penyebab sah. Jangan jadikan satu event sebagai bukti pelanggaran akademik.
 
-## Kapasitas 1.300 peserta
+Untuk ujian berpengawasan, sekolah/panitia perlu menetapkan dan mengumumkan prosedur sebelum ujian: verifikasi identitas dan perangkat; tata letak tempat duduk serta jarak pandang yang memungkinkan pengawas melihat layar; larangan perangkat tambahan, earphone, komunikasi, dan materi yang tidak diizinkan; instruksi untuk tetap pada halaman ujian dan meminta bantuan pengawas bila terjadi gangguan; serta pencatatan insiden oleh pengawas dengan waktu, peserta, konteks, dan saksi. Tinjau riwayat sinyal bersama catatan pengawas sebelum mengambil tindakan. Rasio pengawas, pemeriksaan perangkat, dan konsekuensi pelanggaran harus ditetapkan sekolah, bukan diasumsikan oleh aplikasi.
 
-Target 1.300 adalah peserta ujian bersamaan, bukan otomatis 1.300 request/detik. Kapasitas belum dibuktikan. Sebelum dipakai, tetapkan SLO p95/p99 dan error rate, lalu jalankan benchmark staging menyerupai VPS untuk pola login, baca soal, autosave, heartbeat, pelanggaran, admin, dan submit serentak. Catat event-loop delay, antrean HTTP/DB pool, koneksi, lock/commit MySQL, CPU, memori, dan I/O.
+IP, user-agent, dan waktu dari klien adalah metadata yang dapat tidak akurat atau dipalsukan. Batasi akses metadata ke administrator, tentukan masa retensinya, dan jangan gunakan sebagai satu-satunya dasar sanksi. Layar penuh dan pemblokiran shortcut bergantung pada kemampuan browser/perangkat dan dapat dilewati; perangkat ujian terkunci atau aplikasi kiosk terkelola memerlukan kebijakan serta pengujian perangkat tersendiri.
 
-Arena menggunakan pool DB terbatas, payload kecil, index, debounce autosave 350 ms, jitter heartbeat, revision/idempotency, dan barrier row attempt agar submit serial dengan autosave. Submit dan finalisasi kedaluwarsa menghitung scoring saat attempt dikunci; panjang critical section harus diukur dengan ukuran ujian nyata. Rate limit peserta berbasis identitas token agar satu NAT sekolah tidak berbagi kuota autosave; login dibatasi per akun. Hasil build bukan bukti lulus 1.300 pengguna.
+API berjalan pada port 3001 dan Vite pada port 5173. Atur `DATABASE_URL`, `AUTH_TOKEN_SECRET` acak minimal 32 karakter, serta credential OIDC/Portal Data sesuai kebutuhan. Untuk gambar bank soal, atur `ARENA_UPLOAD_DIR` ke direktori persisten yang dibackup bersama database.
 
-## Migrasi aman
+## Prototipe Android Arena
 
-1. Validasi schema baru pada database staging kosong dan import data referensi dari Portal Data.
-2. Cocokkan aturan CBT lama untuk eligibility, randomisasi, scoring, remedial, pelanggaran, reset, tiket, assignment, audit dan laporan.
-3. Tambahkan tes fungsional/konkurensi di staging, termasuk save-submit race, retry, reset setelah pelanggaran ketiga, duplicate ticket, dan OIDC invalid token.
-4. Jalankan beban bertahap sampai 1.300 peserta virtual; dokumentasikan konfigurasi dan hasil sebelum membuat klaim kapasitas.
-5. Pilot terpisah dengan monitoring dan rollback; alihkan produksi hanya setelah seluruh fitur wajib serta hasil beban disetujui.
+Sumber aplikasi ada di [`android-app/`](android-app/README.md). Bangun hanya setelah HTTPS origin Arena diketahui dan disetujui:
+
+```sh
+cd android-app
+gradle assembleDebug -PARENA_BASE_URL=https://arena.example.school
+```
+
+Ganti contoh origin dengan domain resmi. Jangan mendistribusikan APK debug sebagai aplikasi ujian resmi. Pengujian dan signing rilis belum dilakukan.
+
+## Kapasitas dan kesiapan produksi
+
+Arena belum dinyatakan siap menggantikan CBT dan belum memiliki klaim kapasitas peserta. Sebelum pilot, verifikasi konfigurasi database dan server staging, uji workflow siswa/staf secara end-to-end, uji sinkronisasi/reconciliation, uji pemulihan koneksi dan konkurensi submit, lalu jalankan load test bertahap. Catat SLO p95/p99, error, durabilitas jawaban yang sudah diakui, antrean pool, lock MySQL, CPU, memori, dan event-loop delay.
+
+Panduan rilis staging ke VPS untuk `staging.arena.man1palembang.sch.id` ada di [docs/deployment/staging-vps.md](docs/deployment/staging-vps.md). Dokumen tersebut adalah prosedur persiapan; domain, DNS, MySQL server, Portal Data, Nginx, dan VPS belum diverifikasi atau diubah.

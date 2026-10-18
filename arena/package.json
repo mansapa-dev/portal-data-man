@@ -12,6 +12,7 @@
     "dev:local": "bash scripts/start-local-demo.sh",
     "local:setup": "bash scripts/setup-local-demo.sh",
     "demo:migrate": "node scripts/migrate-local.mjs",
+    "demo:migrate:integrity": "node scripts/migrate-integrity-local.mjs",
     "demo:seed": "node scripts/seed-local-demo.mjs",
     "build": "npm run build -w @arena/api && npm run build -w @arena/web",
     "start": "npm run start -w @arena/api"

@@ -12,6 +12,7 @@ if docker container inspect "$DB_CONTAINER" >/dev/null 2>&1; then
   set -a
   source ./.env
   set +a
+  npm run demo:migrate:integrity
   npm run demo:seed
   echo "Database demo sudah tersedia. Jalankan: npm run dev:local"
   exit 0
