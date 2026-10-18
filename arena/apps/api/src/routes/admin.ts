@@ -55,7 +55,7 @@ export async function adminRoutes(app: FastifyInstance) {
   });
   app.post('/api/admin/students/pin-batch', async (request, reply) => {
     const claims=admin(request,true);
-    const body=z.object({student_ids:z.array(positive).min(1).max(25)}).strict().parse(request.body);
+    const body=z.object({student_ids:z.array(positive).min(1).max(100)}).strict().parse(request.body);
     const ids=[...new Set(body.student_ids)];
     const pool=requirePool();
     const placeholders=ids.map(()=>'?').join(',');

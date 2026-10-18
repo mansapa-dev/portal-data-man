@@ -7,7 +7,7 @@ if (!databaseUrl) throw new Error('DATABASE_URL harus diatur lewat arena/.env');
 
 const pool = mysql.createPool({ uri: databaseUrl, connectionLimit: 2, timezone: 'Z' });
 const demo = {
-  admin: { username: 'admin.demo', password: 'nah n', name: 'Admin Demo Arena' },
+  admin: { username: 'admin.demo', password: '', name: 'Admin Demo Arena' },
   teacher: { username: 'guru.demo', password: 'ArenaGuru!2026', name: 'Guru Demo Arena' },
   student: { nisn: '0000000001', pin: '1234', name: 'Siswa Demo Arena', className: 'X Demo', grade: 'X' },
 };
