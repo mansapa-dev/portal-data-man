@@ -4,13 +4,18 @@ import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
 import { z } from 'zod';
 import { requireRole } from '../lib/access.js';
 import { requirePool } from '../lib/db.js';
-import { assertCsrf, claimsFromRequest, readToken } from '../lib/auth.js';
+import { assertCsrf, claimsFromRequest, normalizeStudentDigits, readToken } from '../lib/auth.js';
 import { resetTerminatedAttemptInTransaction } from '../services/attempt-reset.js';
 
 const ticketCategories = ['ACCOUNT_ACCESS','EXAM_LOCKED','PIN','CONNECTION','TECHNICAL','OTHER'] as const;
+const proctorCache = new Map<number, { expiresAt: number; ok: boolean }>();
 async function canHandle(pool: ReturnType<typeof requirePool>, userId: number) {
+  const cached = proctorCache.get(userId);
+  if (cached && Date.now() < cached.expiresAt) return cached.ok;
   const [rows] = await pool.execute<RowDataPacket[]>(`SELECT EXISTS(SELECT 1 FROM teacher_exam_assignments a JOIN users u ON ((u.role='TEACHER' AND u.teacher_id=a.teacher_id) OR (u.role='EMPLOYEE' AND u.employee_id=a.employee_id)) WHERE u.id=? AND u.status='ACTIVE' AND a.duty_role='PROCTOR' AND a.exam_id IS NULL) ok`, [userId]);
-  return Boolean(rows[0]?.ok);
+  const ok = Boolean(rows[0]?.ok);
+  proctorCache.set(userId, { expiresAt: Date.now() + 30_000, ok });
+  return ok;
 }
 async function assertActiveActor(connection: PoolConnection, actorId: number, role: string) {
   const [rows] = await connection.execute<RowDataPacket[]>("SELECT id FROM users WHERE id=? AND role=? AND status='ACTIVE' FOR UPDATE", [actorId, role]);
@@ -32,7 +37,11 @@ function ticketRateKey(request: FastifyRequest) {
   const bearer = request.headers.authorization?.startsWith('Bearer ') ? request.headers.authorization.slice(7) : undefined;
   const cookie = request.headers.cookie?.split(';').map((part) => part.trim()).find((part) => part.startsWith('arena_student_session='))?.slice('arena_student_session='.length);
   const claims = readToken(bearer ?? cookie ?? '');
-  return claims?.role === 'STUDENT' ? `support-ticket:student:${claims.sub}` : `support-ticket:ip:${request.ip}`;
+  if (claims?.role === 'STUDENT') return `support-ticket:student:${claims.sub}`;
+  const rawNisn = typeof request.body === 'object' && request.body !== null && 'nisn' in request.body ? (request.body as { nisn?: unknown }).nisn : '';
+  const bodyNisn = normalizeStudentDigits(String(rawNisn ?? '')).slice(0, 20);
+  if (bodyNisn) return `support-ticket:nisn:${bodyNisn}`;
+  return `support-ticket:ip:${request.ip}`;
 }
 function ulid(){const chars='0123456789ABCDEFGHJKMNPQRSTVWXYZ';let t=Date.now(),s='';for(let i=0;i<10;i++){s=chars[t%32]+s;t=Math.floor(t/32);}for(const x of randomBytes(16))s+=chars[x&31];return s;}
 function ticketSelect() { return `SELECT t.public_id id,t.student_id studentId,s.nisn,s.name_snapshot studentName,s.class_snapshot className,t.exam_id examId,e.name examName,t.category,t.message,t.status,t.handled_by,t.staff_note staffNote,t.resolution_type resolutionType,t.created_at createdAt,t.updated_at updatedAt,t.resolved_at resolvedAt,u.name handlerName,a.status attemptStatus,a.violation_count violationCount FROM support_tickets t JOIN students s ON s.id=t.student_id LEFT JOIN exams e ON e.id=t.exam_id LEFT JOIN exam_attempts a ON a.id=t.attempt_id LEFT JOIN users u ON u.id=t.handled_by`; }
@@ -45,7 +54,7 @@ export async function supportRoutes(app: FastifyInstance) {
     const connection=await pool.getConnection();let studentId=0,id='';
     try{
       await connection.beginTransaction();
-      const[students]=token?await connection.execute<RowDataPacket[]>('SELECT id FROM students WHERE id=? AND is_active=1 FOR UPDATE',[token.sub]):await connection.execute<RowDataPacket[]>('SELECT id FROM students WHERE nisn=? AND is_active=1 FOR UPDATE',[body.nisn??'']);
+      const[students]=token?await connection.execute<RowDataPacket[]>('SELECT id FROM students WHERE id=? AND is_active=1',[token.sub]):await connection.execute<RowDataPacket[]>('SELECT id FROM students WHERE nisn=? AND is_active=1',[body.nisn??'']);
       studentId=Number(students[0]?.id);if(!studentId)throw Object.assign(new Error('Siswa tidak ditemukan atau tidak aktif'),{statusCode:404});
       let examId=body.exam_id??null;let attemptId:number|null=null;
       if(examId){const[attempts]=await connection.execute<RowDataPacket[]>('SELECT id FROM exam_attempts WHERE student_id=? AND exam_id=?',[studentId,examId]);attemptId=attempts[0]?Number(attempts[0].id):null;

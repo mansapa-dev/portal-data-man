@@ -2,7 +2,7 @@ import mysql from 'mysql2/promise';
 
 const databaseUrl = process.env.DATABASE_URL;
 export const pool = databaseUrl
-  ? mysql.createPool({ uri: databaseUrl, connectionLimit: Number(process.env.DB_POOL_SIZE ?? 15), waitForConnections: true, queueLimit: Number(process.env.DB_QUEUE_LIMIT ?? 2_000), enableKeepAlive: true, timezone: 'Z', namedPlaceholders: true })
+  ? mysql.createPool({ uri: databaseUrl, connectionLimit: Number(process.env.DB_POOL_SIZE ?? 50), waitForConnections: true, queueLimit: Number(process.env.DB_QUEUE_LIMIT ?? 10_000), enableKeepAlive: true, timezone: 'Z', namedPlaceholders: true })
   : null;
 
 export function requirePool() {

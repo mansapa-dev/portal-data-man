@@ -83,9 +83,10 @@ export class StudentExamService {
         }
         await connection.query('INSERT INTO attempt_questions(attempt_id,question_id,question_type,question_text,option_a,option_b,option_c,option_d,option_e,correct_answer,option_mapping,points) VALUES ?', [snapshotRows]);
       }
-      if (!attempt) throw Object.assign(new Error('Sesi ujian tidak ditemukan'), { statusCode: 404 });
-      const [stillActive] = await connection.execute<RowDataPacket[]>(`SELECT 1 active FROM exam_attempts WHERE id=? AND status='IN_PROGRESS' AND expires_at>UTC_TIMESTAMP(3)`, [attempt.id]);
-      if (!stillActive.length) throw Object.assign(new Error('Waktu ujian sudah habis. Jawaban yang tersimpan tetap aman.'), { statusCode: 409 });
+      if (resuming) {
+        const [stillActive] = await connection.execute<RowDataPacket[]>(`SELECT 1 active FROM exam_attempts WHERE id=? AND status='IN_PROGRESS' AND expires_at>UTC_TIMESTAMP(3)`, [attempt.id]);
+        if (!stillActive.length) throw Object.assign(new Error('Waktu ujian sudah habis. Jawaban yang tersimpan tetap aman.'), { statusCode: 409 });
+      }
       const [questions] = await connection.execute<RowDataPacket[]>('SELECT question_id id,question_type,question_text,option_a,option_b,option_c,option_d,option_e,points FROM attempt_questions WHERE attempt_id=?', [attempt.id]);
       const [answers] = await connection.execute<RowDataPacket[]>('SELECT v.question_id,a.answer,COALESCE(a.is_flagged,0) is_flagged,COALESCE(v.revision,0) revision FROM answer_write_versions v LEFT JOIN student_answers a ON a.attempt_id=v.attempt_id AND a.question_id=v.question_id WHERE v.attempt_id=?', [attempt.id]);
       await connection.commit();
@@ -108,9 +109,13 @@ export class StudentExamService {
   }
 
   async heartbeat(studentId: number, examId: number) {
-    const [attempts] = await this.pool.execute<RowDataPacket[]>(`SELECT id FROM exam_attempts WHERE student_id=? AND exam_id=? AND status='IN_PROGRESS' AND expires_at>UTC_TIMESTAMP(3)`, [studentId, examId]);
-    const attempt = attempts[0];
-    if (attempt) await this.pool.execute(`INSERT INTO attempt_connections(attempt_id,last_seen_at) VALUES(?,UTC_TIMESTAMP(3)) ON DUPLICATE KEY UPDATE last_seen_at=IF(last_seen_at<UTC_TIMESTAMP(3)-INTERVAL 40 SECOND,UTC_TIMESTAMP(3),last_seen_at)`, [attempt.id]);
+    await this.pool.execute(
+      `INSERT INTO attempt_connections(attempt_id,last_seen_at)
+       SELECT id,UTC_TIMESTAMP(3) FROM exam_attempts
+       WHERE student_id=? AND exam_id=? AND status='IN_PROGRESS' AND expires_at>UTC_TIMESTAMP(3)
+       ON DUPLICATE KEY UPDATE last_seen_at=IF(attempt_connections.last_seen_at<UTC_TIMESTAMP(3)-INTERVAL 40 SECOND,UTC_TIMESTAMP(3),attempt_connections.last_seen_at)`,
+      [studentId, examId],
+    );
     return { server_time: new Date().toISOString() };
   }
 

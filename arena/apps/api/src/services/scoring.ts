@@ -17,10 +17,54 @@ function fraction(type: string, key: string, answer: string, optionCount: number
   return Math.max(0, Math.min(1, right / Math.max(1, correct.length) - wrong / Math.max(1, optionCount - correct.length)));
 }
 
+const examMetaCache = new Map<number, { isRemedial: boolean; scoreCap: number | null; expiresAt: number }>();
+async function getExamMeta(connection: Pool | import('mysql2/promise').PoolConnection, examId: number): Promise<{ isRemedial: boolean; scoreCap: number | null }> {
+  const cached = examMetaCache.get(examId);
+  if (cached && Date.now() < cached.expiresAt) return { isRemedial: cached.isRemedial, scoreCap: cached.scoreCap };
+  const [followUps] = await connection.execute<RowDataPacket[]>('SELECT m.type,e.grade FROM exam_follow_up_meta m JOIN exams e ON e.id=m.exam_id WHERE m.exam_id=? LIMIT 1', [examId]);
+  let isRemedial = false;
+  let scoreCap: number | null = null;
+  if (followUps[0]?.type === 'REMEDIAL') {
+    isRemedial = true;
+    const capKey = `remedial_score_cap_${String(followUps[0].grade).toUpperCase().trim()}`;
+    const [settings] = await connection.execute<RowDataPacket[]>('SELECT value FROM cbt_settings WHERE key_name=? LIMIT 1', [capKey]);
+    scoreCap = settings[0] ? Number(settings[0].value) : 75;
+  }
+  examMetaCache.set(examId, { isRemedial, scoreCap, expiresAt: Date.now() + 60_000 });
+  return { isRemedial, scoreCap };
+}
+
 export class ScoringService {
+  private readonly submitInFlight = new Map<string, Promise<unknown>>();
   constructor(private readonly pool: Pool) {}
 
-  async submit(studentId:number,examId:number,finalizeOnly=false,retry=0):Promise<unknown>{try{return await this.submitOnce(studentId,examId,finalizeOnly);}catch(error){const code=(error as {code?:string}).code;if(retry<2&&['ER_LOCK_DEADLOCK','ER_LOCK_WAIT_TIMEOUT'].includes(code??'')){await new Promise((resolve)=>setTimeout(resolve,10+Math.floor(Math.random()*30)));return this.submit(studentId,examId,finalizeOnly,retry+1);}throw error;}}
+  async submit(studentId: number, examId: number, finalizeOnly = false): Promise<unknown> {
+    const flightKey = `${studentId}:${examId}:${finalizeOnly}`;
+    const inFlight = this.submitInFlight.get(flightKey);
+    if (inFlight) return await inFlight;
+    const task = this.submitWithRetry(studentId, examId, finalizeOnly, 0);
+    this.submitInFlight.set(flightKey, task);
+    try {
+      return await task;
+    } finally {
+      if (this.submitInFlight.get(flightKey) === task) {
+        this.submitInFlight.delete(flightKey);
+      }
+    }
+  }
+
+  private async submitWithRetry(studentId: number, examId: number, finalizeOnly = false, retry = 0): Promise<unknown> {
+    try {
+      return await this.submitOnce(studentId, examId, finalizeOnly);
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      if (retry < 2 && ['ER_LOCK_DEADLOCK', 'ER_LOCK_WAIT_TIMEOUT'].includes(code ?? '')) {
+        await new Promise((resolve) => setTimeout(resolve, 10 + Math.floor(Math.random() * 30)));
+        return this.submitWithRetry(studentId, examId, finalizeOnly, retry + 1);
+      }
+      throw error;
+    }
+  }
 
   private async submitOnce(studentId: number, examId: number, finalizeOnly = false) {
     const connection = await this.pool.getConnection();
@@ -33,14 +77,7 @@ export class ScoringService {
       const existing = existingRows[0];
       if (existing) {
         if (attempt.status === 'IN_PROGRESS') await connection.execute("UPDATE exam_attempts SET status=IF(expires_at<=UTC_TIMESTAMP(3),'EXPIRED','COMPLETED'),completed_at=COALESCE(completed_at,UTC_TIMESTAMP(3)) WHERE id=?", [attempt.id]);
-        const [followUps] = await connection.execute<RowDataPacket[]>('SELECT m.type,e.grade FROM exam_follow_up_meta m JOIN exams e ON e.id=m.exam_id WHERE m.exam_id=? LIMIT 1', [examId]);
-        let scoreCap: number | null = null;
-        const isRemedial = followUps[0]?.type === 'REMEDIAL';
-        if (isRemedial) {
-          const followUp = followUps[0]!;
-          const [settings] = await connection.execute<RowDataPacket[]>('SELECT value FROM cbt_settings WHERE key_name=? LIMIT 1', [`remedial_score_cap_${String(followUp.grade).toUpperCase().trim()}`]);
-          scoreCap = settings[0] ? Number(settings[0].value) : 75;
-        }
+        const { isRemedial, scoreCap } = await getExamMeta(connection, examId);
         await connection.commit();
         return this.format(existing, isRemedial, scoreCap);
       }
@@ -61,15 +98,9 @@ export class ScoringService {
         return result;
       }, { correct: 0, wrong: 0, blank: 0, earned: 0, maximum: 0 });
       let score = totals.maximum > 0 ? Math.round((totals.earned / totals.maximum * 100) * 100) / 100 : 0;
-      const [followUpRows] = await connection.execute<RowDataPacket[]>('SELECT m.type,e.grade FROM exam_follow_up_meta m JOIN exams e ON e.id=m.exam_id WHERE m.exam_id=? LIMIT 1', [examId]);
-      let isRemedial = false;
-      let scoreCap: number | null = null;
-      if (followUpRows[0]?.type === 'REMEDIAL') {
-        isRemedial = true;
-        const capKey = `remedial_score_cap_${String(followUpRows[0].grade).toUpperCase().trim()}`;
-        const [settings] = await connection.execute<RowDataPacket[]>('SELECT value FROM cbt_settings WHERE key_name=? LIMIT 1', [capKey]);
-        scoreCap = settings[0] ? Number(settings[0].value) : 75;
-        if (score > scoreCap) score = Math.round(scoreCap * 100) / 100;
+      const { isRemedial, scoreCap } = await getExamMeta(connection, examId);
+      if (isRemedial && scoreCap !== null && score > scoreCap) {
+        score = Math.round(scoreCap * 100) / 100;
       }
       await connection.execute(`INSERT INTO exam_results(attempt_id,question_count,correct_count,wrong_count,blank_count,earned_points,maximum_points,score) VALUES(?,?,?,?,?,?,?,?)`, [attempt.id, rows.length, totals.correct, totals.wrong, totals.blank, totals.earned, totals.maximum, score]);
       await connection.execute("UPDATE exam_attempts SET status=IF(status='TERMINATED','TERMINATED',IF(expires_at<=UTC_TIMESTAMP(3),'EXPIRED','COMPLETED')),completed_at=UTC_TIMESTAMP(3) WHERE id=?", [attempt.id]);

@@ -77,6 +77,21 @@ test('verifyPassword menerima hash lama yang dibuat bcryptjs (backward compatibi
   assert.equal(wrong, false, 'Password salah pada hash bcryptjs harus ditolak');
 });
 
+test('verifyPassword melayani hash yang sudah terverifikasi dari cache instan', async () => {
+  const pinHash = await bcrypt.hash('7777', 10);
+  const start1 = performance.now();
+  const first = await verifyPassword('7777', pinHash);
+  const time1 = performance.now() - start1;
+  assert.equal(first, true);
+
+  // Verifikasi kedua dengan PIN dan hash yang sama harus instan dari cache (< 5ms)
+  const start2 = performance.now();
+  const second = await verifyPassword('7777', pinHash);
+  const time2 = performance.now() - start2;
+  assert.equal(second, true);
+  assert.ok(time2 < time1, 'Panggilan kedua harus lebih cepat dari panggilan pertama');
+});
+
 test('closePasswordVerifier mematikan worker dan menolak verifikasi baru dengan 503', async () => {
   // Tutup verifier
   await closePasswordVerifier();
