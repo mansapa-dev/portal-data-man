@@ -30,7 +30,9 @@ export async function questionImageRoutes(app: FastifyInstance) {
     const filename = `${randomBytes(32).toString('hex')}.${type}`;
     await mkdir(uploadDir, { recursive: true });
     await writeFile(path.join(uploadDir, filename), bytes, { flag: 'wx' });
-    await audit(requirePool(), actor.sub, actor.role, 'QUESTION_IMAGE_UPLOADED', 'QuestionImage', filename);
+    // audit_logs.entity_id is VARCHAR(64); the full filename is 68 chars
+    // (64 hex chars plus extension), so store the 64-char opaque file id.
+    await audit(requirePool(), actor.sub, actor.role, 'QUESTION_IMAGE_UPLOADED', 'QuestionImage', path.parse(filename).name);
     reply.header('Cache-Control', 'no-store');
     return { url: `/api/question-images/${filename}` };
   });

@@ -25,12 +25,12 @@ export async function adminRoutes(app: FastifyInstance) {
   const admin = (request: FastifyRequest, mutate = false) => requireRole(request, ['ADMIN'], mutate);
   app.get('/api/admin/dashboard', async (request) => {
     admin(request); const pool = requirePool();
-    const [[stats]] = await pool.query<RowDataPacket[]>(`SELECT s.students,s.active_students,e.exams,e.active_exams,a.attempts,a.in_progress,a.terminated,t.open_tickets
+    const [[stats]] = await pool.query<RowDataPacket[]>(`SELECT s.students,s.active_students,e.exams,e.active_exams,a.attempts,a.in_progress,a.terminated_attempts,t.open_tickets
       FROM (SELECT COUNT(*) students,COALESCE(SUM(is_active=1 AND cbt_status='ACTIVE'),0) active_students FROM students) s
       CROSS JOIN (SELECT COUNT(*) exams,COALESCE(SUM(status='ACTIVE'),0) active_exams FROM exams) e
-      CROSS JOIN (SELECT COUNT(*) attempts,COALESCE(SUM(status='IN_PROGRESS'),0) in_progress,COALESCE(SUM(status='TERMINATED'),0) terminated FROM exam_attempts) a
+      CROSS JOIN (SELECT COUNT(*) attempts,COALESCE(SUM(status='IN_PROGRESS'),0) in_progress,COALESCE(SUM(status='TERMINATED'),0) terminated_attempts FROM exam_attempts) a
       CROSS JOIN (SELECT COALESCE(SUM(status IN ('OPEN','IN_PROGRESS')),0) open_tickets FROM support_tickets) t`);
-    return Object.fromEntries(Object.entries(stats ?? {}).map(([key, value]) => [key, Number(value ?? 0)]));
+    return Object.fromEntries(Object.entries(stats ?? {}).map(([key, value]) => [key === 'terminated_attempts' ? 'terminated' : key, Number(value ?? 0)]));
   });
   app.get('/api/admin/students', async (request) => {
     admin(request); const query = z.object({ page: z.coerce.number().int().min(1).max(1000).default(1), limit: z.coerce.number().int().min(1).max(100).default(50), q: z.string().max(100).optional(), grade: z.string().max(10).optional(), class_id: z.string().max(64).optional(), attempt_status:z.enum(['ALL','NOT_STARTED','IN_PROGRESS','COMPLETED','TERMINATED']).default('ALL'), sort:z.enum(['NAME_ASC','NAME_DESC']).default('NAME_ASC') }).parse(request.query);
