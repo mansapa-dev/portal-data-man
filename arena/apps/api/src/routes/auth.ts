@@ -7,6 +7,7 @@ import { audit } from '../services/audit.js';
 import { createHash } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { staffCapabilities } from '../services/staff-capabilities.js';
+import { verifyPassword } from '../services/password-verifier.js';
 
 const loginSchema = z.object({ nisn: z.string().trim().min(8).max(20), pin: z.string().trim().min(4).max(12) }).strict();
 const studentSessionSeconds=12*60*60;
@@ -58,7 +59,7 @@ export async function authRoutes(app: FastifyInstance) {
         finally{connection.release();}
         const student=rows![0];let valid=false;
         if(student?.cbt_status==='ACTIVE'&&typeof student.pin_hash==='string'){
-          const bcryptStarted=performance.now();valid=await BunPassword.verify(pin,student.pin_hash);bcryptMs=performance.now()-bcryptStarted;
+          const bcryptStarted=performance.now();valid=await verifyPassword(pin,student.pin_hash);bcryptMs=performance.now()-bcryptStarted;
         }
         if(!valid||!student)throw Object.assign(new Error('NISN atau PIN salah'),{statusCode:401});
         const csrf=newCsrf();const token=issueToken({sub:Number(student.id),role:'STUDENT',exp:Math.floor(Date.now()/1000)+studentSessionSeconds,csrf});
@@ -111,10 +112,3 @@ export async function authRoutes(app: FastifyInstance) {
   });
 }
 
-const BunPassword = {
-  async verify(pin: string, encoded: string) {
-    // bcrypt hashes use bcryptjs; PHP PASSWORD_DEFAULT hashes use bcrypt on supported legacy records.
-    const { compare } = await import('bcryptjs');
-    return compare(pin, encoded);
-  },
-};

@@ -165,6 +165,10 @@ ATTEMPT_FINALIZER_INTERVAL_MS=30000
 ATTEMPT_FINALIZER_BATCH_SIZE=20
 # Aktifkan sementara saat load test login staging; log hanya statistik agregat tanpa NISN/PIN.
 ARENA_LOGIN_DIAGNOSTICS=false
+# Verifikasi bcrypt berjalan di worker thread agar event loop API tetap responsif.
+# Mulai dari 3 pada VPS 4 vCPU; ubah hanya berdasarkan hasil staging dan beban layanan lain.
+PASSWORD_VERIFY_WORKERS=3
+PASSWORD_VERIFY_QUEUE_LIMIT=1000
 ARENA_UPLOAD_DIR=/var/lib/arena/question-images
 ARENA_WEB_URL=https://staging.arena.man1palembang.sch.id
 
@@ -178,7 +182,7 @@ OIDC_REDIRECT_URI=https://staging.arena.man1palembang.sch.id/auth/sso/callback
 OIDC_POST_LOGOUT_URI=https://staging.arena.man1palembang.sch.id/guru
 ```
 
-Mulai dengan pool/queue kecil karena VPS juga menjalankan layanan lain. Nilai contoh bukan kapasitas yang telah diukur. Sesuaikan setelah memeriksa `max_connections`, beban puncak semua aplikasi, dan menguji staging. Jangan isi `REDIS_URL` kecuali Redis staging memang tersedia, diizinkan, dan tidak berbagi namespace/cache berisiko dengan layanan lain. Tanpa Redis, rate limit proses API bersifat lokal pada satu proses.
+Mulai dengan pool/queue kecil karena VPS juga menjalankan layanan lain. Nilai contoh bukan kapasitas yang telah diukur. Sesuaikan setelah memeriksa `max_connections`, beban puncak semua aplikasi, dan menguji staging. Worker bcrypt memakai CPU yang sama dengan API; jangan menaikkan jumlah worker tanpa mengukur CPU, event loop, serta latency endpoint soal dan autosave. Antrean worker dibatasi; jika penuh, login baru ditolak sementara dengan 503 agar memori dan latency layanan lain tetap terkendali. Jangan isi `REDIS_URL` kecuali Redis staging memang tersedia, diizinkan, dan tidak berbagi namespace/cache berisiko dengan layanan lain. Tanpa Redis, rate limit proses API bersifat lokal pada satu proses.
 
 Contoh pengamanan file:
 

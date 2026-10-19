@@ -3,6 +3,7 @@ import test from 'node:test';
 import Fastify from 'fastify';
 import rateLimit from '@fastify/rate-limit';
 import { studentLoginRateLimit } from '../dist/routes/auth.js';
+import { closePasswordVerifier } from '../dist/services/password-verifier.js';
 
 test('limiter login tetap membatasi per NISN tanpa menggabungkan siswa satu sekolah', async () => {
   const app = Fastify();
@@ -23,5 +24,6 @@ test('limiter login tetap membatasi per NISN tanpa menggabungkan siswa satu seko
     assert.equal(normalizedSameStudent.statusCode, 429);
   } finally {
     await app.close();
+    await closePasswordVerifier();
   }
 });

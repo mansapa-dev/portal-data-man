@@ -18,6 +18,7 @@ import { staffRoutes } from './routes/staff.js';
 import { questionImageRoutes } from './routes/question-images.js';
 import { ScoringService } from './services/scoring.js';
 import { ExpiredAttemptFinalizer } from './services/expired-attempt-finalizer.js';
+import { closePasswordVerifier } from './services/password-verifier.js';
 
 const env = z.object({
   HOST: z.string().default('0.0.0.0'),
@@ -45,9 +46,17 @@ const redis = env.REDIS_URL ? new Redis(env.REDIS_URL, { maxRetriesPerRequest: 1
 const finalizer = pool && env.ATTEMPT_FINALIZER_ENABLED === 'true'
   ? new ExpiredAttemptFinalizer(pool, new ScoringService(pool), app.log, env.ATTEMPT_FINALIZER_INTERVAL_MS, env.ATTEMPT_FINALIZER_BATCH_SIZE)
   : null;
-await app.register(rateLimit, redis
-  ? { hook: 'preHandler', max: 180, timeWindow: '1 minute', redis, keyGenerator: rateLimitKey }
-  : { hook: 'preHandler', max: 180, timeWindow: '1 minute', keyGenerator: rateLimitKey });
+// Keep a generous per-session request budget for active students (autosave,
+// exam reads and heartbeat), while retaining the lower anonymous/staff budget.
+// Authentication routes have their own stricter account-specific limits.
+const sessionRateLimit = {
+  hook: 'preHandler' as const,
+  max: (_request: import('fastify').FastifyRequest, key: string) => key.startsWith('STUDENT:') ? 1_200 : 180,
+  timeWindow: '1 minute',
+  redis: redis ?? undefined,
+  keyGenerator: rateLimitKey,
+};
+await app.register(rateLimit, sessionRateLimit);
 
 app.get('/health/live', async () => ({ status: 'ok' }));
 app.get('/health/ready', async (_request, reply) => {
@@ -84,6 +93,7 @@ app.setErrorHandler((error, request, reply) => {
 const close = async () => {
   await finalizer?.stop();
   await app.close();
+  await closePasswordVerifier();
   await pool?.end();
   await redis?.quit();
 };

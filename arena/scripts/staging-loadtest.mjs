@@ -28,7 +28,7 @@ function settings() {
     throw new Error(`Database name must be exactly ${STAGING_DATABASE}.`);
   }
   const scenario = required('ARENA_LOADTEST_SCENARIO');
-  if (!['login', 'autosave', 'submit'].includes(scenario)) throw new Error('Scenario must be login, autosave, or submit.');
+  if (!['login', 'autosave', 'submit', 'mixed'].includes(scenario)) throw new Error('Scenario must be login, autosave, submit, or mixed.');
   const concurrency = Number(required('ARENA_LOADTEST_CONCURRENCY'));
   if (!Number.isInteger(concurrency) || ![25, 50, 100].includes(concurrency)) {
     throw new Error('Concurrency must be one of the staged levels: 25, 50, or 100.');
@@ -176,7 +176,15 @@ async function main() {
     } else {
       const examId = config.examId;
       if (!Number.isSafeInteger(examId) || examId <= 0) throw new Error('Exam ID must be a positive integer.');
-      await worker(participants, MAX_PREP_CONCURRENCY, async (participant) => {
+
+      for (let i = 0; i < participants.length; i++) {
+        participants[i].mixedRole = config.scenario === 'mixed'
+          ? (i % 3 === 0 ? 'login' : i % 3 === 1 ? 'autosave' : 'submit')
+          : config.scenario;
+      }
+
+      const needsPrep = participants.filter((p) => p.mixedRole !== 'login');
+      await worker(needsPrep, MAX_PREP_CONCURRENCY, async (participant) => {
         await login(participant);
         const available = await call('GET', '/api/student/exams', { token: participant.auth.token });
         prepMetrics.push(available);
@@ -193,16 +201,18 @@ async function main() {
         if (!String(started.data.exam?.nama_ujian ?? '').startsWith('LOADTEST-')) throw new Error('Exam title must start with LOADTEST-.');
         participant.attempt = started.data;
       });
-      if (prepErrors.length || participants.some((participant) => !participant.attempt) || abortController.signal.aborted) {
+      if (prepErrors.length || needsPrep.some((participant) => !participant.attempt) || abortController.signal.aborted) {
         const failedPreparation = report(`${config.scenario} preparation`, prepMetrics, prepErrors, performance.now() - startedAt, config.concurrency, []);
         console.log(JSON.stringify({ ...failedPreparation, load_wave_sent: false, interrupted }, null, 2));
         throw new Error('Preparation incomplete; load wave was not sent. Created staging attempts are retained for audit.');
       }
 
-      const target = config.scenario === 'autosave' ? 'PUT /api/student/exams/:id/answers/:questionId' : 'POST submit + concurrent autosave';
+      const target = config.scenario === 'autosave' ? 'PUT /api/student/exams/:id/answers/:questionId' : config.scenario === 'submit' ? 'POST submit + concurrent autosave' : 'mixed: login + autosave + submit wave';
       const waveStart = performance.now();
       await worker(participants, config.concurrency, async (participant) => {
-        if (config.scenario === 'autosave') {
+        if (participant.mixedRole === 'login') {
+          await login(participant, metrics);
+        } else if (participant.mixedRole === 'autosave') {
           const question = participant.attempt.soal[0];
           const choices = Array.isArray(question.opsi) ? question.opsi : [];
           if (question.tipe !== 'SHORT_ANSWER' && choices.length === 0) throw new Error('test exam question has no valid answer choices');
@@ -258,19 +268,23 @@ async function main() {
       });
       summary = report(target, metrics, prepErrors, performance.now() - waveStart, config.concurrency, prepMetrics);
 
-      const attemptIds = participants.map((participant) => participant.attempt.attempt_id);
-      const verified = await verifyDatabase(db, config.scenario, participants, attemptIds);
+      const participantsWithAttempts = participants.filter((p) => p.attempt != null);
+      const attemptIds = participantsWithAttempts.map((participant) => participant.attempt.attempt_id);
+      const verified = await verifyDatabase(db, config.scenario, participantsWithAttempts, attemptIds);
       summary.database = verified;
-      if (config.scenario === 'autosave' && verified.consistent && !abortController.signal.aborted) {
-        const finalizationResults = [];
-        const finalizationErrors = [];
-        await worker(participants, MAX_PREP_CONCURRENCY, async (participant) => {
-          const result = await callIdempotent('POST', `/api/student/exams/${examId}/submit`, { token: participant.auth.token, csrf: participant.auth.csrf, body: {} });
-          finalizationResults.push(...result);
-          if (result.at(-1).status !== 200) throw new Error(`test attempt finalization HTTP ${result.at(-1).status || result.at(-1).error}`);
-        }, finalizationErrors);
-        summary.test_attempt_finalization = report('test-attempt cleanup by submit', finalizationResults, finalizationErrors, performance.now() - waveStart, MAX_PREP_CONCURRENCY, []);
-        summary.database_after_finalization = await verifyDatabase(db, 'autosave_finalized', participants, attemptIds);
+      if (['autosave', 'mixed'].includes(config.scenario) && verified.consistent && !abortController.signal.aborted) {
+        const unfinalized = participants.filter((p) => p.mixedRole === 'autosave' && p.attempt != null);
+        if (unfinalized.length > 0) {
+          const finalizationResults = [];
+          const finalizationErrors = [];
+          await worker(unfinalized, MAX_PREP_CONCURRENCY, async (participant) => {
+            const result = await callIdempotent('POST', `/api/student/exams/${examId}/submit`, { token: participant.auth.token, csrf: participant.auth.csrf, body: {} });
+            finalizationResults.push(...result);
+            if (result.at(-1).status !== 200) throw new Error(`test attempt finalization HTTP ${result.at(-1).status || result.at(-1).error}`);
+          }, finalizationErrors);
+          summary.test_attempt_finalization = report('test-attempt cleanup by submit', finalizationResults, finalizationErrors, performance.now() - waveStart, MAX_PREP_CONCURRENCY, []);
+          summary.database_after_finalization = await verifyDatabase(db, config.scenario === 'mixed' ? 'mixed_finalized' : 'autosave_finalized', participantsWithAttempts, attemptIds);
+        }
       }
     }
 
@@ -377,15 +391,17 @@ async function verifyDatabase(db, scenario, participants, attemptIds) {
     const attempt = byId.get(participant.attempt.attempt_id);
     if (!attempt) continue;
     if (Number(attempt.written_versions) !== 1 || Number(attempt.stored_answers) !== 1) bad.push('answer_count');
-    const expectedRevision = scenario.startsWith('autosave') ? 2 : participant.acknowledgedRaceAnswer ? 2 : 1;
+    const isAutosaveRole = participant.mixedRole === 'autosave';
+    const isSubmitRole = participant.mixedRole === 'submit';
+    const expectedRevision = (isAutosaveRole || scenario.startsWith('autosave')) ? 2 : participant.acknowledgedRaceAnswer ? 2 : 1;
     const revisionMatches = participant.raceOutcomeUnknown
       ? [1, 2].includes(Number(attempt.latest_revision))
       : Number(attempt.latest_revision) === expectedRevision;
     if (!revisionMatches) bad.push('answer_revision');
     if (participant.acknowledgedRaceAnswer !== undefined && attempt.saved_answer !== participant.acknowledgedRaceAnswer) bad.push('acknowledged_race_answer_missing');
     if (participant.baselineAnswer !== undefined && ![participant.baselineAnswer, participant.expectedRaceAnswer].includes(attempt.saved_answer)) bad.push('race_answer_state');
-    if (scenario === 'autosave' && (attempt.status !== 'IN_PROGRESS' || Number(attempt.result_count) !== 0)) bad.push('unexpected_result');
-    if (['submit', 'autosave_finalized'].includes(scenario) && (!['COMPLETED', 'EXPIRED', 'TERMINATED'].includes(attempt.status) || Number(attempt.result_count) !== 1 || Number(attempt.classified_questions) !== Number(attempt.question_count) || Number(attempt.score) < 0 || Number(attempt.score) > 100 || Number(attempt.earned_points) < 0 || Number(attempt.earned_points) > Number(attempt.maximum_points))) bad.push('submit_result_state');
+    if ((scenario === 'autosave' || (scenario === 'mixed' && isAutosaveRole)) && (attempt.status !== 'IN_PROGRESS' || Number(attempt.result_count) !== 0)) bad.push('unexpected_result');
+    if ((['submit', 'autosave_finalized', 'mixed_finalized'].includes(scenario) || (scenario === 'mixed' && isSubmitRole)) && (!['COMPLETED', 'EXPIRED', 'TERMINATED'].includes(attempt.status) || Number(attempt.result_count) !== 1 || Number(attempt.classified_questions) !== Number(attempt.question_count) || Number(attempt.score) < 0 || Number(attempt.score) > 100 || Number(attempt.earned_points) < 0 || Number(attempt.earned_points) > Number(attempt.maximum_points))) bad.push('submit_result_state');
   }
   return {
     consistent: missing === 0 && bad.length === 0,
@@ -393,7 +409,7 @@ async function verifyDatabase(db, scenario, participants, attemptIds) {
     found_attempts: rows.length,
     missing_attempts: missing,
     verified_answered_attempts: rows.filter((row) => Number(row.written_versions) === 1 && Number(row.stored_answers) === 1).length,
-    verified_result_attempts: ['submit', 'autosave_finalized'].includes(scenario) ? rows.filter((row) => Number(row.result_count) === 1 && Number(row.classified_questions) === Number(row.question_count) && Number(row.score) >= 0 && Number(row.score) <= 100 && Number(row.earned_points) >= 0 && Number(row.earned_points) <= Number(row.maximum_points)).length : null,
+    verified_result_attempts: ['submit', 'autosave_finalized', 'mixed', 'mixed_finalized'].includes(scenario) ? rows.filter((row) => Number(row.result_count) === 1 && Number(row.classified_questions) === Number(row.question_count) && Number(row.score) >= 0 && Number(row.score) <= 100 && Number(row.earned_points) >= 0 && Number(row.earned_points) <= Number(row.maximum_points)).length : null,
     integrity_errors: bad.length,
   };
 }

@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { assertCsrf, claimsFromRequest, readToken } from '../lib/auth.js';
+import { assertCsrf, claimsFromRequest, rateLimitKey, readToken } from '../lib/auth.js';
 import { requirePool } from '../lib/db.js';
 import { ScoringService } from '../services/scoring.js';
 import { StudentExamService } from '../services/student-exam.js';
@@ -20,15 +20,15 @@ export async function studentExamRoutes(app: FastifyInstance) {
     return claims;
   };
   app.get('/api/student/exams', async (request) => exams.list(studentClaims(request).sub));
-  app.post<{ Params: { id: string } }>('/api/student/exams/:id/start', async (request) => {
+  app.post<{ Params: { id: string } }>('/api/student/exams/:id/start', { config: { rateLimit: { max: 10, timeWindow: '1 minute', keyGenerator: rateLimitKey } } }, async (request) => {
     const claims = studentClaims(request); assertCsrf(request, claims);
     return exams.start(claims.sub, examId.parse(request.params.id));
   });
-  app.post<{ Params: { id: string } }>('/api/student/exams/:id/heartbeat', async (request) => {
+  app.post<{ Params: { id: string } }>('/api/student/exams/:id/heartbeat', { config: { rateLimit: { max: 6, timeWindow: '1 minute', keyGenerator: rateLimitKey } } }, async (request) => {
     const claims = studentClaims(request); assertCsrf(request, claims);
     return exams.heartbeat(claims.sub, examId.parse(request.params.id));
   });
-  app.put<{ Params: { id: string; questionId: string } }>('/api/student/exams/:id/answers/:questionId', async (request) => {
+  app.put<{ Params: { id: string; questionId: string } }>('/api/student/exams/:id/answers/:questionId', { config: { rateLimit: { max: 300, timeWindow: '1 minute', keyGenerator: rateLimitKey } } }, async (request) => {
     const claims = studentClaims(request); assertCsrf(request, claims);
     return exams.saveAnswer(claims, examId.parse(request.params.id), examId.parse(request.params.questionId), answerSchema.parse(request.body));
   });
@@ -43,7 +43,7 @@ export async function studentExamRoutes(app: FastifyInstance) {
     const body = violationSchema.parse(request.body);
     return scoring.recordViolation(claims.sub, examId.parse(request.params.id), body.event_key, body.type, { ip: request.ip, userAgent: request.headers['user-agent'] ?? '', clientOccurredAt: body.client_occurred_at ?? null });
   });
-  app.post<{ Params: { id: string } }>('/api/student/exams/:id/submit', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request) => {
+  app.post<{ Params: { id: string } }>('/api/student/exams/:id/submit', { config: { rateLimit: { max: 10, timeWindow: '1 minute', keyGenerator: rateLimitKey } } }, async (request) => {
     const claims = studentClaims(request); assertCsrf(request, claims);
     const body = z.object({ finalize_only: z.boolean().optional() }).strict().parse(request.body ?? {});
     return scoring.submit(claims.sub, examId.parse(request.params.id), body.finalize_only ?? false);

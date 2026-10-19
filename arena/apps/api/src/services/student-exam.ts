@@ -10,7 +10,12 @@ function ulid() {
   return output;
 }
 function shuffle<T>(items: T[], seed: string): T[] {
-  return [...items].sort((a, b) => createHash('sha256').update(`${seed}:${a}`).digest('hex').localeCompare(createHash('sha256').update(`${seed}:${b}`).digest('hex')));
+  // Hash each item once. Hashing inside Array.sort's comparator performs
+  // O(n log n) synchronous crypto work on the API event loop for every start.
+  return items
+    .map((item) => ({ item, rank: createHash('sha256').update(`${seed}:${item}`).digest('hex') }))
+    .sort((a, b) => a.rank.localeCompare(b.rank))
+    .map(({ item }) => item);
 }
 const options = ['A', 'B', 'C', 'D', 'E'];
 function jsonValue<T>(value: unknown): T {
@@ -115,40 +120,34 @@ export class StudentExamService {
     if (input.base_revision < 0 || !/^[A-Za-z0-9_-]{16,100}$/.test(input.mutation_id)) throw Object.assign(new Error('Versi penyimpanan tidak valid'), { statusCode: 422 });
     const connection = await this.pool.getConnection();
     try {
-      const [preflight] = await connection.execute<RowDataPacket[]>(`SELECT t.id attempt_pk,t.public_id,t.status,t.expires_at,q.question_id,q.question_type,
-        (q.option_a IS NOT NULL AND q.option_a<>'') option_a_available,(q.option_b IS NOT NULL AND q.option_b<>'') option_b_available,
-        (q.option_c IS NOT NULL AND q.option_c<>'') option_c_available,(q.option_d IS NOT NULL AND q.option_d<>'') option_d_available,
-        (q.option_e IS NOT NULL AND q.option_e<>'') option_e_available,v.revision,v.mutation_id,a.id answer_id,a.answer,a.is_flagged
-        FROM exam_attempts t JOIN attempt_questions q ON q.attempt_id=t.id AND q.question_id=?
-        LEFT JOIN answer_write_versions v ON v.attempt_id=q.attempt_id AND v.question_id=q.question_id
-        LEFT JOIN student_answers a ON a.attempt_id=q.attempt_id AND a.question_id=q.question_id
-        WHERE t.student_id=? AND t.exam_id=?`, [questionId, claims.sub, examId]);
-      const first = preflight[0];
-      if (!first) throw Object.assign(new Error('Sesi ujian atau soal tidak ditemukan'), { statusCode: 404 });
-      if (first.public_id !== input.attempt_id) throw Object.assign(new Error('Sesi ujian berubah; muat ulang halaman'), { statusCode: 409 });
-      let answer = input.answer?.trim() || null;
-      if (answer !== null) {
-        if (first.question_type === 'SHORT_ANSWER') {
-          if (answer.length > 500) throw Object.assign(new Error('Jawaban terlalu panjang'), { statusCode: 422 });
-        } else {
-          const letters = [...new Set(answer.toUpperCase().split(',').filter(Boolean))].sort();
-          if (!letters.length || (first.question_type === 'MULTIPLE_CHOICE' && letters.length !== 1) || letters.some((letter) => !['A', 'B', 'C', 'D', 'E'].includes(letter) || !first[`option_${letter.toLowerCase()}_available`])) throw Object.assign(new Error('Pilihan jawaban tidak valid'), { statusCode: 422 });
-          answer = letters.join(',');
-        }
-      }
-      if (first.mutation_id === input.mutation_id) {
-        if (first.answer !== answer || Boolean(first.is_flagged) !== input.is_flagged) throw Object.assign(new Error('ID mutation sudah digunakan untuk payload lain'), { statusCode: 409 });
-        return { question_id: questionId, revision: Number(first.revision ?? 0), duplicate: true };
-      }
       await connection.beginTransaction();
       try {
+        // Lock the attempt first. Submit/finalization use the same row lock, so
+        // an acknowledged write is ordered wholly before or after finalization.
         const [lockedRows] = await connection.execute<RowDataPacket[]>('SELECT id,public_id,status,expires_at,(expires_at<=UTC_TIMESTAMP(3)) expired FROM exam_attempts WHERE student_id=? AND exam_id=? FOR UPDATE', [claims.sub, examId]);
         const attempt = lockedRows[0];
         if (!attempt) throw Object.assign(new Error('Sesi ujian tidak ditemukan'), { statusCode: 404 });
-        if (attempt.public_id !== input.attempt_id || attempt.id !== first.attempt_pk) throw Object.assign(new Error('Sesi ujian berubah; muat ulang halaman'), { statusCode: 409 });
-        const [stateRows] = await connection.execute<RowDataPacket[]>('SELECT v.revision,v.mutation_id,a.id answer_id,a.answer,a.is_flagged FROM attempt_questions q LEFT JOIN answer_write_versions v ON v.attempt_id=q.attempt_id AND v.question_id=q.question_id LEFT JOIN student_answers a ON a.attempt_id=q.attempt_id AND a.question_id=q.question_id WHERE q.attempt_id=? AND q.question_id=?', [attempt.id, questionId]);
+        if (attempt.public_id !== input.attempt_id) throw Object.assign(new Error('Sesi ujian berubah; muat ulang halaman'), { statusCode: 409 });
+        const [stateRows] = await connection.execute<RowDataPacket[]>(`SELECT q.question_type,
+          (q.option_a IS NOT NULL AND q.option_a<>'') option_a_available,(q.option_b IS NOT NULL AND q.option_b<>'') option_b_available,
+          (q.option_c IS NOT NULL AND q.option_c<>'') option_c_available,(q.option_d IS NOT NULL AND q.option_d<>'') option_d_available,
+          (q.option_e IS NOT NULL AND q.option_e<>'') option_e_available,v.revision,v.mutation_id,a.id answer_id,a.answer,a.is_flagged
+          FROM attempt_questions q
+          LEFT JOIN answer_write_versions v ON v.attempt_id=q.attempt_id AND v.question_id=q.question_id
+          LEFT JOIN student_answers a ON a.attempt_id=q.attempt_id AND a.question_id=q.question_id
+          WHERE q.attempt_id=? AND q.question_id=?`, [attempt.id, questionId]);
         const current = stateRows[0];
         if (!current) throw Object.assign(new Error('Soal tidak ditemukan'), { statusCode: 404 });
+        let answer = input.answer?.trim() || null;
+        if (answer !== null) {
+          if (current.question_type === 'SHORT_ANSWER') {
+            if (answer.length > 500) throw Object.assign(new Error('Jawaban terlalu panjang'), { statusCode: 422 });
+          } else {
+            const letters = [...new Set(answer.toUpperCase().split(',').filter(Boolean))].sort();
+            if (!letters.length || (current.question_type === 'MULTIPLE_CHOICE' && letters.length !== 1) || letters.some((letter) => !['A', 'B', 'C', 'D', 'E'].includes(letter) || !current[`option_${letter.toLowerCase()}_available`])) throw Object.assign(new Error('Pilihan jawaban tidak valid'), { statusCode: 422 });
+            answer = letters.join(',');
+          }
+        }
         const revision = current.revision === null ? 0 : Number(current.revision);
         if (current.mutation_id === input.mutation_id) {
           if (current.answer !== answer || Boolean(current.is_flagged) !== input.is_flagged) throw Object.assign(new Error('ID mutation sudah digunakan untuk payload lain'), { statusCode: 409 });

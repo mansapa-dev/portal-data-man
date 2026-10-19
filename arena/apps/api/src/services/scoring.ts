@@ -101,6 +101,7 @@ export class ScoringService {
   }
 
   async recordViolation(studentId: number, examId: number, eventKey: string, type: string, metadata: { ip?: string; userAgent?: string; clientOccurredAt?: string | null } = {}) {
+    let terminated = false;
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
@@ -115,14 +116,21 @@ export class ScoringService {
       if (counted) await connection.execute('UPDATE exam_attempts SET violation_count=LEAST(255,violation_count+1),status=IF(violation_count+1>=3,\'TERMINATED\',status) WHERE id=?', [attempt.id]);
       await connection.commit();
       const count = Number(attempt.violation_count) + Number(counted);
-      const terminated = counted && count >= 3;
+      terminated = counted && count >= 3;
       const outcome: { recorded: boolean; count: number; terminated: boolean; hasil?: unknown } = { recorded: inserted, count, terminated };
+      // Release the connection *before* calling submit so it can acquire its own
+      // connection from the pool without risk of exhaustion when pool is small.
+      connection.release();
       if (terminated) outcome.hasil = await this.submit(studentId, examId, true);
       return outcome;
     } catch (error) {
       try { await connection.rollback(); } catch { /* no active transaction */ }
       throw error;
-    } finally { connection.release(); }
+    } finally {
+      // Guard: only release if submit path above did not already release it.
+      // mysql2 pool connections ignore double-release, but be explicit.
+      if (!terminated) connection.release();
+    }
   }
 
   private format(row: RowDataPacket, isRemedial = false, scoreCap: number | null = null) {
