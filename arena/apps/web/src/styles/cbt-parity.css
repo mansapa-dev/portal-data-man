@@ -1,0 +1,139 @@
+/* Final Arena-to-CBT parity layer. Keep this import last. */
+:root {
+  color-scheme: light;
+  --arena-content: 1440px;
+  --primary: #006527;
+  --primary-hover: #005421;
+  --primary-dark: #006527;
+  --primary-light: #80b99a;
+  --primary-soft: #eaf3e9;
+  --primary-soft-border: #d7e7d6;
+  --bg-body: #fff;
+  --surface: #fff;
+  --surface-subtle: #f1f4ed;
+  --text-main: #24291f;
+  --text-muted: #626c60;
+  --border: #dfe5da;
+  --border-subtle: #e8ece3;
+  --ui-success: #176b3c;
+  --ui-success-bg: #e8f3e9;
+  --ui-success-border: #c8e4cf;
+  --ui-danger: #b42332;
+  --ui-danger-bg: #fff0f1;
+  --ui-danger-border: #f2c9cf;
+  --ui-warning: #8f570c;
+  --ui-warning-bg: #fff5db;
+  --ui-warning-border: #ebd49f;
+  --ui-info: #22698a;
+  --ui-info-bg: #eaf4fa;
+  --ui-info-border: #c8dfe9;
+  --shadow-sm: 0 3px 5px #14231308;
+  --shadow-md: 0 8px 22px #1423130d;
+  --shadow-lg: 0 20px 60px #14231324;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --primary: #70d69b;
+  --primary-hover: #a0e6bb;
+  --primary-dark: #8cdeac;
+  --primary-light: #538968;
+  --primary-soft: #243b2b;
+  --primary-soft-border: #3a5643;
+  --bg-body: #141b17;
+  --surface: #1d2721;
+  --surface-subtle: #253128;
+  --text-main: #edf2e9;
+  --text-muted: #acb7a9;
+  --border: #39463c;
+  --border-subtle: #303d34;
+  --ui-success: #9ce0b1;
+  --ui-success-bg: #233e2b;
+  --ui-success-border: #3b6048;
+  --ui-danger: #ffadb6;
+  --ui-danger-bg: #43282d;
+  --ui-danger-border: #70434b;
+  --ui-warning: #f2ce84;
+  --ui-warning-bg: #3f3522;
+  --ui-warning-border: #695638;
+  --ui-info: #9ed5f0;
+  --ui-info-bg: #233943;
+  --ui-info-border: #3d5b6b;
+}
+
+html, body { background: var(--bg-body); color: var(--text-main); }
+:where(button, a, input, select, textarea, [contenteditable='true']):focus-visible { outline: 3px solid var(--primary-light); outline-offset: 3px; }
+.arena-app :where(input:not([type='checkbox']):not([type='radio']):not([type='range']), select, textarea) { min-height: 44px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text-main); }
+.arena-app :where(input:not([type='checkbox']):not([type='radio']), select, textarea):focus { border-color: var(--primary-light); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-light) 22%, transparent); outline: 0; }
+.arena-app :where(input[type='checkbox'], input[type='radio'], input[type='range']) { accent-color: #16834c; }
+.arena-app :where(.btn, button) { border-radius: 24px; transition: background .18s, border-color .18s, box-shadow .18s, transform .18s; }
+.arena-app .btn-primary { border-color: #006527; background: #006527; color: #fff; box-shadow: 0 4px 12px #00652718; }
+.arena-app .btn-primary:hover:not(:disabled) { border-color: #005421; background: #005421; }
+.arena-app .btn-secondary { border-color: var(--border); background: var(--surface); color: var(--text-main); box-shadow: var(--shadow-sm); }
+.arena-app .btn-secondary:hover:not(:disabled) { border-color: var(--primary-soft-border); background: var(--primary-soft); color: var(--primary-dark); }
+
+/* CBT uses a light sidebar with a green pill for the current section. */
+:where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout { grid-template-columns: 258px minmax(0, 1fr); min-height: 100dvh; background: var(--bg-body); color: var(--text-main); }
+:where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout > .sidebar { width: 258px; background: var(--surface) !important; color: var(--text-main) !important; border-right: 1px solid var(--border) !important; box-shadow: none !important; }
+:where(.admin-workspace, .staff-workspace, .teacher-workspace) .sidebar :where(.sb-brand-title, .user-profile-name) { color: var(--text-main) !important; }
+:where(.admin-workspace, .staff-workspace, .teacher-workspace) .sidebar :where(.sb-brand-sub, .sb-section-label, .sb-nav-group-label, .user-profile-role) { color: var(--text-muted) !important; }
+:where(.admin-workspace, .staff-workspace, .teacher-workspace) .sidebar .sb-item { min-height: 44px; border: 1px solid transparent; border-radius: 24px; color: var(--text-muted) !important; }
+:where(.admin-workspace, .staff-workspace, .teacher-workspace) .sidebar .sb-item:hover { background: var(--primary-soft) !important; color: var(--primary-dark) !important; }
+:where(.admin-workspace, .staff-workspace, .teacher-workspace) .sidebar .sb-item.active { border-color: #006527; background: #006527 !important; color: #fff !important; box-shadow: 0 4px 12px #00652718 !important; }
+:where(.admin-workspace, .staff-workspace, .teacher-workspace) .sidebar .sb-item.active :where(i, .sb-icon, .sb-arrow) { color: #fff !important; }
+:where(.admin-workspace, .staff-workspace, .teacher-workspace) .sidebar :where(.user-profile-card, .sb-logout-btn) { border-color: var(--border); background: var(--surface-subtle); color: var(--text-main); }
+:where(.admin-workspace, .staff-workspace, .teacher-workspace) > .dash-content { min-width: 0; background: var(--bg-body); }
+:where(.admin-workspace, .staff-workspace, .teacher-workspace) .dash-content > .topbar { z-index: 20; min-height: 72px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--bg-body) 94%, transparent); backdrop-filter: blur(12px); }
+:where(.admin-workspace, .staff-workspace, .teacher-workspace) .dash-body { width: min(100%, var(--arena-content)); margin-inline: auto; padding: clamp(18px, 2.4vw, 32px) clamp(15px, 2.7vw, 36px) 48px; }
+
+.arena-app :where(.admin-page-card, .operations-card, .question-results-card, .question-template-catalog, .question-subject-catalog, .teacher-exam-card, .student-home-card, .student-result, .cbt-header, .q-panel, .nav-panel) { border: 1px solid var(--border); border-radius: 22px; background: var(--surface); box-shadow: var(--shadow-sm); }
+.dash-body :where(.admin-table-scroll, .operations-table-wrap, div:has(> table)) { max-width: 100%; overflow: auto; overscroll-behavior-x: contain; }
+.dash-body table { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--surface); color: var(--text-main); font-variant-numeric: tabular-nums; }
+.dash-body th { position: sticky; top: 0; z-index: 1; padding: 13px 14px; border-bottom: 1px solid var(--border); background: var(--surface-subtle); color: var(--text-muted); font-size: 11px; letter-spacing: .35px; white-space: nowrap; }
+.dash-body td { padding: 13px 14px; border-bottom: 1px solid var(--border); background: var(--surface); color: var(--text-main); line-height: 1.55; vertical-align: middle; }
+.dash-body tbody tr:last-child td { border-bottom: 0; }
+.dash-body tbody tr:hover td { background: var(--surface-subtle); }
+.arena-app :where(.admin-status, .teacher-exam-status, .badge) { border-radius: 20px; font-weight: 600; }
+.arena-app .modal { padding: 20px; background: #08150eb3; backdrop-filter: blur(4px); }
+.arena-app .modal-content { max-width: calc(100vw - 28px); max-height: calc(100dvh - 40px); overflow-y: auto; border: 1px solid var(--border); border-radius: 24px; background: var(--surface); color: var(--text-main); box-shadow: var(--shadow-lg); }
+
+.student-portal { width: min(100%, 1120px); margin-inline: auto; }
+.student-exam-card { border-color: var(--border); border-radius: 16px; box-shadow: var(--shadow-sm); transition: transform .18s, border-color .18s, box-shadow .18s; }
+.student-exam-card:hover { transform: translateY(-2px); border-color: var(--primary-soft-border); box-shadow: var(--shadow-md); }
+.cbt-wrapper { width: min(100%, 1280px); margin-inline: auto; }
+.opt-btn { border-radius: 16px; color: var(--text-main); }
+.opt-char { border-radius: 50%; background: var(--surface-subtle); }
+.opt-btn.selected .opt-char, .btn-num.answered { border-color: #006527; background: #006527; color: #fff; }
+.btn-num { border-radius: 12px; font-variant-numeric: tabular-nums; }
+.btn-num.flagged { border-color: var(--ui-warning-border); background: var(--ui-warning-bg); color: var(--ui-warning); }
+.btn-num.active { outline: 2px solid var(--primary); outline-offset: 2px; }
+.question-editor { border-radius: 24px !important; box-shadow: var(--shadow-lg) !important; }
+.question-editor-actions { border-color: var(--border); background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(12px); }
+
+@media (max-width: 800px) {
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout { display: block; min-height: 100dvh; }
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout > .sidebar { position: sticky; top: 0; z-index: 40; width: 100%; height: auto; padding: 8px 11px; border-right: 0 !important; border-bottom: 1px solid var(--border) !important; }
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace) .sidebar nav { display: flex; overflow-x: auto; overscroll-behavior-x: contain; }
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace) .sidebar nav .sb-item { flex: 0 0 auto; min-width: max-content; }
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace) .dash-body { padding: 15px 11px calc(30px + env(safe-area-inset-bottom)); }
+  .arena-app .modal { align-items: flex-end; padding: 12px; }
+  .arena-app .modal-content { width: 100%; max-height: calc(100dvh - 24px); border-radius: 20px; }
+  .student-home-card { width: calc(100% - 20px); }
+  .cbt-wrapper { padding: 10px; }
+}
+
+@media (max-width: 500px) {
+  .arena-app :where(.btn, button) { min-height: 44px; }
+  .dash-body th, .dash-body td { padding: 10px 11px; }
+  .arena-app :where(.operations-heading, .admin-card-heading, .question-template-heading, .question-results-summary) { align-items: stretch; flex-direction: column; }
+  .cbt-header, .q-panel, .nav-panel { border-radius: 18px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
+}
+
+@media print {
+  :root, :root[data-theme='dark'] { color-scheme: light; --text-main: #222; --text-muted: #555; --surface: #fff; --surface-subtle: #f4f4f4; --border: #ccc; --bg-body: #fff; --primary: #006527; --primary-dark: #006527; --primary-soft: #eaf3e9; }
+}

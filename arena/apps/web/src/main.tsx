@@ -20,6 +20,7 @@ import './arena.css';
 import './styles/arena-responsive.css';
 import './styles/workspace-polish.css';
 import './styles/arena-design-system.css';
+import './styles/cbt-parity.css';
 
 type Student = { id: number; nisn: string; nama: string; kelas: string | null; tingkat: string | null };
 type Question = { id: number; tipe: string; pertanyaan: string; opsi: { key: string; text: string }[]; poin: number };
