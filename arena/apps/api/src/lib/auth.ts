@@ -26,6 +26,31 @@ export function readToken(token: string): Claims | null {
   } catch { return null; }
 }
 
+export function rateLimitKey(request: Pick<FastifyRequest, 'headers' | 'ip'>): string {
+  const bearer = request.headers.authorization?.startsWith('Bearer ')
+    ? request.headers.authorization.slice(7)
+    : '';
+  const cookies = request.headers.cookie?.split(';').map((part) => part.trim()) ?? [];
+  const staffCookie = cookies.find((part) => part.startsWith('arena_staff_session='))?.slice('arena_staff_session='.length) ?? '';
+  const studentCookie = cookies.find((part) => part.startsWith('arena_student_session='))?.slice('arena_student_session='.length) ?? '';
+  const claims = [bearer, staffCookie, studentCookie].map(readToken).find((value): value is Claims => value !== null);
+  return claims ? `${claims.role}:${claims.sub}` : `ip:${request.ip}`;
+}
+
+export function normalizeStudentDigits(value: string): string {
+  return value
+    .replace(/[\s\u00a0\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/gu, '')
+    .replace(/[０-９٠-٩۰-۹]/gu, (digit) => {
+      const codePoint = digit.codePointAt(0)!;
+      return String.fromCharCode(codePoint >= 0xff10 && codePoint <= 0xff19 ? codePoint - 0xff10 + 48 : codePoint >= 0x660 && codePoint <= 0x669 ? codePoint - 0x660 + 48 : codePoint - 0x6f0 + 48);
+    });
+}
+
+export function studentLoginRateLimitKey(value: unknown): string {
+  const nisn = typeof value === 'object' && value !== null && 'nisn' in value ? (value as { nisn?: unknown }).nisn : '';
+  return `student-login:${normalizeStudentDigits(String(nisn ?? '')).slice(0, 20)}`;
+}
+
 export function claimsFromRequest(request: FastifyRequest): Claims {
   const header = request.headers.authorization;
   const cookies=request.headers.cookie?.split(';').map((part)=>part.trim())??[];

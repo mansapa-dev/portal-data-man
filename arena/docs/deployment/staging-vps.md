@@ -163,6 +163,8 @@ SETUP_TOKEN=<acak-satu-kali-dan-simpan-aman>
 ATTEMPT_FINALIZER_ENABLED=true
 ATTEMPT_FINALIZER_INTERVAL_MS=30000
 ATTEMPT_FINALIZER_BATCH_SIZE=20
+# Aktifkan sementara saat load test login staging; log hanya statistik agregat tanpa NISN/PIN.
+ARENA_LOGIN_DIAGNOSTICS=false
 ARENA_UPLOAD_DIR=/var/lib/arena/question-images
 ARENA_WEB_URL=https://staging.arena.man1palembang.sch.id
 

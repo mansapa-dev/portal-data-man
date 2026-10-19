@@ -49,7 +49,10 @@ export class ExpiredAttemptFinalizer {
 
       const [attempts] = await this.pool.query<RowDataPacket[]>(
         `SELECT student_id,exam_id FROM exam_attempts
-         WHERE status='IN_PROGRESS' AND expires_at<=UTC_TIMESTAMP(3)
+         WHERE (status='IN_PROGRESS' AND expires_at<=UTC_TIMESTAMP(3))
+            OR (status='TERMINATED' AND NOT EXISTS (
+              SELECT 1 FROM exam_results r WHERE r.attempt_id=exam_attempts.id
+            ))
          ORDER BY expires_at,id LIMIT ?`,
         [this.batchSize],
       );

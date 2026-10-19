@@ -248,16 +248,28 @@ export async function adminRoutes(app: FastifyInstance) {
         seen.add(dedupeKey); candidates.push({rowNumber:i+1,row,key,dedupeKey,canonical});
       }catch(error){errors.push({row:i+1,error:error instanceof z.ZodError?error.issues.map(x=>x.message).join(', '):error instanceof Error?error.message:'Data tidak valid'});}
     }
+    const requestedExamIds=[...new Set(candidates.map((item)=>item.row.exam_id))];
+    const validExamIds=new Set<number>();
+    for(let offset=0;offset<requestedExamIds.length;offset+=500){
+      const chunk=requestedExamIds.slice(offset,offset+500);
+      const[examRows]=await pool.query<RowDataPacket[]>(`SELECT id FROM exams WHERE id IN (${chunk.map(()=>'?').join(',')})`,chunk);
+      for(const exam of examRows)validExamIds.add(Number(exam.id));
+    }
+    const validCandidates=candidates.filter((item)=>{
+      if(validExamIds.has(item.row.exam_id))return true;
+      errors.push({row:item.rowNumber,error:`Ujian ID ${item.row.exam_id} tidak ditemukan di Arena. Pilih ujian yang tersedia pada pratinjau impor, lalu coba lagi.`});
+      return false;
+    });
     const existingKeys=new Set<string>();
     // Bound SQL size while reducing database round-trips from one per question to one per chunk.
-    for(let offset=0;offset<candidates.length;offset+=20){
-      const chunk=candidates.slice(offset,offset+20);
+    for(let offset=0;offset<validCandidates.length;offset+=20){
+      const chunk=validCandidates.slice(offset,offset+20);
       const predicates=chunk.map(()=>`(exam_id=? AND question_type=? AND question_text=? AND COALESCE(option_a,'')=COALESCE(?,'') AND COALESCE(option_b,'')=COALESCE(?,'') AND COALESCE(option_c,'')=COALESCE(?,'') AND COALESCE(option_d,'')=COALESCE(?,'') AND COALESCE(option_e,'')=COALESCE(? ,''))`);
       const params=chunk.flatMap((item)=>[item.canonical.exam_id,item.canonical.question_type,item.canonical.question_text,item.canonical.option_a,item.canonical.option_b,item.canonical.option_c,item.canonical.option_d,item.canonical.option_e]);
       const [existing]=await pool.query<RowDataPacket[]>(`SELECT exam_id,question_type,question_text,option_a,option_b,option_c,option_d,option_e FROM questions WHERE ${predicates.join(' OR ')}`,params);
       for(const row of existing)existingKeys.add(questionDuplicateKey(row as never));
     }
-    const fresh=candidates.filter((item)=>{if(existingKeys.has(item.dedupeKey)){duplicates++;return false;}return true;});
+    const fresh=validCandidates.filter((item)=>{if(existingKeys.has(item.dedupeKey)){duplicates++;return false;}return true;});
     for(let offset=0;offset<fresh.length;offset+=25){
       const chunk=fresh.slice(offset,offset+25);
       try{
@@ -266,7 +278,7 @@ export async function adminRoutes(app: FastifyInstance) {
         inserted+=(result as {affectedRows:number}).affectedRows;
       }catch(batchError){
         // Preserve row-level error reporting if an exceptional database constraint rejects a batch.
-        for(const item of chunk){try{const c=item.canonical;const[result]=await pool.execute('INSERT INTO questions(public_id,exam_id,question_type,question_text,option_a,option_b,option_c,option_d,option_e,correct_answer,points) VALUES(?,?,?,?,?,?,?,?,?,?,?)',[ulid(),item.row.exam_id,item.row.question_type,c.question_text,c.option_a,c.option_b,c.option_c,c.option_d,c.option_e,item.key,item.row.points]);inserted+=(result as{affectedRows:number}).affectedRows;}catch(error){errors.push({row:item.rowNumber,error:error instanceof Error?error.message:(batchError instanceof Error?batchError.message:'Gagal menyimpan soal')});}}
+        for(const item of chunk){try{const c=item.canonical;const[result]=await pool.execute('INSERT INTO questions(public_id,exam_id,question_type,question_text,option_a,option_b,option_c,option_d,option_e,correct_answer,points) VALUES(?,?,?,?,?,?,?,?,?,?,?)',[ulid(),item.row.exam_id,item.row.question_type,c.question_text,c.option_a,c.option_b,c.option_c,c.option_d,c.option_e,item.key,item.row.points]);inserted+=(result as{affectedRows:number}).affectedRows;}catch(error){const code=(error as{code?:string}).code;const message=code==='ER_NO_REFERENCED_ROW_2'?'Ujian tujuan tidak ditemukan atau sudah dihapus. Pilih ulang ujian pada pratinjau impor.':error instanceof Error?error.message:(batchError instanceof Error?batchError.message:'Gagal menyimpan soal');errors.push({row:item.rowNumber,error:message});}}
       }
     }
     await audit(pool,claims.sub,claims.role,'QUESTIONS_IMPORTED','Question',inserted,{inserted,failed:errors.length,duplicates}); return { inserted, failed:errors.length, duplicates, errors };

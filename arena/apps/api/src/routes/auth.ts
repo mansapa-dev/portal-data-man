@@ -1,26 +1,74 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requirePool } from '../lib/db.js';
-import { assertCsrf, claimsFromRequest, issueToken, newCsrf } from '../lib/auth.js';
-import type { RowDataPacket } from 'mysql2/promise';
+import { assertCsrf, claimsFromRequest, issueToken, newCsrf, normalizeStudentDigits, studentLoginRateLimitKey } from '../lib/auth.js';
+import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
 import { audit } from '../services/audit.js';
 import { createHash } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import { staffCapabilities } from '../services/staff-capabilities.js';
 
 const loginSchema = z.object({ nisn: z.string().trim().min(8).max(20), pin: z.string().trim().min(4).max(12) }).strict();
 const studentSessionSeconds=12*60*60;
-function normalizeDigits(value: string) { return value.replace(/[\s\u00a0\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/gu, '').replace(/[０-９٠-٩۰-۹]/gu, (digit) => String.fromCharCode((digit.codePointAt(0)! >= 0xff10 && digit.codePointAt(0)! <= 0xff19) ? digit.codePointAt(0)! - 0xff10 + 48 : digit.codePointAt(0)! >= 0x660 && digit.codePointAt(0)! <= 0x669 ? digit.codePointAt(0)! - 0x660 + 48 : digit.codePointAt(0)! - 0x6f0 + 48)); }
 const loginInFlight = new Map<string,Promise<{token:string;csrf_token:string;expires_in:number;student:Record<string,unknown>}>>();
+export const studentLoginRateLimit = { max: 20, timeWindow: '10 minutes', keyGenerator: (request: { body: unknown }) => studentLoginRateLimitKey(request.body) };
+
+type LoginOutcome='success'|'invalid_credentials'|'invalid_input'|'database_error'|'error';
+function percentile(values:number[],percent:number){if(!values.length)return null;const sorted=[...values].sort((a,b)=>a-b);return Number(sorted[Math.ceil(percent*sorted.length)-1]!.toFixed(1));}
 
 export async function authRoutes(app: FastifyInstance) {
+  const diagnosticsEnabled=process.env.ARENA_LOGIN_DIAGNOSTICS==='true';
+  const metrics={startedAt:Date.now(),requests:0,success:0,invalidCredentials:0,invalidInput:0,databaseErrors:0,errors:0,deduplicated:0,poolWaitMs:[] as number[],lookupMs:[] as number[],bcryptMs:[] as number[],totalMs:[] as number[]};
+  let metricsTimer:NodeJS.Timeout|undefined;
+  const flushMetrics=()=>{
+    if(!diagnosticsEnabled||!metrics.requests)return;
+    app.log.info({event:'student_login_metrics',window_ms:Date.now()-metrics.startedAt,requests:metrics.requests,success:metrics.success,invalid_credentials:metrics.invalidCredentials,invalid_input:metrics.invalidInput,database_errors:metrics.databaseErrors,errors:metrics.errors,deduplicated:metrics.deduplicated,pool_wait_ms:{p50:percentile(metrics.poolWaitMs,.50),p95:percentile(metrics.poolWaitMs,.95),p99:percentile(metrics.poolWaitMs,.99)},lookup_ms:{p50:percentile(metrics.lookupMs,.50),p95:percentile(metrics.lookupMs,.95),p99:percentile(metrics.lookupMs,.99)},bcrypt_ms:{p50:percentile(metrics.bcryptMs,.50),p95:percentile(metrics.bcryptMs,.95),p99:percentile(metrics.bcryptMs,.99)},total_ms:{p50:percentile(metrics.totalMs,.50),p95:percentile(metrics.totalMs,.95),p99:percentile(metrics.totalMs,.99)}},'student login diagnostic window');
+    metrics.startedAt=Date.now();metrics.requests=0;metrics.success=0;metrics.invalidCredentials=0;metrics.invalidInput=0;metrics.databaseErrors=0;metrics.errors=0;metrics.deduplicated=0;metrics.poolWaitMs=[];metrics.lookupMs=[];metrics.bcryptMs=[];metrics.totalMs=[];
+  };
+  const recordMetrics=(outcome:LoginOutcome,duration:number,poolWait:number,lookup:number,bcrypt:number,deduplicated:boolean)=>{
+    if(!diagnosticsEnabled)return;
+    if(!metrics.requests)metrics.startedAt=Date.now();
+    metrics.requests++;if(outcome==='success')metrics.success++;else if(outcome==='invalid_credentials')metrics.invalidCredentials++;else if(outcome==='invalid_input')metrics.invalidInput++;else if(outcome==='database_error')metrics.databaseErrors++;else metrics.errors++;
+    if(deduplicated)metrics.deduplicated++;
+    if(!deduplicated){if(poolWait>0)metrics.poolWaitMs.push(poolWait);if(lookup>0)metrics.lookupMs.push(lookup);if(bcrypt>0)metrics.bcryptMs.push(bcrypt);}
+    metrics.totalMs.push(duration);
+    if(!metricsTimer){metricsTimer=setTimeout(()=>{metricsTimer=undefined;flushMetrics();},60_000);metricsTimer.unref();}
+    if(metrics.requests>=2048){if(metricsTimer)clearTimeout(metricsTimer);metricsTimer=undefined;flushMetrics();}
+  };
+  app.addHook('onClose',async()=>{if(metricsTimer)clearTimeout(metricsTimer);flushMetrics();});
   app.post('/api/auth/student/login', {
-    config: { rateLimit: { max: 20, timeWindow: '10 minutes', keyGenerator: (request) => { const body=request.body as {nisn?:string}|undefined;return `student-login:${String(body?.nisn??'').replace(/\D/g,'').slice(0,20)}`; } } },
+    config: { rateLimit: studentLoginRateLimit },
   }, async (request, reply) => {
-    const body = loginSchema.parse(request.body);
-    const nisn = normalizeDigits(body.nisn); const pin = normalizeDigits(body.pin);
-    if (!/^\d{8,20}$/.test(nisn) || !/^\d{4,12}$/.test(pin)) throw Object.assign(new Error('NISN atau PIN tidak valid'), { statusCode: 422 });
-    const requestKey=createHash('sha256').update(`${process.env.AUTH_TOKEN_SECRET??'local-development-only'}:${nisn}:${pin}`).digest('hex');const previous=loginInFlight.get(requestKey);if(previous){const response=await previous;reply.header('Set-Cookie',`arena_student_session=${response.token}; Path=/; Max-Age=${studentSessionSeconds}; HttpOnly; SameSite=Lax${process.env.NODE_ENV==='production'?'; Secure':''}`);reply.header('Cache-Control','no-store');return response;}
-    const task=(async()=>{const pool=requirePool();const[rows]=await pool.execute<RowDataPacket[]>('SELECT id,nisn,name_snapshot,class_snapshot,grade_snapshot,pin_hash,cbt_status FROM students WHERE nisn=? AND is_active=1 LIMIT 1',[nisn]);const student=rows[0];const valid=student?.cbt_status==='ACTIVE'&&typeof student.pin_hash==='string'&&await BunPassword.verify(pin,student.pin_hash);if(!valid)throw Object.assign(new Error('NISN atau PIN salah'),{statusCode:401});const csrf=newCsrf();const token=issueToken({sub:Number(student.id),role:'STUDENT',exp:Math.floor(Date.now()/1000)+studentSessionSeconds,csrf});return{token,csrf_token:csrf,expires_in:studentSessionSeconds,student:{id:Number(student.id),nisn:student.nisn,nama:student.name_snapshot,kelas:student.class_snapshot,tingkat:student.grade_snapshot}};})();loginInFlight.set(requestKey,task);try{const response=await task;reply.header('Set-Cookie',`arena_student_session=${response.token}; Path=/; Max-Age=${studentSessionSeconds}; HttpOnly; SameSite=Lax${process.env.NODE_ENV==='production'?'; Secure':''}`);reply.header('Cache-Control','no-store');return response;}finally{if(loginInFlight.get(requestKey)===task)loginInFlight.delete(requestKey);}
+    const started=performance.now();let poolWaitMs=0,lookupMs=0,bcryptMs=0,deduplicated=false,outcome:LoginOutcome='error';
+    try{
+      const body = loginSchema.parse(request.body);
+      const nisn = normalizeStudentDigits(body.nisn); const pin = normalizeStudentDigits(body.pin);
+      if (!/^\d{8,20}$/.test(nisn) || !/^\d{4,12}$/.test(pin)) throw Object.assign(new Error('NISN atau PIN tidak valid'), { statusCode: 422 });
+      const requestKey=createHash('sha256').update(`${process.env.AUTH_TOKEN_SECRET??'local-development-only'}:${nisn}:${pin}`).digest('hex');
+      const previous=loginInFlight.get(requestKey);
+      if(previous){
+        deduplicated=true;const response=await previous;outcome='success';
+        reply.header('Set-Cookie',`arena_student_session=${response.token}; Path=/; Max-Age=${studentSessionSeconds}; HttpOnly; SameSite=Lax${process.env.NODE_ENV==='production'?'; Secure':''}`);reply.header('Cache-Control','no-store');return response;
+      }
+      const task=(async()=>{
+        const pool=requirePool();const acquireStarted=performance.now();let connection:PoolConnection;
+        try{connection=await pool.getConnection();}finally{poolWaitMs=performance.now()-acquireStarted;}
+        let rows:RowDataPacket[];
+        try{const queryStarted=performance.now();try{[rows]=await connection.execute<RowDataPacket[]>('SELECT id,nisn,name_snapshot,class_snapshot,grade_snapshot,pin_hash,cbt_status FROM students WHERE nisn=? AND is_active=1 LIMIT 1',[nisn]);}finally{lookupMs=performance.now()-queryStarted;}}
+        finally{connection.release();}
+        const student=rows![0];let valid=false;
+        if(student?.cbt_status==='ACTIVE'&&typeof student.pin_hash==='string'){
+          const bcryptStarted=performance.now();valid=await BunPassword.verify(pin,student.pin_hash);bcryptMs=performance.now()-bcryptStarted;
+        }
+        if(!valid||!student)throw Object.assign(new Error('NISN atau PIN salah'),{statusCode:401});
+        const csrf=newCsrf();const token=issueToken({sub:Number(student.id),role:'STUDENT',exp:Math.floor(Date.now()/1000)+studentSessionSeconds,csrf});
+        return{token,csrf_token:csrf,expires_in:studentSessionSeconds,student:{id:Number(student.id),nisn:student.nisn,nama:student.name_snapshot,kelas:student.class_snapshot,tingkat:student.grade_snapshot}};
+      })();
+      loginInFlight.set(requestKey,task);
+      try{const response=await task;outcome='success';reply.header('Set-Cookie',`arena_student_session=${response.token}; Path=/; Max-Age=${studentSessionSeconds}; HttpOnly; SameSite=Lax${process.env.NODE_ENV==='production'?'; Secure':''}`);reply.header('Cache-Control','no-store');return response;}
+      finally{if(loginInFlight.get(requestKey)===task)loginInFlight.delete(requestKey);}
+    }catch(error){const status=(error as{statusCode?:number})?.statusCode,code=(error as{code?:string})?.code;outcome=error instanceof z.ZodError||status===422?'invalid_input':status===401?'invalid_credentials':code&&(/^(ER_|PROTOCOL_|POOL_|ECONN|ETIMEDOUT)/.test(code))?'database_error':'error';throw error;}
+    finally{recordMetrics(outcome,performance.now()-started,poolWaitMs,lookupMs,bcryptMs,deduplicated);}
   });
   app.get('/api/auth/student/session', async (request,reply) => {
     const claims=claimsFromRequest(request);if(claims.role!=='STUDENT')throw Object.assign(new Error('Sesi siswa diperlukan'),{statusCode:403});

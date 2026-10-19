@@ -12,7 +12,7 @@ import { adminRoutes } from './routes/admin.js';
 import { supportRoutes } from './routes/support.js';
 import { ssoRoutes } from './routes/sso.js';
 import { portalSyncRoutes } from './routes/portal-sync.js';
-import { readToken } from './lib/auth.js';
+import { rateLimitKey } from './lib/auth.js';
 import { setupRoutes } from './routes/setup.js';
 import { staffRoutes } from './routes/staff.js';
 import { questionImageRoutes } from './routes/question-images.js';
@@ -28,6 +28,7 @@ const env = z.object({
   ATTEMPT_FINALIZER_ENABLED: z.enum(['true','false']).default('true'),
   ATTEMPT_FINALIZER_INTERVAL_MS: z.coerce.number().int().min(5_000).max(300_000).default(30_000),
   ATTEMPT_FINALIZER_BATCH_SIZE: z.coerce.number().int().min(1).max(100).default(50),
+  ARENA_LOGIN_DIAGNOSTICS: z.enum(['true','false']).default('false'),
 }).parse(process.env);
 
 const app = Fastify({
@@ -45,8 +46,8 @@ const finalizer = pool && env.ATTEMPT_FINALIZER_ENABLED === 'true'
   ? new ExpiredAttemptFinalizer(pool, new ScoringService(pool), app.log, env.ATTEMPT_FINALIZER_INTERVAL_MS, env.ATTEMPT_FINALIZER_BATCH_SIZE)
   : null;
 await app.register(rateLimit, redis
-  ? { hook: 'preHandler', max: 180, timeWindow: '1 minute', redis, keyGenerator: (request) => { const bearer=request.headers.authorization?.startsWith('Bearer ')?request.headers.authorization.slice(7):'';const claims=bearer?readToken(bearer):null;return claims?`${claims.role}:${claims.sub}`:`ip:${request.ip}`; } }
-  : { hook: 'preHandler', max: 180, timeWindow: '1 minute', keyGenerator: (request) => { const bearer=request.headers.authorization?.startsWith('Bearer ')?request.headers.authorization.slice(7):'';const claims=bearer?readToken(bearer):null;return claims?`${claims.role}:${claims.sub}`:`ip:${request.ip}`; } });
+  ? { hook: 'preHandler', max: 180, timeWindow: '1 minute', redis, keyGenerator: rateLimitKey }
+  : { hook: 'preHandler', max: 180, timeWindow: '1 minute', keyGenerator: rateLimitKey });
 
 app.get('/health/live', async () => ({ status: 'ok' }));
 app.get('/health/ready', async (_request, reply) => {
