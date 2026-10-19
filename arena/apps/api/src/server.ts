@@ -30,13 +30,14 @@ const env = z.object({
   ATTEMPT_FINALIZER_INTERVAL_MS: z.coerce.number().int().min(5_000).max(300_000).default(30_000),
   ATTEMPT_FINALIZER_BATCH_SIZE: z.coerce.number().int().min(1).max(100).default(50),
   ARENA_LOGIN_DIAGNOSTICS: z.enum(['true','false']).default('false'),
+  REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(120_000).default(45_000),
 }).parse(process.env);
 
 const app = Fastify({
   logger: { level: env.LOG_LEVEL, redact: ['req.headers.authorization', 'req.headers.cookie', 'req.body.pin', 'req.body.password'] },
   trustProxy: env.TRUST_PROXY === 'true',
   bodyLimit: 64 * 1024,
-  requestTimeout: 15_000,
+  requestTimeout: env.REQUEST_TIMEOUT_MS,
   keepAliveTimeout: 5_000,
   maxRequestsPerSocket: 1_000,
 });

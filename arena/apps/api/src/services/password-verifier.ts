@@ -1,14 +1,14 @@
 import { availableParallelism } from 'node:os';
 import { Worker } from 'node:worker_threads';
 
-type Job = { id: number; secret: string; encoded: string; resolve: (valid: boolean) => void; reject: (error: Error) => void };
+type Job = { id: number; secret: string; encoded: string; signal?: AbortSignal; resolve: (valid: boolean) => void; reject: (error: Error) => void };
 type Slot = { worker?: Worker; ready: boolean; current?: Job; restartTimer?: NodeJS.Timeout };
 type WorkerMessage = { type: 'ready' } | { type: 'result'; id: number; valid?: boolean; error?: boolean };
 
-const configuredWorkers = Number(process.env.PASSWORD_VERIFY_WORKERS ?? Math.max(1, Math.min(3, availableParallelism() - 1)));
-const workerCount = Number.isSafeInteger(configuredWorkers) && configuredWorkers > 0 ? Math.min(configuredWorkers, 8) : 1;
-const configuredQueue = Number(process.env.PASSWORD_VERIFY_QUEUE_LIMIT ?? 1_000);
-const queueLimit = Number.isSafeInteger(configuredQueue) && configuredQueue > 0 ? Math.min(configuredQueue, 10_000) : 1_000;
+const configuredWorkers = Number(process.env.PASSWORD_VERIFY_WORKERS ?? Math.max(1, availableParallelism() > 2 ? availableParallelism() - 1 : availableParallelism()));
+const workerCount = Number.isSafeInteger(configuredWorkers) && configuredWorkers > 0 ? Math.min(configuredWorkers, 16) : 1;
+const configuredQueue = Number(process.env.PASSWORD_VERIFY_QUEUE_LIMIT ?? 2_000);
+const queueLimit = Number.isSafeInteger(configuredQueue) && configuredQueue > 0 ? Math.min(configuredQueue, 10_000) : 2_000;
 const workerUrl = new URL(import.meta.url.endsWith('.ts') ? './password-verify-worker.ts' : './password-verify-worker.js', import.meta.url);
 const slots: Slot[] = Array.from({ length: workerCount }, () => ({ ready: false }));
 const queue: Job[] = [];
@@ -19,7 +19,16 @@ function dispatch() {
   if (closed) return;
   for (const slot of slots) {
     if (!slot.ready || slot.current || !slot.worker) continue;
-    const job = queue.shift();
+    let job: Job | undefined;
+    while (queue.length > 0) {
+      const candidate = queue.shift()!;
+      if (candidate.signal?.aborted) {
+        candidate.reject(Object.assign(new Error('Permintaan verifikasi dibatalkan oleh klien'), { statusCode: 499 }));
+        continue;
+      }
+      job = candidate;
+      break;
+    }
     if (!job) return;
     slot.current = job;
     try {
@@ -70,11 +79,12 @@ function spawn(slot: Slot) {
 
 for (const slot of slots) spawn(slot);
 
-export function verifyPassword(secret: string, encoded: string): Promise<boolean> {
+export function verifyPassword(secret: string, encoded: string, signal?: AbortSignal): Promise<boolean> {
   if (closed) return Promise.reject(Object.assign(new Error('Verifikasi kredensial sedang tidak tersedia'), { statusCode: 503 }));
+  if (signal?.aborted) return Promise.reject(Object.assign(new Error('Permintaan verifikasi dibatalkan oleh klien'), { statusCode: 499 }));
   if (queue.length >= queueLimit) return Promise.reject(Object.assign(new Error('Layanan login sedang sibuk. Coba lagi sebentar.'), { statusCode: 503 }));
   return new Promise((resolve, reject) => {
-    queue.push({ id: nextId++, secret, encoded, resolve, reject });
+    queue.push({ id: nextId++, secret, encoded, signal, resolve, reject });
     dispatch();
   });
 }

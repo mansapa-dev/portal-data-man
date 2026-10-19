@@ -154,8 +154,8 @@ LOG_LEVEL=info
 TRUST_PROXY=true
 
 DATABASE_URL=mysql://arena_app:<password-url-encoded>@127.0.0.1:3306/arena_staging
-DB_POOL_SIZE=8
-DB_QUEUE_LIMIT=50
+DB_POOL_SIZE=15
+DB_QUEUE_LIMIT=2000
 
 AUTH_TOKEN_SECRET=<acak-minimal-32-karakter>
 PIN_ENCRYPTION_KEY=<acak-minimal-32-karakter-berbeda-dan-dipertahankan>
@@ -166,9 +166,10 @@ ATTEMPT_FINALIZER_BATCH_SIZE=20
 # Aktifkan sementara saat load test login staging; log hanya statistik agregat tanpa NISN/PIN.
 ARENA_LOGIN_DIAGNOSTICS=false
 # Verifikasi bcrypt berjalan di worker thread agar event loop API tetap responsif.
-# Mulai dari 3 pada VPS 4 vCPU; ubah hanya berdasarkan hasil staging dan beban layanan lain.
+# 3 worker pada VPS 4 vCPU adalah sweet spot (1 core sisa untuk DB & main event loop).
 PASSWORD_VERIFY_WORKERS=3
-PASSWORD_VERIFY_QUEUE_LIMIT=1000
+PASSWORD_VERIFY_QUEUE_LIMIT=2000
+REQUEST_TIMEOUT_MS=45000
 ARENA_UPLOAD_DIR=/var/lib/arena/question-images
 ARENA_WEB_URL=https://staging.arena.man1palembang.sch.id
 
@@ -217,6 +218,7 @@ ExecStart=/usr/bin/node apps/api/dist/server.js
 Restart=on-failure
 RestartSec=3
 TimeoutStopSec=30
+LimitNOFILE=65535
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
@@ -297,6 +299,32 @@ Terbitkan sertifikat setelah DNS mengarah ke VPS dan port 80/443 tersedia. Jika 
 
 `/api/question-images/:filename` harus tetap diproxy ke Fastify; jangan expose direktori upload langsung. File gambar soal berada di `/var/lib/arena/question-images`, terpisah dari release.
 
+### Tuning Nginx, OS, dan MySQL untuk Beban 1.500 Pengguna
+Untuk memastikan tidak ada bottleneck socket atau buffer saat 1.500 pengguna aktif:
+
+1. **Nginx Global (`/etc/nginx/nginx.conf`)**:
+   ```nginx
+   worker_rlimit_nofile 8192;
+   events {
+       worker_connections 4096;
+       multi_accept on;
+   }
+   ```
+2. **Swapfile Darurat OS (Mencegah Linux OOM-Killer Membunuh MySQL/Node)**:
+   ```sh
+   sudo fallocate -l 4G /swapfile
+   sudo chmod 600 /swapfile
+   sudo mkswap /swapfile
+   sudo swapon /swapfile
+   echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+   ```
+3. **MySQL Server (`/etc/mysql/mysql.conf.d/mysqld.cnf`)**:
+   ```ini
+   max_connections = 250
+   innodb_buffer_pool_size = 4G
+   table_open_cache = 4000
+   ```
+
 ## 8. Aktivasi DNS, OIDC, dan pemeriksaan
 
 Setelah HTTPS aktif, minta pemilik Portal Data memastikan callback OIDC staging tepat:
@@ -338,37 +366,70 @@ Lakukan sync Portal Data pertama hanya setelah credential staging diverifikasi, 
 7. [ ] Admin awal dibuat satu kali, lalu `SETUP_TOKEN` dihapus.
 8. [ ] Portal Data staging/OIDC client dan callback dikonfirmasi pemiliknya.
 9. [ ] Smoke test, sync awal terkontrol, backup, dan restore staging lulus.
+10. [ ] User read-only `arena_loadtest_audit` dibuat dan load test bertahap (25->50->100) lulus.
 
-**Status saat dokumen dibuat:** belum ada koneksi atau perubahan pada VPS, DNS, MySQL server, Nginx, TLS, Portal Data client, maupun deployment.
+## 10. Prosedur Load Test Staging Terkendali
 
+Skrip load test resmi berada di `scripts/staging-loadtest.mjs`. Skrip ini melakukan pengujian beban bertahap (25, 50, 100 pengguna) dan memverifikasi integritas database secara otomatis menggunakan user MySQL lokal khusus read-only.
 
+### A. Siapkan User Database Audit (Read-Only)
+Jalankan di MySQL VPS staging (ganti password acak; URL-encode di connection string bila ada karakter khusus seperti `@` -> `%40`):
 
+```sql
+CREATE USER 'arena_loadtest_audit'@'127.0.0.1' IDENTIFIED BY '<password-audit-acak>';
+GRANT SELECT ON arena_staging.* TO 'arena_loadtest_audit'@'127.0.0.1';
+FLUSH PRIVILEGES;
+```
 
-CREATE DATABASE arena_staging
-  CHARACTER SET utf8mb4
-  COLLATE utf8mb4_0900_ai_ci;
+### B. Aturan Penyiapan Data Uji di Staging
+1. **Akun Siswa Uji**: Gunakan hanya akun khusus pengujian (bukan data siswa asli). Siapkan file TSV format `NISN<TAB>PIN` per baris.
+2. **Jadwal Ujian Uji**: Judul ujian **wajib** berawalan `LOADTEST-` (contoh: `LOADTEST-TAHAP25-AUTOSAVE`). Status ujian harus `ACTIVE`, waktu pelaksanaan aktif saat pengujian, dan tingkat kelas (`grade`) harus cocok dengan akun siswa uji. Ujian harus memiliki minimal 1 soal pilihan ganda dengan minimal 2 pilihan jawaban.
+3. **Pencegahan Benturan State**: Di Arena CBT, satu siswa hanya boleh memiliki 1 attempt per exam (`uq_arena_attempt_student_exam`). Karena skenario `autosave`, `submit`, dan `mixed` menyelesaikan attempt di akhir pengujian, **gunakan Exam ID berbeda untuk setiap skenario/run**, atau gunakan batch akun peserta yang berbeda untuk tiap skenario agar tidak terjadi error HTTP 409 (`Ujian ini tidak dapat dilanjutkan`).
 
-CREATE USER 'arena_app'@'localhost'
-  IDENTIFIED BY 'GANTI_PASSWORD_APP_RANDOM';
+### C. Perintah Eksekusi Tahap Pertama (25 Pengguna Virtual)
+Jalankan dari direktori rilis staging VPS:
 
-CREATE USER 'arena_migrator'@'localhost'
-  IDENTIFIED BY 'GANTI_PASSWORD_MIGRATOR_RANDOM';
+```sh
+# 1. Uji Login Serentak
+ARENA_LOADTEST_API_URL="https://staging.arena.man1palembang.sch.id" \
+ARENA_LOADTEST_CONFIRM_STAGING="I_ACCEPT_STAGING_DATA_CREATION" \
+ARENA_LOADTEST_DB_NAME="arena_staging" \
+ARENA_LOADTEST_DATABASE_URL="mysql://arena_loadtest_audit:<password-audit-url-encoded>@127.0.0.1:3306/arena_staging" \
+ARENA_LOADTEST_USERS_FILE="/opt/arena/loadtest-users-25.tsv" \
+ARENA_LOADTEST_SCENARIO="login" \
+ARENA_LOADTEST_CONCURRENCY=25 \
+node ./scripts/staging-loadtest.mjs
 
-GRANT SELECT, INSERT, UPDATE, DELETE
-  ON arena_staging.* TO 'arena_app'@'localhost';
+# 2. Uji Autosave Berulang (setelah Login lulus; gunakan Exam ID baru khusus autosave)
+ARENA_LOADTEST_API_URL="https://staging.arena.man1palembang.sch.id" \
+ARENA_LOADTEST_CONFIRM_STAGING="I_ACCEPT_STAGING_DATA_CREATION" \
+ARENA_LOADTEST_DB_NAME="arena_staging" \
+ARENA_LOADTEST_DATABASE_URL="mysql://arena_loadtest_audit:<password-audit-url-encoded>@127.0.0.1:3306/arena_staging" \
+ARENA_LOADTEST_USERS_FILE="/opt/arena/loadtest-users-25.tsv" \
+ARENA_LOADTEST_SCENARIO="autosave" \
+ARENA_LOADTEST_EXAM_ID=<exam-id-autosave> \
+ARENA_LOADTEST_CONCURRENCY=25 \
+node ./scripts/staging-loadtest.mjs
 
-GRANT SELECT, INSERT, UPDATE, DELETE,
-  CREATE, ALTER, INDEX, DROP, REFERENCES
-  ON arena_staging.* TO 'arena_migrator'@'localhost';
+# 3. Uji Submit Serentak + Autosave Race (gunakan Exam ID baru khusus submit)
+ARENA_LOADTEST_API_URL="https://staging.arena.man1palembang.sch.id" \
+ARENA_LOADTEST_CONFIRM_STAGING="I_ACCEPT_STAGING_DATA_CREATION" \
+ARENA_LOADTEST_DB_NAME="arena_staging" \
+ARENA_LOADTEST_DATABASE_URL="mysql://arena_loadtest_audit:<password-audit-url-encoded>@127.0.0.1:3306/arena_staging" \
+ARENA_LOADTEST_USERS_FILE="/opt/arena/loadtest-users-25.tsv" \
+ARENA_LOADTEST_SCENARIO="submit" \
+ARENA_LOADTEST_EXAM_ID=<exam-id-submit> \
+ARENA_LOADTEST_CONCURRENCY=25 \
+node ./scripts/staging-loadtest.mjs
 
-SHOW DATABASES LIKE 'arena_staging';
-
-SHOW GRANTS FOR 'arena_app'@'localhost';
-
-SHOW GRANTS FOR 'arena_migrator'@'localhost';
-
-
-
-PortaldataMan2026Staging#
-
-0116300717
+# 4. Uji Skenario Gabungan / Mixed (gunakan Exam ID baru khusus mixed)
+ARENA_LOADTEST_API_URL="https://staging.arena.man1palembang.sch.id" \
+ARENA_LOADTEST_CONFIRM_STAGING="I_ACCEPT_STAGING_DATA_CREATION" \
+ARENA_LOADTEST_DB_NAME="arena_staging" \
+ARENA_LOADTEST_DATABASE_URL="mysql://arena_loadtest_audit:<password-audit-url-encoded>@127.0.0.1:3306/arena_staging" \
+ARENA_LOADTEST_USERS_FILE="/opt/arena/loadtest-users-25.tsv" \
+ARENA_LOADTEST_SCENARIO="mixed" \
+ARENA_LOADTEST_EXAM_ID=<exam-id-mixed> \
+ARENA_LOADTEST_CONCURRENCY=25 \
+node ./scripts/staging-loadtest.mjs
+```

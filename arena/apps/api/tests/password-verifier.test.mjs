@@ -47,6 +47,18 @@ test('verifyPassword menangani burst concurrent verifikasi secara konsisten', as
   assert.ok(results.every((result) => result === true), 'Semua verifikasi paralel harus sukses');
 });
 
+test('verifyPassword menolak request yang dibatalkan oleh AbortSignal tanpa membuang kerja CPU', async () => {
+  const pinHash = await hash('1234', 10);
+  const controller = new AbortController();
+  controller.abort();
+
+  await assert.rejects(
+    verifyPassword('1234', pinHash, controller.signal),
+    { statusCode: 499 },
+    'Request yang sudah dibatalkan harus langsung ditolak dengan 499',
+  );
+});
+
 test('closePasswordVerifier mematikan worker dan menolak verifikasi baru dengan 503', async () => {
   // Tutup verifier
   await closePasswordVerifier();

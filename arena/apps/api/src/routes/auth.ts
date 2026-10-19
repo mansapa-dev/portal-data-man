@@ -59,7 +59,8 @@ export async function authRoutes(app: FastifyInstance) {
         finally{connection.release();}
         const student=rows![0];let valid=false;
         if(student?.cbt_status==='ACTIVE'&&typeof student.pin_hash==='string'){
-          const bcryptStarted=performance.now();valid=await verifyPassword(pin,student.pin_hash);bcryptMs=performance.now()-bcryptStarted;
+          const signal = (request.raw as { signal?: AbortSignal }).signal;
+          const bcryptStarted=performance.now();valid=await verifyPassword(pin,student.pin_hash,signal);bcryptMs=performance.now()-bcryptStarted;
         }
         if(!valid||!student)throw Object.assign(new Error('NISN atau PIN salah'),{statusCode:401});
         const csrf=newCsrf();const token=issueToken({sub:Number(student.id),role:'STUDENT',exp:Math.floor(Date.now()/1000)+studentSessionSeconds,csrf});
