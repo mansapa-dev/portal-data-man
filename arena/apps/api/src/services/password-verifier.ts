@@ -1,17 +1,50 @@
 import { availableParallelism } from 'node:os';
 import { Worker } from 'node:worker_threads';
-import { createHash } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 
-type Job = { id: number; secret: string; encoded: string; signal?: AbortSignal; resolve: (valid: boolean) => void; reject: (error: Error) => void };
-type Slot = { worker?: Worker; ready: boolean; inFlight: Map<number, Job>; restartTimer?: NodeJS.Timeout };
-type WorkerMessage = { type: 'ready' } | { type: 'result'; id: number; valid?: boolean; error?: boolean };
+export type VerifyResult = {
+  valid: boolean;
+  queueWaitMs: number;
+  computeMs: number;
+  malformed?: boolean;
+};
 
-const configuredWorkers = Number(process.env.PASSWORD_VERIFY_WORKERS ?? Math.max(2, availableParallelism()));
-const workerCount = Number.isSafeInteger(configuredWorkers) && configuredWorkers > 0 ? Math.min(configuredWorkers, 16) : 2;
-const configuredQueue = Number(process.env.PASSWORD_VERIFY_QUEUE_LIMIT ?? 5_000);
-const queueLimit = Number.isSafeInteger(configuredQueue) && configuredQueue > 0 ? Math.min(configuredQueue, 20_000) : 5_000;
-const configuredConcurrency = Number(process.env.PASSWORD_VERIFY_CONCURRENCY_PER_WORKER ?? 4);
-const maxConcurrentPerWorker = Number.isSafeInteger(configuredConcurrency) && configuredConcurrency > 0 ? Math.min(configuredConcurrency, 8) : 4;
+type Job = {
+  id: number;
+  secret: string;
+  encoded: string;
+  signal?: AbortSignal;
+  enqueuedAt: number;
+  dispatchedAt?: number;
+  timer?: NodeJS.Timeout;
+  resolve: (result: VerifyResult) => void;
+  reject: (error: Error) => void;
+};
+
+type Slot = {
+  worker?: Worker;
+  ready: boolean;
+  inFlight: Map<number, Job>;
+  restartTimer?: NodeJS.Timeout;
+};
+
+type WorkerMessage =
+  | { type: 'ready' }
+  | { type: 'result'; id: number; valid?: boolean; malformed?: boolean; computeMs?: number; error?: boolean };
+
+// Configurable worker topology: defaults to (CPU cores - 1) workers to guarantee at least 1 core for event loop & exam APIs
+const parallelism = availableParallelism();
+const configuredWorkers = Number(process.env.PASSWORD_VERIFY_WORKERS ?? Math.max(1, parallelism - 1));
+const workerCount = Number.isSafeInteger(configuredWorkers) && configuredWorkers > 0 ? Math.min(configuredWorkers, 16) : 1;
+
+const configuredQueue = Number(process.env.PASSWORD_VERIFY_QUEUE_LIMIT ?? 1_000);
+const queueLimit = Number.isSafeInteger(configuredQueue) && configuredQueue > 0 ? Math.min(configuredQueue, 20_000) : 1_000;
+
+const configuredConcurrency = Number(process.env.PASSWORD_VERIFY_CONCURRENCY_PER_WORKER ?? 1);
+const maxConcurrentPerWorker = Number.isSafeInteger(configuredConcurrency) && configuredConcurrency > 0 ? Math.min(configuredConcurrency, 8) : 1;
+
+const configuredQueueTimeout = Number(process.env.PASSWORD_VERIFY_QUEUE_TIMEOUT_MS ?? 12_000);
+const queueTimeoutMs = Number.isSafeInteger(configuredQueueTimeout) && configuredQueueTimeout > 0 ? configuredQueueTimeout : 12_000;
 
 const workerUrl = new URL(import.meta.url.endsWith('.ts') ? './password-verify-worker.ts' : './password-verify-worker.js', import.meta.url);
 const slots: Slot[] = Array.from({ length: workerCount }, () => ({ ready: false, inFlight: new Map() }));
@@ -19,13 +52,33 @@ const queue: Job[] = [];
 let nextId = 1;
 let closed = false;
 
-// Fast in-memory cache for positive credential verifications (TTL: 15 minutes, max: 5000)
-const verifiedCache = new Map<string, number>();
-const VERIFIED_CACHE_TTL_MS = 15 * 60_000;
-const VERIFIED_CACHE_MAX = 5_000;
+const stats = {
+  totalJobs: 0,
+  completedJobs: 0,
+  rejected: 0,
+  timeouts: 0,
+};
 
-function cacheKey(secret: string, encoded: string): string {
-  return createHash('sha256').update(`${secret}:${encoded}`).digest('hex');
+export function getVerifierStats() {
+  let inFlightCount = 0;
+  let readyWorkers = 0;
+  for (const slot of slots) {
+    if (slot.ready) readyWorkers++;
+    inFlightCount += slot.inFlight.size;
+  }
+  return {
+    workers: workerCount,
+    readyWorkers,
+    maxConcurrentPerWorker,
+    inFlightCount,
+    queueDepth: queue.length,
+    queueLimit,
+    queueTimeoutMs,
+    totalJobs: stats.totalJobs,
+    completedJobs: stats.completedJobs,
+    rejectedJobs: stats.rejected,
+    timeoutJobs: stats.timeouts,
+  };
 }
 
 function dispatch() {
@@ -45,6 +98,10 @@ function dispatch() {
     let job: Job | undefined;
     while (queue.length > 0) {
       const candidate = queue.shift()!;
+      if (candidate.timer) {
+        clearTimeout(candidate.timer);
+        candidate.timer = undefined;
+      }
       if (candidate.signal?.aborted) {
         candidate.reject(Object.assign(new Error('Permintaan verifikasi dibatalkan oleh klien'), { statusCode: 499 }));
         continue;
@@ -57,12 +114,13 @@ function dispatch() {
     const worker = bestSlot.worker;
     if (!worker) break;
 
+    job.dispatchedAt = performance.now();
     bestSlot.inFlight.set(job.id, job);
     try {
       worker.postMessage({ id: job.id, secret: job.secret, encoded: job.encoded });
     } catch {
       bestSlot.inFlight.delete(job.id);
-      job.reject(Object.assign(new Error('Verifikasi kredensial sedang tidak tersedia'), { statusCode: 503 }));
+      job.reject(Object.assign(new Error('Verifikasi kredensial sedang tidak tersedia'), { statusCode: 503, retryAfter: 2 }));
     }
   }
 }
@@ -83,17 +141,18 @@ function spawn(slot: Slot) {
     const job = slot.inFlight.get(message.id);
     if (!job) return;
     slot.inFlight.delete(message.id);
-    if (message.error || typeof message.valid !== 'boolean') {
-      job.reject(Object.assign(new Error('Verifikasi kredensial gagal'), { statusCode: 503 }));
+    if (message.error) {
+      job.reject(Object.assign(new Error('Verifikasi kredensial gagal'), { statusCode: 503, retryAfter: 2 }));
     } else {
-      if (message.valid) {
-        if (verifiedCache.size >= VERIFIED_CACHE_MAX) {
-          const oldestKey = verifiedCache.keys().next().value;
-          if (oldestKey) verifiedCache.delete(oldestKey);
-        }
-        verifiedCache.set(cacheKey(job.secret, job.encoded), Date.now() + VERIFIED_CACHE_TTL_MS);
-      }
-      job.resolve(message.valid);
+      stats.completedJobs++;
+      const queueWaitMs = (job.dispatchedAt ?? performance.now()) - job.enqueuedAt;
+      const computeMs = message.computeMs ?? 0;
+      job.resolve({
+        valid: Boolean(message.valid),
+        queueWaitMs,
+        computeMs,
+        malformed: Boolean(message.malformed),
+      });
     }
     dispatch();
   });
@@ -101,7 +160,8 @@ function spawn(slot: Slot) {
     if (slot.worker !== worker) return;
     slot.ready = false;
     for (const [, job] of slot.inFlight) {
-      job.reject(Object.assign(new Error('Verifikasi kredensial sedang tidak tersedia'), { statusCode: 503 }));
+      if (job.timer) clearTimeout(job.timer);
+      job.reject(Object.assign(new Error('Verifikasi kredensial sedang tidak tersedia'), { statusCode: 503, retryAfter: 2 }));
     }
     slot.inFlight.clear();
     slot.worker = undefined;
@@ -116,31 +176,64 @@ function spawn(slot: Slot) {
 
 for (const slot of slots) spawn(slot);
 
-export function verifyPassword(secret: string, encoded: string, signal?: AbortSignal): Promise<boolean> {
-  if (closed) return Promise.reject(Object.assign(new Error('Verifikasi kredensial sedang tidak tersedia'), { statusCode: 503 }));
-  if (signal?.aborted) return Promise.reject(Object.assign(new Error('Permintaan verifikasi dibatalkan oleh klien'), { statusCode: 499 }));
-
-  // Check verified cache first
-  const key = cacheKey(secret, encoded);
-  const expiry = verifiedCache.get(key);
-  if (expiry !== undefined) {
-    if (Date.now() < expiry) return Promise.resolve(true);
-    verifiedCache.delete(key);
+export function verifyPasswordDetails(secret: string, encoded: string, signal?: AbortSignal): Promise<VerifyResult> {
+  if (closed) {
+    return Promise.reject(Object.assign(new Error('Verifikasi kredensial sedang tidak tersedia'), { statusCode: 503, retryAfter: 2 }));
+  }
+  if (signal?.aborted) {
+    return Promise.reject(Object.assign(new Error('Permintaan verifikasi dibatalkan oleh klien'), { statusCode: 499 }));
   }
 
-  if (queue.length >= queueLimit) return Promise.reject(Object.assign(new Error('Layanan login sedang sibuk. Coba lagi sebentar.'), { statusCode: 503 }));
+  // Fast rejection if hash is not a string or doesn't have bcrypt signature (does not require worker dispatch)
+  if (typeof encoded !== 'string' || !encoded.startsWith('$2')) {
+    return Promise.resolve({ valid: false, queueWaitMs: 0, computeMs: 0, malformed: true });
+  }
+
+  if (queue.length >= queueLimit) {
+    stats.rejected++;
+    return Promise.reject(Object.assign(new Error('Layanan login sedang sibuk. Coba lagi sebentar.'), { statusCode: 503, retryAfter: 2 }));
+  }
+
+  stats.totalJobs++;
   return new Promise((resolve, reject) => {
-    queue.push({ id: nextId++, secret, encoded, signal, resolve, reject });
+    const job: Job = {
+      id: nextId++,
+      secret,
+      encoded,
+      signal,
+      enqueuedAt: performance.now(),
+      resolve,
+      reject,
+    };
+
+    if (queueTimeoutMs > 0) {
+      job.timer = setTimeout(() => {
+        const idx = queue.indexOf(job);
+        if (idx !== -1) {
+          queue.splice(idx, 1);
+          stats.timeouts++;
+          job.reject(Object.assign(new Error('Layanan login sedang sibuk. Coba lagi sebentar.'), { statusCode: 503, retryAfter: 2 }));
+        }
+      }, queueTimeoutMs);
+      job.timer.unref();
+    }
+
+    queue.push(job);
     dispatch();
   });
 }
 
+export async function verifyPassword(secret: string, encoded: string, signal?: AbortSignal): Promise<boolean> {
+  const result = await verifyPasswordDetails(secret, encoded, signal);
+  return result.valid;
+}
+
 export async function closePasswordVerifier() {
   closed = true;
-  verifiedCache.clear();
   for (const slot of slots) {
     if (slot.restartTimer) clearTimeout(slot.restartTimer);
     for (const [, job] of slot.inFlight) {
+      if (job.timer) clearTimeout(job.timer);
       job.reject(Object.assign(new Error('Server sedang dimatikan'), { statusCode: 503 }));
     }
     slot.inFlight.clear();
@@ -148,5 +241,8 @@ export async function closePasswordVerifier() {
     await slot.worker?.terminate();
     slot.worker = undefined;
   }
-  for (const job of queue.splice(0)) job.reject(Object.assign(new Error('Server sedang dimatikan'), { statusCode: 503 }));
+  for (const job of queue.splice(0)) {
+    if (job.timer) clearTimeout(job.timer);
+    job.reject(Object.assign(new Error('Server sedang dimatikan'), { statusCode: 503 }));
+  }
 }

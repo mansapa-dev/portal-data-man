@@ -1,10 +1,12 @@
 .env
 node_modules/
 dist/
+dist.old/
 *.tar.gz
 storage/backups/
 portal-data-man/storage/backups/
 portal-data-man/packages/*/dist/
+dist.old/
 portal-data-man/apps/*/node_modules/
 storage/imports/*
 storage/exports/*

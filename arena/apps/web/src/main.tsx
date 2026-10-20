@@ -82,9 +82,24 @@ function App() {
   const loadExams = async () => {const rows=await api<Exam[]>('/api/student/exams');setExams(rows);return rows;};
   async function login(event: React.FormEvent) {
     event.preventDefault(); setBusy(true); setMessage('');
+    const maxRetries = 5;
     try {
-      const result = await api<{ token: string; csrf_token: string; student: Student }>('/api/auth/student/login', { method: 'POST', body: { nisn, pin } });
-      localStorage.setItem('arena_active_portal','student');setSession(result.token, result.csrf_token); setStaff(null);setStudent(result.student); await loadExams();
+      for (let attemptNumber = 1; attemptNumber <= maxRetries; attemptNumber++) {
+        try {
+          const result = await api<{ token: string; csrf_token: string; student: Student }>('/api/auth/student/login', { method: 'POST', body: { nisn, pin } });
+          localStorage.setItem('arena_active_portal','student');setSession(result.token, result.csrf_token); setStaff(null);setStudent(result.student); await loadExams();
+          return;
+        } catch (err: unknown) {
+          const isBusy = (err instanceof ApiError && err.statusCode === 503) || (err instanceof Error && err.message.includes('503'));
+          if (isBusy && attemptNumber < maxRetries) {
+            setMessage(`Server sibuk, mencoba lagi... (percobaan ${attemptNumber}/${maxRetries})`);
+            const jitterMs = 1000 + Math.floor(Math.random() * 3000); // 1-4s random jitter
+            await new Promise((resolve) => setTimeout(resolve, jitterMs));
+            continue;
+          }
+          throw err;
+        }
+      }
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Login gagal'); }
     finally { setBusy(false); }
   }

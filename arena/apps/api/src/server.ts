@@ -18,7 +18,12 @@ import { staffRoutes } from './routes/staff.js';
 import { questionImageRoutes } from './routes/question-images.js';
 import { ScoringService } from './services/scoring.js';
 import { ExpiredAttemptFinalizer } from './services/expired-attempt-finalizer.js';
-import { closePasswordVerifier } from './services/password-verifier.js';
+import { closePasswordVerifier, getVerifierStats } from './services/password-verifier.js';
+import { ArenaRateLimitStore } from './lib/rate-limit-store.js';
+import { monitorEventLoopDelay } from 'node:perf_hooks';
+
+const eventLoopMonitor = monitorEventLoopDelay({ resolution: 20 });
+eventLoopMonitor.enable();
 
 const env = z.object({
   HOST: z.string().default('0.0.0.0'),
@@ -56,10 +61,20 @@ const sessionRateLimit = {
   timeWindow: '1 minute',
   redis: redis ?? undefined,
   keyGenerator: rateLimitKey,
+  store: ArenaRateLimitStore,
 };
 await app.register(rateLimit, sessionRateLimit);
 
-app.get('/health/live', async () => ({ status: 'ok' }));
+app.get('/health/live', async () => ({
+  status: 'ok',
+  eventLoopDelayMs: {
+    mean: Number((eventLoopMonitor.mean / 1e6).toFixed(2)),
+    p95: Number((eventLoopMonitor.percentile(95) / 1e6).toFixed(2)),
+    p99: Number((eventLoopMonitor.percentile(99) / 1e6).toFixed(2)),
+    max: Number((eventLoopMonitor.max / 1e6).toFixed(2)),
+  },
+  verifier: getVerifierStats(),
+}));
 app.get('/health/ready', async (_request, reply) => {
   if (!pool) return reply.serviceUnavailable('Database is not configured');
   try {
