@@ -191,8 +191,7 @@ function App() {
         if (failedSaves.current.size) throw new Error('Ada jawaban yang belum tersimpan. Coba simpan lagi sebelum mengirim ujian.');
       }
       const completed = await api<ExamResult>(`/api/student/exams/${attempt.exam.id}/submit`, { method: 'POST', body: finalizeOnly ? {finalize_only:true} : {} });
-      const actual = await api<ExamResult>(`/api/student/exams/${attempt.exam.id}/result`).catch(() => completed);
-      setMessage(''); setResultExamId(attempt.exam.id); setResultExamName(attempt.exam.nama_ujian); setReview(null); setReviewError(''); setResult({...completed,...actual}); setAttempt(null); await loadExams();
+      setMessage(''); setResultExamId(attempt.exam.id); setResultExamName(attempt.exam.nama_ujian); setReview(null); setReviewError(''); setResult(completed); setAttempt(null); await loadExams();
     } catch (error) { setMessage(finalizeOnly?'Waktu habis. Hasil belum dapat dimuat; coba lagi saat koneksi tersedia.':error instanceof Error ? error.message : 'Submit gagal'); throw error; }
     finally { submittingAttempt.current=false;setBusy(false); }
   }

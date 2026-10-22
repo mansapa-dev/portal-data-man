@@ -1,0 +1,759 @@
+/* ==============================================================================
+   ARENA STUDENT UX ENHANCEMENTS — USER-FRIENDLY & HIGHLY RESPONSIVE (CBT ARENA)
+   Dirancang khusus agar intuitif, ramah bagi orang awam/siswa pemula, dan nyaman
+   di seluruh ukuran layar (HP, tablet, Chromebook, laptop, desktop).
+   ============================================================================== */
+
+/* --- 1. KONTROL DAN TIPOGRAFI GLOBAL SISWA --- */
+.student-exam,
+.student-portal,
+.student-result-page {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* --- 2. HEADER UJIAN (CBT HEADER) --- */
+.student-exam .cbt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  margin-bottom: 16px;
+}
+
+.student-exam .cbt-identity {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.student-exam .id-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.student-exam .id-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+.student-exam .id-val {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+/* --- 3. TIMER / SISA WAKTU --- */
+.student-exam .timer-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 130px;
+  padding: 8px 18px;
+  background: var(--surface-subtle);
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+}
+
+.student-exam .timer-box .id-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: var(--primary-dark);
+}
+
+.student-exam .timer-time {
+  font-size: 24px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-main);
+  letter-spacing: 1px;
+}
+
+/* Timer Warning (<= 5 menit) */
+.student-exam .timer-box.danger {
+  background: #fff1f2;
+  border-color: #fca5a5;
+  animation: pulse-timer 2s infinite ease-in-out;
+}
+
+.student-exam .timer-box.danger .id-label,
+.student-exam .timer-box.danger .timer-time {
+  color: #dc2626;
+}
+
+@keyframes pulse-timer {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+}
+
+/* Action button di Header */
+.student-exam-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.student-exam .cbt-help-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 16px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text-main);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.student-exam .cbt-help-button:hover {
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  border-color: var(--primary-soft-border);
+}
+
+.student-fullscreen-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.15s ease;
+}
+
+.student-fullscreen-button:hover {
+  background: var(--surface);
+  color: var(--text-main);
+}
+
+/* --- 4. PROGRESS BAR SOAL --- */
+.student-exam-progress {
+  margin-bottom: 20px;
+}
+
+.student-exam-progress > div {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.student-exam-progress progress {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  border: none;
+  background: var(--border);
+}
+
+.student-exam-progress progress::-webkit-progress-bar {
+  background: var(--border);
+  border-radius: 999px;
+}
+
+.student-exam-progress progress::-webkit-progress-value {
+  background: var(--primary);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.student-exam-progress progress::-moz-progress-bar {
+  background: var(--primary);
+  border-radius: 999px;
+}
+
+/* --- 5. PANEL SOAL (Q-PANEL) --- */
+.student-exam .cbt-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 20px;
+  align-items: start;
+}
+
+.student-exam .q-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 28px 32px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.04);
+}
+
+.student-exam .q-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+  border-bottom: 1.5px solid var(--border);
+}
+
+.student-exam .q-num {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--primary-dark);
+  letter-spacing: -0.3px;
+}
+
+/* Badge Status Autosave yang Jelas & Ramah */
+.student-exam .q-meta > span:last-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  background: #eaf3e9;
+  border: 1px solid #cce3ca;
+  border-radius: 999px;
+  color: #006527;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+/* Teks Narasi Soal */
+.student-exam .q-text {
+  font-size: 17px;
+  line-height: 1.85;
+  color: var(--text-main);
+  margin-bottom: 28px;
+  word-break: break-word;
+}
+
+.student-exam .q-text img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+  margin: 12px 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+/* --- 6. OPSI JAWABAN (PILGAN) BESAR, JELAS, NYAMAN DISENTUH --- */
+.student-exam .opt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 32px;
+}
+
+.student-exam .opt-btn {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.16s ease-in-out;
+  user-select: none;
+}
+
+.student-exam .opt-btn:hover {
+  border-color: #006527;
+  background: #f7faf7;
+  transform: translateY(-1px);
+}
+
+.student-exam .opt-char {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  color: var(--text-main);
+  font-size: 16px;
+  font-weight: 800;
+  transition: all 0.15s ease;
+}
+
+.student-exam .opt-text {
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--text-main);
+  word-break: break-word;
+}
+
+/* Status Terpilih (Selected Option) */
+.student-exam .opt-btn.selected {
+  border-color: #006527;
+  background: #eaf3e9;
+  box-shadow: 0 4px 12px rgba(0, 101, 39, 0.12);
+}
+
+.student-exam .opt-btn.selected .opt-char {
+  background: #006527;
+  border-color: #006527;
+  color: #ffffff;
+}
+
+.student-exam .opt-btn.selected .opt-text {
+  color: #123d1e;
+  font-weight: 600;
+}
+
+/* Soal Isian Singkat */
+.student-exam .short-answer {
+  width: 100%;
+  min-height: 52px;
+  padding: 12px 18px;
+  font-size: 16px;
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text-main);
+  margin-bottom: 28px;
+  box-sizing: border-box;
+}
+
+.student-exam .short-answer:focus {
+  border-color: #006527;
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(0, 101, 39, 0.15);
+}
+
+/* --- 7. TOMBOL NAVIGASI SOAL BAWAH --- */
+.student-exam .q-nav-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 20px;
+  border-top: 1.5px solid var(--border);
+}
+
+.student-exam .q-nav-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 24px;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+/* Tombol Sebelumnya */
+.student-exam .q-nav-actions .btn-secondary {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  color: var(--text-main);
+}
+
+.student-exam .q-nav-actions .btn-secondary:hover:not(:disabled) {
+  background: #e2e8f0;
+}
+
+/* Tombol Ragu-Ragu (Amber/Kuning Emas) */
+.student-exam .q-nav-actions .btn-warning {
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  color: #92400e;
+}
+
+.student-exam .q-nav-actions .btn-warning[aria-pressed="true"] {
+  background: #f59e0b;
+  border-color: #d97706;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+}
+
+.student-exam .q-nav-actions .btn-warning:hover:not(:disabled) {
+  filter: brightness(0.96);
+}
+
+/* Tombol Berikutnya / Selesai */
+.student-exam .q-nav-actions .btn-primary {
+  background: #006527;
+  border: 1px solid #006527;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 101, 39, 0.2);
+}
+
+.student-exam .q-nav-actions .btn-primary:hover:not(:disabled) {
+  background: #005421;
+  transform: translateY(-1px);
+}
+
+/* --- 8. PETA SOAL (NAVIGATION MAP ASIDE) --- */
+.student-exam .student-question-map {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 22px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.04);
+  position: sticky;
+  top: 20px;
+}
+
+.student-exam .nav-panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.student-exam .nav-panel-title b {
+  font-size: 15px;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.student-exam .student-map-legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.student-exam .student-map-legend span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.student-exam .student-map-legend span::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.student-exam .student-map-legend span:nth-child(1)::before {
+  background: #006527;
+}
+
+.student-exam .student-map-legend span:nth-child(2)::before {
+  background: #f59e0b;
+}
+
+.student-exam .nav-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  max-height: 380px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.student-exam .btn-num {
+  height: 44px;
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text-main);
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.student-exam .btn-num:hover {
+  border-color: #006527;
+  background: #f7faf7;
+}
+
+/* Nomor Aktif */
+.student-exam .btn-num.active {
+  border-color: #0284c7;
+  outline: 2px solid #0284c7;
+  outline-offset: 1px;
+}
+
+/* Nomor Sudah Dijawab (Hijau) */
+.student-exam .btn-num.answered {
+  background: #006527;
+  border-color: #006527;
+  color: #ffffff;
+}
+
+/* Nomor Ragu-Ragu (Kuning/Amber) */
+.student-exam .btn-num.flagged {
+  background: #f59e0b;
+  border-color: #d97706;
+  color: #ffffff;
+}
+
+/* Tombol Selesai Ujian di Bawah Peta */
+.student-exam .finish-exam {
+  width: 100%;
+  min-height: 48px;
+  border-radius: 14px;
+  margin-top: 18px;
+  background: #dc2626;
+  border: 1px solid #b91c1c;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
+}
+
+.student-exam .finish-exam:hover:not(:disabled) {
+  background: #b91c1c;
+  transform: translateY(-1px);
+}
+
+/* Tombol Mobile Toggle Peta Soal */
+.student-map-toggle {
+  display: none;
+  width: 100%;
+  min-height: 46px;
+  margin-bottom: 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 750;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* --- 9. MODAL SUBMIT / KUMPULKAN UJIAN (USER-FRIENDLY DIALOG) --- */
+.student-submit-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.student-submit-dialog {
+  width: min(100%, 480px);
+  background: var(--surface);
+  border-radius: 24px;
+  padding: 32px 28px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  text-align: center;
+}
+
+.student-submit-symbol {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  background: #fef3c7;
+  color: #d97706;
+  font-size: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.student-submit-dialog h2 {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text-main);
+  margin: 0 0 8px;
+}
+
+.student-submit-dialog p {
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin: 0 0 20px;
+}
+
+.student-submit-counts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.student-submit-counts span {
+  padding: 12px 8px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.student-submit-counts span:nth-child(1) {
+  background: #eaf3e9;
+  color: #006527;
+  border: 1px solid #cce3ca;
+}
+
+.student-submit-counts span:nth-child(2) {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.student-submit-counts span:nth-child(3) {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.student-submit-note {
+  font-size: 12px !important;
+  color: var(--text-muted) !important;
+  margin-bottom: 24px !important;
+}
+
+.student-submit-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.student-submit-actions .btn {
+  min-height: 48px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+/* --- 10. RESPONSIVE MEDIA QUERIES (MOBILE & TABLET BREAKPOINTS) --- */
+@media (max-width: 900px) {
+  .student-exam .cbt-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .student-map-toggle {
+    display: flex;
+  }
+
+  .student-exam .student-question-map {
+    display: none;
+    position: static;
+  }
+
+  .student-exam .student-question-map.is-open {
+    display: block;
+    margin-top: 16px;
+  }
+}
+
+@media (max-width: 640px) {
+  .student-exam {
+    padding: 10px 8px 30px;
+  }
+
+  .student-exam .cbt-header {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 14px 16px;
+    gap: 12px;
+  }
+
+  .student-exam .cbt-identity {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 14px;
+  }
+
+  .student-exam .timer-box {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px;
+  }
+
+  .student-exam .q-panel {
+    padding: 18px 16px;
+    border-radius: 16px;
+  }
+
+  .student-exam .q-text {
+    font-size: 15.5px;
+    line-height: 1.75;
+  }
+
+  .student-exam .opt-btn {
+    padding: 12px 14px;
+    gap: 12px;
+    border-radius: 14px;
+  }
+
+  .student-exam .opt-char {
+    width: 32px;
+    height: 32px;
+    font-size: 14px;
+  }
+
+  .student-exam .opt-text {
+    font-size: 14.5px;
+  }
+
+  /* Fixed Bottom Navigation Bar on Mobile */
+  .student-exam .q-nav-actions {
+    position: sticky;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--surface);
+    margin: 20px -16px -18px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.08);
+    border-top: 1px solid var(--border);
+    z-index: 50;
+    gap: 8px;
+  }
+
+  .student-exam .q-nav-actions .btn {
+    flex: 1;
+    min-height: 48px;
+    padding: 0 10px;
+    font-size: 12px;
+    border-radius: 12px;
+  }
+
+  .student-exam .nav-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+
+  .student-submit-dialog {
+    padding: 24px 18px;
+  }
+
+  .student-submit-actions {
+    grid-template-columns: 1fr;
+  }
+}

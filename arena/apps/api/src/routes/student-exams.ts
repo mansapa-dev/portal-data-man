@@ -12,7 +12,8 @@ const violationSchema = z.object({ event_key: z.string().min(8).max(100).regex(/
 
 export async function studentExamRoutes(app: FastifyInstance) {
   const pool = requirePool();
-  const exams = new StudentExamService(pool);
+  const exams = new StudentExamService(pool, app.log);
+  app.addHook('onClose', async () => exams.flushDiagnostics());
   const scoring = new ScoringService(pool);
   const studentClaims = (request: FastifyRequest) => {
     const claims = claimsFromRequest(request);

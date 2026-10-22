@@ -17,21 +17,22 @@ function fraction(type: string, key: string, answer: string, optionCount: number
   return Math.max(0, Math.min(1, right / Math.max(1, correct.length) - wrong / Math.max(1, optionCount - correct.length)));
 }
 
-const examMetaCache = new Map<number, { isRemedial: boolean; scoreCap: number | null; expiresAt: number }>();
-async function getExamMeta(connection: Pool | import('mysql2/promise').PoolConnection, examId: number): Promise<{ isRemedial: boolean; scoreCap: number | null }> {
+const examMetaCache = new Map<number, { isRemedial: boolean; scoreCap: number | null; followUpType: string | null; expiresAt: number }>();
+async function getExamMeta(connection: Pool | import('mysql2/promise').PoolConnection, examId: number): Promise<{ isRemedial: boolean; scoreCap: number | null; followUpType: string | null }> {
   const cached = examMetaCache.get(examId);
-  if (cached && Date.now() < cached.expiresAt) return { isRemedial: cached.isRemedial, scoreCap: cached.scoreCap };
+  if (cached && Date.now() < cached.expiresAt) return { isRemedial: cached.isRemedial, scoreCap: cached.scoreCap, followUpType: cached.followUpType };
   const [followUps] = await connection.execute<RowDataPacket[]>('SELECT m.type,e.grade FROM exam_follow_up_meta m JOIN exams e ON e.id=m.exam_id WHERE m.exam_id=? LIMIT 1', [examId]);
   let isRemedial = false;
   let scoreCap: number | null = null;
-  if (followUps[0]?.type === 'REMEDIAL') {
+  const followUpType = (followUps[0]?.type as string | undefined) ?? null;
+  if (followUpType === 'REMEDIAL') {
     isRemedial = true;
-    const capKey = `remedial_score_cap_${String(followUps[0].grade).toUpperCase().trim()}`;
+    const capKey = `remedial_score_cap_${String(followUps[0]?.grade).toUpperCase().trim()}`;
     const [settings] = await connection.execute<RowDataPacket[]>('SELECT value FROM cbt_settings WHERE key_name=? LIMIT 1', [capKey]);
     scoreCap = settings[0] ? Number(settings[0].value) : 75;
   }
-  examMetaCache.set(examId, { isRemedial, scoreCap, expiresAt: Date.now() + 60_000 });
-  return { isRemedial, scoreCap };
+  examMetaCache.set(examId, { isRemedial, scoreCap, followUpType, expiresAt: Date.now() + 60_000 });
+  return { isRemedial, scoreCap, followUpType };
 }
 
 export class ScoringService {
@@ -77,20 +78,23 @@ export class ScoringService {
       const existing = existingRows[0];
       if (existing) {
         if (attempt.status === 'IN_PROGRESS') await connection.execute("UPDATE exam_attempts SET status=IF(expires_at<=UTC_TIMESTAMP(3),'EXPIRED','COMPLETED'),completed_at=COALESCE(completed_at,UTC_TIMESTAMP(3)) WHERE id=?", [attempt.id]);
-        const { isRemedial, scoreCap } = await getExamMeta(connection, examId);
+        const { isRemedial, scoreCap, followUpType } = await getExamMeta(connection, examId);
         await connection.commit();
-        return this.format(existing, isRemedial, scoreCap);
+        return this.format(existing, isRemedial, scoreCap, followUpType);
       }
       if (finalizeOnly && attempt.status === 'IN_PROGRESS' && !Number(attempt.expired)) throw Object.assign(new Error('Ujian masih aktif'), { statusCode: 409 });
       if (!['IN_PROGRESS', 'TERMINATED'].includes(attempt.status)) throw Object.assign(new Error('Ujian tidak dapat disubmit'), { statusCode: 409 });
-      const [rows] = await connection.execute<RowDataPacket[]>(`SELECT q.question_id,q.question_type,q.correct_answer,q.option_a,q.option_b,q.option_c,q.option_d,q.option_e,q.points,a.answer
+      // Optimized query: Only select necessary scoring columns and calculate option_count in SQL,
+      // avoiding transferring heavy option text strings (option_a..e) across the wire.
+      const [rows] = await connection.execute<RowDataPacket[]>(`SELECT q.question_id,q.question_type,q.correct_answer,q.points,a.answer,
+        ((q.option_a IS NOT NULL AND q.option_a<>'') + (q.option_b IS NOT NULL AND q.option_b<>'') + (q.option_c IS NOT NULL AND q.option_c<>'') + (q.option_d IS NOT NULL AND q.option_d<>'') + (q.option_e IS NOT NULL AND q.option_e<>'')) option_count
         FROM attempt_questions q LEFT JOIN student_answers a ON a.attempt_id=q.attempt_id AND a.question_id=q.question_id WHERE q.attempt_id=?`, [attempt.id]);
       if (!rows.length) throw Object.assign(new Error('Snapshot soal tidak tersedia'), { statusCode: 409 });
       const totals = rows.reduce((result, row) => {
         const points = Number(row.points); result.maximum += points;
         if (row.answer === null) result.blank++;
         else {
-          const available = [row.option_a,row.option_b,row.option_c,row.option_d,row.option_e].filter((value) => String(value ?? '').trim() !== '').length;
+          const available = Number(row.option_count ?? [row.option_a,row.option_b,row.option_c,row.option_d,row.option_e].filter((value) => String(value ?? '').trim() !== '').length);
           const score = fraction(row.question_type, row.correct_answer, row.answer, available);
           result.earned += points * score;
           if (score >= 1) result.correct++; else result.wrong++;
@@ -98,14 +102,14 @@ export class ScoringService {
         return result;
       }, { correct: 0, wrong: 0, blank: 0, earned: 0, maximum: 0 });
       let score = totals.maximum > 0 ? Math.round((totals.earned / totals.maximum * 100) * 100) / 100 : 0;
-      const { isRemedial, scoreCap } = await getExamMeta(connection, examId);
+      const { isRemedial, scoreCap, followUpType } = await getExamMeta(connection, examId);
       if (isRemedial && scoreCap !== null && score > scoreCap) {
         score = Math.round(scoreCap * 100) / 100;
       }
       await connection.execute(`INSERT INTO exam_results(attempt_id,question_count,correct_count,wrong_count,blank_count,earned_points,maximum_points,score) VALUES(?,?,?,?,?,?,?,?)`, [attempt.id, rows.length, totals.correct, totals.wrong, totals.blank, totals.earned, totals.maximum, score]);
       await connection.execute("UPDATE exam_attempts SET status=IF(status='TERMINATED','TERMINATED',IF(expires_at<=UTC_TIMESTAMP(3),'EXPIRED','COMPLETED')),completed_at=UTC_TIMESTAMP(3) WHERE id=?", [attempt.id]);
       await connection.commit();
-      return { jumlah_soal: rows.length, benar: totals.correct, salah: totals.wrong, kosong: totals.blank, total_poin: totals.earned, nilai: score, is_remedial: isRemedial, score_cap: scoreCap, status: 'selesai' };
+      return { jumlah_soal: rows.length, benar: totals.correct, salah: totals.wrong, kosong: totals.blank, total_poin: totals.earned, nilai: score, is_remedial: isRemedial, score_cap: scoreCap, follow_up_type: followUpType, status: 'selesai' };
     } catch (error) {
       try { await connection.rollback(); } catch { /* no active transaction */ }
       throw error;
@@ -164,7 +168,7 @@ export class ScoringService {
     }
   }
 
-  private format(row: RowDataPacket, isRemedial = false, scoreCap: number | null = null) {
-    return { jumlah_soal: Number(row.question_count), benar: Number(row.correct_count), salah: Number(row.wrong_count), kosong: Number(row.blank_count), total_poin: Number(row.earned_points), nilai: Number(row.score), is_remedial: isRemedial, score_cap: scoreCap, status: 'selesai' };
+  private format(row: RowDataPacket, isRemedial = false, scoreCap: number | null = null, followUpType: string | null = null) {
+    return { jumlah_soal: Number(row.question_count), benar: Number(row.correct_count), salah: Number(row.wrong_count), kosong: Number(row.blank_count), total_poin: Number(row.earned_points), nilai: Number(row.score), is_remedial: isRemedial, score_cap: scoreCap, follow_up_type: followUpType, status: 'selesai' };
   }
 }

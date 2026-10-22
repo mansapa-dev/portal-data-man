@@ -29,7 +29,20 @@ function buildPool({ attemptRow, questionRow, versionRow, answerRow } = {}) {
     release() { released.count++; },
     async execute(sql, params = []) {
       statements.push({ sql, params });
-      // Attempt lock
+      // Unified attempt + question + version + answer query
+      if (sql.includes('FROM exam_attempts ea') && sql.includes('attempt_questions q')) {
+        if (!attemptRow) return [[]];
+        const combined = {
+          attempt_id: attemptRow.id,
+          public_id: attemptRow.public_id,
+          attempt_status: attemptRow.status,
+          expires_at: attemptRow.expires_at,
+          expired: attemptRow.expired ?? 0,
+          ...(questionRow ?? {}),
+        };
+        return [[combined]];
+      }
+      // Attempt lock (legacy fallback)
       if (sql.startsWith('SELECT id,public_id,status,expires_at')) {
         return [attemptRow ? [attemptRow] : []];
       }

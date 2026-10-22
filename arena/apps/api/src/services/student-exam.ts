@@ -1,6 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 import type { Claims } from '../lib/auth.js';
+import type { FastifyBaseLogger } from 'fastify';
+import { performance } from 'node:perf_hooks';
 
 const idChars = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 function ulid() {
@@ -23,7 +25,42 @@ function jsonValue<T>(value: unknown): T {
 }
 
 export class StudentExamService {
-  constructor(private readonly pool: Pool) {}
+  private readonly diagnosticSamples = new Map<string, Record<string, number | string | boolean>[]>();
+  private diagnosticTimer?: NodeJS.Timeout;
+
+  constructor(private readonly pool: Pool, private readonly diagnostics?: FastifyBaseLogger) {}
+
+  private recordDiagnostic(event: string, values: Record<string, number | string | boolean>) {
+    if (process.env.ARENA_EXAM_DIAGNOSTICS !== 'true' || !this.diagnostics) return;
+    const samples = this.diagnosticSamples.get(event) ?? [];
+    samples.push(values);
+    this.diagnosticSamples.set(event, samples);
+    if (!this.diagnosticTimer) {
+      this.diagnosticTimer = setTimeout(() => this.flushDiagnostics(), 60_000);
+      this.diagnosticTimer.unref();
+    }
+    if (samples.length >= 2048) this.flushDiagnostics();
+  }
+
+  flushDiagnostics() {
+    if (this.diagnosticTimer) clearTimeout(this.diagnosticTimer);
+    this.diagnosticTimer = undefined;
+    for (const [event, samples] of this.diagnosticSamples) {
+      if (!samples.length) continue;
+      const numericKeys = [...new Set(samples.flatMap((sample) => Object.entries(sample).filter(([, value]) => typeof value === 'number').map(([key]) => key)))];
+      const percentile = (key: string, p: number) => {
+        const values = samples.map((sample) => sample[key]).filter((value): value is number => typeof value === 'number').sort((a, b) => a - b);
+        return values.length ? Number(values[Math.min(values.length - 1, Math.ceil(values.length * p) - 1)]!.toFixed(2)) : null;
+      };
+      const outcomes: Record<string, number> = {};
+      for (const sample of samples) {
+        const outcome = String(sample.outcome ?? 'ok');
+        outcomes[outcome] = (outcomes[outcome] ?? 0) + 1;
+      }
+      this.diagnostics?.warn({ event, samples: samples.length, outcomes, timings_ms: Object.fromEntries(numericKeys.map((key) => [key, { p50: percentile(key, 0.5), p95: percentile(key, 0.95), p99: percentile(key, 0.99), max: percentile(key, 1) }])) }, 'exam endpoint diagnostic window');
+      this.diagnosticSamples.set(event, []);
+    }
+  }
 
   async list(studentId: number) {
     const [rows] = await this.pool.execute<RowDataPacket[]>(`SELECT e.id,e.name,e.grade,e.duration_minutes,e.session_number,e.starts_at,e.ends_at,e.academic_year,e.semester,m.type follow_up_type,
@@ -35,7 +72,18 @@ export class StudentExamService {
     return rows.map((row) => ({ id: Number(row.id), nama_ujian: row.name, tingkat: row.grade, durasi: Number(row.duration_minutes), sesi: Number(row.session_number), tanggal_mulai: row.starts_at, tanggal_selesai: row.ends_at, tahun_ajaran: row.academic_year, semester: row.semester, status_attempt: row.attempt_status, can_start: Boolean(row.can_start), is_special: Boolean(row.follow_up_type), special_type: row.follow_up_type ?? null }));
   }
 
-  async start(studentId:number,examId:number,retry=0):Promise<unknown>{try{return await this.startOnce(studentId,examId);}catch(error){const code=(error as {code?:string}).code;if(retry<2&&['ER_LOCK_DEADLOCK','ER_LOCK_WAIT_TIMEOUT','ER_DUP_ENTRY'].includes(code??'')){await new Promise((resolve)=>setTimeout(resolve,10+Math.floor(Math.random()*30)));return this.start(studentId,examId,retry+1);}throw error;}}
+  async start(studentId:number,examId:number,retry=0):Promise<unknown>{
+    try{return await this.startOnce(studentId,examId);}
+    catch(error){
+      const code=(error as {code?:string}).code;
+      if(retry<5&&['ER_LOCK_DEADLOCK','ER_LOCK_WAIT_TIMEOUT','ER_DUP_ENTRY'].includes(code??'')){
+        const delay=Math.min(250,20*(2**retry))+Math.floor(Math.random()*25);
+        await new Promise((resolve)=>setTimeout(resolve,delay));
+        return this.start(studentId,examId,retry+1);
+      }
+      throw error;
+    }
+  }
 
   private async startOnce(studentId: number, examId: number) {
     // Keep the first consistent read outside the resume transaction. If resume
@@ -44,12 +92,20 @@ export class StudentExamService {
     const [students] = await this.pool.execute<RowDataPacket[]>('SELECT id,portal_class_id,nisn,name_snapshot,class_snapshot,grade_snapshot,academic_year_snapshot FROM students WHERE id=? AND is_active=1 AND cbt_status=\'ACTIVE\'', [studentId]);
     const student = students[0];
     if (!student) throw Object.assign(new Error('Siswa tidak ditemukan atau tidak aktif'), { statusCode: 403 });
+    // A locking read for an absent (student_id, exam_id) pair takes a gap lock
+    // under InnoDB's default isolation. Many simultaneous starts on one exam
+    // can then deadlock while inserting adjacent keys in the unique index. Do
+    // a non-locking existence read first; only lock the row when it exists.
+    const [existingAttempts] = await this.pool.execute<RowDataPacket[]>('SELECT id FROM exam_attempts WHERE student_id=? AND exam_id=? LIMIT 1', [studentId, examId]);
     const connection = await this.pool.getConnection();
     let state: { attempt: RowDataPacket; exam: RowDataPacket; questions: RowDataPacket[]; answers: RowDataPacket[] } | undefined;
     try {
       await connection.beginTransaction();
-      const [attemptRows] = await connection.execute<RowDataPacket[]>(`SELECT *, (status='IN_PROGRESS' AND expires_at>UTC_TIMESTAMP(3)) can_resume FROM exam_attempts WHERE student_id=? AND exam_id=? FOR UPDATE`, [studentId, examId]);
-      let attempt: RowDataPacket | undefined = attemptRows[0];
+      let attempt: RowDataPacket | undefined;
+      if (existingAttempts.length) {
+        const [attemptRows] = await connection.execute<RowDataPacket[]>(`SELECT id,public_id,status,expires_at,question_order,option_mapping,(status='IN_PROGRESS' AND expires_at>UTC_TIMESTAMP(3)) can_resume FROM exam_attempts WHERE student_id=? AND exam_id=? FOR UPDATE`, [studentId, examId]);
+        attempt = attemptRows[0];
+      }
       if (attempt && ['COMPLETED', 'TERMINATED', 'EXPIRED'].includes(attempt.status)) throw Object.assign(new Error('Ujian ini tidak dapat dilanjutkan'), { statusCode: 409 });
       const resuming = Boolean(attempt && Number(attempt.can_resume));
       const [examRows] = resuming
@@ -69,7 +125,7 @@ export class StudentExamService {
         const publicId = ulid();
         await connection.execute(`INSERT INTO exam_attempts(public_id,student_id,exam_id,status,started_at,expires_at,question_order,option_mapping)
           VALUES(?,?,?,'IN_PROGRESS',UTC_TIMESTAMP(3),LEAST(DATE_ADD(UTC_TIMESTAMP(3),INTERVAL ? MINUTE),?),?,?)`, [publicId, studentId, examId, exam.duration_minutes, exam.ends_at, JSON.stringify(orderedIds), JSON.stringify(mapping)]);
-        const [created] = await connection.execute<RowDataPacket[]>('SELECT * FROM exam_attempts WHERE student_id=? AND exam_id=? FOR UPDATE', [studentId, examId]);
+        const [created] = await connection.execute<RowDataPacket[]>('SELECT id,public_id,status,expires_at,question_order,option_mapping FROM exam_attempts WHERE student_id=? AND exam_id=? FOR UPDATE', [studentId, examId]);
         attempt = created[0];
         if (!attempt) throw Object.assign(new Error('Gagal membuat sesi ujian'), { statusCode: 503 });
         const sourceById = new Map(source.map((question) => [Number(question.id), question]));
@@ -109,13 +165,26 @@ export class StudentExamService {
   }
 
   async heartbeat(studentId: number, examId: number) {
-    await this.pool.execute(
-      `INSERT INTO attempt_connections(attempt_id,last_seen_at)
-       SELECT id,UTC_TIMESTAMP(3) FROM exam_attempts
-       WHERE student_id=? AND exam_id=? AND status='IN_PROGRESS' AND expires_at>UTC_TIMESTAMP(3)
-       ON DUPLICATE KEY UPDATE last_seen_at=IF(attempt_connections.last_seen_at<UTC_TIMESTAMP(3)-INTERVAL 40 SECOND,UTC_TIMESTAMP(3),attempt_connections.last_seen_at)`,
-      [studentId, examId],
-    );
+    const started = performance.now();
+    let acquireMs = 0;
+    let queryMs = 0;
+    const acquireStarted = performance.now();
+    const connection = await this.pool.getConnection();
+    acquireMs = performance.now() - acquireStarted;
+    try {
+      const queryStarted = performance.now();
+      await connection.execute(
+        `INSERT INTO attempt_connections(attempt_id,last_seen_at)
+         SELECT id,UTC_TIMESTAMP(3) FROM exam_attempts
+         WHERE student_id=? AND exam_id=? AND status='IN_PROGRESS' AND expires_at>UTC_TIMESTAMP(3)
+         ON DUPLICATE KEY UPDATE last_seen_at=IF(attempt_connections.last_seen_at<UTC_TIMESTAMP(3)-INTERVAL 40 SECOND,UTC_TIMESTAMP(3),attempt_connections.last_seen_at)`,
+        [studentId, examId],
+      );
+      queryMs = performance.now() - queryStarted;
+    } finally {
+      connection.release();
+      this.recordDiagnostic('exam_heartbeat', { acquire_ms: Number(acquireMs.toFixed(2)), query_ms: Number(queryMs.toFixed(2)), total_ms: Number((performance.now() - started).toFixed(2)) });
+    }
     return { server_time: new Date().toISOString() };
   }
 
@@ -123,26 +192,46 @@ export class StudentExamService {
 
   private async saveAnswerOnce(claims: Claims, examId: number, questionId: number, input: { answer: string | null; is_flagged: boolean; attempt_id: string; base_revision: number; mutation_id: string }) {
     if (input.base_revision < 0 || !/^[A-Za-z0-9_-]{16,100}$/.test(input.mutation_id)) throw Object.assign(new Error('Versi penyimpanan tidak valid'), { statusCode: 422 });
+    const started = performance.now();
+    const timings: Record<string, number> = {};
+    const mark = (name: string, from: number) => { timings[name] = Number((performance.now() - from).toFixed(2)); };
+    const acquireStarted = performance.now();
     const connection = await this.pool.getConnection();
+    mark('pool_wait_ms', acquireStarted);
     try {
+      let phase = performance.now();
       await connection.beginTransaction();
+      mark('begin_ms', phase);
       try {
-        // Lock the attempt first. Submit/finalization use the same row lock, so
-        // an acknowledged write is ordered wholly before or after finalization.
-        const [lockedRows] = await connection.execute<RowDataPacket[]>('SELECT id,public_id,status,expires_at,(expires_at<=UTC_TIMESTAMP(3)) expired FROM exam_attempts WHERE student_id=? AND exam_id=? FOR UPDATE', [claims.sub, examId]);
-        const attempt = lockedRows[0];
-        if (!attempt) throw Object.assign(new Error('Sesi ujian tidak ditemukan'), { statusCode: 404 });
-        if (attempt.public_id !== input.attempt_id) throw Object.assign(new Error('Sesi ujian berubah; muat ulang halaman'), { statusCode: 409 });
-        const [stateRows] = await connection.execute<RowDataPacket[]>(`SELECT q.question_type,
-          (q.option_a IS NOT NULL AND q.option_a<>'') option_a_available,(q.option_b IS NOT NULL AND q.option_b<>'') option_b_available,
-          (q.option_c IS NOT NULL AND q.option_c<>'') option_c_available,(q.option_d IS NOT NULL AND q.option_d<>'') option_d_available,
-          (q.option_e IS NOT NULL AND q.option_e<>'') option_e_available,v.revision,v.mutation_id,a.id answer_id,a.answer,a.is_flagged
-          FROM attempt_questions q
-          LEFT JOIN answer_write_versions v ON v.attempt_id=q.attempt_id AND v.question_id=q.question_id
-          LEFT JOIN student_answers a ON a.attempt_id=q.attempt_id AND a.question_id=q.question_id
-          WHERE q.attempt_id=? AND q.question_id=?`, [attempt.id, questionId]);
+        // Use a single unified query with FOR SHARE OF ea.
+        // This grants a Shared Lock (S-lock) on exam_attempts, allowing concurrent
+        // autosaves for different questions on the same attempt without row-lock serialization,
+        // while blocking submit (which requires an exclusive X-lock via FOR UPDATE) until
+        // active autosaves finish. It also cuts round-trips from 2 SELECTs down to 1.
+        phase = performance.now();
+        const [stateRows] = await connection.execute<RowDataPacket[]>(
+          `SELECT ea.id AS attempt_id, ea.public_id, ea.status AS attempt_status, ea.expires_at, (ea.expires_at <= UTC_TIMESTAMP(3)) AS expired,
+                  q.question_type,
+                  (q.option_a IS NOT NULL AND q.option_a <> '') AS option_a_available,
+                  (q.option_b IS NOT NULL AND q.option_b <> '') AS option_b_available,
+                  (q.option_c IS NOT NULL AND q.option_c <> '') AS option_c_available,
+                  (q.option_d IS NOT NULL AND q.option_d <> '') AS option_d_available,
+                  (q.option_e IS NOT NULL AND q.option_e <> '') AS option_e_available,
+                  v.revision, v.mutation_id,
+                  a.id AS answer_id, a.answer, a.is_flagged
+           FROM exam_attempts ea
+           LEFT JOIN attempt_questions q ON q.attempt_id = ea.id AND q.question_id = ?
+           LEFT JOIN answer_write_versions v ON v.attempt_id = ea.id AND v.question_id = q.question_id
+           LEFT JOIN student_answers a ON a.attempt_id = ea.id AND a.question_id = q.question_id
+           WHERE ea.student_id = ? AND ea.exam_id = ?
+           FOR SHARE OF ea`,
+          [questionId, claims.sub, examId],
+        );
+        mark('unified_state_query_ms', phase);
         const current = stateRows[0];
-        if (!current) throw Object.assign(new Error('Soal tidak ditemukan'), { statusCode: 404 });
+        if (!current) throw Object.assign(new Error('Sesi ujian tidak ditemukan'), { statusCode: 404 });
+        if (current.public_id !== input.attempt_id) throw Object.assign(new Error('Sesi ujian berubah; muat ulang halaman'), { statusCode: 409 });
+        if (!current.question_type) throw Object.assign(new Error('Soal tidak ditemukan'), { statusCode: 404 });
         let answer = input.answer?.trim() || null;
         if (answer !== null) {
           if (current.question_type === 'SHORT_ANSWER') {
@@ -156,20 +245,32 @@ export class StudentExamService {
         const revision = current.revision === null ? 0 : Number(current.revision);
         if (current.mutation_id === input.mutation_id) {
           if (current.answer !== answer || Boolean(current.is_flagged) !== input.is_flagged) throw Object.assign(new Error('ID mutation sudah digunakan untuk payload lain'), { statusCode: 409 });
+          phase = performance.now();
           await connection.commit();
+          mark('commit_ms', phase);
+          this.recordDiagnostic('exam_autosave', { outcome: 'duplicate', ...timings, total_ms: Number((performance.now() - started).toFixed(2)) });
           return { question_id: questionId, revision, duplicate: true };
         }
-        if (attempt.status !== 'IN_PROGRESS' || Number(attempt.expired)) throw Object.assign(new Error('Ujian sudah tidak aktif'), { statusCode: 409 });
+        if (current.attempt_status !== 'IN_PROGRESS' || Number(current.expired)) throw Object.assign(new Error('Ujian sudah tidak aktif'), { statusCode: 409 });
         if (revision !== input.base_revision) throw Object.assign(new Error('Versi jawaban berubah di tab lain'), { statusCode: 409 });
+        phase = performance.now();
         if (current.answer_id !== null) {
           if (current.answer !== answer || Boolean(current.is_flagged) !== input.is_flagged) await connection.execute('UPDATE student_answers SET answer=?,is_flagged=?,answered_at=UTC_TIMESTAMP(3) WHERE id=?', [answer, Number(input.is_flagged), current.answer_id]);
-        } else if (answer !== null || input.is_flagged) await connection.execute('INSERT INTO student_answers(attempt_id,question_id,answer,is_flagged,answered_at) VALUES(?,?,?,?,UTC_TIMESTAMP(3))', [attempt.id, questionId, answer, Number(input.is_flagged)]);
-        if (current.revision === null) await connection.execute('INSERT INTO answer_write_versions(attempt_id,question_id,revision,mutation_id) VALUES(?,?,1,?)', [attempt.id, questionId, input.mutation_id]);
-        else await connection.execute('UPDATE answer_write_versions SET revision=?,mutation_id=? WHERE attempt_id=? AND question_id=?', [revision + 1, input.mutation_id, attempt.id, questionId]);
+        } else if (answer !== null || input.is_flagged) await connection.execute('INSERT INTO student_answers(attempt_id,question_id,answer,is_flagged,answered_at) VALUES(?,?,?,?,UTC_TIMESTAMP(3))', [current.attempt_id, questionId, answer, Number(input.is_flagged)]);
+        if (current.revision === null) await connection.execute('INSERT INTO answer_write_versions(attempt_id,question_id,revision,mutation_id) VALUES(?,?,1,?)', [current.attempt_id, questionId, input.mutation_id]);
+        else await connection.execute('UPDATE answer_write_versions SET revision=?,mutation_id=? WHERE attempt_id=? AND question_id=?', [revision + 1, input.mutation_id, current.attempt_id, questionId]);
+        mark('answer_writes_ms', phase);
+        phase = performance.now();
         await connection.commit();
+        mark('commit_ms', phase);
+        this.recordDiagnostic('exam_autosave', { outcome: 'saved', ...timings, total_ms: Number((performance.now() - started).toFixed(2)) });
         return { question_id: questionId, answer, is_flagged: input.is_flagged, revision: revision + 1, saved_at: new Date().toISOString() };
       } catch (error) {
+        const code = (error as { code?: string }).code ?? 'unknown';
+        phase = performance.now();
         try { await connection.rollback(); } catch { /* no active transaction */ }
+        mark('rollback_ms', phase);
+        this.recordDiagnostic('exam_autosave', { outcome: 'error', error_code: code, ...timings, total_ms: Number((performance.now() - started).toFixed(2)) });
         throw error;
       }
     } finally { connection.release(); }
