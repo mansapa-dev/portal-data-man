@@ -93,11 +93,12 @@ export async function supportRoutes(app: FastifyInstance) {
     } catch(error) { try { await connection.rollback(); } catch {} throw error; } finally { connection.release(); }
   });
   app.post<{Params:{id:string}}>('/api/staff/support-tickets/:id/reset', async (request) => {
-    const claims=requireRole(request,['ADMIN','TEACHER','EMPLOYEE'],true);const body=z.object({reason:z.string().trim().min(3).max(1000)}).strict().parse(request.body);const pool=requirePool();
-    if(claims.role!=='ADMIN'&&!(await canHandle(pool,claims.sub))) throw Object.assign(new Error('Fitur tiket hanya untuk admin atau petugas piket'),{statusCode:403});
+    // Session recovery (attempt reset) is ADMIN-only; proctors may take and resolve
+    // tickets but cannot reopen a terminated exam session.
+    const claims=requireRole(request,['ADMIN'],true);const body=z.object({reason:z.string().trim().min(3).max(1000)}).strict().parse(request.body);const pool=requirePool();
     const connection=await pool.getConnection();
     try {
-      await connection.beginTransaction(); await assertActiveActor(connection,claims.sub,claims.role); await assertActiveProctor(connection,claims.sub,claims.role);
+      await connection.beginTransaction(); await assertActiveActor(connection,claims.sub,claims.role);
       const [rows]=await connection.execute<RowDataPacket[]>('SELECT id,student_id,exam_id,status,handled_by FROM support_tickets WHERE public_id=? FOR UPDATE',[request.params.id]);const ticket=rows[0];
       if(!ticket) throw Object.assign(new Error('Tiket tidak ditemukan'),{statusCode:404});
       if(ticket.status!=='IN_PROGRESS'||Number(ticket.handled_by)!==claims.sub)throw Object.assign(new Error('Ambil tiket terlebih dahulu'),{statusCode:409});

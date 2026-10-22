@@ -40,6 +40,8 @@ function getViolationLabel(value: unknown): string {
   const map: Record<string, string> = {
     TAB_HIDDEN: 'Berpindah tab / buka aplikasi lain',
     WINDOW_BLUR: 'Jendela ujian kehilangan fokus',
+    MULTI_TAB: 'Tab ujian kedua pada perangkat yang sama',
+    TEXT_SELECTION: 'Seleksi teks soal (long-press) diblokir',
     FULLSCREEN_EXIT: 'Keluar dari mode layar penuh',
     SCREENSHOT_ATTEMPT: 'Mencoba mengambil screenshot',
     COPY_ATTEMPT: 'Mencoba menyalin teks soal',
@@ -1043,6 +1045,11 @@ export function StaffOperations({
                       <span className="badge-status is-disconnected">
                         <i className="fa-solid fa-triangle-exclamation" /> {getViolationLabel(row.type)}
                       </span>
+                      {row.question_no != null && (
+                        <small style={{ display: 'block', color: 'var(--text-muted)' }}>
+                          Soal #{Number(row.question_no)}
+                        </small>
+                      )}
                     </td>
                     {admin && (
                       <td>
@@ -1060,9 +1067,9 @@ export function StaffOperations({
                       </span>
                     </td>
                     <td>
-                      {(admin || canProctor) &&
+                      {admin &&
                         row.attempt_status === 'TERMINATED' &&
-                        Number(row.violation_count) >= 3 && (
+                        Number(row.violation_count) >= 2 && (
                           <button
                             type="button"
                             className="btn-table btn-table-warning"

@@ -274,6 +274,49 @@
   font-weight: 750;
 }
 
+/* --- ANTI-CURANG: CEGAH SELEKSI TEKS & LONG-PRESS (akar masalah panel Google Search) --- */
+.student-exam {
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none; /* iOS Safari: tanpa loupe/callout saat long-press */
+  -webkit-tap-highlight-color: transparent;
+  /* Android Chrome: tanpa double-tap zoom (tap-delay dihapus) */
+  touch-action: manipulation;
+}
+
+/* Hentikan pull-to-refresh Chrome Android & rubber-band iOS saat halaman ujian aktif
+   ('body:has(...)' didukung Chrome 105+, Safari 15.4+). */
+body:has(.student-exam) {
+  overscroll-behavior: none;
+  overscroll-behavior-y: none;
+}
+
+/* Soal isian tetap harus bisa diketik */
+.student-exam input,
+.student-exam textarea {
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
+}
+
+/* Blokir long-press callout & drag pada gambar tautan */
+.student-exam img,
+.student-exam a {
+  -webkit-user-drag: none;
+  user-drag: none;
+  pointer-events: none;
+}
+
+/* Watermark pelacak screenshot (NIS · nama, berulang, murni CSS — tanpa JS runtime) */
+.student-exam .student-exam-watermark {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
+}
+
 /* Teks Narasi Soal */
 .student-exam .q-text {
   font-size: 17px;

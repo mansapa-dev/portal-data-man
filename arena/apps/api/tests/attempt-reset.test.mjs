@@ -27,6 +27,18 @@ test('reset hanya untuk aktor aktif dengan role yang masih cocok', async () => {
   assert.equal(connection.statements.length, 1);
 });
 
+test('guru/petugas piket tidak lagi diizinkan mereset sesi (admin saja)', async () => {
+  const connection = connectionWith({
+    'SELECT id,role,teacher_id,employee_id': [{ id: 5, role: 'TEACHER', teacher_id: 2, employee_id: null }],
+  });
+  await assert.rejects(
+    resetTerminatedAttemptInTransaction(connection, 12, 3, { id: 5, role: 'TEACHER' }, 'alasan reset'),
+    { statusCode: 403 },
+  );
+  // Tidak ada lagi query izin proktor; penolakan terjadi langsung setelah validasi akun.
+  assert.equal(connection.statements.length, 1);
+});
+
 test('reset menyimpan nilai lama di audit dan menulis perubahan dalam transaksi pemanggil', async () => {
   const connection = connectionWith({
     'SELECT id,role,teacher_id,employee_id': [{ id: 8, role: 'ADMIN', teacher_id: null, employee_id: null }],

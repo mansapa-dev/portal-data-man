@@ -8,7 +8,7 @@ import type { RowDataPacket } from 'mysql2/promise';
 
 const examId = z.coerce.number().int().positive();
 const answerSchema = z.object({ answer: z.string().max(500).nullable(), is_flagged: z.boolean().default(false), attempt_id: z.string().length(26), base_revision: z.number().int().nonnegative(), mutation_id: z.string().regex(/^[A-Za-z0-9_-]{16,100}$/) }).strict();
-const violationSchema = z.object({ event_key: z.string().min(8).max(100).regex(/^[A-Za-z0-9_-]+$/), type: z.enum(['TAB_HIDDEN','WINDOW_BLUR','FULLSCREEN_EXIT','SCREENSHOT_ATTEMPT','COPY_ATTEMPT','PASTE_ATTEMPT','CUT_ATTEMPT','CONTEXT_MENU_ATTEMPT','DEVTOOLS_SHORTCUT','BROWSER_SHORTCUT','SPLIT_SCREEN_SUSPECTED','OTHER']), client_occurred_at: z.string().datetime({ offset: true }).optional() }).strict();
+const violationSchema = z.object({ event_key: z.string().min(8).max(100).regex(/^[A-Za-z0-9_-]+$/), type: z.enum(['TAB_HIDDEN','WINDOW_BLUR','FULLSCREEN_EXIT','SCREENSHOT_ATTEMPT','COPY_ATTEMPT','PASTE_ATTEMPT','CUT_ATTEMPT','CONTEXT_MENU_ATTEMPT','DEVTOOLS_SHORTCUT','BROWSER_SHORTCUT','SPLIT_SCREEN_SUSPECTED','MULTI_TAB','TEXT_SELECTION','OTHER']), client_occurred_at: z.string().datetime({ offset: true }).optional(), question_no: z.number().int().nonnegative().max(2000).optional(), csrf_token: z.string().min(32).max(128).optional() }).strict();
 
 export async function studentExamRoutes(app: FastifyInstance) {
   const pool = requirePool();
@@ -39,10 +39,13 @@ export async function studentExamRoutes(app: FastifyInstance) {
     const claims=readToken(bearer??cookie??'');
     const routeId=(request.params as {id:string}).id;
     return claims?.role==='STUDENT'?`violation:student:${claims.sub}:exam:${routeId}`:`violation:ip:${request.ip}`;
-  } } } }, async (request) => {
-    const claims = studentClaims(request); assertCsrf(request, claims);
+  } } } },   async (request) => {
+    const claims = studentClaims(request);
+    // Violations may arrive via navigator.sendBeacon fallback (no custom headers),
+    // so CSRF is additionally accepted inside the body for this endpoint only.
+    assertCsrf(request, claims, { allowBodyToken: true });
     const body = violationSchema.parse(request.body);
-    return scoring.recordViolation(claims.sub, examId.parse(request.params.id), body.event_key, body.type, { ip: request.ip, userAgent: request.headers['user-agent'] ?? '', clientOccurredAt: body.client_occurred_at ?? null });
+    return scoring.recordViolation(claims.sub, examId.parse(request.params.id), body.event_key, body.type, { ip: request.ip, userAgent: request.headers['user-agent'] ?? '', clientOccurredAt: body.client_occurred_at ?? null, questionNo: body.question_no });
   });
   app.post<{ Params: { id: string } }>('/api/student/exams/:id/submit', { config: { rateLimit: { max: 10, timeWindow: '1 minute', keyGenerator: rateLimitKey } } }, async (request) => {
     const claims = studentClaims(request); assertCsrf(request, claims);

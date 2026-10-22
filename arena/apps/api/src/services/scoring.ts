@@ -1,7 +1,50 @@
-import type { Pool, RowDataPacket } from 'mysql2/promise';
+import type { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise';
 
-const violationTypes = new Set(['TAB_HIDDEN','WINDOW_BLUR','FULLSCREEN_EXIT','SCREENSHOT_ATTEMPT','COPY_ATTEMPT','PASTE_ATTEMPT','CUT_ATTEMPT','CONTEXT_MENU_ATTEMPT','DEVTOOLS_SHORTCUT','BROWSER_SHORTCUT','SPLIT_SCREEN_SUSPECTED','OTHER']);
-const thresholdTypes = new Set(['TAB_HIDDEN','FULLSCREEN_EXIT','SCREENSHOT_ATTEMPT','COPY_ATTEMPT']);
+const violationTypes = new Set(['TAB_HIDDEN','WINDOW_BLUR','FULLSCREEN_EXIT','SCREENSHOT_ATTEMPT','COPY_ATTEMPT','PASTE_ATTEMPT','CUT_ATTEMPT','CONTEXT_MENU_ATTEMPT','DEVTOOLS_SHORTCUT','BROWSER_SHORTCUT','SPLIT_SCREEN_SUSPECTED','MULTI_TAB','TEXT_SELECTION','OTHER']);
+// Counted types decide automatic termination. WINDOW_BLUR / MULTI_TAB / SPLIT_SCREEN_SUSPECTED
+// are counted since session 2026: opening a second window/tab, mirroring to another device via
+// a focused second app, or snapping the exam window into a split layout are all cheat signals.
+const thresholdTypes = new Set(['TAB_HIDDEN','WINDOW_BLUR','FULLSCREEN_EXIT','SCREENSHOT_ATTEMPT','COPY_ATTEMPT','MULTI_TAB','SPLIT_SCREEN_SUSPECTED']);
+// Low-confidence signals (e.g. long-press text selection on Android, blocked context menu)
+// are logged for proctors, but every ROLLUP_SIZE events of the same type in one attempt
+// roll up into a single counted violation so persistent offenders still get terminated.
+const rollupTypes = new Set(['TEXT_SELECTION','CONTEXT_MENU_ATTEMPT']);
+const ROLLUP_SIZE = 3;
+
+// Violation policy (threshold 2|3 + termination action) is configurable by admins through
+// cbt_settings.violation_termination_threshold / violation_action. Cached for 60 s so
+// concurrent violation reports never generate extra settings queries under exam load.
+const DEFAULT_VIOLATION_THRESHOLD = 3;
+const DEFAULT_VIOLATION_ACTION = 'AUTO_SUBMIT';
+type ViolationAction = 'AUTO_SUBMIT' | 'LOCK';
+let policyCache: { threshold: number; action: ViolationAction; expiresAt: number } | null = null;
+export function invalidateViolationThresholdCache() { policyCache = null; }
+export async function readViolationThreshold(connection: PoolConnection): Promise<number> {
+  return (await readViolationPolicy(connection)).threshold;
+}
+async function readViolationPolicy(connection: PoolConnection): Promise<{ threshold: number; action: ViolationAction }> {
+  if (policyCache && Date.now() < policyCache.expiresAt) return policyCache;
+  let threshold = DEFAULT_VIOLATION_THRESHOLD, action: ViolationAction = DEFAULT_VIOLATION_ACTION;
+  try {
+    const [rows] = await connection.execute<RowDataPacket[]>("SELECT key_name,value FROM cbt_settings WHERE key_name IN ('violation_termination_threshold','violation_action')");
+    for (const row of rows) {
+      if (row.key_name === 'violation_termination_threshold' && Number(row.value) === 2) threshold = 2;
+      else if (row.key_name === 'violation_action' && row.value === 'LOCK') action = 'LOCK';
+    }
+  } catch { /* missing table or transient failure; keep safe defaults */ }
+  policyCache = { threshold, action, expiresAt: Date.now() + 60_000 };
+  return policyCache;
+}
+
+/** Pool-level wrapper so admin routes can share the same cached policy. */
+export async function getViolationPolicy(pool: Pool): Promise<{ threshold: number; action: ViolationAction }> {
+  const connection = await pool.getConnection();
+  try {
+    return await readViolationPolicy(connection);
+  } finally {
+    connection.release();
+  }
+}
 
 function normalize(text: string) { return text.trim().replace(/\s+/gu, ' ').toLocaleLowerCase('id-ID'); }
 function fraction(type: string, key: string, answer: string, optionCount: number) {
@@ -135,7 +178,7 @@ export class ScoringService {
     }) };
   }
 
-  async recordViolation(studentId: number, examId: number, eventKey: string, type: string, metadata: { ip?: string; userAgent?: string; clientOccurredAt?: string | null } = {}) {
+  async recordViolation(studentId: number, examId: number, eventKey: string, type: string, metadata: { ip?: string; userAgent?: string; clientOccurredAt?: string | null; questionNo?: number } = {}) {
     let terminated = false;
     const connection = await this.pool.getConnection();
     try {
@@ -143,20 +186,40 @@ export class ScoringService {
       const [rows] = await connection.execute<RowDataPacket[]>('SELECT id,status,violation_count FROM exam_attempts WHERE student_id=? AND exam_id=? FOR UPDATE', [studentId, examId]);
       const attempt = rows[0];
       if (!attempt) throw Object.assign(new Error('Sesi ujian tidak ditemukan'), { statusCode: 404 });
-      if (attempt.status !== 'IN_PROGRESS') { await connection.commit(); return { recorded: false, count: Number(attempt.violation_count), terminated: attempt.status === 'TERMINATED' }; }
+      if (attempt.status !== 'IN_PROGRESS') { const policy = await readViolationPolicy(connection); await connection.commit(); return { recorded: false, count: Number(attempt.violation_count), threshold: policy.threshold, action: policy.action, terminated: attempt.status === 'TERMINATED' }; }
       const recordedType = violationTypes.has(type) ? type : 'OTHER';
-      const [result] = await connection.execute('INSERT IGNORE INTO violations(attempt_id,event_key,type,occurred_at,client_occurred_at,ip_address,user_agent) VALUES(?,?,?,UTC_TIMESTAMP(3),?,?,?)', [attempt.id, eventKey, recordedType, metadata.clientOccurredAt ? new Date(metadata.clientOccurredAt) : null, (metadata.ip ?? '').slice(0,45) || null, (metadata.userAgent ?? '').slice(0,500) || null]);
+      const policy = await readViolationPolicy(connection);
+      const questionNo = Number.isSafeInteger(metadata.questionNo) ? Math.min(2000, Math.max(0, Number(metadata.questionNo))) : null;
+      const [result] = await connection.execute('INSERT IGNORE INTO violations(attempt_id,event_key,type,occurred_at,client_occurred_at,ip_address,user_agent,question_no,rolled_up) VALUES(?,?,?,UTC_TIMESTAMP(3),?,?,?,?,0)', [attempt.id, eventKey, recordedType, metadata.clientOccurredAt ? new Date(metadata.clientOccurredAt) : null, (metadata.ip ?? '').slice(0,45) || null, (metadata.userAgent ?? '').slice(0,500) || null, questionNo]);
       const inserted = (result as { affectedRows: number }).affectedRows > 0;
-      const counted = inserted && thresholdTypes.has(recordedType);
-      if (counted) await connection.execute('UPDATE exam_attempts SET violation_count=LEAST(255,violation_count+1),status=IF(violation_count+1>=3,\'TERMINATED\',status) WHERE id=?', [attempt.id]);
+      let counted = inserted && thresholdTypes.has(recordedType);
+      if (inserted && rollupTypes.has(recordedType)) {
+        // Logged signal, but every ROLLUP_SIZE occurrences in one attempt become a
+        // single counted violation. One indexed COUNT + one conditional UPDATE per
+        // soft event; rate limiting keeps this well under exam load.
+        const [pendingRows] = await connection.execute<RowDataPacket[]>("SELECT COUNT(*) pending FROM violations WHERE attempt_id=? AND type=? AND rolled_up=0", [attempt.id, recordedType]);
+        if (Number((pendingRows[0] as { pending?: unknown } | undefined)?.pending ?? 0) >= ROLLUP_SIZE) {
+          await connection.execute('UPDATE violations SET rolled_up=1 WHERE attempt_id=? AND type=? AND rolled_up=0', [attempt.id, recordedType]);
+          counted = true;
+        }
+      }
+      if (counted) await connection.execute('UPDATE exam_attempts SET violation_count=LEAST(255,violation_count+1),status=IF(violation_count+1>=?,\'TERMINATED\',status) WHERE id=?', [policy.threshold, attempt.id]);
       await connection.commit();
       const count = Number(attempt.violation_count) + Number(counted);
-      terminated = counted && count >= 3;
-      const outcome: { recorded: boolean; count: number; terminated: boolean; hasil?: unknown } = { recorded: inserted, count, terminated };
+      terminated = counted && count >= policy.threshold;
+      const outcome: { recorded: boolean; count: number; threshold: number; action: ViolationAction; terminated: boolean; hasil?: unknown } = { recorded: inserted, count, threshold: policy.threshold, action: policy.action, terminated };
       // Release the connection *before* calling submit so it can acquire its own
       // connection from the pool without risk of exhaustion when pool is small.
       connection.release();
-      if (terminated) outcome.hasil = await this.submit(studentId, examId, true);
+      if (terminated) {
+        if (policy.action === 'LOCK') {
+          // LOCK policy: terminate without publishing results; the session stays
+          // recoverable by an admin through the audited attempt reset.
+          outcome.terminated = true;
+        } else {
+          outcome.hasil = await this.submit(studentId, examId, true);
+        }
+      }
       return outcome;
     } catch (error) {
       try { await connection.rollback(); } catch { /* no active transaction */ }

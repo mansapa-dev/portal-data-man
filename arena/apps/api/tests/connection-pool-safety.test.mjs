@@ -36,6 +36,7 @@ test('recordViolation libera koneksi sebelum memanggil submit (anti-pool-exhaust
         return [[{ id: 1, status: 'IN_PROGRESS', violation_count: 2 }]];
       }
       if (sql.startsWith('INSERT IGNORE INTO violations')) return [{ affectedRows: 1 }];
+      if (sql.startsWith('SELECT key_name,value FROM cbt_settings')) return [[{ key_name: 'violation_termination_threshold', value: '3' }]];
       if (sql.startsWith('UPDATE exam_attempts SET violation_count')) return [{ affectedRows: 1 }];
       throw new Error(`Violation-conn unexpected SQL: ${sql}`);
     },
@@ -119,6 +120,7 @@ test('recordViolation melepas koneksi dengan benar saat tidak ada terminasi', as
         return [[{ id: 1, status: 'IN_PROGRESS', violation_count: 0 }]];
       }
       if (sql.startsWith('INSERT IGNORE INTO violations')) return [{ affectedRows: 1 }];
+      if (sql.startsWith('SELECT key_name,value FROM cbt_settings')) return [[{ key_name: 'violation_termination_threshold', value: '3' }]];
       if (sql.startsWith('UPDATE exam_attempts SET violation_count')) return [{ affectedRows: 1 }];
       throw new Error(`Unexpected SQL: ${sql}`);
     },

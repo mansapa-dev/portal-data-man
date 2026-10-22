@@ -73,9 +73,16 @@ export function claimsFromRequest(request: FastifyRequest): Claims {
   return claims;
 }
 
-export function assertCsrf(request: FastifyRequest, claims: Claims) {
-  const csrf = request.headers['x-csrf-token'];
-  if (typeof csrf !== 'string' || csrf !== claims.csrf) throw Object.assign(new Error('Token CSRF tidak valid'), { statusCode: 403 });
+export function assertCsrf(request: FastifyRequest, claims: Claims, options: { allowBodyToken?: boolean } = {}) {
+  const header = request.headers['x-csrf-token'];
+  if (typeof header === 'string' && header === claims.csrf) return;
+  // navigator.sendBeacon cannot set custom headers, so a narrow allowlist of
+  // beacon endpoints may submit the CSRF token inside the JSON body instead.
+  if (options.allowBodyToken && typeof request.body === 'object' && request.body !== null) {
+    const bodyToken = (request.body as { csrf_token?: unknown }).csrf_token;
+    if (typeof bodyToken === 'string' && bodyToken === claims.csrf) return;
+  }
+  throw Object.assign(new Error('Token CSRF tidak valid'), { statusCode: 403 });
 }
 
 export const newCsrf = () => randomBytes(32).toString('hex');

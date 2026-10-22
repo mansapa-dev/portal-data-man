@@ -1,4 +1,5 @@
 import type { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise';
+import { readViolationThreshold } from './scoring.js';
 
 type ResetActor = { id: number; role: string };
 
@@ -21,22 +22,12 @@ export async function resetTerminatedAttemptInTransaction(
     throw Object.assign(new Error('Akun atau hak akses petugas sudah tidak aktif'), { statusCode: 403 });
   }
 
-  let authorized = staff.role === 'ADMIN';
-  if (!authorized && ['TEACHER', 'EMPLOYEE'].includes(String(staff.role))) {
-    const teacherId = staff.role === 'TEACHER' ? Number(staff.teacher_id ?? 0) : 0;
-    const employeeId = staff.role === 'EMPLOYEE' ? Number(staff.employee_id ?? 0) : 0;
-    const [permissionRows] = await connection.execute<RowDataPacket[]>(
-      `SELECT EXISTS(
-         SELECT 1 FROM teacher_exam_assignments a
-         WHERE a.duty_role='PROCTOR' AND a.exam_id IS NULL
-           AND ((? > 0 AND a.teacher_id=?) OR (? > 0 AND a.employee_id=?))
-       ) allowed`,
-      [teacherId, teacherId, employeeId, employeeId],
-    );
-    authorized = Boolean(permissionRows[0]?.allowed);
-  }
+  // Reset after violation termination is an ADMIN-only action: teachers/proctors can
+  // review violations but the session recovery decision (restoring remaining time) is
+  // reserved for the administrator.
+  const authorized = staff.role === 'ADMIN';
   if (!authorized) {
-    throw Object.assign(new Error('Reset hanya tersedia bagi admin atau petugas piket aktif'), { statusCode: 403 });
+    throw Object.assign(new Error('Pemulihan sesi hanya dapat dilakukan oleh admin'), { statusCode: 403 });
   }
 
   const [rows] = await connection.execute<RowDataPacket[]>(
@@ -44,8 +35,9 @@ export async function resetTerminatedAttemptInTransaction(
     [studentId, examId],
   );
   const attempt = rows[0];
-  if (!attempt || attempt.status !== 'TERMINATED' || Number(attempt.violation_count) < 3) {
-    throw Object.assign(new Error('Reset hanya tersedia untuk attempt yang dihentikan setelah tiga pelanggaran'), { statusCode: 409 });
+  const threshold = await readViolationThreshold(connection);
+  if (!attempt || attempt.status !== 'TERMINATED' || Number(attempt.violation_count) < threshold) {
+    throw Object.assign(new Error(`Reset hanya tersedia untuk attempt yang dihentikan setelah ${threshold} pelanggaran`), { statusCode: 409 });
   }
   if (!attempt.is_active || attempt.cbt_status !== 'ACTIVE') {
     throw Object.assign(new Error('Akun siswa tidak aktif'), { statusCode: 409 });

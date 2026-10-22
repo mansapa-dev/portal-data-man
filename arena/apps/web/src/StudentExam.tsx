@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { api, mutationId } from './lib/api';
+import { api, beacon, mutationId } from './lib/api';
 
 export type ExamQuestion={id:number;tipe:string;pertanyaan:string;opsi:{key:string;text:string}[];poin:number};
 export type ExamAttempt={attempt_id:string;exam:{id:number;nama_ujian:string};expires_at:string;server_time?:string;soal:ExamQuestion[];jawaban:{question_id:number;answer:string|null;is_flagged:boolean;revision:number}[]};
 export type ExamResult={status?:string;nilai?:number|string|null;benar?:number|null;salah?:number|null;kosong?:number|null;jumlah_soal?:number|null;is_remedial?:boolean;score_cap?:number|null;follow_up_type?:string|null};
 
-export function StudentExam({attempt,studentName,answers,flags,busy,saveState='saved',message,change,toggleFlag,retrySave,submit,onTerminated,onHelp,children}:{attempt:ExamAttempt;studentName:string;answers:Record<number,string>;flags:Record<number,boolean>;busy:boolean;saveState?:'saved'|'saving'|'error';message?:string;change:(question:ExamQuestion,value:string)=>void;toggleFlag:(question:ExamQuestion)=>void;retrySave:()=>Promise<void>;submit:(finalizeOnly?:boolean)=>Promise<void>;onTerminated:(result:ExamResult|null)=>void;onHelp:()=>void;children?:React.ReactNode}){
+export function StudentExam({attempt,studentName,studentNisn,answers,flags,busy,saveState='saved',message,change,toggleFlag,retrySave,submit,onTerminated,onHelp,children}:{attempt:ExamAttempt;studentName:string;studentNisn?:string;answers:Record<number,string>;flags:Record<number,boolean>;busy:boolean;saveState?:'saved'|'saving'|'error';message?:string;change:(question:ExamQuestion,value:string)=>void;toggleFlag:(question:ExamQuestion)=>void;retrySave:()=>Promise<void>;submit:(finalizeOnly?:boolean)=>Promise<void>;onTerminated:(result:ExamResult|null)=>void;onHelp:()=>void;children?:React.ReactNode}){
  const [remaining,setRemaining]=useState(()=>Math.max(0,Math.ceil((Date.parse(attempt.expires_at)-Date.now()-(attempt.server_time?Date.parse(attempt.server_time)-Date.now():0))/1000))),[warning,setWarning]=useState(''),[current,setCurrent]=useState(0),[submitOpen,setSubmitOpen]=useState(false),[expiryFailed,setExpiryFailed]=useState(false),[mapOpen,setMapOpen]=useState(false);const lastEvent=useRef<Record<string,number>>({}),submitting=useRef(false),fullscreenRequested=useRef(false),submitRef=useRef(submit),terminationRef=useRef(onTerminated);
+ const currentQuestion=useRef(0);currentQuestion.current=current+1;
  const submitCancelButton=useRef<HTMLButtonElement>(null),submitTrigger=useRef<HTMLButtonElement|null>(null);
  submitRef.current=submit;
  terminationRef.current=onTerminated;
@@ -14,20 +15,35 @@ export function StudentExam({attempt,studentName,answers,flags,busy,saveState='s
  const offset=useRef(attempt.server_time?Date.parse(attempt.server_time)-Date.now():0);
  useEffect(()=>{offset.current=attempt.server_time?Date.parse(attempt.server_time)-Date.now():0;submitting.current=false;setExpiryFailed(false);let expiryStarted=false;const tick=()=>{const seconds=Math.max(0,Math.ceil((Date.parse(attempt.expires_at)-Date.now()-offset.current)/1000));setRemaining(seconds);if(seconds===0&&!expiryStarted&&!submitting.current){expiryStarted=true;submitting.current=true;setSubmitOpen(false);void submitRef.current(true).catch(()=>{submitting.current=false;setExpiryFailed(true);setWarning('Waktu habis. Hasil dihitung dari jawaban yang berhasil tersimpan.');});}};tick();const timer=window.setInterval(tick,1000);return()=>clearInterval(timer);},[attempt.attempt_id]);
  useEffect(()=>{
-  let active=true,constrained=false,viewportTimer=0;
-  const record=(type:'TAB_HIDDEN'|'FULLSCREEN_EXIT'|'SCREENSHOT_ATTEMPT'|'COPY_ATTEMPT'|'PASTE_ATTEMPT'|'CUT_ATTEMPT'|'CONTEXT_MENU_ATTEMPT'|'DEVTOOLS_SHORTCUT'|'BROWSER_SHORTCUT'|'SPLIT_SCREEN_SUSPECTED')=>{
+  let active=true,constrained=false,wasFullscreen=false,blurTimer=0,pingTimer=0,viewportTimer=0,multiTabCooldown=0;
+  const record=(type:'TAB_HIDDEN'|'WINDOW_BLUR'|'FULLSCREEN_EXIT'|'SCREENSHOT_ATTEMPT'|'COPY_ATTEMPT'|'PASTE_ATTEMPT'|'CUT_ATTEMPT'|'CONTEXT_MENU_ATTEMPT'|'DEVTOOLS_SHORTCUT'|'BROWSER_SHORTCUT'|'SPLIT_SCREEN_SUSPECTED'|'MULTI_TAB'|'TEXT_SELECTION'|'OTHER')=>{
    if(submitting.current)return;
    const now=Date.now();if(now-(lastEvent.current[type]??0)<5000)return;lastEvent.current[type]=now;
-   void api<{count:number;terminated:boolean;hasil?:ExamResult}>(`/api/student/exams/${attempt.exam.id}/violations`,{method:'POST',body:{event_key:mutationId(),type,client_occurred_at:new Date().toISOString()}}).then(result=>{
+   void api<{count:number;threshold?:number;action?:string;terminated:boolean;hasil?:ExamResult}>(`/api/student/exams/${attempt.exam.id}/violations`,{method:'POST',keepalive:true,body:{event_key:mutationId(),type,client_occurred_at:new Date().toISOString(),question_no:currentQuestion.current}}).then(result=>{
     if(!active)return;
     if(result.terminated){submitting.current=true;terminationRef.current({...result.hasil,status:'TERMINATED'});}
-    else if(['PASTE_ATTEMPT','CUT_ATTEMPT','CONTEXT_MENU_ATTEMPT','DEVTOOLS_SHORTCUT','BROWSER_SHORTCUT','SPLIT_SCREEN_SUSPECTED'].includes(type))setWarning(`Sinyal dicatat untuk ditinjau pengawas; hitungan pelanggaran otomatis tetap ${result.count}/3.`);
-    else setWarning(`Pelanggaran tercatat (${result.count}/3). Tetap di halaman ujian dan ikuti arahan pengawas.`);
-   }).catch(error=>{if(active)setWarning(`Sinyal belum tercatat: ${(error as Error).message}`);});
+    else if(['PASTE_ATTEMPT','CUT_ATTEMPT','CONTEXT_MENU_ATTEMPT','DEVTOOLS_SHORTCUT','BROWSER_SHORTCUT','TEXT_SELECTION'].includes(type))setWarning(`Sinyal dicatat untuk ditinjau pengawas; setiap tiga kejadian serupa dihitung satu pelanggaran (${result.count}/${result.threshold??3}).`);
+    else setWarning(`Pelanggaran tercatat (${result.count}/${result.threshold??3}). Tetap di halaman ujian dan ikuti arahan pengawas.`);
+   }).catch(error=>{if(active){beacon(`/api/student/exams/${attempt.exam.id}/violations`,{event_key:mutationId(),type,client_occurred_at:new Date().toISOString(),question_no:currentQuestion.current});setWarning(`Sinyal belum tercatat: ${(error as Error).message}`);}});
   };
   const visibility=()=>{if(document.hidden)record('TAB_HIDDEN');};
+  const pagehide=()=>{record('OTHER');};
   const clipboard=(type:'COPY_ATTEMPT'|'PASTE_ATTEMPT'|'CUT_ATTEMPT')=>(event:ClipboardEvent)=>{event.preventDefault();record(type);};
   const contextMenu=(event:MouseEvent)=>{event.preventDefault();record('CONTEXT_MENU_ATTEMPT');};
+  const blockSelection=(event:Event)=>{
+   // Input/textarea (soal isian) tetap boleh diseleksi dan diketik.
+   if(event.target instanceof HTMLElement&&event.target.matches('input,textarea,[contenteditable="true"]'))return;
+   event.preventDefault();
+  };
+  const selectionChange=()=>{
+   const selection=window.getSelection();
+   if(selection&&selection.rangeCount>0&&!selection.isCollapsed&&String(selection).length>0){
+    // iOS Safari sering meninggalkan caret dengan range aktif; hanya seleksi
+    // nyata (bukan caret) yang dicatat, lalu dihapus agar loupe tidak muncul.
+    selection.removeAllRanges();
+    record('TEXT_SELECTION');
+   }
+  };
   const keydown=(event:KeyboardEvent)=>{
    if(event.repeat)return;
    const key=event.key.toLowerCase(),platform=navigator.platform.toLowerCase();
@@ -43,22 +59,72 @@ export function StudentExam({attempt,studentName,answers,flags,busy,saveState='s
    else if(modifier&&['p','s','u'].includes(key)){event.preventDefault();record('BROWSER_SHORTCUT');}
   };
   const copy=clipboard('COPY_ATTEMPT'),paste=clipboard('PASTE_ATTEMPT'),cut=clipboard('CUT_ATTEMPT');
-  const fullscreen=()=>{if(fullscreenRequested.current&&!document.fullscreenElement)record('FULLSCREEN_EXIT');};
-  const viewport=()=>{
+   const fullscreenchange=()=>{
+    if(document.fullscreenElement)wasFullscreen=true;
+    else if(fullscreenRequested.current)record('FULLSCREEN_EXIT');
+   };
+   // Multi-tab guard: two exam tabs on one device are reported through a local
+  // BroadcastChannel (no server chatter while a single tab runs). Each tab pings
+  // every 5 s; hearing another tab's ping (or its join) counts as MULTI_TAB and is
+  // re-reported at most every 25 s so the server only sees a few rows per offender.
+  let channel:BroadcastChannel|null=null;
+  const tabId=Math.random().toString(36).slice(2)+Date.now().toString(36);
+  const reportMultiTab=()=>{const now=Date.now();if(now<multiTabCooldown)return;multiTabCooldown=now+25000;record('MULTI_TAB');};
+  try{
+   if(typeof BroadcastChannel==='function'){
+    channel=new BroadcastChannel(`arena-attempt-${attempt.attempt_id}`);
+    channel.onmessage=(event:MessageEvent)=>{
+     if(!active||!event.data||typeof event.data!=='object'||event.data.from===tabId)return;
+     if(event.data.type==='ping'||event.data.type==='join')reportMultiTab();
+    };
+    channel.postMessage({type:'join',from:tabId});
+    pingTimer=window.setInterval(()=>channel?.postMessage({type:'ping',from:tabId}),5000);
+   }
+   }catch{ /* BroadcastChannel unavailable in this WebView; tab-hidden tracking still applies */ }
+   const viewport=()=>{
    window.clearTimeout(viewportTimer);
    viewportTimer=window.setTimeout(()=>{
     const focused=typeof document.hasFocus!=='function'||document.hasFocus();
     const editable=document.activeElement?.matches('input,textarea,select,[contenteditable="true"]');
     const scale=window.visualViewport?.scale??1;
-    if(document.hidden||!focused||navigator.maxTouchPoints<1||editable||Math.abs(scale-1)>0.05||Math.min(screen.width,screen.height)>600||!screen.width||!screen.height){constrained=false;return;}
+    // Desktop splits are only judged after the student used the fullscreen mode this
+    // app provides; an idle small browser window on a computer is not evidence.
+    const enforced=document.fullscreenElement||fullscreenRequested.current||wasFullscreen||navigator.maxTouchPoints>=1;
+    if(document.hidden||!focused||!enforced||editable||Math.abs(scale-1)>0.05||Math.min(screen.width,screen.height)>600||!screen.width||!screen.height){constrained=false;return;}
     const next=window.innerWidth/screen.width<0.72||window.innerHeight/screen.height<0.58;
     if(next&&!constrained)record('SPLIT_SCREEN_SUSPECTED');constrained=next;
    },1500);
   };
+  const blur=()=>{
+   window.clearTimeout(blurTimer);
+   // 1-s grace: focus jumps from notifications or camera shutter dialogs recover
+   // instantly; a persistent focus loss means the student moved to another window/app.
+   blurTimer=window.setTimeout(()=>{if(typeof document.hasFocus!=='function'||!document.hasFocus())record('WINDOW_BLUR');},1000);
+  };
+  const focus=()=>{window.clearTimeout(blurTimer);viewport();};
   const orientation=()=>{constrained=false;window.clearTimeout(viewportTimer);viewportTimer=window.setTimeout(viewport,1800);};
-  document.addEventListener('visibilitychange',visibility);document.addEventListener('copy',copy,true);document.addEventListener('paste',paste,true);document.addEventListener('cut',cut,true);document.addEventListener('contextmenu',contextMenu,true);document.addEventListener('keydown',keydown,true);document.addEventListener('fullscreenchange',fullscreen);window.addEventListener('resize',viewport);window.addEventListener('orientationchange',orientation);viewport();
-  return()=>{active=false;document.removeEventListener('visibilitychange',visibility);document.removeEventListener('copy',copy,true);document.removeEventListener('paste',paste,true);document.removeEventListener('cut',cut,true);document.removeEventListener('contextmenu',contextMenu,true);document.removeEventListener('keydown',keydown,true);document.removeEventListener('fullscreenchange',fullscreen);window.removeEventListener('resize',viewport);window.removeEventListener('orientationchange',orientation);window.clearTimeout(viewportTimer);};
+  // iOS Safari: blokir pinch-zoom (event gesture* hanya ada di Safari) agar siswa
+  // tidak menyusutkan layar untuk membuka dua kolom halaman dalam satu tab.
+  const blockGesture=(event:Event)=>{event.preventDefault();};
+  document.addEventListener('visibilitychange',visibility);document.addEventListener('copy',copy,true);document.addEventListener('paste',paste,true);document.addEventListener('cut',cut,true);document.addEventListener('contextmenu',contextMenu,true);document.addEventListener('selectstart',blockSelection,true);document.addEventListener('dragstart',blockSelection,true);document.addEventListener('selectionchange',selectionChange);document.addEventListener('gesturestart',blockGesture);document.addEventListener('gesturechange',blockGesture);document.addEventListener('keydown',keydown,true);document.addEventListener('fullscreenchange',fullscreenchange);
+  window.addEventListener('resize',viewport);window.addEventListener('orientationchange',orientation);window.addEventListener('pagehide',pagehide);
+  // iOS Safari: pinch-zoom mengubah visualViewport tanpa window resize.
+  window.visualViewport?.addEventListener('resize',viewport);
+  window.visualViewport?.addEventListener('scroll',viewport);
+  window.addEventListener('blur',blur);window.addEventListener('focus',focus);viewport();
+  return()=>{active=false;document.removeEventListener('visibilitychange',visibility);document.removeEventListener('copy',copy,true);document.removeEventListener('paste',paste,true);document.removeEventListener('cut',cut,true);document.removeEventListener('contextmenu',contextMenu,true);document.removeEventListener('selectstart',blockSelection,true);document.removeEventListener('dragstart',blockSelection,true);document.removeEventListener('selectionchange',selectionChange);document.removeEventListener('gesturestart',blockGesture);document.removeEventListener('gesturechange',blockGesture);document.removeEventListener('keydown',keydown,true);document.removeEventListener('fullscreenchange',fullscreenchange);window.removeEventListener('resize',viewport);window.removeEventListener('orientationchange',orientation);window.removeEventListener('pagehide',pagehide);window.visualViewport?.removeEventListener('resize',viewport);window.visualViewport?.removeEventListener('scroll',viewport);window.removeEventListener('blur',blur);window.removeEventListener('focus',focus);window.clearTimeout(viewportTimer);window.clearTimeout(blurTimer);window.clearInterval(pingTimer);try{channel?.close();}catch{/* already closed */}};
  },[attempt.attempt_id]);
+ // Silent attempt at exam start: Chrome requires a user gesture, so this succeeds
+ // when the iframe flow already had one and stays harmless otherwise. The manual
+ // fullscreen button in the header remains the reliable entry point.
+ useEffect(()=>{try{const root=document.documentElement;fullscreenRequested.current=true;void root.requestFullscreen?.().catch(()=>{fullscreenRequested.current=false;});}catch{fullscreenRequested.current=false;}},[attempt.attempt_id]);
+ // Traceable screenshot overlay: NCAA-inspectable CSS-only repeated name/NIS pattern.
+ const watermark=useRef<string>('');
+ if(!watermark.current&&studentNisn){
+  const text=`${studentNisn} · ${studentName}`.slice(0,60);
+  const svg=`<svg xmlns='http://www.w3.org/2000/svg' width='340' height='170'><text x='170' y='88' transform='rotate(-30 170 85)' fill='rgba(15,23,42,0.07)' font-size='13' font-family='sans-serif' text-anchor='middle'>${text.replace(/[<>&']/g,'')}</text></svg>`;
+  watermark.current=`url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}")`;
+ }
   const question=attempt.soal[current];const minutes=Math.floor(remaining/60),seconds=remaining%60;
   useEffect(()=>{const engine=(window as unknown as {MathJax?:{typesetPromise?:()=>Promise<void>}}).MathJax;void engine?.typesetPromise?.();},[question?.id]);
  const answered=attempt.soal.filter(item=>Boolean(answers[item.id]?.trim())).length;
@@ -67,7 +133,7 @@ export function StudentExam({attempt,studentName,answers,flags,busy,saveState='s
  const saveText=saveState==='error'?'Jawaban belum tersimpan':saveState==='saving'?'Menyimpan jawaban…':'Semua perubahan tersimpan';
  const retryExpiredResult=()=>{if(submitting.current)return;submitting.current=true;setExpiryFailed(false);void submit(true).catch(()=>{submitting.current=false;setExpiryFailed(true);});};
  const requestFinish=(event:React.MouseEvent<HTMLButtonElement>)=>{if(remaining===0)return;if(saveState==='error'){setWarning('Ada jawaban yang belum tersimpan. Periksa koneksi sebelum menyelesaikan ujian.');return;}submitTrigger.current=event.currentTarget;setSubmitOpen(true);};
- return <section className="cbt-wrapper student-exam"><header className="cbt-header"><div className="cbt-identity"><div className="id-item"><span className="id-label">Mata Pelajaran</span><span className="id-val">{attempt.exam.nama_ujian}</span></div><div className="id-item"><span className="id-label">Peserta</span><span className="id-val">{studentName}</span></div><div className="id-item"><span className="id-label">No. Ujian</span><span className="id-val">{attempt.exam.id}</span></div><div className="id-item"><span className="id-label">Status</span><span className="id-val">{answered} dari {attempt.soal.length} dijawab</span></div></div><div className={remaining>0&&remaining<=300?'timer-box danger':'timer-box'}><span className="id-label">SISA WAKTU</span><span className="timer-time" aria-live="off">{String(minutes).padStart(2,'0')}:{String(seconds).padStart(2,'0')}</span></div><div className="student-exam-header-actions"><button className="cbt-help-button" type="button" onClick={onHelp}><i className="fa-solid fa-headset"/> Bantuan</button><button className="student-fullscreen-button" type="button" aria-label="Layar penuh" title="Layar penuh" onClick={()=>{if(!document.documentElement.requestFullscreen){setWarning('Mode layar penuh tidak tersedia pada perangkat ini.');return;}fullscreenRequested.current=true;void document.documentElement.requestFullscreen().catch(()=>{fullscreenRequested.current=false;setWarning('Mode layar penuh tidak tersedia pada perangkat ini.');});}}><i className="fa-solid fa-expand"/></button></div></header>
+ return <section className="cbt-wrapper student-exam">{watermark.current&&<div aria-hidden="true" className="student-exam-watermark" style={{backgroundImage:watermark.current}}/>}<header className="cbt-header"><div className="cbt-identity"><div className="id-item"><span className="id-label">Mata Pelajaran</span><span className="id-val">{attempt.exam.nama_ujian}</span></div><div className="id-item"><span className="id-label">Peserta</span><span className="id-val">{studentName}</span></div><div className="id-item"><span className="id-label">No. Ujian</span><span className="id-val">{attempt.exam.id}</span></div><div className="id-item"><span className="id-label">Status</span><span className="id-val">{answered} dari {attempt.soal.length} dijawab</span></div></div><div className={remaining>0&&remaining<=300?'timer-box danger':'timer-box'}><span className="id-label">SISA WAKTU</span><span className="timer-time" aria-live="off">{String(minutes).padStart(2,'0')}:{String(seconds).padStart(2,'0')}</span></div><div className="student-exam-header-actions"><button className="cbt-help-button" type="button" onClick={onHelp}><i className="fa-solid fa-headset"/> Bantuan</button><button className="student-fullscreen-button" type="button" aria-label="Layar penuh" title="Layar penuh" onClick={()=>{if(!document.documentElement.requestFullscreen){setWarning('Mode layar penuh tidak tersedia pada perangkat ini.');return;}fullscreenRequested.current=true;void document.documentElement.requestFullscreen().catch(()=>{fullscreenRequested.current=false;setWarning('Mode layar penuh tidak tersedia pada perangkat ini.');});}}><i className="fa-solid fa-expand"/></button></div></header>
  <div className="student-exam-progress"><div><span>{answered} soal dijawab</span><span>{attempt.soal.length} soal</span></div><progress aria-label="Progres jawaban" max={attempt.soal.length||1} value={answered}/></div>{warning&&<p className="exam-warning" role="status">{warning}</p>}{message&&saveState!=='error'&&<p className="exam-warning" role="alert">{message}</p>}{remaining>0&&saveState==='error'&&<div className="exam-save-error" role="alert"><span>Jawaban belum tersimpan. {message||'Periksa koneksi sebelum menyelesaikan ujian.'}</span><button type="button" onClick={()=>void retrySave()}>Coba simpan lagi</button></div>}
  {remaining===0&&<div className="exam-expired-note" role="status"><span>Waktu ujian habis. Hasil dihitung dari jawaban yang sudah tersimpan.</span>{expiryFailed&&<button type="button" disabled={busy} onClick={retryExpiredResult}>Coba muat hasil lagi</button>}</div>}<button className="student-map-toggle btn btn-secondary" type="button" aria-expanded={mapOpen} aria-controls="student-question-map" onClick={()=>{if(!mapOpen)window.setTimeout(()=>document.getElementById('student-question-map')?.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'}),0);setMapOpen(open=>!open);}}><i className="fa-solid fa-border-all"/> {mapOpen?'Tutup peta soal':'Peta soal ('+answered+'/'+attempt.soal.length+' dijawab)'}</button><div className="cbt-grid">{question&&<article className="q-panel"><div className="q-meta"><span className="q-num">Soal {current+1} dari {attempt.soal.length}</span><span role="status" aria-live="polite" className={`student-save-badge state-${saveState}`}><i className={`fa-solid ${saveState==='error'?'fa-triangle-exclamation':saveState==='saving'?'fa-arrows-rotate fa-spin':'fa-cloud-arrow-up'}`}/> {saveText}</span></div><div className="q-text question-rich-content" dir="auto" dangerouslySetInnerHTML={{__html:question.pertanyaan}}/>{question.tipe==='SHORT_ANSWER'?<input className="short-answer" aria-label="Jawaban singkat" dir="auto" maxLength={500} value={answers[question.id]??''} disabled={busy} onChange={e=>change(question,e.target.value)}/>:<div className="opt-list">{question.opsi.map(option=><label className={`opt-btn ${(answers[question.id]??'').split(',').includes(option.key)?'selected':''}`} key={option.key}><input className="exam-option-input" type={question.tipe==='MULTIPLE_RESPONSE'?'checkbox':'radio'} name={`question-${question.id}`} checked={(answers[question.id]??'').split(',').includes(option.key)} disabled={busy} onChange={e=>{const selected=new Set((answers[question.id]??'').split(',').filter(Boolean));if(question.tipe==='MULTIPLE_RESPONSE')e.target.checked?selected.add(option.key):selected.delete(option.key);else{selected.clear();selected.add(option.key);}change(question,[...selected].sort().join(','));}}/><b className="opt-char" dir="ltr">{option.key}</b><span className="opt-text" dir="auto" dangerouslySetInnerHTML={{__html:option.text}}/></label>)}</div>}<div className="q-nav-actions"><button className="btn btn-secondary" disabled={busy||current===0} onClick={()=>setCurrent(current-1)}><i className="fa-solid fa-chevron-left"/> Sebelumnya</button><button className="btn btn-warning" type="button" disabled={busy} aria-pressed={flags[question.id]??false} onClick={()=>toggleFlag(question)}><i className="fa-solid fa-flag"/> {flags[question.id]?'Hapus ragu':'Ragu-ragu'}</button><button className="btn btn-primary" disabled={busy} onClick={current>=attempt.soal.length-1?requestFinish:()=>setCurrent(current+1)}>{current>=attempt.soal.length-1?'Selesai ujian':'Berikutnya'} <i className={`fa-solid ${current>=attempt.soal.length-1?'fa-paper-plane':'fa-chevron-right'}`}/></button></div></article>}
  <aside id="student-question-map" className={'nav-panel student-question-map '+(mapOpen?'is-open':'')}><div className="nav-panel-title"><b><i className="fa-solid fa-border-all"/> Peta soal</b><span>Pilih nomor soal</span></div><div className="student-map-legend"><span>Hijau: dijawab</span><span>Kuning: ragu</span></div><nav className="nav-grid" aria-label="Nomor soal">{attempt.soal.map((item,index)=><button type="button" key={item.id} className={`btn-num ${answers[item.id]?.trim()?'answered ':''}${flags[item.id]?'flagged ':''}${index===current?'active':''}`} aria-label={'Soal '+(index+1)+(answers[item.id]?.trim()?', dijawab':', belum dijawab')+(flags[item.id]?', ragu-ragu':'')} aria-current={index===current?'step':undefined} onClick={()=>{setCurrent(index);setMapOpen(false);window.setTimeout(()=>document.querySelector('.student-exam .q-panel')?.scrollIntoView({behavior:'auto',block:'start'}),0);}}>{index+1}</button>)}</nav><hr/><button className="btn btn-danger finish-exam" type="button" disabled={busy||remaining===0} onClick={requestFinish}><i className="fa-solid fa-paper-plane"/> SELESAI UJIAN</button></aside></div>{children}{submitOpen&&<div className="modal show student-submit-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setSubmitOpen(false);}}><div className="modal-content student-submit-dialog" role="dialog" aria-modal="true" aria-labelledby="student-submit-title"><div className="student-submit-symbol"><i className="fa-solid fa-circle-exclamation"/></div><h2 id="student-submit-title">Kumpulkan Ujian?</h2><p>{unanswered>0?`${unanswered} soal belum dijawab. Periksa kembali sebelum mengumpulkan.`:'Semua soal telah dijawab. Pastikan jawaban Anda sudah sesuai.'}</p><div className="student-submit-counts"><span><i className="fa-solid fa-check"/> {answered} dijawab</span><span><i className="fa-solid fa-circle-question"/> {unanswered} kosong</span><span><i className="fa-solid fa-flag"/> {flagged} ragu-ragu</span></div><p className="student-submit-note">Setelah dikumpulkan, jawaban tidak dapat diubah.</p><div className="student-submit-actions"><button ref={submitCancelButton} className="btn btn-secondary" type="button" disabled={busy} onClick={()=>setSubmitOpen(false)}>Periksa Lagi</button><button className="btn btn-primary" type="button" disabled={busy||saveState!=='saved'} onClick={()=>{submitting.current=true;void submit(false).catch(()=>{submitting.current=false;setSubmitOpen(false);});}}>Ya, Kumpulkan</button></div></div></div>}</section>;
