@@ -13,7 +13,16 @@ final class StartSessionMiddleware
     {
         if (session_status() !== PHP_SESSION_ACTIVE) {
             session_name('jurnal_kelas_session');
-            session_set_cookie_params(['lifetime' => 0, 'path' => '/', 'secure' => $this->config->get('auth.secure_cookie'), 'httponly' => true, 'samesite' => 'Lax']);
+            $lifetime = (int) $this->config->get('auth.session_lifetime', 31536000);
+            ini_set('session.gc_maxlifetime', (string) $lifetime);
+            ini_set('session.cookie_lifetime', (string) $lifetime);
+            session_set_cookie_params([
+                'lifetime' => $lifetime,
+                'path' => '/',
+                'secure' => (bool) $this->config->get('auth.secure_cookie'),
+                'httponly' => true,
+                'samesite' => 'Lax'
+            ]);
             session_start();
         }
         $_SESSION['csrf_token'] ??= bin2hex(random_bytes(32));

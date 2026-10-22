@@ -15,6 +15,10 @@ final class ReferenceController
         $cacheFresh = $syncedAt > 0 && (time() - $syncedAt) < $cacheTtl && isset($_SESSION['portal_reference'][$key]);
         if ($request->input('refresh') === '1' && ! $cacheFresh) {
             if (!isset($_SESSION['portal_access_token']) || (int)($_SESSION['portal_access_expires_at'] ?? 0) <= time()+5) {
+                // Jangan tendang guru keluar jika data referensi sudah ada di cache
+                if (isset($_SESSION['portal_reference'][$key]) && !empty($_SESSION['portal_reference'][$key])) {
+                    return Response::json(['success'=>true,'data'=>$_SESSION['portal_reference'][$key],'meta'=>['syncedAt'=>$_SESSION['portal_reference']['synced_at'] ?? null, 'cached'=>true]]);
+                }
                 return Response::json(['success'=>false,'message'=>'Token Portal Data berakhir. Silakan login kembali.'],401);
             }
             try {

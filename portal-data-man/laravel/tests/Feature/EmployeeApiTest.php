@@ -245,7 +245,7 @@ class EmployeeApiTest extends TestCase
 
             $response->assertCreated()
                 ->assertJsonPath('data.status', 'READY')
-                ->assertJsonPath('data.summary.totalRows', 4)
+                ->assertJsonPath('data.summary.totalRows', 3)
                 ->assertJsonPath('data.summary.failedRows', 0);
             $this->assertDatabaseHas('ImportBatch', ['type' => 'EMPLOYEE', 'status' => 'READY', 'totalRows' => 3]);
         } finally {

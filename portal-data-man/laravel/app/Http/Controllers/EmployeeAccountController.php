@@ -78,6 +78,56 @@ class EmployeeAccountController extends Controller
         return ApiResponse::success(['passwordSetupUrl' => $setupUrl, 'mailStatus' => $this->mail($account, $setupUrl)], 'Token setup pegawai berhasil dibuat ulang.');
     }
 
+    public function resetPassword(Request $request, Employee $employee): JsonResponse
+    {
+        $account = $employee->account;
+        abort_unless($account, 404, 'Akun pegawai belum tersedia.');
+
+        $data = $request->validate([
+            'password' => ['nullable', 'string', 'min:8', 'max:100'],
+        ]);
+
+        $newPassword = !empty($data['password']) ? $data['password'] : 'Pegawai#'.Str::upper(Str::random(8)).random_int(10, 99);
+        $raw = Str::random(64);
+
+        DB::transaction(function () use ($request, $employee, $account, $newPassword, $raw): void {
+            $account->forceFill([
+                'passwordHash' => Hash::make($newPassword),
+                'initialPassword' => $newPassword,
+                'status' => $account->status === 'DISABLED' ? 'ACTIVE' : $account->status,
+                'mustChangePassword' => true,
+                'failedLoginAttempts' => 0,
+                'lockedUntil' => null,
+                'disabledAt' => null,
+                'passwordChangedAt' => now(),
+            ])->save();
+
+            TeacherPasswordSetupToken::query()->where('teacherAccountId', $account->id)->whereNull('usedAt')->update(['usedAt' => now()]);
+            TeacherPasswordSetupToken::query()->create([
+                'publicId' => (string) Str::ulid(),
+                'teacherAccountId' => $account->id,
+                'tokenHash' => hash('sha256', $raw),
+                'expiresAt' => now()->addDay(),
+            ]);
+
+            $this->sessions->revokeTeacher($account);
+            $this->audit->write($request, 'EMPLOYEE_PASSWORD_RESET', 'TeacherAccount', $account->publicId, null, [
+                'employeePublicId' => $employee->publicId,
+                'username' => $account->username,
+            ]);
+        });
+
+        $setupUrl = url('/employee/setup-password?token='.urlencode($raw));
+
+        return ApiResponse::success([
+            'account' => $account->fresh(),
+            'newPassword' => $newPassword,
+            'defaultPassword' => $newPassword,
+            'passwordSetupUrl' => $setupUrl,
+            'mailStatus' => $this->mail($account, $setupUrl),
+        ], 'Password akun pegawai berhasil di-reset.');
+    }
+
     public function disable(Request $request, Employee $employee): JsonResponse
     {
         return $this->status($request, $employee, 'DISABLED', 'Akun pegawai dinonaktifkan.');

@@ -62,6 +62,56 @@ class TeacherAccountController extends Controller
         return ApiResponse::success(['passwordSetupUrl' => $setupUrl, 'mailStatus' => $this->mail($account, $setupUrl)], 'Token setup berhasil dibuat ulang.');
     }
 
+    public function resetPassword(Request $request, Teacher $teacher): JsonResponse
+    {
+        $account = $teacher->account;
+        abort_unless($account, 404, 'Akun guru belum tersedia.');
+
+        $data = $request->validate([
+            'password' => ['nullable', 'string', 'min:8', 'max:100'],
+        ]);
+
+        $newPassword = !empty($data['password']) ? $data['password'] : $this->defaultPassword();
+        $raw = Str::random(64);
+
+        DB::transaction(function () use ($request, $teacher, $account, $newPassword, $raw): void {
+            $account->forceFill([
+                'passwordHash' => Hash::make($newPassword),
+                'initialPassword' => $newPassword,
+                'status' => $account->status === 'DISABLED' ? 'ACTIVE' : $account->status,
+                'mustChangePassword' => true,
+                'failedLoginAttempts' => 0,
+                'lockedUntil' => null,
+                'disabledAt' => null,
+                'passwordChangedAt' => now(),
+            ])->save();
+
+            TeacherPasswordSetupToken::query()->where('teacherAccountId', $account->id)->whereNull('usedAt')->update(['usedAt' => now()]);
+            TeacherPasswordSetupToken::query()->create([
+                'publicId' => (string) Str::ulid(),
+                'teacherAccountId' => $account->id,
+                'tokenHash' => hash('sha256', $raw),
+                'expiresAt' => now()->addDay(),
+            ]);
+
+            $this->sessions->revokeTeacher($account);
+            $this->audit->write($request, 'TEACHER_PASSWORD_RESET', 'TeacherAccount', $account->publicId, null, [
+                'teacherPublicId' => $teacher->publicId,
+                'username' => $account->username,
+            ]);
+        });
+
+        $setupUrl = url('/teacher/setup-password?token='.urlencode($raw));
+
+        return ApiResponse::success([
+            'account' => $account->fresh(),
+            'newPassword' => $newPassword,
+            'defaultPassword' => $newPassword,
+            'passwordSetupUrl' => $setupUrl,
+            'mailStatus' => $this->mail($account, $setupUrl),
+        ], 'Password akun guru berhasil di-reset.');
+    }
+
     public function disable(Request $request, Teacher $teacher): JsonResponse
     {
         return $this->status($request, $teacher, 'DISABLED', 'Akun guru dinonaktifkan.');

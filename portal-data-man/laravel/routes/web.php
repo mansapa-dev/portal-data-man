@@ -114,6 +114,7 @@ Route::prefix('api/v1')->group(function (): void {
             Route::post('employees/{employee}/account', [EmployeeAccountController::class, 'store']);
             Route::post('employees/accounts/provision-missing', [EmployeeAccountController::class, 'provisionMissing']);
             Route::post('employees/{employee}/account/setup-token', [EmployeeAccountController::class, 'regenerate']);
+            Route::post('employees/{employee}/account/reset-password', [EmployeeAccountController::class, 'resetPassword']);
             Route::post('employees/{employee}/account/disable', [EmployeeAccountController::class, 'disable']);
             Route::post('employees/{employee}/account/enable', [EmployeeAccountController::class, 'enable']);
             Route::post('employees/{employee}/account/unlock', [EmployeeAccountController::class, 'unlock']);
@@ -122,6 +123,7 @@ Route::prefix('api/v1')->group(function (): void {
             Route::post('imports/employees/validate', [EmployeeImportController::class, 'validateFile']);
             Route::post('teachers/{teacher}/account', [TeacherAccountController::class, 'store']);
             Route::post('teachers/{teacher}/account/setup-token', [TeacherAccountController::class, 'regenerate']);
+            Route::post('teachers/{teacher}/account/reset-password', [TeacherAccountController::class, 'resetPassword']);
             Route::post('teachers/{teacher}/account/disable', [TeacherAccountController::class, 'disable']);
             Route::post('teachers/{teacher}/account/enable', [TeacherAccountController::class, 'enable']);
             Route::post('teachers/{teacher}/account/unlock', [TeacherAccountController::class, 'unlock']);
