@@ -12,6 +12,47 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Hilangkan sketsa kotak ganda di dalam .input-wrapper */
+.auth-card .input-wrapper,
+.input-wrapper {
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  border: 1.5px solid var(--border) !important;
+  border-radius: 12px !important;
+  background: var(--surface) !important;
+  padding: 0 14px !important;
+  gap: 10px !important;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease !important;
+}
+
+.auth-card .input-wrapper:focus-within,
+.input-wrapper:focus-within {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 3px rgba(0, 101, 39, 0.15) !important;
+}
+
+.auth-card .input-wrapper input,
+.auth-card .input-wrapper input:focus,
+.auth-card .input-wrapper input:focus-visible,
+.auth-card .input-wrapper input:hover,
+.input-wrapper input,
+.input-wrapper input:focus,
+.input-wrapper input:focus-visible,
+.input-wrapper input:hover,
+.input-wrapper .ui-control {
+  border: none !important;
+  border-radius: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  padding: 12px 0 !important;
+  margin: 0 !important;
+  width: 100% !important;
+  color: var(--text-main) !important;
+  font-size: 14px !important;
+}
+
 /* --- 2. HEADER UJIAN (CBT HEADER) --- */
 .student-exam .cbt-header {
   display: flex;

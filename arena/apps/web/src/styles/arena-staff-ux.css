@@ -1,0 +1,756 @@
+/* ==========================================================================
+   ARENA STAFF & TEACHER UX ENHANCEMENTS
+   Dirancang untuk guru dan staf sekolah agar mudah dipahami, responsif,
+   dan memiliki navigasi serta kontrol aksi yang ramah bagi orang awam.
+   ========================================================================== */
+
+/* 1. Layout & Workspace Ergonomics */
+.staff-workspace-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* 2. Admin & Teacher Overview Hero */
+.arena-overview-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px 28px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: linear-gradient(135deg, var(--surface) 0%, var(--surface-subtle) 100%);
+  box-shadow: 0 4px 16px rgba(0, 101, 39, 0.05);
+}
+
+.arena-overview-hero h2 {
+  margin: 6px 0 8px;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--text-main);
+}
+
+.arena-overview-hero p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.arena-overview-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.arena-overview-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* 3. Workflow Guide Card for Laypeople / Guru & Admin Baru */
+.staff-workflow-guide {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin: 8px 0 4px;
+}
+
+.staff-workflow-step {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  text-align: left;
+}
+
+.staff-workflow-step:hover {
+  transform: translateY(-2px);
+  border-color: var(--primary);
+  box-shadow: 0 6px 18px rgba(0, 101, 39, 0.08);
+}
+
+.staff-workflow-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.staff-workflow-step strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.staff-workflow-step span {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+/* 4. Metric Grid & Cards */
+.staff-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.staff-metric {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 100px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.staff-metric:hover {
+  transform: translateY(-2px);
+  border-color: var(--primary-dark);
+  box-shadow: 0 8px 20px rgba(0, 101, 39, 0.08);
+}
+
+.staff-metric > i {
+  display: grid;
+  place-items: center;
+  flex: 0 0 50px;
+  width: 50px;
+  height: 50px;
+  border-radius: 14px;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  font-size: 20px;
+}
+
+.staff-metric div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.staff-metric small {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.staff-metric strong {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--text-main);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.staff-metric span {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.staff-metric.primary {
+  border-color: var(--primary);
+  background: linear-gradient(135deg, var(--primary) 0%, #004d1e 100%);
+  color: #ffffff;
+}
+
+.staff-metric.primary > i {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
+.staff-metric.primary small {
+  color: #d1ebd6;
+}
+
+.staff-metric.primary strong {
+  color: #ffffff;
+}
+
+.staff-metric.primary span {
+  color: #e5f6e8;
+}
+
+/* 5. Quick Links Bar */
+.arena-overview-quick {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.arena-overview-quick button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 12px 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text-main);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.arena-overview-quick button:hover {
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  border-color: var(--primary-soft-border);
+  transform: translateY(-1px);
+}
+
+.arena-overview-quick button i {
+  font-size: 15px;
+  color: var(--primary-dark);
+}
+
+/* 6. Special Exam Alerts & Panels */
+.arena-overview-special {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px 24px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+}
+
+.arena-overview-special-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.arena-overview-special-cards button {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-subtle);
+  color: var(--text-main);
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.arena-overview-special-cards button:hover {
+  border-color: var(--primary);
+  background: var(--surface);
+  box-shadow: 0 4px 12px rgba(0, 101, 39, 0.06);
+}
+
+.arena-overview-special-cards button i {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.arena-overview-special-cards strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.arena-overview-special-cards span {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.arena-overview-special-cards small {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--primary-dark);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 7. Overview Panels (Score Bars & Schedule) */
+.arena-overview-panels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.arena-overview-panel {
+  display: flex;
+  flex-direction: column;
+  padding: 22px 24px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+}
+
+.arena-overview-panel header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.arena-overview-panel header h3 {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+}
+
+.arena-overview-panel header p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.arena-score-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.arena-score-bars > div {
+  display: grid;
+  grid-template-columns: 75px 1fr 45px;
+  align-items: center;
+  gap: 12px;
+}
+
+.arena-score-bars span:first-child {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.arena-score-track {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.arena-score-track span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #35ab70, var(--primary));
+  transition: width 0.4s ease;
+}
+
+.arena-score-bars strong {
+  font-size: 13px;
+  font-weight: 700;
+  text-align: right;
+  color: var(--text-main);
+  font-variant-numeric: tabular-nums;
+}
+
+.arena-schedule-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.arena-schedule-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-subtle);
+}
+
+.arena-schedule-list li span {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.arena-schedule-list li small {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+/* 8. Operations & Filters Toolbar (Clean Grid) */
+.operations-filter-card {
+  padding: 20px 22px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+  margin-bottom: 18px;
+}
+
+.operations-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  align-items: end;
+}
+
+.operations-filter-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.operations-filter-grid select,
+.operations-filter-grid input {
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-main);
+  font-size: 13px;
+}
+
+.operations-filter-grid select:focus,
+.operations-filter-grid input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(0, 101, 39, 0.12);
+}
+
+/* 9. Live Sessions Summary Pills */
+.operations-status-summary-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  margin-bottom: 16px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.status-pill.online {
+  background: #eaf8ed;
+  color: #15803d;
+  border-color: #bbf7d0;
+}
+
+.status-pill.offline {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
+.status-pill.neutral {
+  background: var(--surface-subtle);
+  color: var(--text-main);
+  border-color: var(--border);
+}
+
+.status-pill.terminated {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fde68a;
+}
+
+/* 10. Table Enhancements & Sticky Headers */
+.arena-table-container {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+.arena-data-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  min-width: 760px;
+}
+
+.arena-data-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 14px 16px;
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  border-bottom: 1.5px solid var(--border);
+}
+
+.arena-data-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--text-main);
+  vertical-align: middle;
+}
+
+.arena-data-table tbody tr:hover td {
+  background: var(--surface-subtle);
+}
+
+.arena-data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Status Badges */
+.badge-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.badge-status.is-active,
+.badge-status.is-connected {
+  background: #eaf8ed;
+  color: #15803d;
+}
+
+.badge-status.is-disconnected {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.badge-status.is-pending,
+.badge-status.is-draft {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.badge-status.is-archived {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.badge-status i {
+  font-size: 7px;
+}
+
+/* Action Button Groups in Table */
+.table-action-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.btn-table {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-main);
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-table:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary-dark);
+  background: var(--primary-soft);
+}
+
+.btn-table.btn-table-danger {
+  color: #b91c1c;
+}
+
+.btn-table.btn-table-danger:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #ef4444;
+  color: #991b1b;
+}
+
+.btn-table.btn-table-warning {
+  color: #b45309;
+}
+
+.btn-table.btn-table-warning:hover:not(:disabled) {
+  background: #fef3c7;
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
+/* 11. Dark Mode Adaptations */
+:root[data-theme=dark] .arena-overview-hero {
+  background: linear-gradient(135deg, var(--surface) 0%, var(--surface-subtle) 100%);
+  border-color: var(--border);
+}
+
+:root[data-theme=dark] .status-pill.online {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+:root[data-theme=dark] .status-pill.offline {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+:root[data-theme=dark] .status-pill.terminated {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+:root[data-theme=dark] .badge-status.is-active,
+:root[data-theme=dark] .badge-status.is-connected {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+}
+
+:root[data-theme=dark] .badge-status.is-disconnected {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+:root[data-theme=dark] .badge-status.is-pending,
+:root[data-theme=dark] .badge-status.is-draft {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+}
+
+:root[data-theme=dark] .btn-table.btn-table-danger {
+  color: #f87171;
+}
+
+:root[data-theme=dark] .btn-table.btn-table-danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: #f87171;
+  color: #fca5a5;
+}
+
+/* 12. Responsive Breakpoints */
+@media (max-width: 1024px) {
+  .staff-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .staff-workflow-guide {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .arena-overview-panels {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .arena-overview-hero {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 18px 20px;
+  }
+  .arena-overview-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .arena-overview-actions .btn {
+    flex: 1;
+    justify-content: center;
+  }
+  .arena-overview-quick {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .arena-overview-special-cards {
+    grid-template-columns: 1fr;
+  }
+  .operations-filter-grid {
+    grid-template-columns: 1fr;
+  }
+  .operations-status-summary-bar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .status-pill {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .staff-metric-grid {
+    grid-template-columns: 1fr;
+  }
+  .staff-workflow-guide {
+    grid-template-columns: 1fr;
+  }
+  .arena-overview-quick {
+    grid-template-columns: 1fr;
+  }
+}
