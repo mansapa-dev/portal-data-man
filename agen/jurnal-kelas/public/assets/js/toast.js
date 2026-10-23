@@ -11,10 +11,5 @@
   }
   window.AgenToast={show,success:(message,options)=>show(message,'success',options),error:(message,options)=>show(message,'error',options),info:(message,options)=>show(message,'info',options)};
   document.addEventListener('DOMContentLoaded',()=>{try{const flash=JSON.parse(sessionStorage.getItem(STORAGE_KEY));if(flash?.message){sessionStorage.removeItem(STORAGE_KEY);show(flash.message,flash.type)}}catch{sessionStorage.removeItem(STORAGE_KEY)}
-    const toggle=document.querySelector('.page-nav-toggle'),close=document.querySelector('.page-nav-close'),scrim=document.querySelector('.page-nav-scrim');
-    const setMenu=open=>{document.body.classList.toggle('page-menu-open',open);toggle?.setAttribute('aria-expanded',String(open))};
-    toggle?.addEventListener('click',()=>setMenu(true));close?.addEventListener('click',()=>setMenu(false));scrim?.addEventListener('click',()=>setMenu(false));
-    document.querySelectorAll('.page-nav-links a').forEach(link=>link.addEventListener('click',()=>setMenu(false)));
-    document.addEventListener('keydown',event=>{if(event.key==='Escape')setMenu(false)});
   });
 })();

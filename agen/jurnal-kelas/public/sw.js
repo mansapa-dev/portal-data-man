@@ -1,4 +1,4 @@
-const CACHE_NAME = 'agen-jurnal-v1';
+const CACHE_NAME = 'agen-jurnal-v2';
 const STATIC_ASSETS = [
   '/',
   '/assets/css/app.css',
