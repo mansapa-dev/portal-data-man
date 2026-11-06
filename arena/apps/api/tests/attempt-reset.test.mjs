@@ -51,10 +51,41 @@ test('attempt TERMINATED manual oleh admin (completed_at) dipulihkan tanpa syara
   assert.ok(new Date(result.expires_at.replace('Z', 'Z')).getTime() > Date.now(), 'sisa waktu dihitung dari completed_at, bukan dari sekarang');
 });
 
-test('sisa waktu habis ditolak dengan 409 dan pesan pemandu untuk operator', async () => {
+test('attempt EXPIRED tetap dipulihkan memakai sisa jadwal ujian (bebas status)', async () => {
+  const examEndsIn1Hour = new Date(Date.now() + 60 * 60_000);
   const connection = connectionWith({
     'SELECT id,role,teacher_id,employee_id': [{ id: 8, role: 'ADMIN', teacher_id: null, employee_id: null }],
-    'SELECT a.*,s.is_active,s.cbt_status': [{ id: 31, public_id: 'attempt-public', status: 'TERMINATED', violation_count: 3, started_at: '2020-01-01 12:00:00', expires_at: '2020-01-01 13:00:00', is_active: 1, cbt_status: 'ACTIVE' }],
+    'SELECT a.*,s.is_active,s.cbt_status': [{ id: 31, public_id: 'attempt-public', status: 'EXPIRED', violation_count: 3, started_at: '2020-01-01 12:00:00', expires_at: '2020-01-01 13:00:00', exam_ends_at: examEndsIn1Hour, is_active: 1, cbt_status: 'ACTIVE' }],
+    'SELECT MAX(occurred_at)': [{ stopped_at: null }],
+    'SELECT score, maximum_points, earned_points': [{ score: 0, maximum_points: 100, earned_points: 0 }],
+  });
+  const result = await resetTerminatedAttemptInTransaction(connection, 12, 3, { id: 8, role: 'ADMIN' }, 'pulihkan sesi kadaluarsa');
+  assert.equal(result.attempt_id, 'attempt-public');
+  const newExpiry = new Date(String(result.expires_at).replace('Z', 'Z')).getTime();
+  assert.ok(newExpiry > Date.now(), 'sisa waktu baru harus di masa depan');
+  // Sisa waktu ≈ jarak ke ends_at ujian (± toleransi 2 menit proses).
+  assert.ok(
+    Math.abs((examEndsIn1Hour.getTime() - newExpiry) / 60_000) < 2,
+    'sisa waktu diambil dari exams.ends_at, bukan 0',
+  );
+});
+
+test('attempt COMPLETED juga dapat dipulihkan (bebas, tanpa syarat status)', async () => {
+  const connection = connectionWith({
+    'SELECT id,role,teacher_id,employee_id': [{ id: 8, role: 'ADMIN', teacher_id: null, employee_id: null }],
+    'SELECT a.*,s.is_active,s.cbt_status': [{ id: 31, public_id: 'attempt-public', status: 'COMPLETED', violation_count: 0, started_at: '2026-01-01 12:00:00', expires_at: '2030-01-01 13:00:00', completed_at: new Date(Date.now() - 60_000), is_active: 1, cbt_status: 'ACTIVE' }],
+    'SELECT MAX(occurred_at)': [{ stopped_at: null }],
+    'SELECT score, maximum_points, earned_points': [{ score: 80, maximum_points: 100, earned_points: 80 }],
+  });
+  const result = await resetTerminatedAttemptInTransaction(connection, 12, 3, { id: 8, role: 'ADMIN' }, 'pulihkan sesi selesai');
+  assert.equal(result.attempt_id, 'attempt-public');
+  assert.ok(new Date(String(result.expires_at).replace('Z', 'Z')).getTime() > Date.now(), 'sisa waktu dari expires_at lama masih dipakai');
+});
+
+test('sisa waktu habis dan jadwal ujian sudah berakhir ditolak 409', async () => {
+  const connection = connectionWith({
+    'SELECT id,role,teacher_id,employee_id': [{ id: 8, role: 'ADMIN', teacher_id: null, employee_id: null }],
+    'SELECT a.*,s.is_active,s.cbt_status': [{ id: 31, public_id: 'attempt-public', status: 'EXPIRED', violation_count: 3, started_at: '2020-01-01 12:00:00', expires_at: '2020-01-01 13:00:00', exam_ends_at: '2020-01-01 14:00:00', is_active: 1, cbt_status: 'ACTIVE' }],
     'SELECT MAX(occurred_at)': [{ stopped_at: new Date('2020-01-01T12:30:00Z') }],
   });
   await assert.rejects(
@@ -63,10 +94,11 @@ test('sisa waktu habis ditolak dengan 409 dan pesan pemandu untuk operator', asy
   );
 });
 
-test('attempt belum TERMINATED tidak dapat dipulihkan (409)', async () => {
+test('sisa waktu habis tanpa kolom jadwal ujian tetap ditolak 409', async () => {
   const connection = connectionWith({
     'SELECT id,role,teacher_id,employee_id': [{ id: 8, role: 'ADMIN', teacher_id: null, employee_id: null }],
-    'SELECT a.*,s.is_active,s.cbt_status': [{ id: 31, public_id: 'attempt-public', status: 'IN_PROGRESS', violation_count: 3, started_at: '2026-01-01 12:00:00', expires_at: '2030-01-01 13:00:00', is_active: 1, cbt_status: 'ACTIVE' }],
+    'SELECT a.*,s.is_active,s.cbt_status': [{ id: 31, public_id: 'attempt-public', status: 'TERMINATED', violation_count: 3, started_at: '2020-01-01 12:00:00', expires_at: '2020-01-01 13:00:00', is_active: 1, cbt_status: 'ACTIVE' }],
+    'SELECT MAX(occurred_at)': [{ stopped_at: new Date('2020-01-01T12:30:00Z') }],
   });
   await assert.rejects(
     resetTerminatedAttemptInTransaction(connection, 12, 3, { id: 8, role: 'ADMIN' }, 'pulihkan sesi lama'),

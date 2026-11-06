@@ -30,15 +30,16 @@ export async function resetTerminatedAttemptInTransaction(
   }
 
   const [rows] = await connection.execute<RowDataPacket[]>(
-    'SELECT a.*,s.is_active,s.cbt_status FROM exam_attempts a JOIN students s ON s.id=a.student_id WHERE a.student_id=? AND a.exam_id=? FOR UPDATE',
+    'SELECT a.*,s.is_active,s.cbt_status,e.ends_at exam_ends_at FROM exam_attempts a JOIN students s ON s.id=a.student_id JOIN exams e ON e.id=a.exam_id WHERE a.student_id=? AND a.exam_id=? FOR UPDATE',
     [studentId, examId],
   );
   const attempt = rows[0];
-  // Session recovery is an admin-only surgical action: any TERMINATED attempt may be
-  // reopened (violation termination and admin "Akhiri Sesi" both set TERMINATED), as long
-  // as remaining time still exists before the attempt's own expiry.
-  if (!attempt || attempt.status !== 'TERMINATED') {
-    throw Object.assign(new Error('Pemulihan sesi hanya tersedia untuk ujian yang sudah dihentikan'), { statusCode: 409 });
+  // Pemulihan sesi bebas: attempt dalam status apa pun (TERMINATED, EXPIRED, COMPLETED,
+  // bahkan IN_PROGRESS) boleh dipulihkan berapa kali pun oleh admin — tidak ada lagi
+  // batas jumlah reset maupun syarat status/pelanggaran. Syaratnya satu: masih ada
+  // sisa waktu yang bisa dikembalikan ke siswa.
+  if (!attempt) {
+    throw Object.assign(new Error('Sesi ujian peserta tidak ditemukan'), { statusCode: 404 });
   }
   if (!attempt.is_active || attempt.cbt_status !== 'ACTIVE') {
     throw Object.assign(new Error('Akun siswa tidak aktif'), { statusCode: 409 });
@@ -52,12 +53,19 @@ export async function resetTerminatedAttemptInTransaction(
   // more recent of the two marks when the session stopped.
   const completedAt = attempt.completed_at ? new Date(attempt.completed_at).getTime() : null;
   const stoppedAt = Math.max(lastViolation ?? 0, completedAt ?? 0) || Date.now();
-  const remaining = new Date(attempt.expires_at).getTime() - stoppedAt;
-  if (remaining <= 0) {
-    throw Object.assign(new Error('Sisa waktu ujian sudah habis. Perpanjang jadwal ujian terlebih dahulu, lalu pulihkan sesi ini.'), { statusCode: 409 });
+  // Fallback cerdas: kalau waktu attempt sendiri sudah lewat, pakai sisa jadwal ujian
+  // (exams.ends_at) selama jadwalnya masih terbuka.
+  let effectiveRemaining = new Date(attempt.expires_at as string | Date).getTime() - stoppedAt;
+  if (effectiveRemaining <= 0) {
+    const examEnd = attempt.exam_ends_at ? new Date(attempt.exam_ends_at as string | Date).getTime() : null;
+    const untilExamEnd = examEnd != null ? examEnd - Date.now() : 0;
+    if (untilExamEnd <= 0) {
+      throw Object.assign(new Error('Sisa waktu ujian sudah habis. Perpanjang jadwal ujian terlebih dahulu, lalu pulihkan sesi ini.'), { statusCode: 409 });
+    }
+    effectiveRemaining = untilExamEnd;
   }
 
-  const expiresAt = new Date(Date.now() + remaining).toISOString().slice(0, 19).replace('T', ' ');
+  const expiresAt = new Date(Date.now() + effectiveRemaining).toISOString().slice(0, 19).replace('T', ' ');
   const [resultRows] = await connection.execute<RowDataPacket[]>(
     'SELECT score, maximum_points, earned_points FROM exam_results WHERE attempt_id=? FOR UPDATE', [attempt.id],
   );

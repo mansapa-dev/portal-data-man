@@ -5,6 +5,9 @@ import { AdminOverview } from './AdminOverview';
 
 type Row = Record<string, unknown>;
 
+/** Status sesi yang boleh dipulihkan admin — semuanya bebas, tanpa syarat pelanggaran. */
+const RECOVERABLE_ATTEMPT_STATUSES = ['TERMINATED', 'EXPIRED', 'COMPLETED', 'IN_PROGRESS'];
+
 function getRowValue(row: Row, key: string): string {
   return String(row[key] ?? '—');
 }
@@ -23,8 +26,7 @@ function formatTeacherDate(value: unknown): string {
 
 function getStatusLabel(value: unknown): string {
   const status = String(value ?? '').toUpperCase();
-  const map: Record<string, string> = {
-    ACTIVE: 'Aktif',
+  const map: Record<string, string> = {    ACTIVE: 'Aktif',
     DRAFT: 'Draf',
     INACTIVE: 'Nonaktif',
     ARCHIVED: 'Arsip',
@@ -559,7 +561,7 @@ export function StaffOperations({
 
   /** Baris Log Pelanggaran yang mungkin dipulihkan: sesi sudah TERMINATED dan pasangan siswa+ujian lengkap. */
   const restoreCandidates = admin
-    ? rows.filter((row) => row.attempt_status === 'TERMINATED' && row.student_id != null && row.exam_id != null)
+    ? rows.filter((row) => RECOVERABLE_ATTEMPT_STATUSES.includes(String(row.attempt_status).toUpperCase()) && row.student_id != null && row.exam_id != null)
     : [];
   const sessionClasses = [...new Set(rows.map((row) => String(row.class_snapshot ?? '')).filter(Boolean))].sort();
   const sessionGrades = [...new Set(rows.map((row) => String(row.grade ?? '')).filter(Boolean))].sort();
@@ -1159,7 +1161,7 @@ export function StaffOperations({
                     </td>
                     <td>
                       {admin &&
-                        row.attempt_status === 'TERMINATED' &&
+                        RECOVERABLE_ATTEMPT_STATUSES.includes(String(row.attempt_status).toUpperCase()) &&
                         row.student_id != null &&
                         row.exam_id != null && (
                           <button
