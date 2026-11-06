@@ -1,5 +1,4 @@
 import type { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise';
-import { readViolationThreshold } from './scoring.js';
 
 type ResetActor = { id: number; role: string };
 
@@ -35,9 +34,11 @@ export async function resetTerminatedAttemptInTransaction(
     [studentId, examId],
   );
   const attempt = rows[0];
-  const threshold = await readViolationThreshold(connection);
-  if (!attempt || attempt.status !== 'TERMINATED' || Number(attempt.violation_count) < threshold) {
-    throw Object.assign(new Error(`Reset hanya tersedia untuk attempt yang dihentikan setelah ${threshold} pelanggaran`), { statusCode: 409 });
+  // Session recovery is an admin-only surgical action: any TERMINATED attempt may be
+  // reopened (violation termination and admin "Akhiri Sesi" both set TERMINATED), as long
+  // as remaining time still exists before the attempt's own expiry.
+  if (!attempt || attempt.status !== 'TERMINATED') {
+    throw Object.assign(new Error('Pemulihan sesi hanya tersedia untuk ujian yang sudah dihentikan'), { statusCode: 409 });
   }
   if (!attempt.is_active || attempt.cbt_status !== 'ACTIVE') {
     throw Object.assign(new Error('Akun siswa tidak aktif'), { statusCode: 409 });
@@ -46,9 +47,15 @@ export async function resetTerminatedAttemptInTransaction(
   const [lastRows] = await connection.execute<RowDataPacket[]>(
     'SELECT MAX(occurred_at) stopped_at FROM violations WHERE attempt_id=?', [attempt.id],
   );
-  const stoppedAt = lastRows[0]?.stopped_at ? new Date(lastRows[0].stopped_at).getTime() : Date.now();
-  const remaining = Math.max(0, new Date(attempt.expires_at).getTime() - stoppedAt);
-  if (remaining <= 0) throw Object.assign(new Error('Sisa waktu ujian sudah habis'), { statusCode: 409 });
+  const lastViolation = lastRows[0]?.stopped_at ? new Date(lastRows[0].stopped_at).getTime() : null;
+  // Admin manual terminations set completed_at without a trailing violation event, so the
+  // more recent of the two marks when the session stopped.
+  const completedAt = attempt.completed_at ? new Date(attempt.completed_at).getTime() : null;
+  const stoppedAt = Math.max(lastViolation ?? 0, completedAt ?? 0) || Date.now();
+  const remaining = new Date(attempt.expires_at).getTime() - stoppedAt;
+  if (remaining <= 0) {
+    throw Object.assign(new Error('Sisa waktu ujian sudah habis. Perpanjang jadwal ujian terlebih dahulu, lalu pulihkan sesi ini.'), { statusCode: 409 });
+  }
 
   const expiresAt = new Date(Date.now() + remaining).toISOString().slice(0, 19).replace('T', ' ');
   const [resultRows] = await connection.execute<RowDataPacket[]>(

@@ -101,7 +101,12 @@ export async function supportRoutes(app: FastifyInstance) {
       await connection.beginTransaction(); await assertActiveActor(connection,claims.sub,claims.role);
       const [rows]=await connection.execute<RowDataPacket[]>('SELECT id,student_id,exam_id,status,handled_by FROM support_tickets WHERE public_id=? FOR UPDATE',[request.params.id]);const ticket=rows[0];
       if(!ticket) throw Object.assign(new Error('Tiket tidak ditemukan'),{statusCode:404});
-      if(ticket.status!=='IN_PROGRESS'||Number(ticket.handled_by)!==claims.sub)throw Object.assign(new Error('Ambil tiket terlebih dahulu'),{statusCode:409});
+      if(['RESOLVED','CLOSED'].includes(ticket.status)) throw Object.assign(new Error('Tiket sudah selesai dan tidak dapat dipulihkan'),{statusCode:409});
+      // Admin yang memulihkan sesi tidak harus mengambil tiket terlebih dahulu: klaim
+      // otomatis ke diri sendiri agar tidak lagi muncul konflik 409 "ambil tiket".
+      if(ticket.status!=='IN_PROGRESS'||Number(ticket.handled_by)!==claims.sub){
+        await connection.execute('UPDATE support_tickets SET status=\'IN_PROGRESS\',handled_by=? WHERE id=?',[claims.sub,ticket.id]);
+      }
       if(!ticket.exam_id)throw Object.assign(new Error('Tiket ini tidak memiliki ujian yang dapat direset'),{statusCode:409});
       const reset=await resetTerminatedAttemptInTransaction(connection,Number(ticket.student_id),Number(ticket.exam_id),{id:claims.sub,role:claims.role},body.reason);
       await connection.execute("UPDATE support_tickets SET status='RESOLVED',staff_note=?,resolution_type='CBT_RESET',resolved_at=UTC_TIMESTAMP(3) WHERE id=?",[body.reason,ticket.id]);

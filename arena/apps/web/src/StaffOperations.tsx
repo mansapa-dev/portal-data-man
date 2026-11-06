@@ -231,6 +231,8 @@ export function StaffOperations({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [lastLoaded, setLastLoaded] = useState<Date | null>(null);
+  // Pemulihan sesi massal (Log Pelanggaran, admin): pasangan siswa+ujian yang dicentang.
+  const [restoreSelection, setRestoreSelection] = useState<string[]>([]);
 
   // Filter Monitoring Sesi
   const [sessionExam, setSessionExam] = useState('');
@@ -485,8 +487,45 @@ export function StaffOperations({
     }
   }
 
-  async function toggleEligibility(person: Row) {
+  function restoreKey(studentId: unknown, examId: unknown): string {
+    return `${Number(studentId)}:${Number(examId)}`;
+  }
+
+  /** Pulihkan beberapa sesi peserta sekaligus dengan satu alasan bersama. */
+  async function restoreSelectedSessions(keys: string[]) {
+    if (!keys.length) {
+      setNotice('Centang dulu sesi peserta yang ingin dipulihkan.');
+      return;
+    }
+    const reason = window.prompt(`Alasan pemulihan ${keys.length} sesi (jawaban dan sisa waktu siswa tetap aman):`);
+    if (!reason?.trim()) return;
+    if (reason.trim().length < 3) {
+      setNotice('Alasan pemulihan minimal 3 karakter.');
+      return;
+    }
+    if (!window.confirm(`Pulihkan ${keys.length} sesi peserta? Ujian yang sudah habis waktunya tidak akan dipulihkan.`)) return;
     setBusy(true);
+    setNotice('');
+    try {
+      const attempts = keys.map((key) => {
+        const [studentId, examId] = key.split(':').map(Number);
+        return { student_id: studentId, exam_id: examId };
+      });
+      const summary = await api<{ total: number; reset: number; failed: number; results: { student_id: number; exam_id: number; ok: boolean; error?: string }[] }>(
+        '/api/admin/students/reset-batch',
+        { method: 'POST', body: { attempts, reason: reason.trim() } },
+      );
+      setNotice(`${summary.reset} sesi berhasil dipulihkan dan siswa dapat melanjutkan ujian.${summary.failed ? ` ${summary.failed} gagal — periksa jadwal ujian atau kirim ulang sesuai angka.` : ''}`);
+      setRestoreSelection(current => current.filter(key => !keys.includes(key)));
+      await load();
+    } catch (e) {
+      setNotice((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleEligibility(person: Row) {    setBusy(true);
     try {
       await api(`/api/admin/teachers/${person.id}/proctor-eligibility`, {
         method: 'POST',
@@ -517,6 +556,11 @@ export function StaffOperations({
   }));
 
   const sessionExams = [...new Map(rows.map((row) => [String(row.exam_id), String(row.exam_name)])).entries()];
+
+  /** Baris Log Pelanggaran yang mungkin dipulihkan: sesi sudah TERMINATED dan pasangan siswa+ujian lengkap. */
+  const restoreCandidates = admin
+    ? rows.filter((row) => row.attempt_status === 'TERMINATED' && row.student_id != null && row.exam_id != null)
+    : [];
   const sessionClasses = [...new Set(rows.map((row) => String(row.class_snapshot ?? '')).filter(Boolean))].sort();
   const sessionGrades = [...new Set(rows.map((row) => String(row.grade ?? '')).filter(Boolean))].sort();
   const sessionSubjects = [...new Set(rows.map((row) => String(row.subject_name ?? '')).filter(Boolean))].sort();
@@ -1006,10 +1050,39 @@ export function StaffOperations({
       {/* View: Log Pelanggaran */}
       {view === 'violations' && (
         <div className="operations-violations staff-workspace-container">
+          {admin && Boolean(restoreCandidates.length) && (
+            <div className="violation-bulk-actions" role="group" aria-label="Pemulihan sesi massal">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={restoreSelection.length === restoreCandidates.length && restoreCandidates.length > 0}
+                  onChange={(event) =>
+                    setRestoreSelection(event.target.checked ? restoreCandidates.map(row => restoreKey(row.student_id, row.exam_id)) : [])
+                  }
+                />
+                Pilih semua sesi di halaman ini ({restoreCandidates.length})
+              </label>
+              <span>{restoreSelection.length} sesi terpilih</span>
+              <button
+                type="button"
+                className="btn-table btn-table-warning"
+                disabled={busy || !restoreSelection.length}
+                onClick={() => void restoreSelectedSessions([...restoreSelection])}
+              >
+                <i className="fa-solid fa-unlock" /> Pulihkan Sesi Terpilih
+              </button>
+              {Boolean(restoreSelection.length) && (
+                <button type="button" disabled={busy} onClick={() => setRestoreSelection([])}>
+                  Bersihkan pilihan
+                </button>
+              )}
+            </div>
+          )}
           <div className="arena-table-container">
             <table className="arena-data-table">
               <thead>
                 <tr>
+                  {admin && Boolean(restoreCandidates.length) && <th>Pulihkan</th>}
                   <th>Waktu Kejadian</th>
                   <th>Peserta & NISN</th>
                   <th>Ujian</th>
@@ -1023,6 +1096,24 @@ export function StaffOperations({
               <tbody>
                 {rows.map((row) => (
                   <tr key={String(row.id)}>
+                    {admin && Boolean(restoreCandidates.length) && (
+                      <td>
+                        {row.student_id != null && row.exam_id != null && (
+                          <input
+                            type="checkbox"
+                            aria-label={`Pilih sesi ${getRowValue(row, 'name_snapshot')} untuk ujian ${getRowValue(row, 'exam_name')}`}
+                            checked={restoreSelection.includes(restoreKey(row.student_id, row.exam_id))}
+                            onChange={(event) =>
+                              setRestoreSelection((current) =>
+                                event.target.checked
+                                  ? [...new Set([...current, restoreKey(row.student_id, row.exam_id)])]
+                                  : current.filter((key) => key !== restoreKey(row.student_id, row.exam_id))
+                              )
+                            }
+                          />
+                        )}
+                      </td>
+                    )}
                     <td>
                       <small>
                         {new Date(String(row.occurred_at)).toLocaleString('id-ID', {
@@ -1069,7 +1160,8 @@ export function StaffOperations({
                     <td>
                       {admin &&
                         row.attempt_status === 'TERMINATED' &&
-                        Number(row.violation_count) >= 2 && (
+                        row.student_id != null &&
+                        row.exam_id != null && (
                           <button
                             type="button"
                             className="btn-table btn-table-warning"

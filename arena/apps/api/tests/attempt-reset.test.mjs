@@ -39,6 +39,41 @@ test('guru/petugas piket tidak lagi diizinkan mereset sesi (admin saja)', async 
   assert.equal(connection.statements.length, 1);
 });
 
+test('attempt TERMINATED manual oleh admin (completed_at) dipulihkan tanpa syarat pelanggaran', async () => {
+  const connection = connectionWith({
+    'SELECT id,role,teacher_id,employee_id': [{ id: 8, role: 'ADMIN', teacher_id: null, employee_id: null }],
+    'SELECT a.*,s.is_active,s.cbt_status': [{ id: 31, public_id: 'attempt-public', status: 'TERMINATED', violation_count: 0, starts_at: '2030-01-01 12:00:00', expires_at: '2030-01-01 13:00:00', completed_at: new Date(Date.now() - 120_000), is_active: 1, cbt_status: 'ACTIVE' }],
+    'SELECT MAX(occurred_at)': [{ stopped_at: null }],
+    'SELECT score, maximum_points, earned_points': [{ score: 50, maximum_points: 100, earned_points: 50 }],
+  });
+  const result = await resetTerminatedAttemptInTransaction(connection, 12, 3, { id: 8, role: 'ADMIN' }, 'pulihkan sesi manual');
+  assert.equal(result.attempt_id, 'attempt-public');
+  assert.ok(new Date(result.expires_at.replace('Z', 'Z')).getTime() > Date.now(), 'sisa waktu dihitung dari completed_at, bukan dari sekarang');
+});
+
+test('sisa waktu habis ditolak dengan 409 dan pesan pemandu untuk operator', async () => {
+  const connection = connectionWith({
+    'SELECT id,role,teacher_id,employee_id': [{ id: 8, role: 'ADMIN', teacher_id: null, employee_id: null }],
+    'SELECT a.*,s.is_active,s.cbt_status': [{ id: 31, public_id: 'attempt-public', status: 'TERMINATED', violation_count: 3, started_at: '2020-01-01 12:00:00', expires_at: '2020-01-01 13:00:00', is_active: 1, cbt_status: 'ACTIVE' }],
+    'SELECT MAX(occurred_at)': [{ stopped_at: new Date('2020-01-01T12:30:00Z') }],
+  });
+  await assert.rejects(
+    resetTerminatedAttemptInTransaction(connection, 12, 3, { id: 8, role: 'ADMIN' }, 'pulihkan sesi lama'),
+    { statusCode: 409 },
+  );
+});
+
+test('attempt belum TERMINATED tidak dapat dipulihkan (409)', async () => {
+  const connection = connectionWith({
+    'SELECT id,role,teacher_id,employee_id': [{ id: 8, role: 'ADMIN', teacher_id: null, employee_id: null }],
+    'SELECT a.*,s.is_active,s.cbt_status': [{ id: 31, public_id: 'attempt-public', status: 'IN_PROGRESS', violation_count: 3, started_at: '2026-01-01 12:00:00', expires_at: '2030-01-01 13:00:00', is_active: 1, cbt_status: 'ACTIVE' }],
+  });
+  await assert.rejects(
+    resetTerminatedAttemptInTransaction(connection, 12, 3, { id: 8, role: 'ADMIN' }, 'pulihkan sesi lama'),
+    { statusCode: 409 },
+  );
+});
+
 test('reset menyimpan nilai lama di audit dan menulis perubahan dalam transaksi pemanggil', async () => {
   const connection = connectionWith({
     'SELECT id,role,teacher_id,employee_id': [{ id: 8, role: 'ADMIN', teacher_id: null, employee_id: null }],

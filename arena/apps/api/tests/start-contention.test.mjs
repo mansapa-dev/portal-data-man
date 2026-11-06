@@ -39,10 +39,10 @@ test('start retries a concurrent unique-key winner and resumes its attempt', asy
   };
   const pool = {
     async execute(sql) {
-      if (sql.startsWith('SELECT id,portal_class_id')) return [[{ id: 1, portal_class_id: null, grade_snapshot: 'X' }]];
-      if (sql.startsWith('SELECT id FROM exam_attempts')) {
+      // Satu query preflight: siswa + keberadaan attempt (LEFT JOIN).
+      if (sql.startsWith('SELECT s.id')) {
         preflightReads++;
-        return [preflightReads === 1 ? [] : [{ id: 10 }]];
+        return [[{ id: 1, portal_class_id: null, grade_snapshot: 'X', attempt_id: preflightReads === 1 ? null : 10 }]];
       }
       throw new Error(`Unexpected pool SQL: ${sql}`);
     },

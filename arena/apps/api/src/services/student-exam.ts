@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import type { Pool, RowDataPacket } from 'mysql2/promise';
+import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import type { Claims } from '../lib/auth.js';
 import type { FastifyBaseLogger } from 'fastify';
 import { performance } from 'node:perf_hooks';
@@ -89,32 +89,51 @@ export class StudentExamService {
     // Keep the first consistent read outside the resume transaction. If resume
     // waits on an autosave's attempt lock, the transaction must not retain a
     // repeatable-read snapshot from before that save committed.
-    const [students] = await this.pool.execute<RowDataPacket[]>('SELECT id,portal_class_id,nisn,name_snapshot,class_snapshot,grade_snapshot,academic_year_snapshot FROM students WHERE id=? AND is_active=1 AND cbt_status=\'ACTIVE\'', [studentId]);
-    const student = students[0];
-    if (!student) throw Object.assign(new Error('Siswa tidak ditemukan atau tidak aktif'), { statusCode: 403 });
+    //
+    // Student + attempt existence are read in one round-trip. Each call to
+    // pool.execute() waits for a free pooled connection, so two separate reads
+    // doubled the pool queue time under a start spike (measured ~0.5s + ~0.6s
+    // per student at 1015 concurrent starts). The LEFT JOIN keeps the read
+    // non-locking: `uq_arena_attempt_student_exam` makes the join at most one row.
+    //
     // A locking read for an absent (student_id, exam_id) pair takes a gap lock
     // under InnoDB's default isolation. Many simultaneous starts on one exam
-    // can then deadlock while inserting adjacent keys in the unique index. Do
-    // a non-locking existence read first; only lock the row when it exists.
-    const [existingAttempts] = await this.pool.execute<RowDataPacket[]>('SELECT id FROM exam_attempts WHERE student_id=? AND exam_id=? LIMIT 1', [studentId, examId]);
+    // can then deadlock while inserting adjacent keys in the unique index. That
+    // is why only the non-locking existence check happens here; the row itself
+    // is locked later, inside the transaction, when it actually exists.
+    const [students] = await this.pool.execute<RowDataPacket[]>(
+      `SELECT s.id,s.portal_class_id,s.nisn,s.name_snapshot,s.class_snapshot,s.grade_snapshot,s.academic_year_snapshot,a.id attempt_id
+       FROM students s LEFT JOIN exam_attempts a ON a.student_id=s.id AND a.exam_id=?
+       WHERE s.id=? AND s.is_active=1 AND s.cbt_status='ACTIVE' LIMIT 1`,
+      [examId, studentId],
+    );
+    const student = students[0];
+    if (!student) throw Object.assign(new Error('Siswa tidak ditemukan atau tidak aktif'), { statusCode: 403 });
+    const hasExistingAttempt = Boolean(student.attempt_id);
     const connection = await this.pool.getConnection();
     let state: { attempt: RowDataPacket; exam: RowDataPacket; questions: RowDataPacket[]; answers: RowDataPacket[] } | undefined;
     try {
       await connection.beginTransaction();
       let attempt: RowDataPacket | undefined;
-      if (existingAttempts.length) {
+      if (hasExistingAttempt) {
         const [attemptRows] = await connection.execute<RowDataPacket[]>(`SELECT id,public_id,status,expires_at,question_order,option_mapping,(status='IN_PROGRESS' AND expires_at>UTC_TIMESTAMP(3)) can_resume FROM exam_attempts WHERE student_id=? AND exam_id=? FOR UPDATE`, [studentId, examId]);
         attempt = attemptRows[0];
       }
       if (attempt && ['COMPLETED', 'TERMINATED', 'EXPIRED'].includes(attempt.status)) throw Object.assign(new Error('Ujian ini tidak dapat dilanjutkan'), { statusCode: 409 });
       const resuming = Boolean(attempt && Number(attempt.can_resume));
+      // db_now ikut dibaca agar expires_at bisa dihitung tanpa query tambahan
+      // setelah INSERT (jam tetap mengikuti database, bukan jam aplikasi).
       const [examRows] = resuming
-        ? await connection.execute<RowDataPacket[]>('SELECT e.* FROM exams e WHERE e.id=?', [examId])
-        : await connection.execute<RowDataPacket[]>(`SELECT e.* FROM exams e WHERE e.id=? AND e.status='ACTIVE' AND UTC_TIMESTAMP(3) BETWEEN e.starts_at AND e.ends_at
+        ? await connection.execute<RowDataPacket[]>('SELECT e.*,UTC_TIMESTAMP(3) db_now FROM exams e WHERE e.id=?', [examId])
+        : await connection.execute<RowDataPacket[]>(`SELECT e.*,UTC_TIMESTAMP(3) db_now FROM exams e WHERE e.id=? AND e.status='ACTIVE' AND UTC_TIMESTAMP(3) BETWEEN e.starts_at AND e.ends_at
           AND e.grade=? AND (NOT EXISTS(SELECT 1 FROM exam_target_classes all_tc WHERE all_tc.exam_id=e.id) OR EXISTS(SELECT 1 FROM exam_target_classes tc WHERE tc.exam_id=e.id AND tc.portal_class_id=?))
           AND (NOT EXISTS(SELECT 1 FROM exam_target_students ts WHERE ts.exam_id=e.id) OR EXISTS(SELECT 1 FROM exam_target_students ts WHERE ts.exam_id=e.id AND ts.student_id=?))`, [examId, student.grade_snapshot, student.portal_class_id, studentId]);
       const exam = examRows[0];
       if (!exam) throw Object.assign(new Error('Ujian tidak tersedia untuk siswa ini'), { statusCode: 403 });
+      // Sesi baru: seluruh state (soal + jawaban) sudah diketahui dari hasil INSERT,
+      // jadi tidak perlu SELECT ulang. Memangkas 2 round-trip per siswa, penting saat
+      // ratusan siswa menekan "Mulai" pada detik yang sama.
+      let createdQuestions: RowDataPacket[] | undefined;
       if (!attempt) {
         const [source] = await connection.execute<RowDataPacket[]>('SELECT id,question_type,question_text,option_a,option_b,option_c,option_d,option_e,correct_answer,points FROM questions WHERE exam_id=? AND status=\'ACTIVE\' ORDER BY id', [examId]);
         if (!source.length) throw Object.assign(new Error('Soal ujian belum tersedia'), { statusCode: 409 });
@@ -123,30 +142,44 @@ export class StudentExamService {
         const mapping: Record<string, string[]> = {};
         for (const questionId of orderedIds) mapping[String(questionId)] = shuffle(options, `${seed}:${questionId}`);
         const publicId = ulid();
-        await connection.execute(`INSERT INTO exam_attempts(public_id,student_id,exam_id,status,started_at,expires_at,question_order,option_mapping)
+        const expiresAt = new Date(Math.min(
+          new Date(exam.db_now as string | Date).getTime() + Number(exam.duration_minutes) * 60_000,
+          new Date(exam.ends_at as string | Date).getTime(),
+        ));
+        const [inserted] = await connection.execute<ResultSetHeader>(`INSERT INTO exam_attempts(public_id,student_id,exam_id,status,started_at,expires_at,question_order,option_mapping)
           VALUES(?,?,?,'IN_PROGRESS',UTC_TIMESTAMP(3),LEAST(DATE_ADD(UTC_TIMESTAMP(3),INTERVAL ? MINUTE),?),?,?)`, [publicId, studentId, examId, exam.duration_minutes, exam.ends_at, JSON.stringify(orderedIds), JSON.stringify(mapping)]);
-        const [created] = await connection.execute<RowDataPacket[]>('SELECT id,public_id,status,expires_at,question_order,option_mapping FROM exam_attempts WHERE student_id=? AND exam_id=? FOR UPDATE', [studentId, examId]);
-        attempt = created[0];
-        if (!attempt) throw Object.assign(new Error('Gagal membuat sesi ujian'), { statusCode: 503 });
+        attempt = { id: inserted.insertId, public_id: publicId, status: 'IN_PROGRESS', expires_at: expiresAt, question_order: JSON.stringify(orderedIds), option_mapping: JSON.stringify(mapping) } as unknown as RowDataPacket;
         const sourceById = new Map(source.map((question) => [Number(question.id), question]));
         const snapshotRows: unknown[][] = [];
+        const synthesized: RowDataPacket[] = [];
         for (const questionId of orderedIds) {
           const question = sourceById.get(questionId)!;
           const letterMap = mapping[String(questionId)]!;
           const optionsMapped = Object.fromEntries(letterMap.map((letter, index) => [letter.toLowerCase(), question[`option_${options[index]!.toLowerCase()}`]]));
           const correct = String((question as RowDataPacket).correct_answer ?? '').split(',').map((letter) => letter.trim().toUpperCase()).filter(Boolean).map((letter) => letterMap[options.indexOf(letter)]).filter(Boolean).sort().join(',');
           snapshotRows.push([attempt.id, questionId, question.question_type, question.question_text, optionsMapped.a ?? null, optionsMapped.b ?? null, optionsMapped.c ?? null, optionsMapped.d ?? null, optionsMapped.e ?? null, correct, JSON.stringify(letterMap), question.points]);
+          synthesized.push({ id: questionId, question_type: question.question_type, question_text: question.question_text, option_a: optionsMapped.a ?? null, option_b: optionsMapped.b ?? null, option_c: optionsMapped.c ?? null, option_d: optionsMapped.d ?? null, option_e: optionsMapped.e ?? null, points: question.points } as unknown as RowDataPacket);
         }
         await connection.query('INSERT INTO attempt_questions(attempt_id,question_id,question_type,question_text,option_a,option_b,option_c,option_d,option_e,correct_answer,option_mapping,points) VALUES ?', [snapshotRows]);
+        createdQuestions = synthesized;
       }
       if (resuming) {
         const [stillActive] = await connection.execute<RowDataPacket[]>(`SELECT 1 active FROM exam_attempts WHERE id=? AND status='IN_PROGRESS' AND expires_at>UTC_TIMESTAMP(3)`, [attempt.id]);
         if (!stillActive.length) throw Object.assign(new Error('Waktu ujian sudah habis. Jawaban yang tersimpan tetap aman.'), { statusCode: 409 });
       }
-      const [questions] = await connection.execute<RowDataPacket[]>('SELECT question_id id,question_type,question_text,option_a,option_b,option_c,option_d,option_e,points FROM attempt_questions WHERE attempt_id=?', [attempt.id]);
-      const [answers] = await connection.execute<RowDataPacket[]>('SELECT v.question_id,a.answer,COALESCE(a.is_flagged,0) is_flagged,COALESCE(v.revision,0) revision FROM answer_write_versions v LEFT JOIN student_answers a ON a.attempt_id=v.attempt_id AND a.question_id=v.question_id WHERE v.attempt_id=?', [attempt.id]);
+      const activeAttempt = attempt;
+      if (!activeAttempt) throw Object.assign(new Error('Gagal membuat sesi ujian'), { statusCode: 503 });
+      let questions: RowDataPacket[];
+      let answers: RowDataPacket[];
+      if (createdQuestions) {
+        questions = createdQuestions;
+        answers = [];
+      } else {
+        [questions] = await connection.execute<RowDataPacket[]>('SELECT question_id id,question_type,question_text,option_a,option_b,option_c,option_d,option_e,points FROM attempt_questions WHERE attempt_id=?', [activeAttempt.id]);
+        [answers] = await connection.execute<RowDataPacket[]>('SELECT v.question_id,a.answer,COALESCE(a.is_flagged,0) is_flagged,COALESCE(v.revision,0) revision FROM answer_write_versions v LEFT JOIN student_answers a ON a.attempt_id=v.attempt_id AND a.question_id=v.question_id WHERE v.attempt_id=?', [activeAttempt.id]);
+      }
       await connection.commit();
-      state = { attempt, exam, questions, answers };
+      state = { attempt: activeAttempt, exam, questions, answers };
     } catch (error) {
       try { await connection.rollback(); } catch { /* no active transaction */ }
       throw error;

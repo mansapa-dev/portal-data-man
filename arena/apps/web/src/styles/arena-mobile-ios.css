@@ -1,0 +1,481 @@
+/* ==========================================================================
+   ARENA MOBILE iOS SKIN
+   Tampilan gaya iOS untuk dashboard admin/guru/petugas di ponsel (≤760px).
+   Ditumpuk di atas arena-mobile-hardening.css (impor terakhir): struktur yang
+   mencegah overflow tetap dari berkas hardening, berkas ini mengubah
+   bahasa visualnya menjadi iOS (frosted glass, kartu inset, pil chip).
+   ========================================================================== */
+
+:where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Warna dasar layar (iOS grouped background) turunan dari palet sekolah. */
+:where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout {
+  --arena-ios-bg: color-mix(in srgb, var(--bg-body) 86%, #6f7768);
+  --arena-ios-hairline: color-mix(in srgb, var(--border) 62%, transparent);
+  --arena-ios-fill: color-mix(in srgb, var(--text-main) 6%, transparent);
+  --arena-ios-card-shadow: 0 1px 1px rgba(23, 42, 30, .03), 0 6px 20px rgba(23, 42, 30, .05);
+  --arena-ios-danger: color-mix(in srgb, #ff3b30 78%, #d70015);
+}
+
+:root[data-theme=dark] :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout {
+  --arena-ios-card-shadow: 0 1px 1px rgba(0, 0, 0, .14), 0 6px 20px rgba(0, 0, 0, .22);
+}
+
+/* ---- Latar & tap feedback ---- */
+@media (max-width: 760px) {
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout {
+    background: var(--arena-ios-bg);
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-content {
+    background: transparent;
+  }
+
+  /* Tekan tombol = UI kit iOS (berdenyut turun, tidak menggelap kasar). */
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-body :is(button, .btn):active {
+    transform: scale(.97);
+    transition-duration: 60ms;
+  }
+}
+
+/* ---- Bilah navigasi atas (striip chip ala kategori App Store) ---- */
+@media (max-width: 760px) {
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace) .sidebar,
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).teacher-workspace .sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    display: block;
+    width: 100%;
+    height: calc(48px + env(safe-area-inset-top));
+    padding: calc(6px + env(safe-area-inset-top)) 12px 8px;
+    background: color-mix(in srgb, var(--surface) 78%, transparent);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
+    border: 0;
+    border-bottom: .5px solid var(--arena-ios-hairline);
+    box-shadow: none;
+  }
+
+  /* Guru memakai latar gradien hijau; di strip mobile disamakan agar frosted. */
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).teacher-workspace .sidebar {
+    background: color-mix(in srgb, var(--surface) 78%, transparent);
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace) .sidebar nav {
+    display: flex;
+    flex-flow: row nowrap;
+    align-items: center;
+    gap: 7px;
+    height: 34px;
+    margin: 0;
+    padding: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace) .sidebar nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace) .sb-nav-group,
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).teacher-workspace .sb-nav-group {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 7px;
+    margin: 0;
+    padding: 0;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace) .sidebar nav .sb-item,
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).teacher-workspace .sidebar nav .sb-item {
+    display: inline-flex !important;
+    flex: 0 0 auto !important;
+    align-items: center !important;
+    gap: 7px !important;
+    width: auto !important;
+    min-width: max-content !important;
+    height: 34px !important;
+    min-height: 34px !important;
+    max-height: 34px !important;
+    padding: 0 14px !important;
+    border: 0 !important;
+    border-radius: 999px !important;
+    background: var(--arena-ios-fill) !important;
+    color: var(--text-main) !important;
+    font-size: 12px !important;
+    font-weight: 650 !important;
+    letter-spacing: -.01em !important;
+    box-shadow: none !important;
+    scroll-snap-align: center !important;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace) .sidebar nav .sb-item .sb-icon {
+    flex: 0 0 auto;
+    width: auto;
+    color: color-mix(in srgb, var(--text-main) 65%, transparent);
+    font-size: 11px;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace) .sidebar nav .sb-item.active,
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).teacher-workspace .sidebar nav .sb-item.active {
+    background: var(--primary) !important;
+    color: #fff !important;
+    font-weight: 700 !important;
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--primary) 28%, transparent) !important;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace) .sidebar nav .sb-item.active .sb-icon {
+    color: #fff;
+  }
+}
+
+/* ---- Papan judul (large title ala iOS, frosted) ---- */
+@media (max-width: 760px) {
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-content > .topbar {
+    position: sticky;
+    top: calc(48px + env(safe-area-inset-top));
+    z-index: 35;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 52px;
+    padding: 6px 14px;
+    background: color-mix(in srgb, var(--surface) 78%, transparent);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: .5px solid var(--arena-ios-hairline);
+    box-shadow: none;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dashboard-top-title small {
+    margin: 0;
+    font-size: 8.5px;
+    font-weight: 700;
+    letter-spacing: .12em;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dashboard-top-title h1 {
+    margin: 1px 0 0;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -.35px;
+  }
+
+  /* Aksi lingkaran kecil ala iOS (bukan tombol "Password"/teks). */
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .staff-topbar-actions {
+    gap: 7px;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .staff-topbar-actions .theme-toggle,
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .staff-topbar-actions .staff-topbar-logout {
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    min-height: 34px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--arena-ios-fill);
+    color: var(--primary-dark);
+    font-size: 13px;
+  }
+
+  /* Tubuh konten mengalir di bawah dua bilah frosted. */
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-body {
+    gap: 14px;
+    padding: 15px 13px calc(30px + env(safe-area-inset-bottom));
+  }
+}
+
+/* ---- Kartu: inset grouped surface ---- */
+@media (max-width: 760px) {
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-body > div[style],
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-body > section[style],
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-body > form[style],
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-body .admin-page-card {
+    padding: 16px 14px !important;
+    border: 0 !important;
+    border-radius: 20px !important;
+    background: var(--surface) !important;
+    box-shadow: var(--arena-ios-card-shadow) !important;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .admin-page-card {
+    padding: 16px 14px;
+    border: 0;
+    border-radius: 20px;
+    background: var(--surface);
+    box-shadow: var(--arena-ios-card-shadow);
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-body .operations-card {
+    border-radius: 20px !important;
+    box-shadow: var(--arena-ios-card-shadow) !important;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .operations-card-header {
+    padding: 15px 15px 13px;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .operations-card-header h3 {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -.2px;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .operations-card .admin-table-scroll {
+    border: 0;
+    border-radius: 0;
+  }
+}
+
+/* ---- Tipografi judul seksi ---- */
+@media (max-width: 760px) {
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .operations-heading h2 {
+    margin: 3px 0 2px;
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -.6px;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .operations-heading p {
+    font-size: 11.5px;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .section-kicker {
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: .13em;
+  }
+}
+
+/* ---- Tombol ---- */
+@media (max-width: 760px) {
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-body :is(.btn, button:not(.sb-item)) {
+    min-height: 42px;
+    border-radius: 13px;
+    font-size: 12.5px;
+    font-weight: 650;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-body .btn-primary {
+    background: var(--primary) !important;
+    border-color: transparent !important;
+    color: #fff !important;
+    box-shadow: 0 3px 10px color-mix(in srgb, var(--primary) 25%, transparent);
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-body .btn-secondary:not(:hover):not(:active) {
+    background: var(--arena-ios-fill) !important;
+    border-color: transparent !important;
+    color: var(--text-main) !important;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-body .btn-danger:not(:hover):not(:active) {
+    background: color-mix(in srgb, var(--arena-ios-danger) 13%, transparent) !important;
+    border-color: transparent !important;
+    color: var(--arena-ios-danger) !important;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-body button:not(.sb-item):not(.btn):not(.theme-toggle):not(.staff-topbar-logout):not(:hover):not(:active) {
+    background: var(--arena-ios-fill);
+    border-color: transparent;
+    color: var(--primary-dark);
+  }
+
+  /* Tombol aksi dalam tabel: pil kecil lebar isi (bukan tombol blok). */
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-body table td :is(button, .btn) {
+    min-height: 34px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    font-size: 11px;
+  }
+
+  .admin-workspace .dash-body .exam-row-actions button {
+    min-height: 34px;
+  }
+}
+
+/* ---- Kontrol formulir ---- */
+@media (max-width: 760px) {
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-body input:not([type=checkbox]):not([type=radio]):not([type=file]),
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-body select,
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-body textarea {
+    min-height: 44px;
+    border: 1px solid var(--arena-ios-hairline);
+    border-radius: 13px;
+    background: var(--surface);
+    font-size: 13px;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-body label {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: .01em;
+  }
+}
+
+/* ---- Tabel: kartu membulat + kolom pertama menempel ---- */
+@media (max-width: 760px) {
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-body table {
+    border-radius: 16px;
+    border: 0;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-body th {
+    padding: 10px 12px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: .07em;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-body td {
+    padding: 10px 12px;
+    font-size: 11.5px;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-body td,
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-body th {
+    border-bottom: .5px solid var(--arena-ios-hairline);
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-body table :is(tr,:is(tbody,thead) tr):last-child :is(td,th) {
+    border-bottom: 0;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-body tr:hover td,
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-body tr:hover td:first-child {
+    background: transparent;
+  }
+
+  /* Kolom identitas mengikuti saat tabel digeser horizontal. */
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-body td:first-child,
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-body th:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--surface);
+    box-shadow: 1px 0 0 var(--arena-ios-hairline);
+  }
+}
+
+/* ---- Pil status & label ---- */
+@media (max-width: 760px) {
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-body :is(.operation-status, .admin-status, .status-pill, .admin-count-pill) {
+    border-radius: 999px;
+    font-weight: 700;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .dash-body :is(.operation-status, .admin-status) {
+    min-height: 21px;
+    padding: 4px 9px;
+    font-size: 9.5px;
+  }
+}
+
+/* ---- Kotak notifikasi halus ---- */
+@media (max-width: 760px) {
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .arena-notice {
+    border: 0;
+    border-radius: 15px;
+    background: color-mix(in srgb, #f5a623 14%, var(--surface));
+    color: #75520d;
+    font-size: 12px;
+    box-shadow: var(--arena-ios-card-shadow);
+  }
+
+  :root[data-theme=dark] :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .arena-notice {
+    color: #ffd479;
+  }
+}
+
+/* ---- Ringkasan & daftar pada halaman beranda ---- */
+@media (max-width: 760px) {
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .staff-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .staff-metric {
+    min-height: 0 !important;
+    padding: 13px 12px !important;
+    border: 0 !important;
+    border-radius: 17px !important;
+    background: var(--surface) !important;
+    box-shadow: var(--arena-ios-card-shadow) !important;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .staff-metric>i {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--primary-soft);
+    font-size: 13px;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .staff-metric strong {
+    font-size: 21px;
+    letter-spacing: -.4px;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .staff-metric.primary {
+    background: var(--primary) !important;
+    border-color: transparent !important;
+    color: #fff !important;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .arena-overview-quick {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .arena-overview-quick button {
+    min-height: 46px !important;
+    border: 0 !important;
+    border-radius: 15px !important;
+    background: var(--arena-ios-fill) !important;
+    box-shadow: none !important;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .arena-overview-quick button:hover {
+    background: var(--primary-soft) !important;
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout :is(.arena-overview-hero, .teacher-welcome-card, .arena-overview-special, .admin-sync-toolbar) {
+    border: 0 !important;
+    border-radius: 22px !important;
+    background: linear-gradient(120deg, var(--surface) 62%, color-mix(in srgb, var(--primary-soft) 55%, var(--surface))) !important;
+    box-shadow: var(--arena-ios-card-shadow) !important;
+  }
+}
+
+/* ---- Navigasi halaman ---- */
+@media (max-width: 760px) {
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .operations-pagination {
+    justify-content: center;
+    padding: 13px 15px;
+    background: var(--surface);
+  }
+
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout .operations-pagination .btn {
+    min-height: 36px;
+    padding: 6px 13px;
+    border-radius: 999px;
+  }
+}
+
+/* ---- Empty state ---- */
+@media (max-width: 760px) {
+  :where(.admin-workspace, .staff-workspace, .teacher-workspace).dashboard-layout :is(.operations-empty, .admin-empty-state, .teacher-empty-state) {
+    border: 0;
+    border-radius: 17px;
+    background: var(--arena-ios-fill);
+  }
+}

@@ -314,8 +314,23 @@ export async function adminRoutes(app: FastifyInstance) {
   app.delete<{Params:{id:string}}>('/api/admin/teacher-assignments/:id',async(request)=>{const claims=admin(request,true);const id=positive.parse(request.params.id);const[res]=await requirePool().execute('DELETE FROM teacher_exam_assignments WHERE id=?',[id]);if(!(res as {affectedRows:number}).affectedRows)throw Object.assign(new Error('Penugasan tidak ditemukan'),{statusCode:404});await audit(requirePool(),claims.sub,claims.role,'TEACHER_ASSIGNMENT_DELETED','TeacherExamAssignment',id);return{success:true};});
   app.post<{Params:{id:string}}>('/api/admin/teachers/:id/proctor-eligibility',async(request)=>{const claims=admin(request,true);const id=positive.parse(request.params.id);const{eligible}=z.object({eligible:z.boolean()}).strict().parse(request.body);const[res]=await requirePool().execute('UPDATE teachers SET proctor_eligible=? WHERE id=?',[Number(eligible),id]);if(!(res as {affectedRows:number}).affectedRows)throw Object.assign(new Error('Guru tidak ditemukan'),{statusCode:404});await audit(requirePool(),claims.sub,claims.role,'TEACHER_PROCTOR_ELIGIBILITY_UPDATED','Teacher',id,{eligible:!eligible},{eligible});return{success:true};});
   app.post('/api/admin/students/reset-batch', async (request) => {
-    const claims = admin(request,true); const body = z.object({ student_ids:z.array(positive).min(1).max(50),exam_id:positive,reason:z.string().trim().min(3).max(1000) }).strict().parse(request.body); const results=[] as {student_id:number;ok:boolean;result?:unknown;error?:string}[];
-    const resetIds=[...new Set(body.student_ids)];results.push(...await mapLimit(resetIds,3,async(studentId)=>{try{return{student_id:studentId,ok:true,result:await resetOne(studentId,body.exam_id,claims.sub,body.reason)};}catch(error){return{student_id:studentId,ok:false,error:error instanceof Error?error.message:'Reset gagal'};}}));
+    const claims = admin(request,true);
+    // Dua bentuk payload:
+    // 1) { student_ids: number[], exam_id }          — reset massal satu ujian (Kontrol & Siswa).
+    // 2) { attempts: [{student_id, exam_id}] }       — pulihkan sesi dari Log Pelanggaran, ujian per baris.
+    const body = z.object({ student_ids:z.array(positive).optional(), exam_id:positive.optional(), attempts:z.array(z.object({student_id:positive,exam_id:positive}).strict()).optional(), reason:z.string().trim().min(3).max(1000) }).strict()
+      .refine(v=>Boolean(v.student_ids?.length||v.attempts?.length),{message:'Sertakan student_ids atau attempts'})
+      .refine(v=>!(v.student_ids?.length)||Boolean(v.exam_id),{message:'Format lama student_ids memerlukan exam_id'})
+      .refine(v=>v.reason.length>=3,{message:'Alasan minimal 3 karakter'})
+      .parse(request.body);
+    const pairs=(body.attempts??[]).map((item)=>({student_id:item.student_id,exam_id:item.exam_id}))
+      .concat((body.student_ids??[]).map((studentId)=>({student_id:studentId,exam_id:body.exam_id??0})));
+    const deduped=new Map<string,{student_id:number;exam_id:number}>();
+    for(const pair of pairs) deduped.set(`${pair.student_id}:${pair.exam_id}`,pair);
+    if(deduped.size<1||deduped.size>50)throw Object.assign(new Error('Pilih 1 sampai 50 sesi per proses pemulihan'),{statusCode:422});
+    const results=[] as {student_id:number;exam_id:number;ok:boolean;result?:unknown;error?:string}[];
+    const targets=[...deduped.values()];
+    results.push(...await mapLimit(targets,3,async(pair)=>{try{return{...pair,ok:true,result:await resetOne(pair.student_id,pair.exam_id,claims.sub,body.reason)};}catch(error){return{...pair,ok:false,error:error instanceof Error?error.message:'Reset gagal'};}}));
     return { total:results.length,reset:results.filter(x=>x.ok).length,failed:results.filter(x=>!x.ok).length,results };
   });
 }

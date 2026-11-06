@@ -48,6 +48,16 @@ const app = Fastify({
 });
 await app.register(helmet);
 await app.register(sensible);
+// The error handler MUST be registered before any route plugin: `await app.register(...)`
+// boots each plugin immediately, and plugin contexts that finish loading before a
+// setErrorHandler call never inherit it. Registering it late made every route error
+// (including zod 422 payloads) fall back to Fastify's default handler as HTTP 500.
+app.setErrorHandler((error, request, reply) => {
+  request.log.error({ err: error }, 'request failed');
+  const candidate = error as Error & { statusCode?: number };
+  const status = error instanceof z.ZodError ? 422 : candidate.statusCode && candidate.statusCode >= 400 && candidate.statusCode < 600 ? candidate.statusCode : 500;
+  return reply.status(status).send({ error: status >= 500 ? 'Internal server error' : error instanceof z.ZodError ? error.issues.map((issue)=>issue.message).join(', ') : candidate.message });
+});
 const redis = env.REDIS_URL ? new Redis(env.REDIS_URL, { maxRetriesPerRequest: 1, enableOfflineQueue: false }) : null;
 const finalizer = pool && env.ATTEMPT_FINALIZER_ENABLED === 'true'
   ? new ExpiredAttemptFinalizer(pool, new ScoringService(pool), app.log, env.ATTEMPT_FINALIZER_INTERVAL_MS, env.ATTEMPT_FINALIZER_BATCH_SIZE)
@@ -98,13 +108,6 @@ if (pool) {
   await app.register(staffRoutes);
   await app.register(questionImageRoutes);
 }
-
-app.setErrorHandler((error, request, reply) => {
-  request.log.error({ err: error }, 'request failed');
-  const candidate = error as Error & { statusCode?: number };
-  const status = error instanceof z.ZodError ? 422 : candidate.statusCode && candidate.statusCode >= 400 && candidate.statusCode < 600 ? candidate.statusCode : 500;
-  return reply.status(status).send({ error: status >= 500 ? 'Internal server error' : error instanceof z.ZodError ? error.issues.map((issue)=>issue.message).join(', ') : candidate.message });
-});
 
 const close = async () => {
   await finalizer?.stop();

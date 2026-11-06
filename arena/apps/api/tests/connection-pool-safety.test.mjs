@@ -133,3 +133,37 @@ test('recordViolation melepas koneksi dengan benar saat tidak ada terminasi', as
   assert.equal(result.terminated, false);
   assert.equal(released, true, 'Koneksi harus dilepas meskipun tidak ada terminasi');
 });
+
+test('recordViolation tidak me-rollback koneksi yang sudah dilepas saat submit gagal', async () => {
+  // Regresi: setelah connection.release(), koneksi bisa langsung dipakai request
+  // lain. rollback() pada koneksi itu akan membatalkan transaksi request lain.
+  let violationReleases = 0;
+  let rollbacksAfterRelease = 0;
+  const violationConn = {
+    async beginTransaction() {},
+    async commit() {},
+    async rollback() { rollbacksAfterRelease++; },
+    release() { violationReleases++; },
+    async execute(sql) {
+      if (sql.startsWith('SELECT id,status,violation_count')) return [[{ id: 1, status: 'IN_PROGRESS', violation_count: 2 }]];
+      if (sql.startsWith('INSERT IGNORE INTO violations')) return [{ affectedRows: 1 }];
+      if (sql.startsWith('SELECT key_name,value FROM cbt_settings')) return [[{ key_name: 'violation_termination_threshold', value: '3' }]];
+      if (sql.startsWith('UPDATE exam_attempts SET violation_count')) return [{ affectedRows: 1 }];
+      throw new Error(`Unexpected SQL: ${sql}`);
+    },
+  };
+  const submitConn = {
+    async beginTransaction() {},
+    async commit() {},
+    async rollback() {},
+    release() {},
+    async execute() { throw new Error('submit failed after release'); },
+  };
+  let call = 0;
+  const pool = { async getConnection() { return call++ === 0 ? violationConn : submitConn; } };
+  const scoring = new ScoringService(pool);
+
+  await assert.rejects(() => scoring.recordViolation(9, 3, 'test-event-key-003', 'TAB_HIDDEN'), /submit failed after release/);
+  assert.equal(violationReleases, 1, 'Koneksi recordViolation harus dilepas tepat sekali');
+  assert.equal(rollbacksAfterRelease, 0, 'Koneksi yang sudah dilepas tidak boleh di-rollback lagi');
+});

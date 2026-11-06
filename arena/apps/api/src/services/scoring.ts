@@ -180,6 +180,10 @@ export class ScoringService {
 
   async recordViolation(studentId: number, examId: number, eventKey: string, type: string, metadata: { ip?: string; userAgent?: string; clientOccurredAt?: string | null; questionNo?: number } = {}) {
     let terminated = false;
+    // A connection handed back to the pool may be reused by another request
+    // immediately. Never touch it afterwards (rollback/release) or that other
+    // request's transaction can be rolled back by mistake.
+    let released = false;
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
@@ -211,6 +215,7 @@ export class ScoringService {
       // Release the connection *before* calling submit so it can acquire its own
       // connection from the pool without risk of exhaustion when pool is small.
       connection.release();
+      released = true;
       if (terminated) {
         if (policy.action === 'LOCK') {
           // LOCK policy: terminate without publishing results; the session stays
@@ -222,12 +227,10 @@ export class ScoringService {
       }
       return outcome;
     } catch (error) {
-      try { await connection.rollback(); } catch { /* no active transaction */ }
+      if (!released) { try { await connection.rollback(); } catch { /* no active transaction */ } }
       throw error;
     } finally {
-      // Guard: only release if submit path above did not already release it.
-      // mysql2 pool connections ignore double-release, but be explicit.
-      if (!terminated) connection.release();
+      if (!released) connection.release();
     }
   }
 

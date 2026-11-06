@@ -59,3 +59,28 @@ Lanjutkan dari 25 ke 50 lalu 100 hanya jika:
 - p95 per endpoint di bawah 2 detik dan p99 per endpoint di bawah 5 detik pada tahap uji; tidak ada pertumbuhan antrean pool/DB yang menetap, lock wait panjang, atau degradasi aplikasi lain di VPS.
 
 Output JSON memberi `pass: true` hanya jika pemeriksaan request, integritas database, dan latency terpenuhi; kode keluar `2` menandakan tahap gagal kriteria, sedangkan kode keluar `1` menandakan konfigurasi/preflight gagal. Jika ada pelanggaran, hentikan eskalasi dan simpan output runner serta metrik MySQL/host untuk investigasi. Ambang latency di atas adalah kriteria uji awal yang diusulkan, bukan SLO sekolah atau bukti kapasitas produksi. Runner tidak menjalankan tes 1.015 pengguna.
+
+## Catatan kapasitas 1.015 pengguna (lab lokal)
+
+Angka berikut berasal dari uji 1.015 siswa serentak pada satu mesin lab (2 vCPU, MySQL 8.4 di eMMC, `sync_binlog=1`, `innodb_flush_log_at_trx_commit=1`, buffer pool 128 MB). Ini **bukan** jaminan kapasitas produksi, tetapi menunjukkan di mana batasnya berada:
+
+| Fase | Wall time | p50 | p95 | Throughput | Error |
+| --- | --- | --- | --- | --- | --- |
+| Start ujian | 17,6 s | 10,5 s | 16,5 s | 58 req/s | 0 |
+| Heartbeat | 4,4 s | 2,6 s | 3,9 s | 230 req/s | 0 |
+| Autosave | 6,2 s | 4,2 s | 5,9 s | 163 req/s | 0 |
+| Submit | 9,4 s | 5,5 s | 9,0 s | 108 req/s | 0 |
+| Daftar ujian (spike login) | 3,9 s | 3,1 s | 3,2 s | 259 req/s | 0 |
+
+Temuan penting:
+
+- Fase start dibatasi oleh commit MySQL, bukan oleh aplikasi atau ukuran pool. `DB_POOL_SIZE` 25, 50, dan 100 menghasilkan throughput yang sama (~50–56 start/detik), jadi menaikkan pool tidak menolong selama disk masih menjadi bottleneck.
+- Satu start adalah satu transaksi yang menulis attempt + snapshot soal. Pada storage eMMC, fsync/commit inilah yang membatasi laju.
+- Finalizer attempt kedaluwarsa kini menguras beberapa batch per putaran. Uji mass expiry 1.015 attempt selesai dalam ~6 detik (21 batch, 0 gagal); sebelumnya satu batch 50 baris per 30 detik membutuhkan ~10 menit.
+
+Rekomendasi untuk produksi:
+
+- Gunakan NVMe/SSD dengan IOPS konsisten dan minimal 4 vCPU; pisahkan MySQL dari mesin aplikasi bila memungkinkan.
+- Naikkan `innodb_buffer_pool_size` (minimal 1–2 GB untuk dataset ujian sekolah) dan pantau `Innodb_data_fsyncs`, `Innodb_os_log_written`, serta lock wait saat uji beban.
+- Pertahankan `sync_binlog=1` dan `innodb_flush_log_at_trx_commit=1` bila integritas jawaban prioritas. Turunkan ke nilai yang lebih longgar hanya jika risiko kehilangan beberapa detik transaksi saat crash dapat diterima.
+- Jalankan `scripts/staging-loadtest.mjs` bertahap (25 → 50 → 100) di VPS produksi/staging yang sebenarnya sebelum hari ujian; jangan memakai angka lab di atas sebagai SLO.
