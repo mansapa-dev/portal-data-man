@@ -23,6 +23,7 @@ import './styles/arena-design-system.css';
 import './styles/cbt-parity.css';
 import './styles/arena-mobile-hardening.css';
 import './styles/arena-mobile-ios.css';
+import './styles/exam-list.css';
 
 type Student = { id: number; nisn: string; nama: string; kelas: string | null; tingkat: string | null };
 type Question = { id: number; tipe: string; pertanyaan: string; opsi: { key: string; text: string }[]; poin: number };
@@ -434,10 +435,64 @@ function StaffPanel({ staff,onLogout,darkMode,onToggleTheme }: { staff: Staff;on
       const summary=reportData.summary as Record<string,unknown>;
       const distribution=Array.isArray(reportData.distribution)?reportData.distribution as Array<Record<string,unknown>>:[];
       const results=await allExamResults(reportExamId);
-      const rows=results.map((row,index)=>'<tr><td>'+(index+1)+'</td><td>'+escapePrint(row.nisn)+'</td><td>'+escapePrint(row.name_snapshot)+'</td><td>'+escapePrint(row.class_snapshot)+'</td><td><b>'+escapePrint(row.score)+'</b></td><td>'+escapePrint(new Date(String(row.created_at)).toLocaleString('id-ID'))+'</td></tr>').join('');
-      const bands=distribution.map(row=>'<tr><td>'+escapePrint(row.score_band)+'</td><td>'+escapePrint(row.students)+'</td></tr>').join('');
-      const sign=(title:string,name:string,nip:string)=>'<div><p>'+escapePrint(title)+'</p><div class="signature-space"></div><b>'+escapePrint(name||'........................................')+'</b><p>NIP '+escapePrint(nip||'........................................')+'</p></div>';
-      const html='<!doctype html><html lang="id"><head><meta charset="utf-8"><title>Laporan Hasil Arena</title><style>'+printBaseCss+'@page{size:A4 landscape;margin:10mm 12mm}h1{text-align:center;font-size:17px;margin:15px 0}h2{font-size:14px;margin-top:20px}.meta{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:12px 0}.meta div{display:flex;gap:8px}.meta b{min-width:100px}.results{font-size:10px}.results th,.results td{padding:4px}.summary{width:50%}.signatures{display:flex;justify-content:space-around;text-align:center;margin-top:25px;break-inside:avoid}.signature-space{height:65px}@media print{.print-letterhead{margin-top:0}}</style></head><body><button onclick="window.print()">Cetak / simpan PDF</button>'+printLetterhead(reportIdentity)+'<h1>LAPORAN HASIL UJIAN</h1><div class="meta"><div><b>Ujian</b><span>'+escapePrint(exam?.name??reportExamId)+'</span></div><div><b>Tahun ajaran</b><span>'+escapePrint(exam?.academic_year)+'</span></div><div><b>Semester</b><span>'+escapePrint(exam?.semester==='ODD'?'Ganjil':'Genap')+'</span></div><div><b>Tanggal cetak</b><span>'+escapePrint(new Date().toLocaleDateString('id-ID',{timeZone:'Asia/Jakarta',day:'2-digit',month:'long',year:'numeric'}))+'</span></div></div><table class="summary"><tbody><tr><th>Jumlah peserta</th><td>'+escapePrint(summary.participants)+'</td><th>Rata-rata</th><td>'+escapePrint(summary.average_score)+'</td></tr><tr><th>Selesai</th><td>'+escapePrint(summary.completed)+'</td><th>Nilai min / maks</th><td>'+escapePrint(summary.min_score)+' / '+escapePrint(summary.max_score)+'</td></tr></tbody></table><h2>Daftar hasil peserta</h2><table class="results"><thead><tr><th>No.</th><th>NISN</th><th>Nama siswa</th><th>Kelas</th><th>Nilai</th><th>Selesai</th></tr></thead><tbody>'+rows+'</tbody></table><h2>Distribusi nilai</h2><table class="summary"><thead><tr><th>Rentang mulai</th><th>Jumlah peserta</th></tr></thead><tbody>'+bands+'</tbody></table><p>Palembang, '+escapePrint(new Date().toLocaleDateString('id-ID',{timeZone:'Asia/Jakarta',day:'2-digit',month:'long',year:'numeric'}))+'</p><div class="signatures">'+sign('Mengetahui, Kepala Madrasah',reportIdentity.principal,reportIdentity.principalNip)+sign('Wakur Kurikulum',reportIdentity.curriculum,reportIdentity.curriculumNip)+'</div></body></html>';
+      const formatScore=(value:unknown)=>{if(value===null||value===undefined||value==='')return '—';const score=Number(value);return Number.isFinite(score)?score.toLocaleString('id-ID',{minimumFractionDigits:2,maximumFractionDigits:2}):'—';};
+      const rows=results.map((row,index)=>`<tr><td class="number">${index+1}</td><td class="nisn">${escapePrint(row.nisn)}</td><td>${escapePrint(row.name_snapshot)}</td><td>${escapePrint(row.class_snapshot)}</td><td class="score">${escapePrint(formatScore(row.score))}</td><td class="date">${escapePrint(new Date(String(row.created_at)).toLocaleString('id-ID',{timeZone:'Asia/Jakarta',dateStyle:'short',timeStyle:'short'}))}</td></tr>`).join('');
+      const bands=distribution.map(row=>`<tr><td>${escapePrint(row.score_band)}</td><td class="number">${escapePrint(row.students)}</td></tr>`).join('');
+      const sign=(title:string,name:string,nip:string)=>`<div class="signature"><p>${escapePrint(title)}</p><div class="signature-space"></div><b>${escapePrint(name||'........................................')}</b><p>NIP ${escapePrint(nip||'........................................')}</p></div>`;
+      const printDate=new Date().toLocaleDateString('id-ID',{timeZone:'Asia/Jakarta',day:'2-digit',month:'long',year:'numeric'});
+      const reportCss=`
+        @page{size:A4 landscape;margin:11mm 12mm}
+        body{max-width:1120px;margin:20px auto;color:#172620;font-size:11px;line-height:1.4}
+        .print-button{margin-bottom:18px}
+        h1{margin:16px 0 4px;text-align:center;font-size:18px;letter-spacing:.08em}
+        .report-subtitle{margin:0 0 18px;text-align:center;color:#53645a;font-size:11px}
+        h2{margin:23px 0 9px;font-size:13px;color:#214b35}
+        .meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 24px;margin:0 0 16px}
+        .meta-item{display:grid;grid-template-columns:120px minmax(0,1fr);gap:10px;padding:8px 11px;border:1px solid #dce5dd;border-radius:6px;min-width:0}
+        .meta-item b{color:#4d6254}.meta-item span{overflow-wrap:anywhere}
+        .summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:0 0 20px}
+        .summary-item{padding:10px 12px;border:1px solid #cdded0;border-radius:7px;background:#f5faf6;break-inside:avoid}
+        .summary-item span{display:block;margin-bottom:4px;color:#526457;font-size:10px}
+        .summary-item strong{font-size:17px;color:#173e2a;font-variant-numeric:tabular-nums}
+        table{width:100%;table-layout:fixed;border-collapse:collapse}
+        th,td{padding:6px 8px;border:1px solid #c4d0c6;vertical-align:middle;overflow-wrap:anywhere}
+        th{background:#eaf3eb;color:#244632;font-size:10px}
+        .results{font-size:10px}.results tbody tr:nth-child(even){background:#f7faf7}
+        .results th:nth-child(1){width:5%}.results th:nth-child(2){width:14%}
+        .results th:nth-child(3){width:35%}.results th:nth-child(4){width:12%}
+        .results th:nth-child(5){width:10%}.results th:nth-child(6){width:24%}
+        .results .number,.results .score{text-align:center;font-variant-numeric:tabular-nums}
+        .results .nisn,.results .date{white-space:nowrap;font-variant-numeric:tabular-nums}
+        .distribution{width:48%;min-width:340px}.distribution .number{text-align:center}
+        .report-footer{margin-top:22px;text-align:right}
+        .signatures{display:grid;grid-template-columns:1fr 1fr;gap:45px;margin-top:10px;text-align:center;break-inside:avoid}
+        .signature-space{height:60px}.signature p{margin:5px 0}
+        @media print{body{margin:0;max-width:none}.print-letterhead{margin-top:0}h2,.summary-grid,.meta,.report-footer{break-after:avoid}.results thead,.distribution thead{display:table-header-group}}
+        @media(max-width:700px){.meta,.summary-grid{grid-template-columns:1fr 1fr}.meta-item{grid-template-columns:1fr;gap:3px}.distribution{width:100%;min-width:0}}
+      `;
+      const html=`<!doctype html><html lang="id"><head><meta charset="utf-8"><title>Laporan Hasil Arena</title><style>${printBaseCss}${reportCss}</style></head><body>
+        <button class="print-button" onclick="window.print()">Cetak / simpan PDF</button>
+        ${printLetterhead(reportIdentity)}
+        <h1>LAPORAN HASIL UJIAN</h1><p class="report-subtitle">Rekap hasil peserta</p>
+        <div class="meta">
+          <div class="meta-item"><b>Ujian</b><span>${escapePrint(exam?.name??reportExamId)}</span></div>
+          <div class="meta-item"><b>Tahun ajaran</b><span>${escapePrint(exam?.academic_year)}</span></div>
+          <div class="meta-item"><b>Semester</b><span>${escapePrint(exam?.semester==='ODD'?'Ganjil':'Genap')}</span></div>
+          <div class="meta-item"><b>Tanggal cetak</b><span>${escapePrint(printDate)}</span></div>
+        </div>
+        <div class="summary-grid">
+          <div class="summary-item"><span>Jumlah peserta</span><strong>${escapePrint(summary.participants)}</strong></div>
+          <div class="summary-item"><span>Sesi selesai</span><strong>${escapePrint(summary.completed)}</strong></div>
+          <div class="summary-item"><span>Rata-rata nilai</span><strong>${escapePrint(formatScore(summary.average_score))}</strong></div>
+          <div class="summary-item"><span>Nilai min / maks</span><strong>${escapePrint(formatScore(summary.min_score))} / ${escapePrint(formatScore(summary.max_score))}</strong></div>
+        </div>
+        <h2>Daftar hasil peserta</h2>
+        <table class="results"><thead><tr><th>No.</th><th>NISN</th><th>Nama siswa</th><th>Kelas</th><th>Nilai</th><th>Waktu hasil</th></tr></thead><tbody>${rows}</tbody></table>
+        <h2>Distribusi nilai</h2>
+        <table class="distribution"><thead><tr><th>Rentang mulai</th><th>Jumlah peserta</th></tr></thead><tbody>${bands}</tbody></table>
+        <p class="report-footer">Palembang, ${escapePrint(printDate)}</p>
+        <div class="signatures">${sign('Mengetahui, Kepala Madrasah',reportIdentity.principal,reportIdentity.principalNip)}${sign('Wakur Kurikulum',reportIdentity.curriculum,reportIdentity.curriculumNip)}</div>
+      </body></html>`;
       popup.document.open();popup.document.write(html);popup.document.close();
     }catch(error){popup.close();setNotice(error instanceof Error?error.message:'Laporan cetak gagal disiapkan');}finally{setBusy(false);}
   }
@@ -489,7 +544,7 @@ function StaffPanel({ staff,onLogout,darkMode,onToggleTheme }: { staff: Staff;on
         <button type="button" className="btn btn-secondary" onClick={()=>{setShowArchivedExams(value=>!value);setExamSearch('');setExamStatusFilter('');}}><i className={`fa-solid ${showArchivedExams?'fa-arrow-left':'fa-box-archive'}`}/>{showArchivedExams?' Kembali ke ujian':' Arsip ujian'}</button>
         <button type="button" className="btn btn-secondary" disabled={!filteredAdminExams.length} onClick={()=>void exportExcel('daftar-ujian-arena.xlsx',[{name:'Daftar Ujian',rows:[['ID','Nama','Mapel','Tingkat','Sesi','Mulai WIB','Selesai WIB','Target kelas','Tahun ajaran','Semester','Status','Soal','Percobaan'],...filteredAdminExams.map(row=>[row.id,row.name,row.subject_name,row.grade,row.session_number,row.starts_at,row.ends_at,row.class_names||'Semua kelas',row.academic_year,row.semester,row.status,row.question_count,row.attempt_count])]}])}>Ekspor hasil filter</button><span>{filteredAdminExams.length} ujian tampil</span>
       </div>
-      <div className="admin-table-scroll"><table><thead><tr><th>ID</th><th>Nama ujian & mapel</th><th>Tingkat</th><th>Sesi, tanggal & jam (WIB)</th><th>Target</th><th>Tahun ajaran / semester</th><th>Status</th><th>Aksi</th></tr></thead><tbody>{filteredAdminExams.map(row=><tr key={String(row.id)}><td><strong>#{String(row.id)}</strong></td><td><strong>{String(row.name)}</strong><br/><small>{String(row.subject_name||'Mata Pelajaran Umum')}</small></td><td>Tingkat {String(row.grade)}</td><td>Sesi {String(row.session_number??1)}<br/><small>{new Intl.DateTimeFormat('id-ID',{timeZone:'Asia/Jakarta',dateStyle:'medium'}).format(new Date(String(row.starts_at)))}</small><br/><small>{new Intl.DateTimeFormat('id-ID',{timeZone:'Asia/Jakarta',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(String(row.starts_at)))}–{new Intl.DateTimeFormat('id-ID',{timeZone:'Asia/Jakarta',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(String(row.ends_at)))} WIB</small></td><td>{Number(row.target_student_count)>0?`Peserta khusus (${String(row.target_student_count)} siswa)`:String(row.class_names||'Semua kelas')}</td><td>{String(row.academic_year)}<br/><small>Semester {row.semester==='ODD'?'Ganjil':'Genap'}</small></td><td><span className={`admin-status status-${String(row.status).toLowerCase()}`}>{String(row.status)}</span><br/><small>{String(row.question_count)} soal · {String(row.attempt_count)} percobaan</small></td><td className="exam-row-actions">{row.status==='ARCHIVED'?<button disabled={busy} onClick={()=>void archiveExam(row)}>Pulihkan</button>:<><button disabled={busy||Boolean(row.follow_up_type)} onClick={()=>void editExam(Number(row.id))}>Ubah</button><button disabled={busy||Boolean(row.follow_up_type)} onClick={()=>void duplicateExam(row)}>Duplikasi</button><button disabled={busy||Boolean(row.follow_up_type)} onClick={()=>void archiveExam(row)}>Arsipkan</button><button className="btn btn-danger" disabled={busy||Boolean(row.follow_up_type)} onClick={()=>void deleteExam(row)}>Hapus</button>{Number(row.attempt_count)>0&&<button disabled={busy} onClick={()=>void terminateExam(Number(row.id))}>Akhiri sesi</button>}</>}</td></tr>)}{!filteredAdminExams.length&&<tr><td colSpan={8}><div className="admin-empty-state"><strong>Tidak ada jadwal ujian yang cocok</strong><span>Ubah filter atau periksa daftar arsip.</span></div></td></tr>}</tbody></table></div></>}</div>}
+      <div className="admin-table-scroll exam-table-scroll"><table className="exam-list-table"><thead><tr><th>ID</th><th>Nama ujian & mapel</th><th>Tingkat</th><th>Sesi, tanggal & jam (WIB)</th><th>Target</th><th>Tahun ajaran / semester</th><th>Status</th><th>Aksi</th></tr></thead><tbody>{filteredAdminExams.map(row=><tr key={String(row.id)}><td><strong>#{String(row.id)}</strong></td><td><strong>{String(row.name)}</strong><br/><small>{String(row.subject_name||'Mata Pelajaran Umum')}</small></td><td>Tingkat {String(row.grade)}</td><td>Sesi {String(row.session_number??1)}<br/><small>{new Intl.DateTimeFormat('id-ID',{timeZone:'Asia/Jakarta',dateStyle:'medium'}).format(new Date(String(row.starts_at)))}</small><br/><small>{new Intl.DateTimeFormat('id-ID',{timeZone:'Asia/Jakarta',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(String(row.starts_at)))}–{new Intl.DateTimeFormat('id-ID',{timeZone:'Asia/Jakarta',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(String(row.ends_at)))} WIB</small></td><td>{Number(row.target_student_count)>0?`Peserta khusus (${String(row.target_student_count)} siswa)`:String(row.class_names||'Semua kelas')}</td><td>{String(row.academic_year)}<br/><small>Semester {row.semester==='ODD'?'Ganjil':'Genap'}</small></td><td><span className={`admin-status status-${String(row.status).toLowerCase()}`}>{String(row.status)}</span><br/><small>{String(row.question_count)} soal · {String(row.attempt_count)} percobaan</small></td><td><div className="exam-row-actions">{row.status==='ARCHIVED'?<button disabled={busy} onClick={()=>void archiveExam(row)}>Pulihkan</button>:<><button disabled={busy||Boolean(row.follow_up_type)} onClick={()=>void editExam(Number(row.id))}>Ubah</button><button disabled={busy||Boolean(row.follow_up_type)} onClick={()=>void duplicateExam(row)}>Duplikasi</button><button disabled={busy||Boolean(row.follow_up_type)} onClick={()=>void archiveExam(row)}>Arsipkan</button><button className="btn btn-danger" disabled={busy||Boolean(row.follow_up_type)} onClick={()=>void deleteExam(row)}>Hapus</button>{Number(row.attempt_count)>0&&<button disabled={busy} onClick={()=>void terminateExam(Number(row.id))}>Akhiri sesi</button>}</>}</div></td></tr>)}{!filteredAdminExams.length&&<tr><td colSpan={8}><div className="admin-empty-state"><strong>Tidak ada jadwal ujian yang cocok</strong><span>Ubah filter atau periksa daftar arsip.</span></div></td></tr>}</tbody></table></div></>}</div>}
     {view==='followups'&&admin&&<div style={card}>
       <h3>Susulan dan remedial</h3><p>Susulan tersedia bagi siswa aktif yang belum pernah mengerjakan ujian sumber. Kandidat remedial memerlukan sedikitnya batas pelanggaran yang ditetapkan admin (2–3) dan persetujuan admin.</p>
       <fieldset style={card}><legend>Batas nilai remedial</legend><div style={{display:'flex',gap:12,flexWrap:'wrap'}}>{(['X','XI','XII'] as const).map((grade)=><label key={grade}>Tingkat {grade}<input type="number" min={0} max={100} step="0.01" value={followCaps[grade]} onChange={(event)=>setFollowCaps({...followCaps,[grade]:Number(event.target.value)})}/></label>)}<button type="button" disabled={busy} onClick={()=>void saveFollowCaps()}>Simpan batas nilai</button></div></fieldset>
