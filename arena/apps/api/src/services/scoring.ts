@@ -46,8 +46,8 @@ export async function getViolationPolicy(pool: Pool): Promise<{ threshold: numbe
   }
 }
 
-function normalize(text: string) { return text.trim().replace(/\s+/gu, ' ').toLocaleLowerCase('id-ID'); }
-function fraction(type: string, key: string, answer: string, optionCount: number) {
+function normalize(text: string) { return text.trim().replace(/\.+$/u, '').replace(/\s+/gu, '').toLocaleLowerCase('id-ID'); }
+export function fraction(type: string, key: string, answer: string, optionCount: number) {
   if (type === 'SHORT_ANSWER') {
     const given = normalize(answer);
     return given !== '' && key.split('|').some((accepted) => normalize(accepted) === given) ? 1 : 0;
@@ -61,7 +61,7 @@ function fraction(type: string, key: string, answer: string, optionCount: number
 }
 
 const examMetaCache = new Map<number, { isRemedial: boolean; scoreCap: number | null; followUpType: string | null; expiresAt: number }>();
-async function getExamMeta(connection: Pool | import('mysql2/promise').PoolConnection, examId: number): Promise<{ isRemedial: boolean; scoreCap: number | null; followUpType: string | null }> {
+export async function getExamMeta(connection: Pool | import('mysql2/promise').PoolConnection, examId: number): Promise<{ isRemedial: boolean; scoreCap: number | null; followUpType: string | null }> {
   const cached = examMetaCache.get(examId);
   if (cached && Date.now() < cached.expiresAt) return { isRemedial: cached.isRemedial, scoreCap: cached.scoreCap, followUpType: cached.followUpType };
   const [followUps] = await connection.execute<RowDataPacket[]>('SELECT m.type,e.grade FROM exam_follow_up_meta m JOIN exams e ON e.id=m.exam_id WHERE m.exam_id=? LIMIT 1', [examId]);
