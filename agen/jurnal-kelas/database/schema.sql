@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS attendance_sessions (
  attendance_date DATE NOT NULL, class_public_id CHAR(26) NOT NULL, class_name_snapshot VARCHAR(150) NOT NULL,
  academic_year_public_id CHAR(26) NOT NULL, academic_year_snapshot VARCHAR(50) NOT NULL, semester_public_id CHAR(26) NOT NULL, semester_snapshot VARCHAR(50) NOT NULL,
  teacher_public_id CHAR(26) NOT NULL, teacher_name_snapshot VARCHAR(150) NOT NULL, subject_id BIGINT UNSIGNED NOT NULL, subject_name_snapshot VARCHAR(150) NOT NULL,
- period_start TINYINT UNSIGNED NOT NULL, period_end TINYINT UNSIGNED NOT NULL, status ENUM('DRAFT','FINAL') NOT NULL DEFAULT 'DRAFT', finalized_at DATETIME(3) NULL,
+ period_start TINYINT UNSIGNED NOT NULL, period_end TINYINT UNSIGNED NOT NULL, status ENUM('DRAFT','FINAL','AMENDED') NOT NULL DEFAULT 'DRAFT', finalized_at DATETIME(3) NULL,
  created_by BIGINT UNSIGNED NOT NULL, created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
  CONSTRAINT chk_attendance_period CHECK(period_start BETWEEN 1 AND 11 AND period_end BETWEEN period_start AND 11),
  CONSTRAINT fk_attendance_subject FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE RESTRICT ON UPDATE CASCADE,
