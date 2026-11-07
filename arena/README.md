@@ -53,6 +53,7 @@ mysql -u root -p arena < database/migrations/007_student_pin_ciphertext.sql
 mysql -u root -p arena < database/migrations/008_perf_indexes.sql
 mysql -u root -p arena < database/migrations/009_violation_threshold.sql
 mysql -u root -p arena < database/migrations/010_violation_anti_copy.sql
+mysql -u root -p arena < database/migrations/011_teacher_proctor_combined.sql
 npm run dev
 ```
 

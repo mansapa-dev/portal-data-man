@@ -228,7 +228,8 @@ export function StaffOperations({
   const [personType, setPersonType] = useState<'teacher' | 'employee'>('teacher');
   const [personId, setPersonId] = useState('');
   const [assignedExam, setAssignedExam] = useState('');
-  const [duty, setDuty] = useState<'TEACHER' | 'PROCTOR'>('TEACHER');
+  const [duty, setDuty] = useState<'TEACHER' | 'PROCTOR' | 'TEACHER_PROCTOR'>('TEACHER');
+  const selectedTeacherEligible = personType !== 'teacher' || Boolean(people.teachers.find(person => String(person.id) === personId)?.proctor_eligible);
   const [editingAssignmentId, setEditingAssignmentId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
@@ -437,7 +438,7 @@ export function StaffOperations({
     setPersonType(row.teacher_id ? 'teacher' : 'employee');
     setPersonId(String(row.teacher_id ?? row.employee_id ?? ''));
     setAssignedExam(String(row.exam_id ?? ''));
-    setDuty(String(row.duty_role) === 'PROCTOR' ? 'PROCTOR' : 'TEACHER');
+    setDuty(String(row.duty_role) === 'TEACHER_PROCTOR' ? 'TEACHER_PROCTOR' : String(row.duty_role) === 'PROCTOR' ? 'PROCTOR' : 'TEACHER');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -1219,7 +1220,7 @@ export function StaffOperations({
                 {editingAssignmentId ? 'Ubah Penugasan Guru / Piket' : 'Tetapkan Penugasan Guru / Pengawas'}
               </h3>
               <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
-                Tentukan guru pengampu ujian atau proktor ruang untuk memantau pelaksanaan ujian.
+                Pilih guru pengampu, pengawas, atau keduanya untuk ujian yang ditentukan.
               </p>
             </div>
 
@@ -1231,6 +1232,7 @@ export function StaffOperations({
                   onChange={(e) => {
                     setPersonType(e.target.value as 'teacher' | 'employee');
                     setPersonId('');
+                    if (e.target.value === 'employee' && duty === 'TEACHER_PROCTOR') setDuty('PROCTOR');
                   }}
                 >
                   <option value="teacher">Dewan Guru</option>
@@ -1254,9 +1256,10 @@ export function StaffOperations({
 
               <label>
                 Peran Tugas
-                <select value={duty} onChange={(e) => setDuty(e.target.value as 'TEACHER' | 'PROCTOR')}>
+                <select value={duty} onChange={(e) => setDuty(e.target.value as 'TEACHER' | 'PROCTOR' | 'TEACHER_PROCTOR')}>
                   <option value="TEACHER">Guru Pengampu Mata Pelajaran</option>
                   <option value="PROCTOR">Pengawas Ujian (Proktor)</option>
+                  <option value="TEACHER_PROCTOR" disabled={personType !== 'teacher'}>Guru Pengampu dan Pengawas Ujian</option>
                 </select>
               </label>
 
@@ -1273,8 +1276,12 @@ export function StaffOperations({
               </label>
             </div>
 
+            {personId && personType === 'teacher' && duty !== 'TEACHER' && !selectedTeacherEligible && (
+              <p className="arena-notice">Aktifkan izin guru pada bagian Kelayakan Pengawas sebelum menyimpan penugasan ini.</p>
+            )}
+
             <div style={{ marginTop: '16px', display: 'flex', gap: '10px' }}>
-              <button className="btn btn-primary" disabled={busy || !personId || (!assignedExam && duty === 'TEACHER')}>
+              <button className="btn btn-primary" disabled={busy || !personId || (!assignedExam && duty !== 'PROCTOR') || (duty !== 'TEACHER' && !selectedTeacherEligible)}>
                 <i className="fa-solid fa-floppy-disk" /> Simpan Penugasan
               </button>
               {editingAssignmentId && (
@@ -1314,7 +1321,7 @@ export function StaffOperations({
                     </td>
                     <td>
                       <span className={`badge-status is-${String(row.duty_role).toLowerCase()}`}>
-                        {String(row.duty_role) === 'PROCTOR' ? 'Pengawas Ruang' : 'Guru Pengampu'}
+                        {String(row.duty_role) === 'TEACHER_PROCTOR' ? 'Guru Pengampu & Pengawas' : String(row.duty_role) === 'PROCTOR' ? 'Pengawas Ruang' : 'Guru Pengampu'}
                       </span>
                     </td>
                     <td>{row.exam_name ? String(row.exam_name) : 'Seluruh Jadwal Ujian'}</td>
