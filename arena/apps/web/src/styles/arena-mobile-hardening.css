@@ -18,6 +18,136 @@
   box-sizing: border-box;
 }
 
+/* Nama mapel harus terbaca utuh; aturan tombol umum tidak boleh meratakan isi kartu. */
+.admin-workspace.dashboard-layout .dash-body .question-subject-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 310px), 1fr));
+}
+
+.admin-workspace.dashboard-layout .dash-body .question-subject-card {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-content: start;
+  align-items: center;
+  justify-content: stretch;
+  gap: 9px 12px;
+  min-height: 158px;
+  padding: 15px;
+  text-align: left;
+}
+
+.admin-workspace.dashboard-layout .dash-body .question-subject-icon {
+  grid-row: auto;
+}
+
+.admin-workspace.dashboard-layout .dash-body .question-subject-count {
+  justify-self: end;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+.admin-workspace.dashboard-layout .dash-body .question-subject-card > strong,
+.admin-workspace.dashboard-layout .dash-body .question-subject-card > small,
+.admin-workspace.dashboard-layout .dash-body .question-subject-link {
+  grid-column: 1 / -1;
+  min-width: 0;
+  text-align: left;
+}
+
+.admin-workspace.dashboard-layout .dash-body .question-subject-card > strong {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.admin-workspace.dashboard-layout .dash-body .question-subject-card > small {
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.admin-workspace.dashboard-layout .dash-body .question-subject-link {
+  align-self: end;
+  margin-top: 2px;
+  font-size: 11px;
+}
+
+/* Daftar soal: pertahankan struktur sel tabel, lalu tata tombol di dalam sel aksi. */
+.admin-workspace.dashboard-layout .dash-body .question-results-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+}
+
+.admin-workspace.dashboard-layout .dash-body .question-results-table {
+  width: 100%;
+  min-width: 1260px;
+  table-layout: fixed;
+  border: 0;
+}
+
+.admin-workspace.dashboard-layout .dash-body .question-results-table th:nth-child(1) { width: 48px; }
+.admin-workspace.dashboard-layout .dash-body .question-results-table th:nth-child(2) { width: 34%; }
+.admin-workspace.dashboard-layout .dash-body .question-results-table th:nth-child(3) { width: 15%; }
+.admin-workspace.dashboard-layout .dash-body .question-results-table th:nth-child(4) { width: 12%; }
+.admin-workspace.dashboard-layout .dash-body .question-results-table th:nth-child(5) { width: 62px; }
+.admin-workspace.dashboard-layout .dash-body .question-results-table th:nth-child(6) { width: 62px; }
+.admin-workspace.dashboard-layout .dash-body .question-results-table th:nth-child(7) { width: 76px; }
+.admin-workspace.dashboard-layout .dash-body .question-results-table th:nth-child(8) { width: 228px; }
+
+.admin-workspace.dashboard-layout .dash-body .question-results-table :is(th, td) {
+  box-sizing: border-box;
+  padding: 12px 10px;
+  vertical-align: top;
+}
+
+.admin-workspace.dashboard-layout .dash-body .question-results-table tbody tr:nth-child(even) td {
+  background: var(--surface-subtle);
+}
+
+.admin-workspace.dashboard-layout .dash-body .question-results-table tbody tr:hover td {
+  background: var(--primary-soft);
+}
+
+.admin-workspace.dashboard-layout .dash-body .question-results-table .question-list-content {
+  max-width: none;
+  gap: 8px;
+}
+
+.admin-workspace.dashboard-layout .dash-body .question-results-table .question-list-content > strong {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.admin-workspace.dashboard-layout .dash-body .question-results-table .question-list-content > div {
+  gap: 4px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.admin-workspace.dashboard-layout .dash-body .question-results-table .question-row-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+
+.admin-workspace.dashboard-layout .dash-body .question-results-table .question-row-actions button {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  margin: 0;
+  padding: 6px;
+  font-size: 10px;
+}
+
+.admin-workspace.dashboard-layout .dash-body .question-results-table .question-row-actions button:last-child {
+  color: var(--ui-danger);
+  border-color: var(--ui-danger-border);
+}
+
 /* Grid vertikal halaman operasional: satu kolom yang boleh menyusut. */
 .operations-page {
   grid-template-columns: minmax(0, 1fr);
@@ -278,47 +408,52 @@
   }
 }
 
-.admin-mobile-menu-toggle { display: none; }
+.workspace-mobile-menu-toggle { display: none; }
 
 @media (max-width: 760px) {
-  .admin-workspace.dashboard-layout > .sidebar {
-    display: grid;
+  :is(.admin-workspace, .staff-workspace).dashboard-layout > .sidebar {
+    display: grid !important;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     gap: 0 10px;
     padding: 8px 12px;
+    height: auto;
+    min-height: calc(56px + env(safe-area-inset-top));
     z-index: 50;
   }
-  .admin-workspace.dashboard-layout .sb-brand {
+  :is(.admin-workspace, .staff-workspace).dashboard-layout .sb-brand {
     display: block;
     min-width: 0;
     padding: 0;
     border: 0;
   }
-  .admin-workspace.dashboard-layout .sb-brand-identity { gap: 8px; }
-  .admin-workspace.dashboard-layout .sb-brand-mark,
-  .admin-workspace.dashboard-layout .sb-brand-mark img { width: 34px; height: 34px; flex-basis: 34px; }
-  .admin-workspace.dashboard-layout .sb-brand-title { font-size: 12px; }
-  .admin-workspace.dashboard-layout .sb-brand-sub { font-size: 9px; }
-  .admin-workspace.dashboard-layout .admin-mobile-menu-toggle {
+  :is(.admin-workspace, .staff-workspace).dashboard-layout .sb-brand-identity { gap: 8px; }
+  :is(.admin-workspace, .staff-workspace).dashboard-layout .sb-brand-mark,
+  :is(.admin-workspace, .staff-workspace).dashboard-layout .sb-brand-mark img { width: 34px; height: 34px; flex-basis: 34px; }
+  :is(.admin-workspace, .staff-workspace).dashboard-layout .sb-brand-title { color: var(--text-main); font-size: 12px; }
+  :is(.admin-workspace, .staff-workspace).dashboard-layout .sb-brand-sub { color: var(--text-muted); font-size: 9px; }
+  :is(.admin-workspace, .staff-workspace).dashboard-layout .sb-section-label,
+  :is(.admin-workspace, .staff-workspace).dashboard-layout .sidebar-user-footer { display: none !important; }
+  :is(.admin-workspace, .staff-workspace).dashboard-layout .workspace-mobile-menu-toggle {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
     min-height: 40px;
     padding: 8px 12px;
-    border: 1px solid #ffffff55;
+    border: 1px solid var(--primary);
     border-radius: 10px;
-    background: #ffffff1c;
+    background: var(--primary);
     color: #fff;
     font: inherit;
     font-size: 12px;
     font-weight: 700;
     cursor: pointer;
   }
-  .admin-workspace.dashboard-layout .admin-mobile-menu-toggle:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-  .admin-workspace.dashboard-layout .sidebar nav {
+  :is(.admin-workspace, .staff-workspace).dashboard-layout .workspace-mobile-menu-toggle:focus-visible { outline: 2px solid var(--primary-dark); outline-offset: 2px; }
+  :is(.admin-workspace, .staff-workspace).dashboard-layout .sidebar nav {
     display: none;
+    height: auto;
     grid-column: 1 / -1;
     max-height: calc(100dvh - 70px);
     margin: 9px -12px -8px;
@@ -327,35 +462,45 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     scroll-snap-type: none;
-    border-top: 1px solid #ffffff30;
+    border-top: 1px solid var(--border);
   }
-  .admin-workspace.dashboard-layout .sidebar.admin-menu-open nav { display: grid; gap: 14px; }
-  .admin-workspace.dashboard-layout .sb-nav-group {
+  :is(.admin-workspace, .staff-workspace).dashboard-layout .sidebar.workspace-menu-open nav { display: grid; gap: 14px; }
+  :is(.admin-workspace, .staff-workspace).dashboard-layout .sb-nav-group {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     gap: 6px;
     min-width: 0;
     padding: 0;
   }
-  .admin-workspace.dashboard-layout .sb-nav-group-label {
+  :is(.admin-workspace, .staff-workspace).dashboard-layout .sb-nav-group-label {
     display: block;
     grid-column: 1 / -1;
     padding: 4px 3px;
+    color: var(--text-muted);
     font-size: 10px;
     letter-spacing: .08em;
   }
-  .admin-workspace.dashboard-layout .sidebar nav .sb-item {
-    width: 100%;
-    min-width: 0;
-    min-height: 42px;
-    padding: 9px 10px;
+  :is(.admin-workspace, .staff-workspace).dashboard-layout .sidebar nav .sb-item {
+    display: flex !important;
+    flex: 1 1 auto !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    height: auto !important;
+    min-height: 42px !important;
+    max-height: none !important;
+    padding: 9px 10px !important;
+    border-radius: 10px !important;
+    background: transparent !important;
+    color: var(--text-main) !important;
     white-space: normal;
     text-align: left;
     scroll-snap-align: none;
   }
-  .admin-workspace.dashboard-layout .sidebar nav .sb-label { min-width: 0; line-height: 1.25; }
-  .admin-workspace.dashboard-layout .sidebar nav .sb-arrow { display: none; }
-  .admin-workspace.dashboard-layout .dash-content > .topbar { position: relative; top: auto; }
+  :is(.admin-workspace, .staff-workspace).dashboard-layout .sidebar nav .sb-item.active { background: var(--primary-soft) !important; color: var(--primary-dark) !important; }
+  :is(.admin-workspace, .staff-workspace).dashboard-layout .sidebar nav .sb-item.active .sb-icon { color: var(--primary-dark); }
+  :is(.admin-workspace, .staff-workspace).dashboard-layout .sidebar nav .sb-label { min-width: 0; line-height: 1.25; }
+  :is(.admin-workspace, .staff-workspace).dashboard-layout .sidebar nav .sb-arrow { display: none; }
+  :is(.admin-workspace, .staff-workspace).dashboard-layout .dash-content > .topbar { position: relative; top: auto; }
   .admin-workspace.dashboard-layout .dash-body { padding: 13px 11px calc(28px + env(safe-area-inset-bottom)); }
   .admin-workspace.dashboard-layout .dash-body :is(.admin-result-filters, .operations-monitor-filters, .admin-ticket-toolbar) {
     display: grid;
@@ -436,10 +581,6 @@
   .admin-workspace.dashboard-layout .dash-body .exam-list-table .exam-row-actions { flex-wrap: wrap; }
   .admin-workspace.dashboard-layout .dash-body .exam-list-table .exam-row-actions button { flex: 1 1 105px; min-height: 38px; }
   .admin-workspace.dashboard-layout .dash-body .exam-list-table td[colspan]::before { content: none; }
-}
-
-@media (max-width: 360px) {
-  .admin-workspace.dashboard-layout .sb-nav-group { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 420px) {

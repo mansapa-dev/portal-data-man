@@ -3,6 +3,7 @@ export const examSubjects = [
   "Al-Qur'an Hadist",
   'Bahasa Arab',
   'Bahasa Indonesia',
+  'Bahasa Inggris',
   'Bahasa Inggris Tingkat Lanjut',
   'Biologi',
   'BK',

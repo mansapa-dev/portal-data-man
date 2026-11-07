@@ -1359,7 +1359,7 @@ export function StaffOperations({
                 Kelayakan Pengawas bagi Guru
               </h3>
               <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
-                Centang nama guru yang diizinkan memantau sesi dan mengambil tiket bantuan peserta.
+                Centang nama guru yang diizinkan membantu tiket peserta. Penugasan pengawas tetap diperlukan untuk memantau sesi ujian.
               </p>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '8px' }}>

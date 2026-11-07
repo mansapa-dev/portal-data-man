@@ -8,26 +8,29 @@ import { assertCsrf, claimsFromRequest, normalizeStudentDigits, readToken } from
 import { resetTerminatedAttemptInTransaction } from '../services/attempt-reset.js';
 
 const ticketCategories = ['ACCOUNT_ACCESS','EXAM_LOCKED','PIN','CONNECTION','TECHNICAL','OTHER'] as const;
-const proctorCache = new Map<number, { expiresAt: number; ok: boolean }>();
 async function canHandle(pool: ReturnType<typeof requirePool>, userId: number) {
-  const cached = proctorCache.get(userId);
-  if (cached && Date.now() < cached.expiresAt) return cached.ok;
-  const [rows] = await pool.execute<RowDataPacket[]>(`SELECT EXISTS(SELECT 1 FROM teacher_exam_assignments a JOIN users u ON ((u.role='TEACHER' AND u.teacher_id=a.teacher_id) OR (u.role='EMPLOYEE' AND u.employee_id=a.employee_id)) WHERE u.id=? AND u.status='ACTIVE' AND a.duty_role='PROCTOR' AND a.exam_id IS NULL) ok`, [userId]);
-  const ok = Boolean(rows[0]?.ok);
-  proctorCache.set(userId, { expiresAt: Date.now() + 30_000, ok });
-  return ok;
+  const [rows] = await pool.execute<RowDataPacket[]>(`SELECT (
+    EXISTS(SELECT 1 FROM teacher_exam_assignments a JOIN users u ON ((u.role='TEACHER' AND u.teacher_id=a.teacher_id) OR (u.role='EMPLOYEE' AND u.employee_id=a.employee_id)) WHERE u.id=? AND u.status='ACTIVE' AND a.duty_role='PROCTOR' AND a.exam_id IS NULL)
+    OR EXISTS(SELECT 1 FROM teachers t JOIN users u ON u.teacher_id=t.id WHERE u.id=? AND u.role='TEACHER' AND u.status='ACTIVE' AND t.status='ACTIVE' AND t.proctor_eligible=1)
+  ) ok`, [userId, userId]);
+  return Boolean(rows[0]?.ok);
 }
 async function assertActiveActor(connection: PoolConnection, actorId: number, role: string) {
   const [rows] = await connection.execute<RowDataPacket[]>("SELECT id FROM users WHERE id=? AND role=? AND status='ACTIVE' FOR UPDATE", [actorId, role]);
   if (!rows[0]) throw Object.assign(new Error('Akun petugas tidak aktif atau hak akses sudah berubah'), { statusCode: 403 });
 }
-async function assertActiveProctor(connection: PoolConnection, actorId: number, role: string) {
+async function assertActiveTicketHandler(connection: PoolConnection, actorId: number, role: string) {
   if (role === 'ADMIN') return;
-  const [rows] = await connection.execute<RowDataPacket[]>(`SELECT EXISTS(
+  const [rows] = await connection.execute<RowDataPacket[]>(`SELECT (
+    EXISTS(
     SELECT 1 FROM teacher_exam_assignments a JOIN users u
       ON ((u.role='TEACHER' AND u.teacher_id=a.teacher_id) OR (u.role='EMPLOYEE' AND u.employee_id=a.employee_id))
     WHERE u.id=? AND u.role=? AND u.status='ACTIVE' AND a.duty_role='PROCTOR' AND a.exam_id IS NULL
-  ) allowed`, [actorId, role]);
+    ) OR EXISTS(
+      SELECT 1 FROM teachers t JOIN users u ON u.teacher_id=t.id
+      WHERE u.id=? AND u.role='TEACHER' AND u.status='ACTIVE' AND t.status='ACTIVE' AND t.proctor_eligible=1
+    )
+  ) allowed`, [actorId, role, actorId]);
   if (!rows[0]?.allowed) throw Object.assign(new Error('Hak petugas piket sudah tidak aktif'), { statusCode: 403 });
 }
 async function writeTicketAudit(connection: PoolConnection, request: FastifyRequest, actorId: number | null, role: string | null, action: string, id: string, before?: unknown, after?: unknown) {
@@ -81,7 +84,7 @@ export async function supportRoutes(app: FastifyInstance) {
     if(claims.role!=='ADMIN'&&['OPEN','CLOSED'].includes(body.status)) throw Object.assign(new Error('Petugas hanya dapat mengambil atau menyelesaikan tiket'),{statusCode:403});
     const connection=await pool.getConnection();
     try {
-      await connection.beginTransaction(); await assertActiveActor(connection,claims.sub,claims.role); await assertActiveProctor(connection,claims.sub,claims.role);
+      await connection.beginTransaction(); await assertActiveActor(connection,claims.sub,claims.role); await assertActiveTicketHandler(connection,claims.sub,claims.role);
       const [rows]=await connection.execute<RowDataPacket[]>('SELECT id,status,handled_by FROM support_tickets WHERE public_id=? FOR UPDATE',[request.params.id]);const ticket=rows[0];
       if(!ticket) throw Object.assign(new Error('Tiket tidak ditemukan'),{statusCode:404});
       if(['RESOLVED','CLOSED'].includes(ticket.status)) throw Object.assign(new Error('Tiket sudah ditutup'),{statusCode:409});

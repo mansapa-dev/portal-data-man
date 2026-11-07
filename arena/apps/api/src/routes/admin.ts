@@ -247,7 +247,18 @@ export async function adminRoutes(app: FastifyInstance) {
     return { success:true, action:body.action };
   });
   app.get('/api/admin/live-sessions', async (request) => { admin(request); const {page}=z.object({page:z.coerce.number().int().min(1).max(1000).default(1)}).parse(request.query); const [rows] = await requirePool().execute<RowDataPacket[]>(`SELECT a.public_id,a.status,a.started_at,a.expires_at,a.violation_count,s.id student_id,s.nisn,s.name_snapshot,s.class_snapshot,e.id exam_id,e.name exam_name,e.grade,e.subject_name,c.last_seen_at FROM exam_attempts a JOIN students s ON s.id=a.student_id JOIN exams e ON e.id=a.exam_id LEFT JOIN attempt_connections c ON c.attempt_id=a.id WHERE (a.status='IN_PROGRESS' OR (a.status='TERMINATED' AND a.updated_at >= UTC_TIMESTAMP(3) - INTERVAL 1 DAY)) ORDER BY FIELD(a.status,'IN_PROGRESS','TERMINATED'),a.updated_at DESC,a.id DESC LIMIT 100 OFFSET ?`,[(page-1)*100]); return rows; });
-  app.get('/api/admin/exams/:id/report', async (request) => { admin(request); const id = positive.parse((request.params as {id: string}).id); const [rows] = await requirePool().execute<RowDataPacket[]>(`SELECT COUNT(*) participants, SUM(a.status='COMPLETED') completed, SUM(a.status='IN_PROGRESS') in_progress, AVG(r.score) average_score, MIN(r.score) min_score, MAX(r.score) max_score FROM exam_attempts a LEFT JOIN exam_results r ON r.attempt_id=a.id WHERE a.exam_id=?`, [id]); const [distribution] = await requirePool().execute<RowDataPacket[]>(`SELECT FLOOR(r.score/10)*10 score_band,COUNT(*) students FROM exam_results r JOIN exam_attempts a ON a.id=r.attempt_id WHERE a.exam_id=? GROUP BY score_band ORDER BY score_band`, [id]); return { summary: rows[0], distribution }; });
+  app.get('/api/admin/exams/:id/report', async (request) => {
+    admin(request);
+    const id=positive.parse((request.params as {id:string}).id);
+    const query=z.object({grade:z.enum(['X','XI','XII']).optional(),class_name:z.string().trim().max(100).optional()}).parse(request.query);
+    const filters=['a.exam_id=?'];const params:(string|number)[]=[id];
+    if(query.grade){filters.push('e.grade=?');params.push(query.grade);}
+    if(query.class_name){filters.push('s.class_snapshot=?');params.push(query.class_name);}
+    const where=filters.join(' AND '),pool=requirePool();
+    const [rows]=await pool.execute<RowDataPacket[]>(`SELECT COUNT(*) participants, SUM(a.status='COMPLETED') completed, SUM(a.status='IN_PROGRESS') in_progress, AVG(r.score) average_score, MIN(r.score) min_score, MAX(r.score) max_score FROM exam_attempts a JOIN exams e ON e.id=a.exam_id JOIN students s ON s.id=a.student_id LEFT JOIN exam_results r ON r.attempt_id=a.id WHERE ${where}`,params);
+    const [distribution]=await pool.execute<RowDataPacket[]>(`SELECT FLOOR(r.score/10)*10 score_band,COUNT(*) students FROM exam_results r JOIN exam_attempts a ON a.id=r.attempt_id JOIN exams e ON e.id=a.exam_id JOIN students s ON s.id=a.student_id WHERE ${where} GROUP BY score_band ORDER BY score_band`,params);
+    return {summary:rows[0],distribution};
+  });
   app.get('/api/admin/questions', async (request) => {
     admin(request);
     const query = z.object({ exam_id: positive.optional(), grade:z.string().trim().max(10).optional(),class_id:z.string().trim().max(64).optional(),subject_name:z.string().trim().max(100).optional(), question_type: z.enum(['MULTIPLE_CHOICE','MULTIPLE_RESPONSE','SHORT_ANSWER']).optional(), status: z.enum(['ACTIVE','DISABLED','ALL']).default('ALL'), q: z.string().trim().max(120).optional(), page: z.coerce.number().int().min(1).max(1000).default(1), limit: z.coerce.number().int().min(1).max(100).default(50) }).parse(request.query);
