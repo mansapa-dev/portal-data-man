@@ -41,7 +41,7 @@ CREATE TABLE subjects (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE teacher_exam_assignments (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, teacher_id BIGINT UNSIGNED NULL, employee_id BIGINT UNSIGNED NULL, exam_id BIGINT UNSIGNED NULL,
-  duty_role ENUM('TEACHER','PROCTOR') NOT NULL DEFAULT 'TEACHER', created_by BIGINT UNSIGNED NOT NULL,
+  duty_role ENUM('TEACHER','PROCTOR','TEACHER_PROCTOR') NOT NULL DEFAULT 'TEACHER', created_by BIGINT UNSIGNED NOT NULL,
   UNIQUE KEY uq_arena_teacher_exam(teacher_id,exam_id), UNIQUE KEY uq_arena_employee_exam(employee_id,exam_id), KEY idx_arena_assignment_exam(exam_id),
   CONSTRAINT fk_arena_assignment_teacher FOREIGN KEY(teacher_id) REFERENCES teachers(id) ON DELETE RESTRICT,
   CONSTRAINT fk_arena_assignment_employee FOREIGN KEY(employee_id) REFERENCES employees(id) ON DELETE RESTRICT,

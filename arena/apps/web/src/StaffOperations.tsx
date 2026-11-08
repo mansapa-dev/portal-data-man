@@ -1244,6 +1244,12 @@ export function StaffOperations({
                 Pilih Nama Personel
                 <select required value={personId} onChange={(e) => setPersonId(e.target.value)}>
                   <option value="">-- Pilih Guru / Pegawai --</option>
+                  {personType === 'teacher' && !people.teachers.length && (
+                    <option value="none" disabled>Data guru belum tersedia — jalankan Sinkronisasi Portal Data (Guru) terlebih dahulu</option>
+                  )}
+                  {personType === 'employee' && !people.employees.length && (
+                    <option value="none" disabled>Data pegawai belum tersedia — jalankan Sinkronisasi Portal Data (Pegawai) terlebih dahulu</option>
+                  )}
                   {(personType === 'teacher' ? people.teachers : people.employees)
                     .filter((person) => person.status === 'ACTIVE' || String(person.id) === personId)
                     .map((person) => (
@@ -1266,7 +1272,7 @@ export function StaffOperations({
               <label>
                 Target Ujian
                 <select value={assignedExam} onChange={(e) => setAssignedExam(e.target.value)}>
-                  <option value="">Semua Ujian (Khusus Pengawas)</option>
+                  <option value="" disabled={duty !== 'PROCTOR'}>Semua Ujian (Khusus Pengawas)</option>
                   {exams.map((exam) => (
                     <option key={String(exam.id)} value={String(exam.id)}>
                       {getRowValue(exam, 'name')}
@@ -1275,6 +1281,12 @@ export function StaffOperations({
                 </select>
               </label>
             </div>
+
+            {duty !== 'PROCTOR' && !assignedExam && (
+              <p className="arena-notice" style={{ marginTop: 8 }}>
+                Guru pengampu / pengampu + pengawas wajib menargetkan satu ujian. Opsi "Semua Ujian" hanya untuk peran Pengawas Ujian (Proktor).
+              </p>
+            )}
 
             {personId && personType === 'teacher' && duty !== 'TEACHER' && !selectedTeacherEligible && (
               <p className="arena-notice">Aktifkan izin guru pada bagian Kelayakan Pengawas sebelum menyimpan penugasan ini.</p>
