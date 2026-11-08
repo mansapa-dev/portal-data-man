@@ -125,8 +125,17 @@ export async function authRoutes(app: FastifyInstance) {
         finally{connection.release();}
         const student=rows![0];let valid=false;
         if(student?.cbt_status==='ACTIVE'&&typeof student.pin_hash==='string'){
-          const signal = (request.raw as { signal?: AbortSignal }).signal;
-          const verResult=await verifyPasswordDetails(pin,student.pin_hash,signal);
+          // Node 24: IncomingMessage#signal auto-aborts ~1s after the request body
+          // finishes streaming, which wrongly discards queued bcrypt verifications
+          // (mass 499 during concurrent student logins). Track the real socket
+          // lifetime instead: abort only when the client connection is actually
+          // closed before a response is written.
+          const disconnect=new AbortController();
+          const onSocketClose=()=>{if(!reply.raw.writableEnded)disconnect.abort();};
+          reply.raw.once('close',onSocketClose);
+          let verResult;
+          try{verResult=await verifyPasswordDetails(pin,student.pin_hash,disconnect.signal);}
+          finally{reply.raw.removeListener('close',onSocketClose);}
           valid=verResult.valid;queueWaitMs=verResult.queueWaitMs;bcryptMs=verResult.computeMs;
         }
         if(!valid||!student)throw Object.assign(new Error('NISN atau PIN salah'),{statusCode:401});
