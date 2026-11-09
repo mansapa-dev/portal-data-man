@@ -5,6 +5,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import { performance } from 'node:perf_hooks';
 import { loadExamQuestionSource } from './exam-question-source.js';
 import type { ExamAdmissionService } from './exam-admission.js';
+import type { WaitingClaimReceipt } from './waiting-room.js';
 
 const idChars = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 function ulid() {
@@ -75,20 +76,20 @@ export class StudentExamService {
       admission_ticket: !row.attempt_status && Boolean(row.can_start) ? this.admission?.ticket(studentId, Number(row.id), row.grade, { academic_year: row.academic_year, semester: row.semester, starts_at: row.starts_at, session_number: row.session_number }) : undefined }));
   }
 
-  async start(studentId:number,examId:number,retry=0):Promise<unknown>{
-    try{return await this.startOnce(studentId,examId);}
+  async start(studentId:number,examId:number,retry=0,receipt?:WaitingClaimReceipt):Promise<unknown>{
+    try{return await this.startOnce(studentId,examId,receipt);}
     catch(error){
       const code=(error as {code?:string}).code;
       if(retry<5&&['ER_LOCK_DEADLOCK','ER_LOCK_WAIT_TIMEOUT','ER_DUP_ENTRY'].includes(code??'')){
         const delay=Math.min(250,20*(2**retry))+Math.floor(Math.random()*25);
         await new Promise((resolve)=>setTimeout(resolve,delay));
-        return this.start(studentId,examId,retry+1);
+        return this.start(studentId,examId,retry+1,receipt);
       }
       throw error;
     }
   }
 
-  private async startOnce(studentId: number, examId: number) {
+  private async startOnce(studentId: number, examId: number, receipt?: WaitingClaimReceipt) {
     const startedAt = performance.now();
     // Keep the first consistent read outside the resume transaction. If resume
     // waits on an autosave's attempt lock, the transaction must not retain a
@@ -186,12 +187,10 @@ export class StudentExamService {
         const mapping: Record<string, string[]> = {};
         for (const questionId of orderedIds) mapping[String(questionId)] = shuffle(options, `${seed}:${questionId}`);
         const publicId = ulid();
-        const expiresAt = new Date(Math.min(
-          new Date(exam.db_now as string | Date).getTime() + Number(exam.duration_minutes) * 60_000,
-          new Date(exam.ends_at as string | Date).getTime(),
-        ));
+        const fullEnd = new Date(exam.db_now as string | Date).getTime() + Number(exam.duration_minutes) * 60_000;
+        const expiresAt = new Date(receipt ? fullEnd : Math.min(fullEnd,new Date(exam.ends_at as string | Date).getTime()));
         const [inserted] = await connection.execute<ResultSetHeader>(`INSERT INTO exam_attempts(public_id,student_id,exam_id,status,started_at,expires_at,question_order,option_mapping)
-          VALUES(?,?,?,'IN_PROGRESS',UTC_TIMESTAMP(3),LEAST(DATE_ADD(UTC_TIMESTAMP(3),INTERVAL ? MINUTE),?),?,?)`, [publicId, studentId, examId, exam.duration_minutes, exam.ends_at, JSON.stringify(orderedIds), JSON.stringify(mapping)]);
+          VALUES(?,?,?,'IN_PROGRESS',UTC_TIMESTAMP(3),${receipt ? 'DATE_ADD(UTC_TIMESTAMP(3),INTERVAL ? MINUTE)' : 'LEAST(DATE_ADD(UTC_TIMESTAMP(3),INTERVAL ? MINUTE),?)'},?,?)`, [publicId, studentId, examId, exam.duration_minutes, ...(receipt ? [] : [exam.ends_at]), JSON.stringify(orderedIds), JSON.stringify(mapping)]);
         attempt = { id: inserted.insertId, public_id: publicId, status: 'IN_PROGRESS', expires_at: expiresAt, question_order: JSON.stringify(orderedIds), option_mapping: JSON.stringify(mapping) } as unknown as RowDataPacket;
         const sourceById = new Map(source.map((question) => [Number(question.id), question]));
         const snapshotRows: unknown[][] = [];
@@ -221,6 +220,11 @@ export class StudentExamService {
       } else {
         [questions] = await connection.execute<RowDataPacket[]>('SELECT question_id id,question_type,question_text,option_a,option_b,option_c,option_d,option_e,points FROM attempt_questions WHERE attempt_id=?', [activeAttempt.id]);
         [answers] = await connection.execute<RowDataPacket[]>('SELECT v.question_id,a.answer,COALESCE(a.is_flagged,0) is_flagged,COALESCE(v.revision,0) revision FROM answer_write_versions v LEFT JOIN student_answers a ON a.attempt_id=v.attempt_id AND a.question_id=v.question_id WHERE v.attempt_id=?', [activeAttempt.id]);
+      }
+      if (receipt) {
+        const [claims] = await connection.execute<RowDataPacket[]>('SELECT token_hash FROM exam_waiting_claims WHERE exam_id=? AND student_id=? FOR UPDATE',[examId,studentId]);
+        if (claims[0] && claims[0].token_hash!==receipt.tokenHash) throw Object.assign(new Error('Token sesi ujian berubah. Pulihkan sesi dari jadwal.'),{statusCode:409});
+        if (!claims[0]) await connection.execute("INSERT INTO exam_waiting_claims(exam_id,student_id,attempt_id,token_hash,queue_sequence,state) VALUES(?,?,?,?,?,'IN_EXAM')",[examId,studentId,activeAttempt.id,receipt.tokenHash,receipt.sequence]);
       }
       await connection.commit();
       state = { attempt: activeAttempt, exam, questions, answers };

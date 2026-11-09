@@ -1,6 +1,6 @@
 # Rencana konfigurasi Arena untuk staging
 
-Kontrol pembukaan tingkat XII → XI → X dijelaskan di [grade-admission.md](grade-admission.md).
+Antrean per sesi, konfigurasi batch, migrasi, worker, dan pengujian dijelaskan di [waiting-room.md](waiting-room.md). Kontrol tingkat XII/XI/X sudah digantikan FIFO.
 
 Semua berkas di `infra/` adalah contoh untuk diterapkan manual setelah uji staging. Tidak ada perubahan sistem yang dilakukan oleh pekerjaan lokal ini. Simpan salinan konfigurasi lama sebelum memasang setiap berkas, jalankan pemeriksaan sintaks, lalu terapkan satu komponen per waktu.
 

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { api, ApiError, mutationId, setSession } from './lib/api';
+import { api, ApiError, mutationId, setSession, setExamToken, getExamToken } from './lib/api';
+import type { WaitingView } from './lib/waiting-room';
 import { loadXlsx } from './lib/xlsx';
 import { QuestionBank } from './QuestionBank';
 import { StaffOperations } from './StaffOperations';
@@ -41,7 +42,8 @@ function App() {
   const [sessionLoading,setSessionLoading]=useState(true);
   const [exams, setExams] = useState<Exam[]>([]);
   const [attempt, setAttempt] = useState<Attempt | null>(null);
-  const [waitingExam, setWaitingExam] = useState<{ examId: number; ticket: string; name: string } | null>(null);
+  const [waitingExam, setWaitingExam] = useState<{ examId: number; initial: WaitingView; name: string } | null>(null);
+  const waitingRestored = useRef<number|null>(null);
   useEffect(() => { if (!student) setWaitingExam(null); }, [student]);
   const [result, setResult] = useState<ExamResult | null>(null);
   const [resultExamName, setResultExamName] = useState('');
@@ -142,36 +144,26 @@ function App() {
     setMessage(''); setBusy(true);
     const exam = exams.find(item => item.id === examId);
     try {
-      if (!resume && exam?.status_attempt !== 'IN_PROGRESS' && exam?.admission_ticket) {
-        const admission = await api<{ allowed: boolean }>(`/api/student/exams/${examId}/admission?ticket=${encodeURIComponent(exam.admission_ticket)}`);
-        if (!admission.allowed) {
-          setWaitingExam({ examId, ticket: exam.admission_ticket, name: exam.nama_ujian });
-          return;
-        }
+      const state=await api<WaitingView>(`/api/student/exams/${examId}/waiting/${resume || exam?.status_attempt==='IN_PROGRESS'?'resume':'join'}`,{method:'POST',body:{},timeoutMs:10000});
+      if(state.status==='IN_EXAM' && state.admit_token){await openAttempt(examId,state.admit_token);return;}
+      if(state.status==='FINISHED'){if(state.admit_token)setExamToken(examId,state.admit_token);await showResult(examId);return;}
+      setWaitingExam({examId,initial:state,name:exam?.nama_ujian ?? 'Ujian'});
+      if(student){
+        try{sessionStorage.setItem('arena_waiting_exam',JSON.stringify({examId,studentId:student.id}));}catch{/* queue stays durable on the server */}
       }
-      // An already-open cohort enters directly, including late arrivals.
-      await openAttempt(examId);
     }
     catch (error) {
-      if (error instanceof ApiError && error.statusCode === 425) {
-        try {
-          const available = await loadExams();
-          const fresh = available.find(item => item.id === examId);
-          if (fresh?.admission_ticket) { setWaitingExam({ examId, ticket: fresh.admission_ticket, name: fresh.nama_ujian }); return; }
-        } catch { /* show the original start error */ }
-      }
-      if (exam?.admission_ticket && (!(error instanceof ApiError) || error.statusCode >= 500 || error.statusCode === 429)) {
-        setWaitingExam({ examId, ticket: exam.admission_ticket, name: exam.nama_ujian });
-        return;
-      }
       setMessage(error instanceof Error ? error.message : 'Tidak dapat membuka ujian');
     } finally { setBusy(false); }
   }
-  async function openAttempt(examId: number) {
+  async function openAttempt(examId: number, admitToken?:string) {
     setBusy(true); setMessage('');
     try {
       setResult(null); setResultExamId(null); setReview(null); setReviewError(''); setExamHelpOpen(false);
-      const result = await api<Attempt>(`/api/student/exams/${examId}/start`, { method: 'POST', body: {} });
+      if(admitToken)setExamToken(examId,admitToken);
+      const result = await api<Attempt>(`/api/student/exams/${examId}/waiting/claim`, { method: 'POST', body: {}, timeoutMs: 20000 });
+      try{sessionStorage.removeItem('arena_waiting_exam');}catch{/* storage may be disabled */}
+      setWaitingExam(null);
       setAttempt(result);
       const savedAnswers: Record<number, string> = {}; const savedRevisions: Record<number, number> = {};
       const savedFlags: Record<number, boolean> = {};
@@ -179,17 +171,9 @@ function App() {
       revisionState.current = savedRevisions; failedSaves.current.clear(); setSaveState('saved'); setAnswers(savedAnswers); setFlags(savedFlags);
     } finally { setBusy(false); }
   }
-  async function openWaitingAttempt() {
+  async function openWaitingAttempt(token:string) {
     if (!waitingExam) return;
-    try { await openAttempt(waitingExam.examId); setWaitingExam(null); }
-    catch (error) {
-      if (error instanceof ApiError && error.statusCode === 425) {
-        const available = await loadExams();
-        const fresh = available.find(item => item.id === waitingExam.examId);
-        if (fresh?.admission_ticket) setWaitingExam({ examId: fresh.id, ticket: fresh.admission_ticket, name: fresh.nama_ujian });
-      }
-      throw error;
-    }
+    await openAttempt(waitingExam.examId,token);
   }
   async function save(question: Question, value: string, flagged = flags[question.id] ?? false) {
     if (!attempt) return;
@@ -275,10 +259,10 @@ function App() {
     } catch (error) { setMessage(finalizeOnly?'Waktu habis. Hasil belum dapat dimuat; coba lagi saat koneksi tersedia.':error instanceof Error ? error.message : 'Submit gagal'); throw error; }
     finally { submittingAttempt.current=false;setBusy(false); }
   }
-  async function showResult(examId:number){setBusy(true);setMessage('');setReview(null);setReviewError('');try{setResultExamId(examId);setResultExamName(exams.find(item=>item.id===examId)?.nama_ujian??'');setResult(await api<ExamResult>(`/api/student/exams/${examId}/result`));}catch(error){setMessage(error instanceof Error?error.message:'Hasil belum tersedia');}finally{setBusy(false);}}
+  async function showResult(examId:number){setBusy(true);setMessage('');setReview(null);setReviewError('');try{if(!getExamToken(examId)){const access=await api<WaitingView>(`/api/student/exams/${examId}/waiting/resume`,{method:'POST',body:{},timeoutMs:10000});if(access.admit_token)setExamToken(examId,access.admit_token);}setResultExamId(examId);setResultExamName(exams.find(item=>item.id===examId)?.nama_ujian??'');setResult(await api<ExamResult>(`/api/student/exams/${examId}/result`));}catch(error){setMessage(error instanceof Error?error.message:'Hasil belum tersedia');}finally{setBusy(false);}}
   async function loadReview(){if(resultExamId===null)return;setReviewLoading(true);setReviewError('');try{const data=await api<{soal:{id:number;pertanyaan?:string;status:string}[]}>(`/api/student/exams/${resultExamId}/review`);if(!data.soal?.length)throw new Error('Data soal review belum tersedia. Hubungi petugas ujian.');setReview(data);}catch(error){setReview(null);setReviewError(error instanceof Error?error.message:'Review gagal dimuat');}finally{setReviewLoading(false);}}
   function terminated(hasil:ExamResult|null){setResultExamId(attempt?.exam.id??null);setResultExamName(attempt?.exam.nama_ujian??'');setAttempt(null);setResult(hasil??{status:'TERMINATED'});setReview(null);setReviewError('');setReviewLoading(false);void loadExams();}
-  async function logout() { try { await api('/api/auth/logout', { method: 'POST', body: {} }); } catch { /* local logout still clears the in-memory token */ } localStorage.removeItem('arena_active_portal');setSession(null, null); setStudent(null); setStaff(null); setAttempt(null); setResult(null); setExams([]); }
+  async function logout() { try { await api('/api/auth/logout', { method: 'POST', body: {} }); } catch { /* disconnected queues expire by heartbeat */ } try{sessionStorage.removeItem('arena_waiting_exam');}catch{}localStorage.removeItem('arena_active_portal');setSession(null, null); setWaitingExam(null); waitingRestored.current=null; setStudent(null); setStaff(null); setAttempt(null); setResult(null); setExams([]); }
   useEffect(() => {
     let cancelled=false;
     const params=new URLSearchParams(window.location.hash.slice(1));const token=params.get('token'),csrf=params.get('csrf');
@@ -306,6 +290,15 @@ function App() {
   }, [attempt]);
 
   const card: React.CSSProperties = {};
+  useEffect(()=>{
+    if(!student || !exams.length || attempt || waitingExam || waitingRestored.current===student.id)return;
+    waitingRestored.current=student.id;
+    try{
+      const saved=JSON.parse(sessionStorage.getItem('arena_waiting_exam') ?? 'null') as {studentId:number;examId:number}|null;
+      const exam=saved && saved.studentId===student.id ? exams.find(item=>item.id===saved.examId && item.can_start && item.status_attempt!=='IN_PROGRESS') : null;
+      if(exam)void start(exam.id);
+    }catch{/* the Redis queue never depends on browser storage */}
+  },[student,exams,attempt,waitingExam]);
   if(sessionLoading)return <main className="center-wrapper"><div className="auth-card" role="status">Memeriksa sesi…</div></main>;
   return <main className={attempt?'arena-app exam-active':'arena-app'}>
      {!staff&&<header className="topbar public-topbar"><div className="dashboard-home-brand"><img src="/assets/img/logo-man1-palembang.png" alt="Lambang MAN 1 Palembang"/><div><strong>MANSAPA ARENA</strong><span>Area Evaluasi dan Asesmen</span></div></div><div className="public-topbar-actions"><button type="button" className="theme-toggle" aria-label={darkMode?'Aktifkan mode terang':'Aktifkan mode gelap'} aria-pressed={darkMode} onClick={()=>setDarkMode(current=>!current)}>◐</button><a href="/auth/sso/start" className="topbar-guru-link"><i className="fa-solid fa-chalkboard-user"/><span className="hide-on-mobile">Portal Guru</span></a>{student?<button className="btn btn-danger" onClick={() => void logout()}><i className="fa-solid fa-arrow-right-from-bracket"/><span className="hide-on-mobile">Keluar</span></button>:<button className="admin-lock" type="button" aria-label="Login pengelola" title="Login Pengelola" onClick={()=>setStaffLoginOpen(true)}><i className="fa-solid fa-lock"/></button>}</div></header>}
@@ -313,7 +306,7 @@ function App() {
     {staff ? <StaffPanel staff={staff} onLogout={()=>void logout()} darkMode={darkMode} onToggleTheme={()=>setDarkMode(current=>!current)} /> : student ? attempt ?
       <StudentExam attempt={attempt} studentName={student.nama} studentNisn={student.nisn} answers={answers} flags={flags} busy={busy} saveState={saveState} message={message} change={change} toggleFlag={toggleFlag} retrySave={retrySave} submit={submit} onTerminated={terminated} onHelp={()=>setExamHelpOpen(true)}>{examHelpOpen&&<StudentSupportModal examId={attempt.exam.id} onClose={()=>setExamHelpOpen(false)}/>}</StudentExam>
       : result ? <><StudentResult onHelp={()=>setExamHelpOpen(true)} examName={resultExamName} result={result} review={review} reviewLoading={reviewLoading} reviewError={reviewError} onReview={loadReview} onClose={()=>{setResult(null);setResultExamId(null);setReview(null);setReviewError('');setReviewLoading(false);setExamHelpOpen(false);}}/>{examHelpOpen&&<StudentSupportModal examId={resultExamId} initialCategory="EXAM_LOCKED" onClose={()=>setExamHelpOpen(false)}/>}</>
-      : waitingExam ? <ExamWaitingRoom examId={waitingExam.examId} ticket={waitingExam.ticket} examName={waitingExam.name} onReady={openWaitingAttempt} onCancel={() => { setWaitingExam(null); void loadExams().catch(error => setMessage(error instanceof Error ? error.message : 'Jadwal gagal diperbarui')); }}/>
+      : waitingExam ? <ExamWaitingRoom examId={waitingExam.examId} initial={waitingExam.initial} examName={waitingExam.name} onReady={openWaitingAttempt} onCancel={async() => { await api(`/api/student/exams/${waitingExam.examId}/waiting/leave`,{method:'POST',body:{},timeoutMs:10000}).catch(()=>{});setWaitingExam(null);try{sessionStorage.removeItem('arena_waiting_exam');}catch{}void loadExams().catch(error => setMessage(error instanceof Error ? error.message : 'Jadwal gagal diperbarui')); }}/>
       : <StudentDashboard student={student} exams={exams} busy={busy} start={start} showResult={showResult}/>
       : <main className="center-wrapper"><div className="auth-card"><div className="auth-header"><i className="fa-solid fa-user-graduate auth-icon"/><span className="student-eyebrow">MANSAPA ARENA</span><h2>Siap untuk ujian?</h2><p>Masuk dengan nomor peserta dan PIN dari petugas.</p></div>{message&&<p className="arena-notice" role="alert">{message}</p>}<form onSubmit={(event) => void login(event)} autoComplete="off"><div className="input-group"><label className="ui-label" htmlFor="studentNisn">Nomor Peserta (NISN)</label><div className="input-wrapper"><i className="fa-regular fa-id-badge left-icon"/><input id="studentNisn" name="student_nisn" required inputMode="numeric" pattern="[0-9]*" maxLength={20} autoComplete="off" autoCapitalize="off" spellCheck={false} data-lpignore="true" value={nisn} onChange={(event) => setNisn(event.target.value)} placeholder="Masukkan NISN" /></div></div><div className="input-group"><label className="ui-label" htmlFor="studentPin">PIN Ujian (4 Digit)</label><div className="input-wrapper"><i className="fa-solid fa-key left-icon"/><input id="studentPin" name="student_pin" required type={showPin?'text':'password'} inputMode="numeric" pattern="[0-9]*" maxLength={12} autoComplete="new-password" autoCapitalize="off" spellCheck={false} data-lpignore="true" value={pin} onChange={(event) => setPin(event.target.value)} placeholder="••••"/><button className="toggle-pw" type="button" aria-label={showPin?'Sembunyikan PIN':'Tampilkan PIN'} onClick={()=>setShowPin(value=>!value)}><i className={`fa-regular ${showPin?'fa-eye-slash':'fa-eye'}`}/></button></div></div><button className="ui-button btn btn-primary student-login-button" disabled={busy}>{busy ? 'Memproses…' : 'Masuk Ujian'} <i className="fa-solid fa-arrow-right"/></button></form><button type="button" className="support-link-button" onClick={()=>setLoginHelpOpen(true)}><i className="fa-solid fa-headset"/> Tidak bisa masuk? Kirim tiket bantuan</button></div></main>}
     {!staff&&staffLoginOpen&&<div className="modal show" role="dialog" aria-modal="true" aria-label="Login pengelola" onMouseDown={(event)=>{if(event.target===event.currentTarget)setStaffLoginOpen(false);}}><div className="modal-content staff-login-modal"><div className="modal-title-row"><h3><i className="fa-solid fa-shield-halved"/>Portal Personel Arena</h3><button aria-label="Tutup dialog" onClick={()=>setStaffLoginOpen(false)}>&times;</button></div><p className="login-help-copy">Gunakan akun lokal atau masuk dengan akun Portal Data guru/pegawai.</p><a className="sso-button arena-sso-button" href="/auth/sso/start"><i className="fa-solid fa-right-to-bracket"/> Masuk dengan Portal Data SSO</a><div className="login-divider"><span>atau akun lokal</span></div><form onSubmit={(event)=>void staffLogin(event)}><div className="input-group"><label className="ui-label" htmlFor="staffUsername">Username</label><div className="input-wrapper"><i className="fa-solid fa-user left-icon"/><input id="staffUsername" required autoComplete="username" value={username} onChange={(event)=>setUsername(event.target.value)} /></div></div><div className="input-group"><label className="ui-label" htmlFor="staffPassword">Password</label><div className="input-wrapper"><i className="fa-solid fa-lock left-icon"/><input id="staffPassword" required type="password" autoComplete="current-password" value={password} onChange={(event)=>setPassword(event.target.value)} /></div></div><div className="modal-actions"><button className="btn btn-primary" disabled={busy}>Masuk ke portal</button></div></form></div></div>}

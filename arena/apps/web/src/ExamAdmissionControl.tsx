@@ -1,36 +1,28 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from './lib/api';
+import type { WaitingView } from './lib/waiting-room';
 import './styles/exam-admission.css';
 
-type Status = { enabled: boolean; current_grade: 'XII' | 'XI' | 'X'; threshold: number; max_wait_seconds: number; next_stage_in_seconds: number | null; counts: Record<'XII' | 'XI' | 'X', number> };
-type Exam = { id: number; name: string; grade: string; session_number: number; starts_at: string; status: string };
-
-export function ExamAdmissionControl() {
-  const [exams, setExams] = useState<Exam[]>([]);
-  const [examId, setExamId] = useState('');
-  const [status, setStatus] = useState<Status | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState('');
-  useEffect(() => { let active = true; void api<Exam[]>('/api/admin/exams').then(rows => { if (active) setExams(rows.filter(exam => exam.status === 'ACTIVE')); }).catch(error => { if (active) setNotice(error instanceof Error ? error.message : 'Jadwal gagal dimuat'); }); return () => { active = false; }; }, []);
-  async function refresh() {
-    if (!examId) return;
-    setBusy(true); setNotice('');
-    try { setStatus(await api<Status>(`/api/admin/exam-admission?exam_id=${examId}`)); }
-    catch (error) { setNotice(error instanceof Error ? error.message : 'Status antrean gagal dimuat'); }
-    finally { setBusy(false); }
+type Exam={id:number;name:string;grade:string;session_number:number;status:string};
+type Form={queue_open:number;batch_size:number;batch_interval_ms:number;heartbeat_timeout_ms:number;claim_timeout_ms:number};
+export function ExamAdmissionControl(){
+  const [exams,setExams]=useState<Exam[]>([]),[examId,setExamId]=useState(''),[view,setView]=useState<WaitingView|null>(null),[form,setForm]=useState<Form|null>(null),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
+  const selected=useRef('');selected.current=examId;
+  useEffect(()=>{let active=true;void api<Exam[]>('/api/admin/exams').then(rows=>{if(active)setExams(rows.filter(row=>row.status==='ACTIVE'));}).catch(error=>{if(active)setNotice(error.message);});return()=>{active=false;};},[]);
+  useEffect(()=>{
+    if(!examId)return;let active=true;
+    const load=async()=>{try{const next=await api<WaitingView>(`/api/admin/waiting-room/${examId}`,{timeoutMs:10000});if(active){setView(next);setForm(old=>old ?? {queue_open:next.queue_open ?? (next.queue_state==='CLOSED'?0:1),batch_size:next.batch_size,batch_interval_ms:next.batch_interval_ms,heartbeat_timeout_ms:next.heartbeat_timeout_ms,claim_timeout_ms:next.claim_timeout_ms});}}catch(error){if(active)setNotice(error instanceof Error?error.message:'Status gagal dimuat');}};
+    void load();const timer=window.setInterval(()=>{void load();},10000);return()=>{active=false;window.clearInterval(timer);};
+  },[examId]);
+  async function action(kind:'settings'|'release'){
+    if(!view || !form)return;const target=examId;setBusy(true);setNotice('');
+    try{const next=await api<WaitingView>(`/api/admin/waiting-room/${target}/${kind}`,{method:kind==='settings'?'PUT':'POST',body:kind==='settings'?form:{expected_batch:view.batch_id},timeoutMs:10000});if(selected.current===target){setView(next);setNotice(kind==='settings'?'Pengaturan disimpan.':`${next.released_count ?? 0} siswa dilepas. Pelepasan berikutnya mengikuti jeda batch.`);}}
+    catch(error){setNotice(error instanceof Error?error.message:'Perintah gagal');}finally{setBusy(false);}
   }
-  async function advance() {
-    if (!status || !examId) return;
-    setBusy(true); setNotice('');
-    try { setStatus(await api<Status>('/api/admin/exam-admission/advance', { method: 'POST', body: { exam_id: Number(examId), expected_grade: status.current_grade } })); }
-    catch (error) { setNotice(error instanceof Error ? error.message : 'Tingkat berikutnya belum dibuka'); }
-    finally { setBusy(false); }
-  }
-  return <section className="exam-admission-control" aria-labelledby="exam-admission-heading">
-    <h3 id="exam-admission-heading">Giliran mulai ujian</h3>
-    <p>XII dimulai lebih dahulu. XI lalu X terbuka setelah 300 siswa tingkat sebelumnya mulai atau batas 3 menit per tahap tercapai. Tingkat yang sudah dibuka tetap terbuka untuk siswa yang terlambat.</p>
-    <div className="exam-admission-actions"><label>Jadwal dalam sesi yang dipantau<select disabled={busy} value={examId} onChange={event => { setExamId(event.target.value); setStatus(null); }}><option value="">Pilih jadwal aktif</option>{exams.map(exam => <option key={exam.id} value={exam.id}>{exam.name} · {exam.grade} · Sesi {exam.session_number} · {new Date(exam.starts_at).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta' })}</option>)}</select></label><button type="button" className="btn btn-secondary" disabled={busy || !examId} onClick={() => void refresh()}>Perbarui status</button></div>
-    {status && <><div className="exam-admission-counts">{(['XII','XI','X'] as const).map(grade => <span key={grade}>{grade}: {status.counts[grade]} siswa mulai</span>)}</div><p>{status.enabled ? `Tingkat yang sudah dibuka: ${status.current_grade === 'XII' ? 'XII' : status.current_grade === 'XI' ? 'XII dan XI' : 'XII, XI, dan X'}. Ambang: ${status.threshold} siswa atau ${status.max_wait_seconds} detik per tahap.` : 'Antrean tingkat dinonaktifkan pada konfigurasi aplikasi.'}</p>{status.enabled && status.current_grade !== 'X' && <p>{status.next_stage_in_seconds === null ? 'Waktu tunggu dimulai saat siswa pertama memeriksa giliran atau mulai ujian.' : `Tahap berikutnya dibuka paling lambat dalam ${status.next_stage_in_seconds} detik dari pemeriksaan ini.`}</p>}<button type="button" className="btn btn-primary" disabled={busy || !status.enabled || status.current_grade === 'X'} onClick={() => void advance()}>Buka tingkat berikutnya</button><p><small>Gunakan jika petugas perlu membuka tahap berikutnya lebih awal. Batas waktu tetap berjalan dan pembukaan tidak menutup tingkat sebelumnya.</small></p></>}
+  return <section className="exam-admission-control"><h3>Ruang tunggu FIFO</h3><p>Peserta masuk sesuai urutan pertama menekan Mulai Ujian. Maksimal satu batch dilepas pada setiap interval; peserta yang lebih sedikit dari ukuran batch tetap dilepas.</p>
+    <label>Ujian / sesi<select disabled={busy} value={examId} onChange={event=>{setExamId(event.target.value);setView(null);setForm(null);setNotice('');}}><option value="">Pilih jadwal</option>{exams.map(exam=><option key={exam.id} value={exam.id}>{exam.name} · {exam.grade} · Sesi {exam.session_number}</option>)}</select></label>
+    {view && <><div className="exam-admission-counts"><span>Menunggu: {view.waiting_count}</span><span>Admitted: {view.admitted_count}</span><span>Sedang ujian: {view.in_exam_count}</span><span>Selesai: {view.finished_count}</span></div><p>Status antrean: {view.queue_state} · Batch terakhir: {view.batch_id}</p><button type="button" className="btn btn-primary" disabled={busy || view.queue_state!=='OPEN' || !view.waiting_count} onClick={()=>void action('release')}>Lepas batch berikutnya</button></>}
+    {form && <form className="waiting-settings" onSubmit={event=>{event.preventDefault();void action('settings');}}><label><input type="checkbox" checked={form.queue_open===1} onChange={event=>setForm({...form,queue_open:event.target.checked?1:0})}/> Buka antrean</label><label>Ukuran batch<input type="number" min={1} max={1000} required value={form.batch_size} onChange={event=>setForm({...form,batch_size:Number(event.target.value)})}/></label><label>Jeda batch (detik)<input type="number" min={1} max={3600} required value={form.batch_interval_ms/1000} onChange={event=>setForm({...form,batch_interval_ms:Number(event.target.value)*1000})}/></label><label>Timeout heartbeat (detik)<input type="number" min={10} max={600} required value={form.heartbeat_timeout_ms/1000} onChange={event=>setForm({...form,heartbeat_timeout_ms:Number(event.target.value)*1000})}/></label><label>Timeout claim (detik)<input type="number" min={10} max={600} required value={form.claim_timeout_ms/1000} onChange={event=>setForm({...form,claim_timeout_ms:Number(event.target.value)*1000})}/></label><button type="submit" className="btn btn-secondary" disabled={busy}>Simpan pengaturan</button></form>}
     {notice && <p role="status">{notice}</p>}
   </section>;
 }

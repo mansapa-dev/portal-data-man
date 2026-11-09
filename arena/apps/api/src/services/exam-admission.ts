@@ -18,7 +18,7 @@ if not threshold then
   redis.call('HSET', KEYS[1], 'threshold', threshold)
 end
 local maxWait = tonumber(redis.call('HGET', KEYS[1], 'max_wait_ms'))
-if not maxWait then
+if not maxWait or maxWait > tonumber(ARGV[7]) then
   maxWait = tonumber(ARGV[7])
   redis.call('HSET', KEYS[1], 'max_wait_ms', maxWait)
 end
@@ -42,7 +42,7 @@ if openedAt then redis.call('HSET', KEYS[1], 'stage_started_at_ms', openedAt) en
 for i = 1,4 do if redis.call('EXISTS', KEYS[i]) == 1 then redis.call('EXPIRE', KEYS[i], tonumber(ARGV[5])) end end
 local remaining = -1
 if stage < 2 and openedAt then remaining = math.max(0, openedAt + maxWait - now) end
-return {stage, threshold, counts[1], counts[2], counts[3], maxWait, remaining}
+return {stage, threshold, counts[1], counts[2], counts[3], maxWait, remaining, now, openedAt or 0}
 `;
 
 export function admissionGroup(exam: AdmissionExam): string {
@@ -111,14 +111,18 @@ export class ExamAdmissionService {
   }
 
   private async run(action: string, group: string, grade: AdmissionGrade, studentId = 0) {
-    if (!this.enabled) return { enabled: false, allowed: true, current_grade: 'X' as AdmissionGrade, threshold: this.threshold, max_wait_seconds: this.maxWaitSeconds, next_stage_in_seconds: null, counts: { XII: 0, XI: 0, X: 0 } };
+    if (!this.enabled) return { enabled: false, allowed: true, current_grade: 'X' as AdmissionGrade, threshold: this.threshold, max_wait_seconds: this.maxWaitSeconds, next_stage_in_seconds: null, server_time: new Date().toISOString(), stage_started_at: null, policy_version: 'quota-or-time-v2', counts: { XII: 0, XI: 0, X: 0 } };
     if (!this.redis || this.redis.status !== 'ready') throw Object.assign(new Error('Antrean ujian belum tersedia. Silakan tunggu sebentar.'), { statusCode: 503 });
     const base = `arena:admission:{${group}}`;
     let result: number[];
     try {
       result = await this.redis.eval(admissionLua, 4, `${base}:state`, `${base}:XII`, `${base}:XI`, `${base}:X`, action, admissionGrades.indexOf(grade), this.threshold, studentId, this.ttlSeconds, admissionGrades.indexOf(grade), this.maxWaitSeconds * 1000) as number[];
-    } catch { throw Object.assign(new Error('Antrean ujian belum tersedia. Silakan tunggu sebentar.'), { statusCode: 503 }); }
-    const [stage, threshold, XII, XI, X, maxWaitMs, remainingMs] = result as [number, number, number, number, number, number, number];
-    return { enabled: true, allowed: admissionGrades.indexOf(grade) <= stage, current_grade: admissionGrades[stage]!, threshold, max_wait_seconds: maxWaitMs / 1000, next_stage_in_seconds: remainingMs < 0 ? null : Math.ceil(remainingMs / 1000), counts: { XII, XI, X } };
+    } catch (cause) {
+      // Keep the failure message for diagnostics, excluding Redis command args.
+      const detail = new Error(cause instanceof Error ? cause.message : 'Redis command failed');
+      throw Object.assign(new Error('Antrean ujian belum tersedia. Silakan tunggu sebentar.', { cause: detail }), { statusCode: 503 });
+    }
+    const [stage, threshold, XII, XI, X, maxWaitMs, remainingMs, nowMs, openedAtMs] = result as [number, number, number, number, number, number, number, number, number];
+    return { enabled: true, allowed: admissionGrades.indexOf(grade) <= stage, current_grade: admissionGrades[stage]!, threshold, max_wait_seconds: maxWaitMs / 1000, next_stage_in_seconds: remainingMs < 0 ? null : Math.ceil(remainingMs / 1000), server_time: new Date(nowMs).toISOString(), stage_started_at: openedAtMs ? new Date(openedAtMs).toISOString() : null, policy_version: 'quota-or-time-v2', counts: { XII, XI, X } };
   }
 }

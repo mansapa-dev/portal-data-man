@@ -4,9 +4,9 @@ import { assertCsrf, claimsFromRequest, rateLimitKey, readToken } from '../lib/a
 import { requirePool } from '../lib/db.js';
 import { ScoringService } from '../services/scoring.js';
 import { StudentExamService } from '../services/student-exam.js';
-import type { RowDataPacket } from 'mysql2/promise';
-import { ExamAdmissionService } from '../services/exam-admission.js';
-import { redis } from '../lib/redis.js';
+import type { Pool, RowDataPacket } from 'mysql2/promise';
+import { waitingRoom } from '../lib/waiting-room.js';
+import type { WaitingRoomService } from '../services/waiting-room.js';
 
 const examId = z.coerce.number().int().positive();
 const answerSchema = z.object({ answer: z.string().max(500).nullable(), is_flagged: z.boolean().default(false), attempt_id: z.string().length(26), base_revision: z.number().int().nonnegative(), mutation_id: z.string().regex(/^[A-Za-z0-9_-]{16,100}$/) }).strict();
@@ -32,14 +32,14 @@ export const studentStartResponseSchema = {
   },
 } as const;
 
-export async function studentExamRoutes(app: FastifyInstance) {
+export async function studentExamRoutes(app: FastifyInstance, options:{pool?:Pool;waiting?:WaitingRoomService}={}) {
   app.addHook('onSend', async (request, reply, payload) => {
     if (request.url.split('?')[0]?.startsWith('/api/student/exams')) reply.header('Cache-Control', 'no-store');
     return payload;
   });
-  const pool = requirePool();
-  const admission = new ExamAdmissionService(redis);
-  const exams = new StudentExamService(pool, app.log, admission);
+  const pool = options.pool ?? requirePool();
+  const waiting = options.waiting ?? waitingRoom;
+  const exams = new StudentExamService(pool, app.log);
   app.addHook('onClose', async () => exams.flushDiagnostics());
   const scoring = new ScoringService(pool);
   const studentClaims = (request: FastifyRequest) => {
@@ -47,26 +47,38 @@ export async function studentExamRoutes(app: FastifyInstance) {
     if (claims.role !== 'STUDENT') throw Object.assign(new Error('Sesi siswa diperlukan'), { statusCode: 403 });
     return claims;
   };
+  const access = async(request:FastifyRequest,exam:number,finished=false,bodyToken=false)=>{
+    const claims=studentClaims(request);
+    const header=request.headers['x-exam-token'];
+    const token=typeof header==='string'?header:bodyToken?String((request.body as {exam_token?:string})?.exam_token ?? ''):'';
+    await waiting.authorize(exam,claims.sub,token,finished);
+    return claims;
+  };
+  const claim = async(request:FastifyRequest<{Params:{id:string}}>)=>{
+    const claims=studentClaims(request);assertCsrf(request,claims);
+    z.object({}).strict().parse(request.body ?? {});
+    const exam=examId.parse(request.params.id),header=request.headers['x-exam-token'];
+    return waiting.claim(exam,claims.sub,typeof header==='string'?header:'',receipt=>exams.start(claims.sub,exam,0,receipt));
+  };
   app.get('/api/student/exams', async (request) => exams.list(studentClaims(request).sub));
   app.get<{ Params: { id: string } }>('/api/student/exams/:id/admission', { config: { rateLimit: { max: 24, timeWindow: '1 minute', keyGenerator: rateLimitKey } } }, async (request) => {
-    const claims = studentClaims(request);
-    const query = z.object({ ticket: z.string().min(1).max(2000) }).strict().parse(request.query);
-    return admission.statusForTicket(query.ticket, claims.sub, examId.parse(request.params.id));
+    studentClaims(request);
+    throw Object.assign(new Error('Ruang tunggu sudah diperbarui. Muat ulang halaman dari jadwal ujian.'),{statusCode:410});
   });
   app.post<{ Params: { id: string } }>('/api/student/exams/:id/start', { schema: { response: { 200: studentStartResponseSchema } }, config: { rateLimit: { max: 10, timeWindow: '1 minute', keyGenerator: rateLimitKey } } }, async (request) => {
-    const claims = studentClaims(request); assertCsrf(request, claims);
-    return exams.start(claims.sub, examId.parse(request.params.id));
+    return claim(request);
   });
+  app.post<{Params:{id:string}}>('/api/student/exams/:id/waiting/claim',{schema:{response:{200:studentStartResponseSchema}},config:{rateLimit:{max:12,timeWindow:'1 minute',keyGenerator:rateLimitKey}}},claim);
   app.post<{ Params: { id: string } }>('/api/student/exams/:id/heartbeat', { config: { rateLimit: { max: 6, timeWindow: '1 minute', keyGenerator: rateLimitKey } } }, async (request) => {
-    const claims = studentClaims(request); assertCsrf(request, claims);
+    const claims = await access(request,examId.parse(request.params.id)); assertCsrf(request, claims);
     return exams.heartbeat(claims.sub, examId.parse(request.params.id));
   });
   app.put<{ Params: { id: string; questionId: string } }>('/api/student/exams/:id/answers/:questionId', { config: { rateLimit: { max: 300, timeWindow: '1 minute', keyGenerator: rateLimitKey } } }, async (request) => {
-    const claims = studentClaims(request); assertCsrf(request, claims);
+    const claims = await access(request,examId.parse(request.params.id)); assertCsrf(request, claims);
     return exams.saveAnswer(claims, examId.parse(request.params.id), examId.parse(request.params.questionId), answerSchema.parse(request.body));
   });
   app.post<{ Params: { id: string } }>('/api/student/exams/:id/answers/batch', { config: { rateLimit: { max: 60, timeWindow: '1 minute', keyGenerator: rateLimitKey } } }, async (request) => {
-    const claims = studentClaims(request); assertCsrf(request, claims);
+    const claims = await access(request,examId.parse(request.params.id)); assertCsrf(request, claims);
     return exams.saveAnswersBatch(claims, examId.parse(request.params.id), batchAnswersSchema.parse(request.body));
   });
   app.post<{ Params: { id: string } }>('/api/student/exams/:id/violations', { config: { rateLimit: { max: 20, timeWindow: '1 minute', keyGenerator: (request) => {
@@ -76,21 +88,26 @@ export async function studentExamRoutes(app: FastifyInstance) {
     const routeId=(request.params as {id:string}).id;
     return claims?.role==='STUDENT'?`violation:student:${claims.sub}:exam:${routeId}`:`violation:ip:${request.ip}`;
   } } } },   async (request) => {
-    const claims = studentClaims(request);
+    const claims = await access(request,examId.parse(request.params.id),true,true);
     // Violations may arrive via navigator.sendBeacon fallback (no custom headers),
     // so CSRF is additionally accepted inside the body for this endpoint only.
     assertCsrf(request, claims, { allowBodyToken: true });
-    const body = violationSchema.parse(request.body);
-    return scoring.recordViolation(claims.sub, examId.parse(request.params.id), body.event_key, body.type, { ip: request.ip, userAgent: request.headers['user-agent'] ?? '', clientOccurredAt: body.client_occurred_at ?? null, questionNo: body.question_no });
+    const {exam_token: _token,...payload}=z.object({exam_token:z.string().max(64).optional()}).passthrough().parse(request.body);
+    const body = violationSchema.parse(payload);
+    const result=await scoring.recordViolation(claims.sub, examId.parse(request.params.id), body.event_key, body.type, { ip: request.ip, userAgent: request.headers['user-agent'] ?? '', clientOccurredAt: body.client_occurred_at ?? null, questionNo: body.question_no });
+    if(result.terminated)try{await waiting.finish(examId.parse(request.params.id),claims.sub);}catch{app.log.warn('waiting completion deferred');}
+    return result;
   });
   app.post<{ Params: { id: string } }>('/api/student/exams/:id/submit', { config: { rateLimit: { max: 10, timeWindow: '1 minute', keyGenerator: rateLimitKey } } }, async (request) => {
-    const claims = studentClaims(request); assertCsrf(request, claims);
+    const claims = await access(request,examId.parse(request.params.id),true); assertCsrf(request, claims);
     const body = z.object({ finalize_only: z.boolean().optional() }).strict().parse(request.body ?? {});
-    return scoring.submit(claims.sub, examId.parse(request.params.id), body.finalize_only ?? false);
+    const result=await scoring.submit(claims.sub, examId.parse(request.params.id), body.finalize_only ?? false);
+    try{await waiting.finish(examId.parse(request.params.id),claims.sub);}catch{app.log.warn('waiting completion deferred');}
+    return result;
   });
-  app.get<{ Params: { id: string } }>('/api/student/exams/:id/review', async (request) => scoring.review(studentClaims(request).sub, examId.parse(request.params.id)));
+  app.get<{ Params: { id: string } }>('/api/student/exams/:id/review', async (request) => scoring.review((await access(request,examId.parse(request.params.id),true)).sub, examId.parse(request.params.id)));
   app.get<{ Params: { id: string } }>('/api/student/exams/:id/result', async (request) => {
-    const studentId=studentClaims(request).sub,id=examId.parse(request.params.id);
+    const id=examId.parse(request.params.id),studentId=(await access(request,id,true)).sub;
     const [rows]=await pool.execute<RowDataPacket[]>(`SELECT a.status,r.question_count jumlah_soal,r.correct_count benar,r.wrong_count salah,r.blank_count kosong,r.score nilai,m.type follow_up_type FROM exam_attempts a LEFT JOIN exam_results r ON r.attempt_id=a.id LEFT JOIN exam_follow_up_meta m ON m.exam_id=a.exam_id WHERE a.student_id=? AND a.exam_id=? LIMIT 1`,[studentId,id]);
     if(!rows[0])throw Object.assign(new Error('Hasil ujian tidak ditemukan'),{statusCode:404});
     if(rows[0].status==='IN_PROGRESS')throw Object.assign(new Error('Ujian masih berlangsung'),{statusCode:409});

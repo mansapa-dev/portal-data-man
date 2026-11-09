@@ -21,7 +21,7 @@ test('student start HTTP response strips answer keys and disables caching', asyn
   });
   const app = Fastify();
   try {
-    await app.register(studentExamRoutes);
+    await app.register(studentExamRoutes,{pool:{},waiting:{claim:async(_exam,_student,_token,start)=>start({tokenHash:'dummy',sequence:1})}});
     const csrf = 'c'.repeat(32);
     const response = await app.inject({
       method: 'POST', url: '/api/student/exams/1/start',

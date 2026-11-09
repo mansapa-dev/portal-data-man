@@ -11,6 +11,7 @@
 .exam-waiting-dots span{width:8px;height:8px;background:var(--primary,#16704a);border-radius:50%;animation:exam-waiting-dot 1.2s ease-in-out infinite}
 .exam-waiting-dots span:nth-child(2){animation-delay:.15s}.exam-waiting-dots span:nth-child(3){animation-delay:.3s}
 .exam-waiting-notice{min-height:26px;font-size:13px}.exam-admission-control{margin:18px 0;padding:20px;border:1px solid var(--border,#dce7e1);border-radius:14px}
+.waiting-position-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:24px 0}.waiting-position-grid>div{padding:18px 8px;border-radius:14px;background:var(--primary-soft,#edf6f0)}.waiting-position-grid strong{display:block;font-size:clamp(22px,5vw,34px);color:var(--primary,#16704a)}.waiting-position-grid span{display:block;font-size:12px;margin-top:6px}.waiting-connection{display:flex;justify-content:center;align-items:center;gap:8px;font-size:13px}.waiting-connection>span{width:8px;height:8px;border-radius:50%;background:#299260}.waiting-settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-top:20px}.waiting-settings label{display:grid;gap:6px}.exam-waiting-card>button{margin:5px}
 .exam-admission-actions{display:flex;gap:12px;flex-wrap:wrap;align-items:end}.exam-admission-actions label{display:grid;gap:6px;flex:1;min-width:200px}
 .exam-admission-counts{display:flex;gap:20px;flex-wrap:wrap;margin:16px 0}.exam-admission-counts span{font-weight:600}
 @keyframes exam-waiting-ring{0%{transform:scale(.6);opacity:.5}100%{transform:scale(1.15);opacity:0}}

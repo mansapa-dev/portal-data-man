@@ -6,7 +6,10 @@ import { z } from 'zod';
 import { pool } from './lib/db.js';
 import { authRoutes } from './routes/auth.js';
 import { studentExamRoutes } from './routes/student-exams.js';
-import { examAdmissionRoutes } from './routes/exam-admission.js';
+import { waitingRoomRoutes } from './routes/waiting-room.js';
+import { waitingRoom } from './lib/waiting-room.js';
+import { WaitingRoomEvents } from './services/waiting-room-events.js';
+import { WaitingRoomWorker } from './services/waiting-room-worker.js';
 import { staffAuthRoutes } from './routes/staff-auth.js';
 import { adminRoutes } from './routes/admin.js';
 import { supportRoutes } from './routes/support.js';
@@ -19,7 +22,7 @@ import { questionImageRoutes } from './routes/question-images.js';
 import { ScoringService } from './services/scoring.js';
 import { ExpiredAttemptFinalizer } from './services/expired-attempt-finalizer.js';
 import { closePasswordVerifier, getVerifierStats } from './services/password-verifier.js';
-import { ArenaRateLimitStore } from './lib/rate-limit-store.js';
+import { sharedRateLimitStore } from './lib/rate-limit-store.js';
 import { redis } from './lib/redis.js';
 import { monitorEventLoopDelay } from 'node:perf_hooks';
 
@@ -63,6 +66,10 @@ app.setErrorHandler((error, request, reply) => {
 const finalizer = pool && env.ATTEMPT_FINALIZER_ENABLED === 'true'
   ? new ExpiredAttemptFinalizer(pool, new ScoringService(pool), app.log, env.ATTEMPT_FINALIZER_INTERVAL_MS, env.ATTEMPT_FINALIZER_BATCH_SIZE)
   : null;
+const waitingEvents=new WaitingRoomEvents(waitingRoom);
+const waitingWorker=pool && process.env.WAITING_WORKER_ENABLED!=='false' ? new WaitingRoomWorker(waitingRoom,app.log) : null;
+// The custom store receives normalized plugin options; capture the shared Redis
+// explicitly because @fastify/rate-limit does not pass settings.redis to it.
 // Keep a generous per-session request budget for active students (autosave,
 // exam reads and heartbeat), while retaining the lower anonymous/staff budget.
 // Authentication routes have their own stricter account-specific limits.
@@ -72,7 +79,7 @@ const sessionRateLimit = {
   timeWindow: '1 minute',
   redis: redis ?? undefined,
   keyGenerator: rateLimitKey,
-  store: ArenaRateLimitStore,
+  store: sharedRateLimitStore(redis),
 };
 await app.register(rateLimit, sessionRateLimit);
 
@@ -103,7 +110,7 @@ await app.register(ssoRoutes);
 await app.register(setupRoutes);
 if (pool) {
   await app.register(studentExamRoutes);
-  await app.register(examAdmissionRoutes);
+  await app.register(waitingRoomRoutes,{events:waitingEvents});
   await app.register(adminRoutes);
   await app.register(supportRoutes);
   await app.register(portalSyncRoutes);
@@ -112,6 +119,8 @@ if (pool) {
 }
 
 const close = async () => {
+  await waitingWorker?.stop();
+  await waitingEvents.stop();
   await finalizer?.stop();
   await app.close();
   await closePasswordVerifier();
@@ -121,4 +130,6 @@ const close = async () => {
 process.once('SIGINT', () => void close().then(() => process.exit(0)));
 process.once('SIGTERM', () => void close().then(() => process.exit(0)));
 await app.listen({ host: env.HOST, port: env.PORT });
+if(pool)waitingEvents.start();
+waitingWorker?.start();
 finalizer?.start();

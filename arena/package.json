@@ -17,6 +17,8 @@
     "perf:seed": "node scripts/seed-perf-local.mjs",
     "perf:warmup": "node scripts/warmup-exam-local.mjs",
     "perf:verify": "node scripts/verify-perf-local.mjs",
+    "waiting:migrate": "node scripts/migrate-waiting-local.mjs",
+    "waiting:worker": "npm run waiting:worker -w @arena/api",
     "build": "npm run build -w @arena/api && npm run build -w @arena/web",
     "start": "npm run start -w @arena/api"
   },

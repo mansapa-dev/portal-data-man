@@ -26,6 +26,13 @@ test('missing Redis blocks new admission; disabled gate needs no Redis', async (
   assert.equal(disabled.ticket(1, 2, 'X', schedule), undefined);
 });
 
+test('Redis admission failures retain their cause for server diagnostics', async () => {
+  const cause = Object.assign(new Error('Test Redis command failure'), { command: { args: ['dummy-sensitive-value'] } });
+  const redis = { status: 'ready', async eval() { throw cause; } };
+  const gate = new ExamAdmissionService(redis, { enabled: true, secret });
+  await assert.rejects(gate.status(scope(), 'XI'), error => error.statusCode === 503 && error.cause.message === cause.message && !('command' in error.cause));
+});
+
 test('polling tickets cannot be reused for another student/exam or forged', async () => {
   const gate = new ExamAdmissionService(null, { enabled: false, secret });
   const issuer = new ExamAdmissionService(null, { enabled: true, secret });
@@ -149,5 +156,16 @@ test('Redis opens each stage after 180 seconds without quota and never requeues 
     await redis.hset(`arena:admission:{${legacyGroup}}:state`, 'stage', 1, 'threshold', 300);
     assert.equal((await gate.status(legacyGroup, 'XI')).allowed, true, 'Existing open stages must not close after an upgrade');
     assert.equal((await gate.status(legacyGroup, 'X')).allowed, false);
+
+    const slowGroup = scope();
+    await redis.hset(`arena:admission:{${slowGroup}}:state`, 'stage', 0, 'threshold', 300, 'max_wait_ms', 600000, 'stage_started_at_ms', (await redisNow(redis)) - 181000);
+    const shortened = await gate.status(slowGroup, 'XI');
+    assert.equal(shortened.allowed, true, 'An old longer window must not keep students past the configured 3-minute limit');
+    assert.equal(shortened.max_wait_seconds, 180);
+    assert.equal(shortened.policy_version, 'quota-or-time-v2');
+    assert.ok(Number.isFinite(Date.parse(shortened.server_time)));
+    assert.ok(Number.isFinite(Date.parse(shortened.stage_started_at)));
+    const longConfig = new ExamAdmissionService(redis, { enabled: true, maxWaitSeconds: 600, secret });
+    assert.equal((await longConfig.status(slowGroup, 'XI')).max_wait_seconds, 180, 'Another API process cannot extend the active window');
   } finally { await redis.quit(); }
 });

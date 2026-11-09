@@ -9,6 +9,7 @@ import { performance } from 'node:perf_hooks';
 import { staffCapabilities } from '../services/staff-capabilities.js';
 import { verifyPassword, verifyPasswordDetails, getVerifierStats } from '../services/password-verifier.js';
 import { refundStudentLoginRateLimit } from '../lib/rate-limit-store.js';
+import { waitingRoom } from '../lib/waiting-room.js';
 
 const loginSchema = z.object({ nisn: z.string().trim().min(8).max(20), pin: z.string().trim().min(4).max(12) }).strict();
 const studentSessionSeconds=12*60*60;
@@ -177,6 +178,7 @@ export async function authRoutes(app: FastifyInstance) {
   });
   app.post('/api/auth/logout', async (request, reply) => {
     const claims = claimsFromRequest(request); assertCsrf(request, claims);
+    if(claims.role==='STUDENT')try{await waitingRoom.logout(claims.sub);}catch{app.log.warn('waiting logout cleanup deferred to heartbeat expiry');}
     const secure=process.env.NODE_ENV==='production'?'; Secure':'';
     reply.header('Set-Cookie',[`arena_staff_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax${secure}`,`arena_student_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax${secure}`]);
     reply.header('Clear-Site-Data', 'cache');

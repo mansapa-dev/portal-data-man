@@ -1,5 +1,15 @@
 import type { Redis } from 'ioredis';
 
+const incrementLua=`
+local value=redis.call('INCR',KEYS[1])
+local ttl=tonumber(ARGV[1])
+local max=tonumber(ARGV[2])
+if value==1 or (ARGV[3]=='true' and value>max) then redis.call('PEXPIRE',KEYS[1],ttl)
+elseif ARGV[4]=='true' and value>max then ttl=math.min(ttl*(2^(value-max-1)),9007199254740991);redis.call('PEXPIRE',KEYS[1],ttl)
+else ttl=redis.call('PTTL',KEYS[1]) end
+return {value,ttl}`;
+const readLua=`return {tonumber(redis.call('GET',KEYS[1]) or '0'),math.max(0,redis.call('PTTL',KEYS[1]))}`;
+
 type RateLimitCallback = (error: Error | null, result?: { current: number; ttl: number }) => void;
 
 interface RateLimitItem {
@@ -34,9 +44,9 @@ export class ArenaRateLimitStore {
     if (this.redis) {
       // Redis store implementation via fastify-rate-limit custom lua commands
       const fullKey = this.keyPrefix + key;
-      (this.redis as any).rateLimit(fullKey, timeWindow, max, this.continueExceeding, this.exponentialBackoff, (err: Error | null, result: [number, number]) => {
+      this.redis.eval(incrementLua, 1, fullKey, timeWindow, max, String(this.continueExceeding), String(this.exponentialBackoff), (err, raw) => {
         if (err) cb(err);
-        else cb(null, { current: result[0], ttl: result[1] });
+        else {const result=raw as [number,number];cb(null, { current: result[0], ttl: result[1] });}
       });
       return;
     }
@@ -62,9 +72,9 @@ export class ArenaRateLimitStore {
   read(key: string, cb: RateLimitCallback, timeWindow: number, max?: number): void {
     if (this.redis) {
       const fullKey = this.keyPrefix + key;
-      (this.redis as any).rateLimitRead(fullKey, (err: Error | null, result: [number, number]) => {
+      this.redis.eval(readLua,1,fullKey,(err,raw) => {
         if (err) cb(err);
-        else cb(null, { current: result[0], ttl: result[1] });
+        else {const result=raw as [number,number];cb(null, { current: result[0], ttl: result[1] });}
       });
       return;
     }
@@ -109,6 +119,11 @@ export class ArenaRateLimitStore {
     }
     return childStore;
   }
+}
+
+// Fastify passes normalized limiter options to a custom store, excluding Redis.
+export function sharedRateLimitStore(redis:Redis|null) {
+  return class extends ArenaRateLimitStore { constructor(options:any){super({...options,redis});} };
 }
 
 let activeStudentLoginStore: ArenaRateLimitStore | null = null;

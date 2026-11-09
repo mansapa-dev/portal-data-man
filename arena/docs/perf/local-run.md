@@ -1,5 +1,7 @@
 # Uji lokal alur ujian
 
+> Untuk kode saat ini gunakan [panduan ruang tunggu FIFO dan k6](../ops/waiting-room.md#load-test). Seed `seed-waiting-load-local.mjs` dan `tests/k6/waiting-room.js` menggantikan fixture gate tingkat di bawah. Langkah berikut adalah arsip pengukuran rilis sebelumnya dan tidak kompatibel dengan endpoint admission terbaru.
+
 Prasyarat: Node >=22, Docker Compose, k6. Tidak ada pengujian terhadap staging atau production dari panduan ini.
 
 1. Dari `arena/`, jalankan `docker compose -f docker-compose.dev.yml up -d` (tanpa `down -v`). Buat `arena/.env` dari `.env.example` dengan secret acak **khusus lokal**; sesuaikan `DATABASE_URL` ke port 3308 dan `REDIS_URL` ke 6379.

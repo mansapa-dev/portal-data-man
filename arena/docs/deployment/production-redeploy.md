@@ -13,22 +13,21 @@ Panduan staging tetap ada di [staging-vps.md](staging-vps.md).
 
 ## 0. Isi rilis ini (untuk verifikasi)
 
-Perubahan alur ujian pada commit terbaru (setelah `ee4306a3` — "Optimize Arena exam flow and add Redis grade admission"):
+Rilis ruang tunggu FIFO menggantikan gate tingkat. Baca [panduan ruang tunggu](../ops/waiting-room.md) untuk state machine, pengujian dan persistensi Redis.
 
-- **Mulai ujian**: gate antrean tingkat XII→XI→X (Redis) dan warm-up cache
-  sumber soal berjalan **sebelum** transaksi MySQL dibuka. Siswa yang masih
-  menunggu giliran ditolak `HTTP 425` tanpa pernah menyentuh pool MySQL, dan
-  transaksi mulai berhenti memegang latensi Redis di antara query-nya.
+- **Mulai ujian**: join FIFO Redis per ujian, lalu worker melepas maksimal
+  300 siswa per 10 detik. Claim token diperlukan untuk membuat attempt;
+  durasi penuh mulai pada claim, bukan ketika masuk ruang tunggu.
 - **Simpan jawaban**: client mengirim batch tiap 3–4 detik, maksimal 40
   jawaban per transaksi; retry atas respons hilang tetap idempotent lewat
   `mutation_id`; konflik revisi lintas tab tetap `409` dan di-retry client.
 - **Selesai ujian**: submit idempotent per `(student_id, exam_id)`; scoring
   tetap sinkron di MySQL; waktu habis menghitung hasil dari jawaban tersimpan.
 - Endpoint verifikasi kunci:
-  - `POST /api/student/exams/:id/start` — siswa yang belum dibuka tingkatnya menerima `HTTP 425` **tanpa menambah antrean pool MySQL**.
+  - `POST /api/student/exams/:id/waiting/join` lalu `/waiting/claim` — siswa yang belum admitted tidak dapat membuka soal/API ujian.
   - `POST /api/student/exams/:id/answers/batch` — `200` + `revisions` per soal; `409` untuk konflik revisi/tab lain.
   - `POST /api/student/exams/:id/submit` — hasil sama meski di-submit dua kali ( dua tab/dua permintaan).
-  - `GET /api/admin/exam-admission?exam_id=` dan `POST /api/admin/exam-admission/advance` — kontrol pembukaan tingkat dari portal admin (komponen `ExamAdmissionControl`).
+  - `GET /api/admin/waiting-room/:id` dan `POST /api/admin/waiting-room/:id/release` — kontrol batch dan pengaturan FIFO dari portal admin.
 
 ## 1. Checklist pra-deploy
 
@@ -37,7 +36,7 @@ Jalankan di mesin lokal sebelum menyentuh server, dari `arena/`:
 ```bash
 npm ci
 npm run build                          # apps/api/dist + apps/web/dist wajib sukses
-cd apps/api && node tests/*.test.mjs   # seluruh pengujian lulus (process exit 0)
+node --test apps/api/tests/*.test.mjs # siapkan DB/Redis uji untuk test integrasi
 ```
 
 Di server, sebelum mulai:
@@ -68,10 +67,10 @@ Jangan menimpa `.env`/secret atau folder storage apa pun.
 
 ## 3. Migrasi database (hanya file baru)
 
-Migrasi `arena/database/migrations/` saat ini `001`–`011` dan sudah
-diterapkan di production sebelumnya. Rilis berikutnya hanya membawa file baru
-(bandingkan dengan `git show --stat origin/main -- arena/database` atau
-`git diff <release-lama>..<release-baru> -- database/migrations`).
+Rilis ini menambahkan `012_waiting_room.sql`. Terapkan file ini sebelum
+reload API; jangan mengulang `001`–`011` yang sudah diterapkan. Periksa file baru
+dengan `git show --stat origin/main -- arena/database` atau
+`git diff <release-lama>..<release-baru> -- database/migrations`.
 
 Jika ada file migrasi baru `NNN_xxx.sql`, terapkan satu per satu sebagai user
 DDL, bukan user runtime (`arena_app`):
@@ -116,9 +115,12 @@ pm2 describe arena-api | grep -E "cwd|script|exec mode|instances"
 Nilai yang diharapkan setelah rilis ini (per proses, di environment PM2/server):
 
 ```dotenv
-EXAM_GRADE_ADMISSION_ENABLED=true
-EXAM_GRADE_ADMISSION_THRESHOLD=300         # ubah hanya dari hasil pengukuran
-EXAM_ADMISSION_TIMEZONE=Asia/Jakarta
+WAITING_BATCH_SIZE=300
+WAITING_BATCH_INTERVAL_MS=10000
+WAITING_HEARTBEAT_TIMEOUT_MS=90000
+WAITING_CLAIM_TIMEOUT_MS=120000
+WAITING_WORKER_ENABLED=true
+WAITING_WORKER_TICK_MS=1000
 EXAM_QUESTION_SOURCE_TTL_MS=2000
 EXAM_QUESTION_REDIS_TTL_MS=2000
 REDIS_URL=redis://<host-pribadi>:6379      # wajib; tanpa Redis gate jatuh ke 503 yang aman
@@ -208,9 +210,9 @@ Prinsipnya:
 
 - Skema database selalu dibuat additif sehingga kode lama boleh berjalan
   di database baru; kolom/indeks baru tidak perlu dibalik.
-- Untuk gate antrean, darurat yang cepat adalah menonaktifkan fitur:
-  `EXAM_GRADE_ADMISSION_ENABLED=false` lalu `pm2 restart arena-api --update-env`
-  (semua tingkat langsung dibuka; attempt yang sudah jalan tidak terganggu).
+- Untuk menghentikan admission baru, pause antrean melalui panel admin.
+  Tidak ada env bypass FIFO; `EXAM_GRADE_ADMISSION_ENABLED` sudah tidak digunakan.
+  Rollback ke kode lama juga perlu web lama; pertahankan tabel additif dan data.
 - Deployment tidak pernah menghapus data (attempt, jawaban, hasil).
   Jangan memulihkan backup dengan cara menimpa database production kecuali
   disetujui pemilik data dan paham data yang hilang sejak backup.
@@ -224,10 +226,10 @@ Prinsipnya:
   jendela ujian untuk melihat p50/p95/p99 per event (`exam_start`,
   `exam_batch`, `exam_autosave`, `exam_heartbeat`, `exam_admission`); matikan
   kembali setelah gelombang.
-- **Gate antrean**: jika gelombang tingkat tertentu selesai lebih cepat dari
-  rencana, gunakan kontrol admin (`ExamAdmissionControl` atau
-  `POST /api/admin/exam-admission/advance`) untuk membuka tingkat berikutnya
-  secara manual; threshold tidak perlu diubah saat ujian berlangsung.
+- **Ruang tunggu**: gunakan panel admin untuk melepas batch atau mengubah
+  ukuran/interval. Pantau worker dan Redis AOF/noeviction; tanpa worker,
+  antrean tetap tersimpan tetapi tidak maju. Terapkan konfigurasi SSE nginx
+  pada rilis ini agar proxy tidak menahan event.
 - **Cache soal 2 detik**: hasil edit soal oleh admin hanya perhitungkan
   attempt yang dimulai setelah TTL berlalu; ini keputusan desain untuk
   melindungi kecepatan mulai, bukan bug.
