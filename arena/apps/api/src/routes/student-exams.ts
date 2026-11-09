@@ -5,14 +5,41 @@ import { requirePool } from '../lib/db.js';
 import { ScoringService } from '../services/scoring.js';
 import { StudentExamService } from '../services/student-exam.js';
 import type { RowDataPacket } from 'mysql2/promise';
+import { ExamAdmissionService } from '../services/exam-admission.js';
+import { redis } from '../lib/redis.js';
 
 const examId = z.coerce.number().int().positive();
 const answerSchema = z.object({ answer: z.string().max(500).nullable(), is_flagged: z.boolean().default(false), attempt_id: z.string().length(26), base_revision: z.number().int().nonnegative(), mutation_id: z.string().regex(/^[A-Za-z0-9_-]{16,100}$/) }).strict();
+const batchAnswersSchema = z.object({ attempt_id: z.string().length(26), answers: z.array(z.object({ question_id: z.number().int().positive(), answer: z.string().max(500).nullable(), is_flagged: z.boolean(), base_revision: z.number().int().nonnegative(), mutation_id: z.string().regex(/^[A-Za-z0-9_-]{16,100}$/) }).strict()).min(1).max(40) }).strict();
 const violationSchema = z.object({ event_key: z.string().min(8).max(100).regex(/^[A-Za-z0-9_-]+$/), type: z.enum(['TAB_HIDDEN','WINDOW_BLUR','FULLSCREEN_EXIT','SCREENSHOT_ATTEMPT','COPY_ATTEMPT','PASTE_ATTEMPT','CUT_ATTEMPT','CONTEXT_MENU_ATTEMPT','DEVTOOLS_SHORTCUT','BROWSER_SHORTCUT','SPLIT_SCREEN_SUSPECTED','MULTI_TAB','TEXT_SELECTION','OTHER']), client_occurred_at: z.string().datetime({ offset: true }).optional(), question_no: z.number().int().nonnegative().max(2000).optional(), csrf_token: z.string().min(32).max(128).optional() }).strict();
 
+// Keep the HTTP boundary allowlisted: a future service change must not expose
+// correct_answer, option_mapping, or explanation fields to a student.
+export const studentStartResponseSchema = {
+  type: 'object', additionalProperties: false,
+  required: ['attempt_id', 'exam', 'expires_at', 'server_time', 'soal', 'jawaban'],
+  properties: {
+    attempt_id: { type: 'string' },
+    exam: { type: 'object', additionalProperties: false, required: ['id', 'nama_ujian'], properties: { id: { type: 'integer' }, nama_ujian: { type: 'string' } } },
+    expires_at: { type: 'string' }, server_time: { type: 'string' },
+    soal: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'tipe', 'pertanyaan', 'opsi', 'poin'], properties: {
+      id: { type: 'integer' }, tipe: { type: 'string' }, pertanyaan: { type: 'string' }, poin: { type: 'number' },
+      opsi: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['key', 'text'], properties: { key: { type: 'string' }, text: { type: 'string' } } } },
+    } } },
+    jawaban: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['question_id', 'answer', 'is_flagged', 'revision'], properties: {
+      question_id: { type: 'integer' }, answer: { type: ['string', 'null'] }, is_flagged: { type: 'boolean' }, revision: { type: 'integer' },
+    } } },
+  },
+} as const;
+
 export async function studentExamRoutes(app: FastifyInstance) {
+  app.addHook('onSend', async (request, reply, payload) => {
+    if (request.url.split('?')[0]?.startsWith('/api/student/exams')) reply.header('Cache-Control', 'no-store');
+    return payload;
+  });
   const pool = requirePool();
-  const exams = new StudentExamService(pool, app.log);
+  const admission = new ExamAdmissionService(redis);
+  const exams = new StudentExamService(pool, app.log, admission);
   app.addHook('onClose', async () => exams.flushDiagnostics());
   const scoring = new ScoringService(pool);
   const studentClaims = (request: FastifyRequest) => {
@@ -21,7 +48,12 @@ export async function studentExamRoutes(app: FastifyInstance) {
     return claims;
   };
   app.get('/api/student/exams', async (request) => exams.list(studentClaims(request).sub));
-  app.post<{ Params: { id: string } }>('/api/student/exams/:id/start', { config: { rateLimit: { max: 10, timeWindow: '1 minute', keyGenerator: rateLimitKey } } }, async (request) => {
+  app.get<{ Params: { id: string } }>('/api/student/exams/:id/admission', { config: { rateLimit: { max: 24, timeWindow: '1 minute', keyGenerator: rateLimitKey } } }, async (request) => {
+    const claims = studentClaims(request);
+    const query = z.object({ ticket: z.string().min(1).max(2000) }).strict().parse(request.query);
+    return admission.statusForTicket(query.ticket, claims.sub, examId.parse(request.params.id));
+  });
+  app.post<{ Params: { id: string } }>('/api/student/exams/:id/start', { schema: { response: { 200: studentStartResponseSchema } }, config: { rateLimit: { max: 10, timeWindow: '1 minute', keyGenerator: rateLimitKey } } }, async (request) => {
     const claims = studentClaims(request); assertCsrf(request, claims);
     return exams.start(claims.sub, examId.parse(request.params.id));
   });
@@ -32,6 +64,10 @@ export async function studentExamRoutes(app: FastifyInstance) {
   app.put<{ Params: { id: string; questionId: string } }>('/api/student/exams/:id/answers/:questionId', { config: { rateLimit: { max: 300, timeWindow: '1 minute', keyGenerator: rateLimitKey } } }, async (request) => {
     const claims = studentClaims(request); assertCsrf(request, claims);
     return exams.saveAnswer(claims, examId.parse(request.params.id), examId.parse(request.params.questionId), answerSchema.parse(request.body));
+  });
+  app.post<{ Params: { id: string } }>('/api/student/exams/:id/answers/batch', { config: { rateLimit: { max: 60, timeWindow: '1 minute', keyGenerator: rateLimitKey } } }, async (request) => {
+    const claims = studentClaims(request); assertCsrf(request, claims);
+    return exams.saveAnswersBatch(claims, examId.parse(request.params.id), batchAnswersSchema.parse(request.body));
   });
   app.post<{ Params: { id: string } }>('/api/student/exams/:id/violations', { config: { rateLimit: { max: 20, timeWindow: '1 minute', keyGenerator: (request) => {
     const bearer=request.headers.authorization?.startsWith('Bearer ')?request.headers.authorization.slice(7):undefined;

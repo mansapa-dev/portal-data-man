@@ -14,6 +14,9 @@
     "demo:migrate": "node scripts/migrate-local.mjs",
     "demo:migrate:integrity": "node scripts/migrate-integrity-local.mjs",
     "demo:seed": "node scripts/seed-local-demo.mjs",
+    "perf:seed": "node scripts/seed-perf-local.mjs",
+    "perf:warmup": "node scripts/warmup-exam-local.mjs",
+    "perf:verify": "node scripts/verify-perf-local.mjs",
     "build": "npm run build -w @arena/api && npm run build -w @arena/web",
     "start": "npm run start -w @arena/api"
   },

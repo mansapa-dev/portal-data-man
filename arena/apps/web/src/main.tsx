@@ -7,6 +7,8 @@ import { StaffOperations } from './StaffOperations';
 import { StudentCards } from './StudentCards';
 import { StudentExam, StudentResult } from './StudentExam';
 import { StudentDashboard, StudentSupportModal } from './StudentDashboard';
+import { ExamWaitingRoom } from './ExamWaitingRoom';
+import { ExamAdmissionControl } from './ExamAdmissionControl';
 import type { Exam } from './StudentDashboard';
 import type { ExamResult } from './StudentExam';
 import { exportExcel, safeFilename } from './lib/spreadsheet';
@@ -39,6 +41,8 @@ function App() {
   const [sessionLoading,setSessionLoading]=useState(true);
   const [exams, setExams] = useState<Exam[]>([]);
   const [attempt, setAttempt] = useState<Attempt | null>(null);
+  const [waitingExam, setWaitingExam] = useState<{ examId: number; ticket: string; name: string } | null>(null);
+  useEffect(() => { if (!student) setWaitingExam(null); }, [student]);
   const [result, setResult] = useState<ExamResult | null>(null);
   const [resultExamName, setResultExamName] = useState('');
   const [resultExamId, setResultExamId] = useState<number | null>(null);
@@ -64,11 +68,33 @@ function App() {
   const retryTimers = useRef(new Map<number, number>());
   const retryAttempts = useRef(new Map<number, number>());
   const pending = useRef(new Map<number, Promise<void>>());
+  const batchQueue = useRef(new Map<number, { item: {question_id:number;answer:string|null;is_flagged:boolean;base_revision:number;mutation_id:string}; resolve:(value:{revision:number})=>void; reject:(error:unknown)=>void }>());
+  const batchTimer = useRef<number | null>(null);
+  const batchInFlight = useRef<Promise<void> | null>(null);
   const latestDraft = useRef(new Map<number, {question:Question;answer:string;flagged:boolean}>());
   const retryDraft = useRef(new Map<number, {question:Question;answer:string;flagged:boolean;mutationId:string}>());
   const revisionState = useRef<Record<number, number>>({});
   const failedSaves = useRef(new Set<number>());
   const submittingAttempt = useRef(false);
+  function flushBatch(examId:number, attemptId:string): Promise<void> {
+    if (batchTimer.current !== null) { window.clearTimeout(batchTimer.current); batchTimer.current = null; }
+    if (batchInFlight.current) return batchInFlight.current.then(() => flushBatch(examId, attemptId));
+    const entries=[...batchQueue.current.entries()].slice(0,40);
+    if (!entries.length) return Promise.resolve();
+    for (const [id] of entries) batchQueue.current.delete(id);
+    const task=api<{revisions:Record<number,number>}>(`/api/student/exams/${examId}/answers/batch`,{method:'POST',body:{attempt_id:attemptId,answers:entries.map(([,entry])=>entry.item)}})
+      .then(result=>{for(const [id,entry] of entries){const revision=result.revisions[id];if(!Number.isSafeInteger(revision))entry.reject(new Error('Konfirmasi simpan jawaban tidak lengkap'));else entry.resolve({revision});}})
+      .catch(error=>{for(const [,entry] of entries)entry.reject(error);})
+      .finally(()=>{if(batchInFlight.current===task)batchInFlight.current=null;if(batchQueue.current.size)void flushBatch(examId,attemptId);});
+    batchInFlight.current=task;
+    return task;
+  }
+  function enqueueBatch(examId:number,attemptId:string,item:{question_id:number;answer:string|null;is_flagged:boolean;base_revision:number;mutation_id:string}):Promise<{revision:number}>{
+    return new Promise((resolve,reject)=>{
+      batchQueue.current.set(item.question_id,{item,resolve,reject});
+      if(batchTimer.current===null){const delay=submittingAttempt.current?0:3000+Math.floor(Math.random()*1000);batchTimer.current=window.setTimeout(()=>{batchTimer.current=null;void flushBatch(examId,attemptId);},delay);}
+    });
+  }
   function refreshSaveState() {
     setSaveState(failedSaves.current.size ? 'error' : pending.current.size || timers.current.size ? 'saving' : 'saved');
   }
@@ -112,7 +138,26 @@ function App() {
     try { const result=await api<{csrf_token:string;staff:Staff}>('/api/auth/staff/login',{method:'POST',body:{username,password}});localStorage.setItem('arena_active_portal','staff');setSession(null,result.csrf_token);setStudent(null);setStaff(result.staff);setStaffLoginOpen(false); }
     catch(error){setMessage(error instanceof Error?error.message:'Login staf gagal');} finally{setBusy(false);}
   }
-  async function start(examId: number) {
+  async function start(examId: number, resume = false) {
+    setMessage('');
+    const exam = exams.find(item => item.id === examId);
+    if (!resume && exam?.status_attempt !== 'IN_PROGRESS' && exam?.admission_ticket) {
+      setWaitingExam({ examId, ticket: exam.admission_ticket, name: exam.nama_ujian });
+      return;
+    }
+    try { await openAttempt(examId); }
+    catch (error) {
+      if (error instanceof ApiError && error.statusCode === 425) {
+        try {
+          const available = await loadExams();
+          const fresh = available.find(item => item.id === examId);
+          if (fresh?.admission_ticket) { setWaitingExam({ examId, ticket: fresh.admission_ticket, name: fresh.nama_ujian }); return; }
+        } catch { /* show the original start error */ }
+      }
+      setMessage(error instanceof Error ? error.message : 'Tidak dapat membuka ujian');
+    }
+  }
+  async function openAttempt(examId: number) {
     setBusy(true); setMessage('');
     try {
       setResult(null); setResultExamId(null); setReview(null); setReviewError(''); setExamHelpOpen(false);
@@ -122,8 +167,19 @@ function App() {
       const savedFlags: Record<number, boolean> = {};
       result.jawaban.forEach((item) => { savedAnswers[item.question_id] = item.answer ?? ''; savedRevisions[item.question_id] = item.revision; savedFlags[item.question_id] = item.is_flagged; });
       revisionState.current = savedRevisions; failedSaves.current.clear(); setSaveState('saved'); setAnswers(savedAnswers); setFlags(savedFlags);
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'Tidak dapat membuka ujian'); }
-    finally { setBusy(false); }
+    } finally { setBusy(false); }
+  }
+  async function openWaitingAttempt() {
+    if (!waitingExam) return;
+    try { await openAttempt(waitingExam.examId); setWaitingExam(null); }
+    catch (error) {
+      if (error instanceof ApiError && error.statusCode === 425) {
+        const available = await loadExams();
+        const fresh = available.find(item => item.id === waitingExam.examId);
+        if (fresh?.admission_ticket) setWaitingExam({ examId: fresh.id, ticket: fresh.admission_ticket, name: fresh.nama_ujian });
+      }
+      throw error;
+    }
   }
   async function save(question: Question, value: string, flagged = flags[question.id] ?? false) {
     if (!attempt) return;
@@ -134,7 +190,7 @@ function App() {
       try {
         while(latestDraft.current.has(question.id)){
           const draft=latestDraft.current.get(question.id)!;const retryable=retryDraft.current.get(question.id);const payload=retryable&&retryable.answer===draft.answer&&retryable.flagged===draft.flagged?retryable:{...draft,mutationId:mutationId()};retryDraft.current.set(question.id,payload);latestDraft.current.delete(question.id);setSaveState(failedSaves.current.size?'error':'saving');
-          const result=await api<{revision:number}>(`/api/student/exams/${attempt.exam.id}/answers/${question.id}`,{method:'PUT',body:{answer:payload.answer||null,is_flagged:payload.flagged,attempt_id:attempt.attempt_id,base_revision:revisionState.current[question.id]??0,mutation_id:payload.mutationId}});
+          const result=await enqueueBatch(attempt.exam.id,attempt.attempt_id,{question_id:question.id,answer:payload.answer||null,is_flagged:payload.flagged,base_revision:revisionState.current[question.id]??0,mutation_id:payload.mutationId});
           revisionState.current={...revisionState.current,[question.id]:result.revision};
           retryDraft.current.delete(question.id);
           failedSaves.current.delete(question.id);
@@ -174,6 +230,7 @@ function App() {
     setBusy(true);submittingAttempt.current=true;
     for(const timer of retryTimers.current.values())window.clearTimeout(timer);retryTimers.current.clear();
     try {
+      if (batchQueue.current.size) await flushBatch(attempt.exam.id,attempt.attempt_id);
       const due = [...timers.current.entries()];
       due.forEach(([, timer]) => window.clearTimeout(timer)); timers.current.clear();
       if (finalizeOnly) {
@@ -194,7 +251,16 @@ function App() {
         }
         if (failedSaves.current.size) throw new Error('Ada jawaban yang belum tersimpan. Coba simpan lagi sebelum mengirim ujian.');
       }
-      const completed = await api<ExamResult>(`/api/student/exams/${attempt.exam.id}/submit`, { method: 'POST', body: finalizeOnly ? {finalize_only:true} : {} });
+      let completed:ExamResult | null=null;
+      for(let retry=0;retry<5;retry++){
+        try{completed=await api<ExamResult>(`/api/student/exams/${attempt.exam.id}/submit`,{method:'POST',body:finalizeOnly?{finalize_only:true}:{}});break;}
+        catch(error){
+          const retryable=!(error instanceof ApiError)||error.statusCode>=500||error.statusCode===429;
+          if(!retryable||retry===4)throw error;
+          await new Promise<void>(resolve=>window.setTimeout(resolve,Math.round(Math.min(4000,300*2**retry)*(0.7+Math.random()*0.6))));
+        }
+      }
+      if(!completed)throw new Error('Hasil ujian belum diterima');
       setMessage(''); setResultExamId(attempt.exam.id); setResultExamName(attempt.exam.nama_ujian); setReview(null); setReviewError(''); setResult(completed); setAttempt(null); await loadExams();
     } catch (error) { setMessage(finalizeOnly?'Waktu habis. Hasil belum dapat dimuat; coba lagi saat koneksi tersedia.':error instanceof Error ? error.message : 'Submit gagal'); throw error; }
     finally { submittingAttempt.current=false;setBusy(false); }
@@ -237,6 +303,7 @@ function App() {
     {staff ? <StaffPanel staff={staff} onLogout={()=>void logout()} darkMode={darkMode} onToggleTheme={()=>setDarkMode(current=>!current)} /> : student ? attempt ?
       <StudentExam attempt={attempt} studentName={student.nama} studentNisn={student.nisn} answers={answers} flags={flags} busy={busy} saveState={saveState} message={message} change={change} toggleFlag={toggleFlag} retrySave={retrySave} submit={submit} onTerminated={terminated} onHelp={()=>setExamHelpOpen(true)}>{examHelpOpen&&<StudentSupportModal examId={attempt.exam.id} onClose={()=>setExamHelpOpen(false)}/>}</StudentExam>
       : result ? <><StudentResult onHelp={()=>setExamHelpOpen(true)} examName={resultExamName} result={result} review={review} reviewLoading={reviewLoading} reviewError={reviewError} onReview={loadReview} onClose={()=>{setResult(null);setResultExamId(null);setReview(null);setReviewError('');setReviewLoading(false);setExamHelpOpen(false);}}/>{examHelpOpen&&<StudentSupportModal examId={resultExamId} initialCategory="EXAM_LOCKED" onClose={()=>setExamHelpOpen(false)}/>}</>
+      : waitingExam ? <ExamWaitingRoom examId={waitingExam.examId} ticket={waitingExam.ticket} examName={waitingExam.name} onReady={openWaitingAttempt} onCancel={() => { setWaitingExam(null); void loadExams().catch(error => setMessage(error instanceof Error ? error.message : 'Jadwal gagal diperbarui')); }}/>
       : <StudentDashboard student={student} exams={exams} busy={busy} start={start} showResult={showResult}/>
       : <main className="center-wrapper"><div className="auth-card"><div className="auth-header"><i className="fa-solid fa-user-graduate auth-icon"/><span className="student-eyebrow">MANSAPA ARENA</span><h2>Siap untuk ujian?</h2><p>Masuk dengan nomor peserta dan PIN dari petugas.</p></div>{message&&<p className="arena-notice" role="alert">{message}</p>}<form onSubmit={(event) => void login(event)} autoComplete="off"><div className="input-group"><label className="ui-label" htmlFor="studentNisn">Nomor Peserta (NISN)</label><div className="input-wrapper"><i className="fa-regular fa-id-badge left-icon"/><input id="studentNisn" name="student_nisn" required inputMode="numeric" pattern="[0-9]*" maxLength={20} autoComplete="off" autoCapitalize="off" spellCheck={false} data-lpignore="true" value={nisn} onChange={(event) => setNisn(event.target.value)} placeholder="Masukkan NISN" /></div></div><div className="input-group"><label className="ui-label" htmlFor="studentPin">PIN Ujian (4 Digit)</label><div className="input-wrapper"><i className="fa-solid fa-key left-icon"/><input id="studentPin" name="student_pin" required type={showPin?'text':'password'} inputMode="numeric" pattern="[0-9]*" maxLength={12} autoComplete="new-password" autoCapitalize="off" spellCheck={false} data-lpignore="true" value={pin} onChange={(event) => setPin(event.target.value)} placeholder="••••"/><button className="toggle-pw" type="button" aria-label={showPin?'Sembunyikan PIN':'Tampilkan PIN'} onClick={()=>setShowPin(value=>!value)}><i className={`fa-regular ${showPin?'fa-eye-slash':'fa-eye'}`}/></button></div></div><button className="ui-button btn btn-primary student-login-button" disabled={busy}>{busy ? 'Memproses…' : 'Masuk Ujian'} <i className="fa-solid fa-arrow-right"/></button></form><button type="button" className="support-link-button" onClick={()=>setLoginHelpOpen(true)}><i className="fa-solid fa-headset"/> Tidak bisa masuk? Kirim tiket bantuan</button></div></main>}
     {!staff&&staffLoginOpen&&<div className="modal show" role="dialog" aria-modal="true" aria-label="Login pengelola" onMouseDown={(event)=>{if(event.target===event.currentTarget)setStaffLoginOpen(false);}}><div className="modal-content staff-login-modal"><div className="modal-title-row"><h3><i className="fa-solid fa-shield-halved"/>Portal Personel Arena</h3><button aria-label="Tutup dialog" onClick={()=>setStaffLoginOpen(false)}>&times;</button></div><p className="login-help-copy">Gunakan akun lokal atau masuk dengan akun Portal Data guru/pegawai.</p><a className="sso-button arena-sso-button" href="/auth/sso/start"><i className="fa-solid fa-right-to-bracket"/> Masuk dengan Portal Data SSO</a><div className="login-divider"><span>atau akun lokal</span></div><form onSubmit={(event)=>void staffLogin(event)}><div className="input-group"><label className="ui-label" htmlFor="staffUsername">Username</label><div className="input-wrapper"><i className="fa-solid fa-user left-icon"/><input id="staffUsername" required autoComplete="username" value={username} onChange={(event)=>setUsername(event.target.value)} /></div></div><div className="input-group"><label className="ui-label" htmlFor="staffPassword">Password</label><div className="input-wrapper"><i className="fa-solid fa-lock left-icon"/><input id="staffPassword" required type="password" autoComplete="current-password" value={password} onChange={(event)=>setPassword(event.target.value)} /></div></div><div className="modal-actions"><button className="btn btn-primary" disabled={busy}>Masuk ke portal</button></div></form></div></div>}
@@ -564,6 +631,7 @@ function StaffPanel({ staff,onLogout,darkMode,onToggleTheme }: { staff: Staff;on
       <h4>Jadwal tersimpan</h4><div style={{overflowX:'auto'}}><table style={{width:'100%',textAlign:'left'}}><thead><tr><th>Ujian</th><th>Sumber</th><th>Jenis</th><th>Peserta</th><th>Jadwal</th><th>Status</th><th></th></tr></thead><tbody>{(Array.isArray(data)?data as Array<Record<string,unknown>>:[]).map((row)=><tr key={String(row.id)}><td>{String(row.name)} · {String(row.grade)}</td><td>{String(row.source_name)}</td><td>{String(row.type)}</td><td>{String(row.student_count)}</td><td>{new Date(String(row.starts_at)).toLocaleString('id-ID')}</td><td>{String(row.status)} · {String(row.completed_count)}/{String(row.student_count)} selesai</td><td><button disabled={busy} onClick={()=>void toggleFollowUp(row)}>{row.status==='ACTIVE'?'Nonaktifkan':'Aktifkan'}</button></td></tr>)}</tbody></table></div>
     </div>}
     {view==='settings'&&admin&&<div style={card}><h2>Pengaturan Sistem</h2><p>Atur batas nilai maksimum hasil ujian remedial berdasarkan tingkat.</p><fieldset style={card}><legend>Nilai maksimum remedial</legend><div style={{display:'flex',gap:12,flexWrap:'wrap'}}>{(['X','XI','XII'] as const).map(grade=><label key={grade}>Tingkat {grade}<input type="number" min="0" max="100" step="0.01" value={followCaps[grade]} onChange={event=>setFollowCaps({...followCaps,[grade]:Number(event.target.value)})}/></label>)}</div><button type="button" disabled={busy} onClick={()=>void saveFollowCaps()}>Simpan pengaturan</button></fieldset><p>Nilai hasil remedial yang melebihi batas akan dibatasi. Riwayat pelanggaran tetap tersedia di menu log.</p></div>}
+    {view==='settings'&&admin&&<ExamAdmissionControl/>}
     {view==='questions'&&admin&&<QuestionBank initialExamId={questionCatalogExamId}/>}
     {view==='students'&&admin&&<div style={card}>
       <form onSubmit={(event)=>{event.preventDefault();void loadStudents(1,studentQuery);}}><label>Cari NISN/nama <input value={studentQuery} onChange={(event)=>setStudentQuery(event.target.value)} maxLength={100}/></label><label>Tingkat <select value={studentGrade} onChange={event=>setStudentGrade(event.target.value)}><option value="">Semua tingkat</option>{[...new Set(classChoices.map(row=>String(row.grade)))].sort().map(grade=><option key={grade} value={grade}>{grade}</option>)}</select></label><label>Kelas <select value={studentClass} onChange={event=>setStudentClass(event.target.value)}><option value="">Semua kelas</option>{classChoices.filter(row=>!studentGrade||String(row.grade)===studentGrade).map(row=><option key={String(row.portal_class_id)} value={String(row.portal_class_id)}>{String(row.name)} · {String(row.grade)}</option>)}</select></label><label>Status pengerjaan<select value={studentAttemptStatus} onChange={event=>setStudentAttemptStatus(event.target.value)}><option value="ALL">Semua status</option><option value="NOT_STARTED">Belum mulai</option><option value="IN_PROGRESS">Sedang ujian</option><option value="COMPLETED">Selesai</option><option value="TERMINATED">Dihentikan</option></select></label><label>Urut nama<select value={studentSort} onChange={event=>setStudentSort(event.target.value as 'NAME_ASC'|'NAME_DESC')}><option value="NAME_ASC">A–Z</option><option value="NAME_DESC">Z–A</option></select></label><button disabled={busy}>Terapkan filter</button><button type="button" disabled={busy} onClick={()=>{setStudentQuery('');setStudentGrade('');setStudentClass('');setStudentAttemptStatus('ALL');setStudentSort('NAME_ASC');setStudentPage(1);setBusy(true);void api('/api/admin/students?page=1&limit=50').then(setData).catch(error=>setNotice(error instanceof Error?error.message:'Data siswa gagal dimuat')).finally(()=>setBusy(false));}}>Reset</button></form>

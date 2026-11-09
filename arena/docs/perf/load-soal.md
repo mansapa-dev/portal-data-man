@@ -1,0 +1,9 @@
+# Optimasi terbatas: pembacaan sumber soal saat mulai
+
+Audit awal dan status baseline ada di `baseline.md`. Tidak ada angka k6 sebelum/sesudah karena prasyarat lokal belum tersedia; jangan menganggap pengurangan query sebagai klaim kapasitas 1.015 siswa.
+
+Perubahan ini menyatukan pembacaan `questions` untuk permintaan mulai serentak pada exam yang sama. Sebelum perubahan, setiap siswa baru membaca seluruh sumber soal aktif sekali. Sekarang satu proses API melakukan satu pembacaan untuk gelombang yang tiba bersamaan, lalu memakai hasil read-only dengan TTL default 2 detik. Jika Redis tersedia, cache yang sama dibagi lintas proses dengan TTL default 2 detik. Nilai `EXAM_QUESTION_SOURCE_TTL_MS` (0–30000), `EXAM_QUESTION_SOURCE_CACHE_MAX` (1–100), dan `EXAM_QUESTION_REDIS_TTL_MS` (1000–60000) dapat diatur melalui env. Cache lokal hanya memuat maksimal 16 paket secara default. Pembacaan gagal tidak disimpan.
+
+Cache lokal langsung dibersihkan setelah mutasi soal melalui rute admin pada proses itu; revisi cache Redis juga dinaikkan. Proses cluster lain dapat memakai data lama paling lama sesuai TTL lokal; karena itu soal sebaiknya difinalkan sebelum ujian dibuka. Optimasi ini tidak mengubah snapshot per siswa, randomisasi, hak akses, atau penilaian. Respons siswa tetap dibentuk dari field aman dan tidak berisi `correct_answer`. Unit test memeriksa satu pembacaan sumber untuk 20 mulai serentak, respons tanpa field kunci, dan invalidasi saat fetch masih berlangsung.
+
+Langkah ukur setelah lingkungan lokal siap: jalankan skenario k6 yang sama pada kode sebelum dan sesudah perubahan, catat p95 `/start`, error rate, query per detik pada `questions`, antrean pool, lock DB, CPU event loop, dan jumlah hasil akhir. Baca juga `/health/live` selama tes. Penurunan query `questions` saja tidak menjamin `/start` cepat karena setiap siswa masih menulis snapshot 40 soal dalam transaksi.

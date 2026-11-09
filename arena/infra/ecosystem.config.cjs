@@ -1,0 +1,24 @@
+module.exports = {
+  apps: [{
+    name: 'arena-api',
+    cwd: process.env.ARENA_DIR || '/srv/arena',
+    script: 'apps/api/dist/server.js',
+    exec_mode: 'cluster',
+    instances: 3,
+    max_memory_restart: process.env.ARENA_MAX_MEMORY_RESTART || '1200M',
+    env: {
+      NODE_ENV: 'production',
+      LOG_LEVEL: 'warn',
+      DB_POOL_SIZE: '12',
+      DB_QUEUE_LIMIT: '10000',
+      DB_CONNECT_TIMEOUT_MS: '10000',
+      PASSWORD_VERIFY_WORKERS: '1',
+      EXAM_QUESTION_SOURCE_TTL_MS: '2000',
+      EXAM_QUESTION_REDIS_TTL_MS: '2000',
+      EXAM_GRADE_ADMISSION_ENABLED: 'true',
+      EXAM_GRADE_ADMISSION_THRESHOLD: '300',
+      EXAM_GRADE_ADMISSION_TTL_SECONDS: '172800',
+      EXAM_ADMISSION_TIMEZONE: 'Asia/Jakarta',
+    },
+  }],
+};

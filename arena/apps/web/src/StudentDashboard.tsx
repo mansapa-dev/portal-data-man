@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { api } from './lib/api';
 
 export type Student = { id:number; nisn:string; nama:string; kelas:string|null; tingkat:string|null };
-export type Exam = { id:number; nama_ujian:string; durasi:number; sesi?:number; tanggal_mulai?:string|null; tanggal_selesai?:string|null; status_attempt:string|null; can_start:boolean; is_special?:boolean; special_type?:string|null };
+export type Exam = { id:number; nama_ujian:string; durasi:number; sesi?:number; tanggal_mulai?:string|null; tanggal_selesai?:string|null; status_attempt:string|null; can_start:boolean; is_special?:boolean; special_type?:string|null; admission_ticket?:string };
 
 const completed = (exam:Exam) => ['COMPLETED','EXPIRED'].includes(exam.status_attempt??'');
 const dateLabel = (value?:string|null) => {

@@ -1,0 +1,7 @@
+# Fase 1 — kunci jawaban pada alur siswa
+
+Audit kode Arena menunjukkan `correct_answer` dibaca hanya di server untuk snapshot dan scoring. Respons `POST /api/student/exams/:id/start` sejak awal membentuk objek soal tanpa kunci; sekarang rute tersebut juga memakai response schema dengan daftar field yang diizinkan. Field tambahan dari service, termasuk `correct_answer`, `kunci`, `pembahasan`, dan `option_mapping`, dibuang saat serialisasi HTTP. Semua respons `/api/student/exams` diberi `Cache-Control: no-store`.
+
+Frontend `arena/apps/web/src` tidak memakai `sessionStorage`. `localStorage` hanya menyimpan tema (`mansapa-cbt-theme-v2`) dan portal aktif (`arena_active_portal`). Soal dan jawaban siswa berada di memori React, dan penilaian tetap dilakukan oleh `ScoringService` di server ketika submit. Karena tidak ada penyimpanan soal/kunci di storage browser pada Arena, tidak ada penghapusan storage yang diperlukan.
+
+`GET /api/student/exams/:id/review` tetap menolak sesi yang belum `COMPLETED` atau `EXPIRED` dan hanya mengirim status soal, tanpa kunci mentah. Pengujian HTTP `student-exam-response.test.mjs` memberi service payload sengaja berisi kunci di beberapa tingkat, lalu memeriksa respons tersaring dan `no-store`. Pengujian itu perlu dijalankan dengan Node >=22; Node lokal 18.8.0 gagal memuat Fastify 5 sebelum test berjalan (`diagnostics.tracingChannel` tidak tersedia). Build TypeScript dan tes service sumber soal dapat berjalan dengan Node lokal, tetapi belum menggantikan tes HTTP pada runtime yang didukung.

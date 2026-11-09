@@ -3,6 +3,8 @@ import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import type { Claims } from '../lib/auth.js';
 import type { FastifyBaseLogger } from 'fastify';
 import { performance } from 'node:perf_hooks';
+import { loadExamQuestionSource } from './exam-question-source.js';
+import type { ExamAdmissionService } from './exam-admission.js';
 
 const idChars = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 function ulid() {
@@ -28,7 +30,7 @@ export class StudentExamService {
   private readonly diagnosticSamples = new Map<string, Record<string, number | string | boolean>[]>();
   private diagnosticTimer?: NodeJS.Timeout;
 
-  constructor(private readonly pool: Pool, private readonly diagnostics?: FastifyBaseLogger) {}
+  constructor(private readonly pool: Pool, private readonly diagnostics?: FastifyBaseLogger, private readonly admission?: ExamAdmissionService) {}
 
   private recordDiagnostic(event: string, values: Record<string, number | string | boolean>) {
     if (process.env.ARENA_EXAM_DIAGNOSTICS !== 'true' || !this.diagnostics) return;
@@ -69,7 +71,8 @@ export class StudentExamService {
       WHERE s.id=? AND s.is_active=1 AND s.cbt_status='ACTIVE' AND ((e.status='ACTIVE' AND UTC_TIMESTAMP(3) BETWEEN e.starts_at AND e.ends_at
       AND (NOT EXISTS (SELECT 1 FROM exam_target_classes all_tc WHERE all_tc.exam_id=e.id) OR EXISTS (SELECT 1 FROM exam_target_classes tc WHERE tc.exam_id=e.id AND tc.portal_class_id=s.portal_class_id))
       AND (NOT EXISTS(SELECT 1 FROM exam_target_students all_ts WHERE all_ts.exam_id=e.id) OR EXISTS(SELECT 1 FROM exam_target_students ts WHERE ts.exam_id=e.id AND ts.student_id=s.id))) OR a.id IS NOT NULL) ORDER BY e.starts_at DESC,e.id`, [studentId]);
-    return rows.map((row) => ({ id: Number(row.id), nama_ujian: row.name, tingkat: row.grade, durasi: Number(row.duration_minutes), sesi: Number(row.session_number), tanggal_mulai: row.starts_at, tanggal_selesai: row.ends_at, tahun_ajaran: row.academic_year, semester: row.semester, status_attempt: row.attempt_status, can_start: Boolean(row.can_start), is_special: Boolean(row.follow_up_type), special_type: row.follow_up_type ?? null }));
+    return rows.map((row) => ({ id: Number(row.id), nama_ujian: row.name, tingkat: row.grade, durasi: Number(row.duration_minutes), sesi: Number(row.session_number), tanggal_mulai: row.starts_at, tanggal_selesai: row.ends_at, tahun_ajaran: row.academic_year, semester: row.semester, status_attempt: row.attempt_status, can_start: Boolean(row.can_start), is_special: Boolean(row.follow_up_type), special_type: row.follow_up_type ?? null,
+      admission_ticket: !row.attempt_status && Boolean(row.can_start) ? this.admission?.ticket(studentId, Number(row.id), row.grade, { academic_year: row.academic_year, semester: row.semester, starts_at: row.starts_at, session_number: row.session_number }) : undefined }));
   }
 
   async start(studentId:number,examId:number,retry=0):Promise<unknown>{
@@ -86,6 +89,7 @@ export class StudentExamService {
   }
 
   private async startOnce(studentId: number, examId: number) {
+    const startedAt = performance.now();
     // Keep the first consistent read outside the resume transaction. If resume
     // waits on an autosave's attempt lock, the transaction must not retain a
     // repeatable-read snapshot from before that save committed.
@@ -110,7 +114,9 @@ export class StudentExamService {
     const student = students[0];
     if (!student) throw Object.assign(new Error('Siswa tidak ditemukan atau tidak aktif'), { statusCode: 403 });
     const hasExistingAttempt = Boolean(student.attempt_id);
+    const acquireStarted = performance.now();
     const connection = await this.pool.getConnection();
+    const poolWaitMs = performance.now() - acquireStarted;
     let state: { attempt: RowDataPacket; exam: RowDataPacket; questions: RowDataPacket[]; answers: RowDataPacket[] } | undefined;
     try {
       await connection.beginTransaction();
@@ -135,7 +141,11 @@ export class StudentExamService {
       // ratusan siswa menekan "Mulai" pada detik yang sama.
       let createdQuestions: RowDataPacket[] | undefined;
       if (!attempt) {
-        const [source] = await connection.execute<RowDataPacket[]>('SELECT id,question_type,question_text,option_a,option_b,option_c,option_d,option_e,correct_answer,points FROM questions WHERE exam_id=? AND status=\'ACTIVE\' ORDER BY id', [examId]);
+        await this.admission?.assertCanStart({ academic_year: exam.academic_year, semester: exam.semester, starts_at: exam.starts_at, session_number: exam.session_number }, student.grade_snapshot);
+        const source = await loadExamQuestionSource(examId, async () => {
+          const [rows] = await connection.execute<RowDataPacket[]>('SELECT id,question_type,question_text,option_a,option_b,option_c,option_d,option_e,correct_answer,points FROM questions WHERE exam_id=? AND status=\'ACTIVE\' ORDER BY id', [examId]);
+          return rows;
+        });
         if (!source.length) throw Object.assign(new Error('Soal ujian belum tersedia'), { statusCode: 409 });
         const seed = createHash('sha256').update(`${studentId}:${examId}:${randomBytes(16).toString('hex')}`).digest('hex');
         const orderedIds = shuffle(source.map((q) => Number(q.id)), seed);
@@ -185,6 +195,15 @@ export class StudentExamService {
       throw error;
     } finally { connection.release(); }
     const { attempt, exam, questions, answers } = state!;
+    // Count only after COMMIT. SADD is idempotent on retries/resume, including
+    // a retry after the DB committed but the Redis acknowledgement was lost.
+    try {
+      await this.admission?.started({ academic_year: exam.academic_year, semester: exam.semester, starts_at: exam.starts_at, session_number: exam.session_number }, student.grade_snapshot, studentId);
+    } catch (error) {
+      // A Redis interruption must not lock a student out of an existing attempt.
+      if (!hasExistingAttempt || (error as { statusCode?: number }).statusCode !== 503) throw error;
+      this.recordDiagnostic('exam_admission', { outcome: 'resume_counter_deferred' });
+    }
     const byId = new Map(questions.map((q) => [Number(q.id), q]));
     const mapping = jsonValue<Record<string, string[]>>(attempt.option_mapping);
     const ordered = jsonValue<number[]>(attempt.question_order).map((id) => {
@@ -194,6 +213,7 @@ export class StudentExamService {
       const choices = type === 'SHORT_ANSWER' ? [] : (mapping[String(id)] ?? options).map((key) => ({ key, text: q[`option_${key.toLowerCase()}`] })).filter((choice) => choice.text !== null && choice.text !== '');
       return { id: Number(q.id), tipe: type, pertanyaan: q.question_text, opsi: choices, poin: Number(q.points) };
     }).filter(Boolean);
+    this.recordDiagnostic('exam_start', { resumed: hasExistingAttempt, question_count: ordered.length, pool_wait_ms: Number(poolWaitMs.toFixed(2)), total_ms: Number((performance.now() - startedAt).toFixed(2)) });
     return { attempt_id: attempt.public_id, exam: { id: Number(exam.id), nama_ujian: exam.name }, expires_at: attempt.expires_at, server_time: new Date().toISOString(), soal: ordered, jawaban: answers.map((a) => ({ question_id: Number(a.question_id), answer: a.answer, is_flagged: Boolean(a.is_flagged), revision: Number(a.revision) })) };
   }
 
@@ -219,6 +239,73 @@ export class StudentExamService {
       this.recordDiagnostic('exam_heartbeat', { acquire_ms: Number(acquireMs.toFixed(2)), query_ms: Number(queryMs.toFixed(2)), total_ms: Number((performance.now() - started).toFixed(2)) });
     }
     return { server_time: new Date().toISOString() };
+  }
+
+  async saveAnswersBatch(claims: Claims, examId: number, input: { attempt_id: string; answers: { question_id: number; answer: string | null; is_flagged: boolean; base_revision: number; mutation_id: string }[] }) {
+    const ids = input.answers.map((answer) => answer.question_id);
+    if (!ids.length || ids.length > 40 || new Set(ids).size !== ids.length) throw Object.assign(new Error('Batch jawaban tidak valid'), { statusCode: 422 });
+    const started = performance.now();
+    const connection = await this.pool.getConnection();
+    const poolWaitMs = performance.now() - started;
+    try {
+      await connection.beginTransaction();
+      const [attempts] = await connection.execute<RowDataPacket[]>('SELECT id,public_id,status,expires_at,(expires_at<=UTC_TIMESTAMP(3)) expired FROM exam_attempts WHERE student_id=? AND exam_id=? FOR UPDATE', [claims.sub, examId]);
+      const attempt = attempts[0];
+      if (!attempt) throw Object.assign(new Error('Sesi ujian tidak ditemukan'), { statusCode: 404 });
+      if (attempt.public_id !== input.attempt_id) throw Object.assign(new Error('Sesi ujian berubah; muat ulang halaman'), { statusCode: 409 });
+      const marks = ids.map(() => '?').join(',');
+      const [rows] = await connection.query<RowDataPacket[]>(`SELECT q.question_id,q.question_type,
+        (q.option_a IS NOT NULL AND q.option_a<>'') option_a_available,
+        (q.option_b IS NOT NULL AND q.option_b<>'') option_b_available,
+        (q.option_c IS NOT NULL AND q.option_c<>'') option_c_available,
+        (q.option_d IS NOT NULL AND q.option_d<>'') option_d_available,
+        (q.option_e IS NOT NULL AND q.option_e<>'') option_e_available,
+        v.revision,v.mutation_id,a.answer,a.is_flagged
+        FROM attempt_questions q LEFT JOIN answer_write_versions v ON v.attempt_id=q.attempt_id AND v.question_id=q.question_id
+        LEFT JOIN student_answers a ON a.attempt_id=q.attempt_id AND a.question_id=q.question_id
+        WHERE q.attempt_id=? AND q.question_id IN (${marks})`, [attempt.id, ...ids]);
+      const byId = new Map(rows.map((row) => [Number(row.question_id), row]));
+      const updates: { questionId: number; answer: string | null; flagged: boolean; revision: number; mutationId: string }[] = [];
+      const revisions: Record<number, number> = {};
+      for (const item of input.answers) {
+        const row = byId.get(item.question_id);
+        if (!row) throw Object.assign(new Error('Soal tidak ditemukan'), { statusCode: 404 });
+        let answer = item.answer?.trim() || null;
+        if (answer !== null) {
+          if (row.question_type === 'SHORT_ANSWER') {
+            if (answer.length > 500) throw Object.assign(new Error('Jawaban terlalu panjang'), { statusCode: 422 });
+          } else {
+            const letters = [...new Set(answer.toUpperCase().split(',').map((part) => part.trim()).filter(Boolean))].sort();
+            if (!letters.length || (row.question_type === 'MULTIPLE_CHOICE' && letters.length !== 1) || letters.some((letter) => !['A','B','C','D','E'].includes(letter) || !row[`option_${letter.toLowerCase()}_available`])) throw Object.assign(new Error('Pilihan jawaban tidak valid'), { statusCode: 422 });
+            answer = letters.join(',');
+          }
+        }
+        const revision = row.revision === null ? 0 : Number(row.revision);
+        if (row.mutation_id === item.mutation_id) {
+          if (row.answer !== answer || Boolean(row.is_flagged) !== item.is_flagged) throw Object.assign(new Error('ID mutation sudah digunakan untuk payload lain'), { statusCode: 409 });
+          revisions[item.question_id] = revision;
+          continue;
+        }
+        if (attempt.status !== 'IN_PROGRESS' || Number(attempt.expired)) throw Object.assign(new Error('Ujian sudah tidak aktif'), { statusCode: 409 });
+        if (revision !== item.base_revision) throw Object.assign(new Error('Versi jawaban berubah di tab lain'), { statusCode: 409 });
+        const nextRevision = revision + 1;
+        updates.push({ questionId: item.question_id, answer, flagged: item.is_flagged, revision: nextRevision, mutationId: item.mutation_id });
+        revisions[item.question_id] = nextRevision;
+      }
+      if (updates.length) {
+        const answerValues = updates.map((item) => [attempt.id, item.questionId, item.answer, Number(item.flagged)]);
+        await connection.query('INSERT INTO student_answers(attempt_id,question_id,answer,is_flagged,answered_at) VALUES ? ON DUPLICATE KEY UPDATE answer=VALUES(answer),is_flagged=VALUES(is_flagged),answered_at=VALUES(answered_at)', [answerValues.map((row) => [...row, new Date()])]);
+        const versionValues = updates.map((item) => [attempt.id, item.questionId, item.revision, item.mutationId]);
+        await connection.query('INSERT INTO answer_write_versions(attempt_id,question_id,revision,mutation_id) VALUES ? ON DUPLICATE KEY UPDATE revision=VALUES(revision),mutation_id=VALUES(mutation_id)', [versionValues]);
+      }
+      await connection.commit();
+      this.recordDiagnostic('exam_batch', { outcome: 'saved', batch_size: ids.length, pool_wait_ms: Number(poolWaitMs.toFixed(2)), total_ms: Number((performance.now() - started).toFixed(2)) });
+      return { revisions };
+    } catch (error) {
+      try { await connection.rollback(); } catch { /* no active transaction */ }
+      this.recordDiagnostic('exam_batch', { outcome: 'error', batch_size: ids.length, pool_wait_ms: Number(poolWaitMs.toFixed(2)), total_ms: Number((performance.now() - started).toFixed(2)) });
+      throw error;
+    } finally { connection.release(); }
   }
 
   async saveAnswer(claims:Claims,examId:number,questionId:number,input:{answer:string|null;is_flagged:boolean;attempt_id:string;base_revision:number;mutation_id:string},retry=0):Promise<unknown>{try{return await this.saveAnswerOnce(claims,examId,questionId,input);}catch(error){const code=(error as {code?:string}).code;if(retry<2&&['ER_LOCK_DEADLOCK','ER_LOCK_WAIT_TIMEOUT'].includes(code??'')){await new Promise((resolve)=>setTimeout(resolve,10+Math.floor(Math.random()*30)));return this.saveAnswer(claims,examId,questionId,input,retry+1);}throw error;}}

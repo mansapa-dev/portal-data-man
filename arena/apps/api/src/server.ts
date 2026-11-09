@@ -2,11 +2,11 @@ import Fastify from 'fastify';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import sensible from '@fastify/sensible';
-import { Redis } from 'ioredis';
 import { z } from 'zod';
 import { pool } from './lib/db.js';
 import { authRoutes } from './routes/auth.js';
 import { studentExamRoutes } from './routes/student-exams.js';
+import { examAdmissionRoutes } from './routes/exam-admission.js';
 import { staffAuthRoutes } from './routes/staff-auth.js';
 import { adminRoutes } from './routes/admin.js';
 import { supportRoutes } from './routes/support.js';
@@ -20,6 +20,7 @@ import { ScoringService } from './services/scoring.js';
 import { ExpiredAttemptFinalizer } from './services/expired-attempt-finalizer.js';
 import { closePasswordVerifier, getVerifierStats } from './services/password-verifier.js';
 import { ArenaRateLimitStore } from './lib/rate-limit-store.js';
+import { redis } from './lib/redis.js';
 import { monitorEventLoopDelay } from 'node:perf_hooks';
 
 const eventLoopMonitor = monitorEventLoopDelay({ resolution: 20 });
@@ -28,7 +29,7 @@ eventLoopMonitor.enable();
 const env = z.object({
   HOST: z.string().default('0.0.0.0'),
   PORT: z.coerce.number().int().min(1).max(65535).default(3001),
-  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('warn'),
   TRUST_PROXY: z.enum(['true', 'false']).default('false'),
   REDIS_URL: z.string().url().optional(),
   ATTEMPT_FINALIZER_ENABLED: z.enum(['true','false']).default('true'),
@@ -53,12 +54,12 @@ await app.register(sensible);
 // setErrorHandler call never inherit it. Registering it late made every route error
 // (including zod 422 payloads) fall back to Fastify's default handler as HTTP 500.
 app.setErrorHandler((error, request, reply) => {
-  request.log.error({ err: error }, 'request failed');
+  if ((error as { statusCode?: number }).statusCode !== 425) request.log.error({ err: error }, 'request failed');
   const candidate = error as Error & { statusCode?: number };
   const status = error instanceof z.ZodError ? 422 : candidate.statusCode && candidate.statusCode >= 400 && candidate.statusCode < 600 ? candidate.statusCode : 500;
+  if (status === 425) reply.header('Retry-After', '7');
   return reply.status(status).send({ error: status >= 500 ? 'Internal server error' : error instanceof z.ZodError ? error.issues.map((issue)=>issue.message).join(', ') : candidate.message });
 });
-const redis = env.REDIS_URL ? new Redis(env.REDIS_URL, { maxRetriesPerRequest: 1, enableOfflineQueue: false }) : null;
 const finalizer = pool && env.ATTEMPT_FINALIZER_ENABLED === 'true'
   ? new ExpiredAttemptFinalizer(pool, new ScoringService(pool), app.log, env.ATTEMPT_FINALIZER_INTERVAL_MS, env.ATTEMPT_FINALIZER_BATCH_SIZE)
   : null;
@@ -102,6 +103,7 @@ await app.register(ssoRoutes);
 await app.register(setupRoutes);
 if (pool) {
   await app.register(studentExamRoutes);
+  await app.register(examAdmissionRoutes);
   await app.register(adminRoutes);
   await app.register(supportRoutes);
   await app.register(portalSyncRoutes);

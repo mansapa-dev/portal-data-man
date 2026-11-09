@@ -1,0 +1,19 @@
+.exam-waiting-room{display:grid;place-items:center;min-height:70vh;padding:36px 18px}
+.exam-waiting-card{width:min(100%,600px);box-sizing:border-box;text-align:center;padding:44px 32px;border:1px solid var(--border,#dce7e1);border-radius:24px;background:var(--surface,#fff);box-shadow:0 20px 64px #163f2910}
+.exam-waiting-card h1{font-size:clamp(23px,4vw,31px);line-height:1.4;margin:14px 0;color:var(--text-main,#173d2b)}
+.exam-waiting-card p{line-height:1.65;color:var(--text-muted,#5b6e63)}
+.exam-waiting-eyebrow{font-size:11px;letter-spacing:2px;font-weight:800;margin:24px 0 0}
+.exam-waiting-card .exam-waiting-name{font-weight:700;color:var(--text-main,#173d2b);margin:14px 0 4px}
+.exam-waiting-animation{position:relative;width:112px;height:112px;display:grid;place-items:center;margin:auto;color:var(--primary,#16704a);font-size:31px}
+.exam-waiting-animation span{position:absolute;inset:0;border:2px solid currentColor;border-radius:50%;opacity:.2;animation:exam-waiting-ring 2.4s ease-out infinite}
+.exam-waiting-animation span:nth-child(2){animation-delay:.8s}.exam-waiting-animation span:nth-child(3){animation-delay:1.6s}
+.exam-waiting-dots{display:flex;justify-content:center;gap:8px;margin:22px 0 8px}
+.exam-waiting-dots span{width:8px;height:8px;background:var(--primary,#16704a);border-radius:50%;animation:exam-waiting-dot 1.2s ease-in-out infinite}
+.exam-waiting-dots span:nth-child(2){animation-delay:.15s}.exam-waiting-dots span:nth-child(3){animation-delay:.3s}
+.exam-waiting-notice{min-height:26px;font-size:13px}.exam-admission-control{margin:18px 0;padding:20px;border:1px solid var(--border,#dce7e1);border-radius:14px}
+.exam-admission-actions{display:flex;gap:12px;flex-wrap:wrap;align-items:end}.exam-admission-actions label{display:grid;gap:6px;flex:1;min-width:200px}
+.exam-admission-counts{display:flex;gap:20px;flex-wrap:wrap;margin:16px 0}.exam-admission-counts span{font-weight:600}
+@keyframes exam-waiting-ring{0%{transform:scale(.6);opacity:.5}100%{transform:scale(1.15);opacity:0}}
+@keyframes exam-waiting-dot{0%,70%,100%{transform:translateY(0);opacity:.35}35%{transform:translateY(-6px);opacity:1}}
+@media(prefers-reduced-motion:reduce){.exam-waiting-animation span,.exam-waiting-dots span{animation:none}.exam-waiting-animation span{opacity:.12}.exam-waiting-dots span{opacity:.65}}
+@media(max-width:480px){.exam-waiting-card{padding:32px 20px}.exam-waiting-room{padding:24px 12px}}
