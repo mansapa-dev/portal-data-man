@@ -19,7 +19,7 @@ export async function examAdmissionRoutes(app: FastifyInstance) {
     requireRole(request, ['ADMIN']);
     reply.header('Cache-Control', 'no-store');
     const { exam_id } = z.object({ exam_id: z.coerce.number().int().positive() }).strict().parse(request.query);
-    return admission.status(await groupForExam(exam_id), 'XII');
+    return admission.inspect(await groupForExam(exam_id));
   });
   app.post('/api/admin/exam-admission/advance', async (request, reply) => {
     const claims = requireRole(request, ['ADMIN'], true);

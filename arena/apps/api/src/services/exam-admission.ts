@@ -9,19 +9,40 @@ type Ticket = { studentId: number; examId: number; grade: AdmissionGrade; group:
 // All keys use one Redis hash tag, including when Redis Cluster is introduced.
 // Counts are distinct students, shared across grade-specific exam packages.
 export const admissionLua = `
+redis.replicate_commands()
+local clock = redis.call('TIME')
+local now = tonumber(clock[1]) * 1000 + math.floor(tonumber(clock[2]) / 1000)
 local threshold = tonumber(redis.call('HGET', KEYS[1], 'threshold'))
 if not threshold then
   threshold = tonumber(ARGV[3])
   redis.call('HSET', KEYS[1], 'threshold', threshold)
 end
+local maxWait = tonumber(redis.call('HGET', KEYS[1], 'max_wait_ms'))
+if not maxWait then
+  maxWait = tonumber(ARGV[7])
+  redis.call('HSET', KEYS[1], 'max_wait_ms', maxWait)
+end
 local stage = tonumber(redis.call('HGET', KEYS[1], 'stage') or '0')
+local openedAt = tonumber(redis.call('HGET', KEYS[1], 'stage_started_at_ms'))
+if not openedAt and ARGV[1] ~= 'peek' then openedAt = now end
 if ARGV[1] == 'started' then redis.call('SADD', KEYS[tonumber(ARGV[2]) + 2], ARGV[4]) end
 local counts = {redis.call('SCARD', KEYS[2]), redis.call('SCARD', KEYS[3]), redis.call('SCARD', KEYS[4])}
-while stage < 2 and counts[stage + 1] >= threshold do stage = stage + 1 end
-if ARGV[1] == 'advance' and stage == tonumber(ARGV[6]) then stage = math.min(2, stage + 1) end
+while stage < 2 do
+  local timedOut = openedAt and now >= openedAt + maxWait
+  if counts[stage + 1] < threshold and not timedOut then break end
+  if timedOut then openedAt = openedAt + maxWait else openedAt = now end
+  stage = stage + 1
+end
+if ARGV[1] == 'advance' and stage == tonumber(ARGV[6]) and stage < 2 then
+  stage = stage + 1
+  openedAt = now
+end
 redis.call('HSET', KEYS[1], 'stage', stage)
+if openedAt then redis.call('HSET', KEYS[1], 'stage_started_at_ms', openedAt) end
 for i = 1,4 do if redis.call('EXISTS', KEYS[i]) == 1 then redis.call('EXPIRE', KEYS[i], tonumber(ARGV[5])) end end
-return {stage, threshold, counts[1], counts[2], counts[3]}
+local remaining = -1
+if stage < 2 and openedAt then remaining = math.max(0, openedAt + maxWait - now) end
+return {stage, threshold, counts[1], counts[2], counts[3], maxWait, remaining}
 `;
 
 export function admissionGroup(exam: AdmissionExam): string {
@@ -42,14 +63,16 @@ export class ExamAdmissionService {
   readonly enabled: boolean;
   private readonly threshold: number;
   private readonly ttlSeconds: number;
+  private readonly maxWaitSeconds: number;
   private readonly secret: string;
 
-  constructor(private readonly redis: Redis | null, options: { enabled?: boolean; threshold?: number; ttlSeconds?: number; secret?: string } = {}) {
+  constructor(private readonly redis: Redis | null, options: { enabled?: boolean; threshold?: number; ttlSeconds?: number; maxWaitSeconds?: number; secret?: string } = {}) {
     this.enabled = options.enabled ?? process.env.EXAM_GRADE_ADMISSION_ENABLED !== 'false';
     this.threshold = options.threshold ?? Number(process.env.EXAM_GRADE_ADMISSION_THRESHOLD ?? 300);
     this.ttlSeconds = options.ttlSeconds ?? Number(process.env.EXAM_GRADE_ADMISSION_TTL_SECONDS ?? 172800);
+    this.maxWaitSeconds = options.maxWaitSeconds ?? Number(process.env.EXAM_GRADE_ADMISSION_MAX_WAIT_SECONDS ?? 180);
     this.secret = options.secret ?? (process.env.AUTH_TOKEN_SECRET || 'local-development-only');
-    if (!Number.isSafeInteger(this.threshold) || this.threshold < 1 || !Number.isSafeInteger(this.ttlSeconds) || this.ttlSeconds < 3600) throw new Error('Konfigurasi antrean mulai ujian tidak valid');
+    if (!Number.isSafeInteger(this.threshold) || this.threshold < 1 || !Number.isSafeInteger(this.maxWaitSeconds) || this.maxWaitSeconds < 1 || this.maxWaitSeconds > 3600 || !Number.isSafeInteger(this.ttlSeconds) || this.ttlSeconds < 3600) throw new Error('Konfigurasi antrean mulai ujian tidak valid');
   }
 
   ticket(studentId: number, examId: number, grade: unknown, exam: AdmissionExam) {
@@ -73,6 +96,7 @@ export class ExamAdmissionService {
   }
 
   async status(group: string, grade: AdmissionGrade) { return this.run('status', group, grade); }
+  async inspect(group: string) { return this.run('peek', group, 'XII'); }
   async recordStarted(group: string, grade: AdmissionGrade, studentId: number) { return this.run('started', group, grade, studentId); }
   async advance(group: string, expectedGrade: AdmissionGrade) { return this.run('advance', group, expectedGrade); }
 
@@ -87,14 +111,14 @@ export class ExamAdmissionService {
   }
 
   private async run(action: string, group: string, grade: AdmissionGrade, studentId = 0) {
-    if (!this.enabled) return { enabled: false, allowed: true, current_grade: 'X' as AdmissionGrade, threshold: this.threshold, counts: { XII: 0, XI: 0, X: 0 } };
+    if (!this.enabled) return { enabled: false, allowed: true, current_grade: 'X' as AdmissionGrade, threshold: this.threshold, max_wait_seconds: this.maxWaitSeconds, next_stage_in_seconds: null, counts: { XII: 0, XI: 0, X: 0 } };
     if (!this.redis || this.redis.status !== 'ready') throw Object.assign(new Error('Antrean ujian belum tersedia. Silakan tunggu sebentar.'), { statusCode: 503 });
     const base = `arena:admission:{${group}}`;
     let result: number[];
     try {
-      result = await this.redis.eval(admissionLua, 4, `${base}:state`, `${base}:XII`, `${base}:XI`, `${base}:X`, action, admissionGrades.indexOf(grade), this.threshold, studentId, this.ttlSeconds, admissionGrades.indexOf(grade)) as number[];
+      result = await this.redis.eval(admissionLua, 4, `${base}:state`, `${base}:XII`, `${base}:XI`, `${base}:X`, action, admissionGrades.indexOf(grade), this.threshold, studentId, this.ttlSeconds, admissionGrades.indexOf(grade), this.maxWaitSeconds * 1000) as number[];
     } catch { throw Object.assign(new Error('Antrean ujian belum tersedia. Silakan tunggu sebentar.'), { statusCode: 503 }); }
-    const [stage, threshold, XII, XI, X] = result as [number, number, number, number, number];
-    return { enabled: true, allowed: admissionGrades.indexOf(grade) <= stage, current_grade: admissionGrades[stage]!, threshold, counts: { XII, XI, X } };
+    const [stage, threshold, XII, XI, X, maxWaitMs, remainingMs] = result as [number, number, number, number, number, number, number];
+    return { enabled: true, allowed: admissionGrades.indexOf(grade) <= stage, current_grade: admissionGrades[stage]!, threshold, max_wait_seconds: maxWaitMs / 1000, next_stage_in_seconds: remainingMs < 0 ? null : Math.ceil(remainingMs / 1000), counts: { XII, XI, X } };
   }
 }

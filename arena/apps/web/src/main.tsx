@@ -139,13 +139,19 @@ function App() {
     catch(error){setMessage(error instanceof Error?error.message:'Login staf gagal');} finally{setBusy(false);}
   }
   async function start(examId: number, resume = false) {
-    setMessage('');
+    setMessage(''); setBusy(true);
     const exam = exams.find(item => item.id === examId);
-    if (!resume && exam?.status_attempt !== 'IN_PROGRESS' && exam?.admission_ticket) {
-      setWaitingExam({ examId, ticket: exam.admission_ticket, name: exam.nama_ujian });
-      return;
+    try {
+      if (!resume && exam?.status_attempt !== 'IN_PROGRESS' && exam?.admission_ticket) {
+        const admission = await api<{ allowed: boolean }>(`/api/student/exams/${examId}/admission?ticket=${encodeURIComponent(exam.admission_ticket)}`);
+        if (!admission.allowed) {
+          setWaitingExam({ examId, ticket: exam.admission_ticket, name: exam.nama_ujian });
+          return;
+        }
+      }
+      // An already-open cohort enters directly, including late arrivals.
+      await openAttempt(examId);
     }
-    try { await openAttempt(examId); }
     catch (error) {
       if (error instanceof ApiError && error.statusCode === 425) {
         try {
@@ -154,8 +160,12 @@ function App() {
           if (fresh?.admission_ticket) { setWaitingExam({ examId, ticket: fresh.admission_ticket, name: fresh.nama_ujian }); return; }
         } catch { /* show the original start error */ }
       }
+      if (exam?.admission_ticket && (!(error instanceof ApiError) || error.statusCode >= 500 || error.statusCode === 429)) {
+        setWaitingExam({ examId, ticket: exam.admission_ticket, name: exam.nama_ujian });
+        return;
+      }
       setMessage(error instanceof Error ? error.message : 'Tidak dapat membuka ujian');
-    }
+    } finally { setBusy(false); }
   }
   async function openAttempt(examId: number) {
     setBusy(true); setMessage('');

@@ -8,6 +8,7 @@ import { StudentExamService } from '../dist/services/student-exam.js';
 const scope = () => randomBytes(16).toString('hex');
 const schedule = { academic_year: '2026/2027', semester: 'ODD', starts_at: new Date('2026-11-09T01:00:00Z'), session_number: 1 };
 const secret = 'dummy-test-secret-for-admission-123456789';
+async function redisNow(redis) { const [seconds, micros] = await redis.time(); return Number(seconds) * 1000 + Math.floor(Number(micros) / 1000); }
 
 test('admission groups join grade packages in the same school day and session', () => {
   assert.equal(admissionGroup(schedule), admissionGroup({ ...schedule, starts_at: new Date('2026-11-09T02:30:00Z') }));
@@ -90,16 +91,63 @@ test('server rejects direct XI start before reading source questions or insertin
     await redis.ping();
     // Fresh scope for this run, independent of all other tests.
     const exam = { ...schedule, academic_year: `dummy-${scope()}`, id: 2, duration_minutes: 60, ends_at: new Date(Date.now() + 3600000) };
-    let rolledBack = false, released = false;
-    const connection = {
-      async beginTransaction() {}, async commit() {}, async rollback() { rolledBack = true; }, release() { released = true; },
-      async execute(sql) { assert.match(sql, /FROM exams e/); return [[exam]]; },
-      async query() { assert.fail('No attempt/snapshot writes are allowed before admission'); },
+    let acquired = false;
+    const pool = {
+      async execute() { return [[{ ...exam, id: 1, grade_snapshot: 'XI', gate_exam_id: 2, exam_open: 1 }]]; },
+      async getConnection() { acquired = true; assert.fail('A blocked start must not acquire a transaction connection'); },
     };
-    const pool = { async execute() { return [[{ id: 1, grade_snapshot: 'XI' }]]; }, async getConnection() { return connection; } };
     const service = new StudentExamService(pool, undefined, new ExamAdmissionService(redis, { enabled: true, threshold: 300, secret }));
     await assert.rejects(service.start(1, 2), { statusCode: 425 });
-    assert.equal(rolledBack, true);
-    assert.equal(released, true);
+    assert.equal(acquired, false);
+  } finally { await redis.quit(); }
+});
+
+test('Redis opens each stage after 180 seconds without quota and never requeues late arrivals', { skip: !process.env.REDIS_TEST_URL }, async () => {
+  const redis = new Redis(process.env.REDIS_TEST_URL, { maxRetriesPerRequest: 1 });
+  try {
+    await redis.ping();
+    const gate = new ExamAdmissionService(redis, { enabled: true, threshold: 300, maxWaitSeconds: 180, secret });
+    const group = scope();
+    const stateKey = `arena:admission:{${group}}:state`;
+    const peek = await gate.inspect(group);
+    assert.equal(peek.next_stage_in_seconds, null);
+    assert.equal(await redis.hget(stateKey, 'stage_started_at_ms'), null, 'Admin inspection must not start a session timer');
+
+    const initial = await gate.status(group, 'XI');
+    assert.equal(initial.allowed, false);
+    assert.equal(initial.max_wait_seconds, 180);
+    const timer = await redis.hget(stateKey, 'stage_started_at_ms');
+    await gate.status(group, 'X');
+    await gate.recordStarted(group, 'XII', 1);
+    assert.equal(await redis.hget(stateKey, 'stage_started_at_ms'), timer, 'Polling and a new start must not reset the timer');
+
+    await redis.hset(stateKey, 'stage_started_at_ms', (await redisNow(redis)) - 179000);
+    assert.equal((await gate.status(group, 'XI')).allowed, false, 'XI must still wait before the 180-second boundary');
+    await redis.hset(stateKey, 'stage_started_at_ms', (await redisNow(redis)) - 180000);
+    const releases = await Promise.all(Array.from({ length: 20 }, () => gate.status(group, 'XI')));
+    assert.ok(releases.every(result => result.allowed && result.current_grade === 'XI'));
+    const xiStage = await gate.status(group, 'X');
+    assert.equal(xiStage.allowed, false);
+    assert.ok(xiStage.next_stage_in_seconds > 175 && xiStage.next_stage_in_seconds <= 180, 'XI has its own 3-minute window');
+    assert.equal(xiStage.counts.XII, 1, 'The timer works without the minimum quota');
+
+    await redis.hset(stateKey, 'stage_started_at_ms', (await redisNow(redis)) - 180000);
+    assert.equal((await gate.status(group, 'X')).allowed, true);
+    for (const grade of ['XII', 'XI', 'X']) {
+      assert.equal((await gate.status(group, grade)).allowed, true, 'Late arrivals must remain admitted');
+      const late = await gate.recordStarted(group, grade, 999);
+      assert.equal(late.current_grade, 'X');
+      assert.equal(late.next_stage_in_seconds, null);
+    }
+
+    const idleGroup = scope();
+    await gate.status(idleGroup, 'XII');
+    await redis.hset(`arena:admission:{${idleGroup}}:state`, 'stage_started_at_ms', (await redisNow(redis)) - 420000);
+    assert.equal((await gate.status(idleGroup, 'X')).allowed, true, 'A late poll catches up both elapsed windows');
+
+    const legacyGroup = scope();
+    await redis.hset(`arena:admission:{${legacyGroup}}:state`, 'stage', 1, 'threshold', 300);
+    assert.equal((await gate.status(legacyGroup, 'XI')).allowed, true, 'Existing open stages must not close after an upgrade');
+    assert.equal((await gate.status(legacyGroup, 'X')).allowed, false);
   } finally { await redis.quit(); }
 });

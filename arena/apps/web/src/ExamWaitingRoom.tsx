@@ -8,6 +8,7 @@ export function ExamWaitingRoom({ examId, ticket, examName, onReady, onCancel }:
   const [notice, setNotice] = useState('');
   const [stopped, setStopped] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [maxWaitSeconds, setMaxWaitSeconds] = useState(180);
   useEffect(() => {
     let cancelled = false;
     let timer = 0;
@@ -15,9 +16,10 @@ export function ExamWaitingRoom({ examId, ticket, examName, onReady, onCancel }:
     const schedule = (delay: number) => { if (!cancelled) timer = window.setTimeout(() => { void poll(); }, delay); };
     async function poll() {
       try {
-        const status = await api<{ allowed: boolean }>(`/api/student/exams/${examId}/admission?ticket=${encodeURIComponent(ticket)}`);
+        const status = await api<{ allowed: boolean; max_wait_seconds: number }>(`/api/student/exams/${examId}/admission?ticket=${encodeURIComponent(ticket)}`);
         if (cancelled) return;
         setNotice('');
+        setMaxWaitSeconds(status.max_wait_seconds);
         if (!status.allowed) { schedule(5000 + Math.random() * 5000); return; }
         // Spread the next cohort's starts after its gate opens.
         timer = window.setTimeout(() => {
@@ -44,6 +46,7 @@ export function ExamWaitingRoom({ examId, ticket, examName, onReady, onCancel }:
       <h1 id="exam-waiting-title">Silakan tunggu, sesi Anda akan segera dimulai...</h1>
       <p className="exam-waiting-name">{examName}</p>
       <p>Ujian akan terbuka otomatis saat giliran Anda tiba.</p>
+      <p>Setiap tahap dibuka setelah kuota terpenuhi atau maksimal {Math.ceil(maxWaitSeconds / 60)} menit, mana yang lebih dahulu.</p>
       <div className="exam-waiting-dots" aria-hidden="true"><span/><span/><span/></div>
       <p className="exam-waiting-notice" role="status" aria-live="polite">{notice}</p>
       <button className="btn btn-secondary" type="button" disabled={starting} onClick={onCancel}>{stopped ? 'Kembali dan perbarui jadwal' : 'Kembali ke jadwal'}</button>
