@@ -2,6 +2,13 @@
 
 Belum ada hasil k6 yang sah. Pada mesin ini tidak tersedia Docker, k6, Node >=22, atau konfigurasi DB Arena lokal. Tidak ada request ke staging/production. Karena baseline juga belum dapat diukur, klaim peningkatan latency atau kesiapan 1.015 siswa **belum dibuat**.
 
+## Round berikutnya (setelah commit `ee4306a3`)
+
+- Mulai: gate antrean tingkat (Redis) dan warm-up cache sumber soal pindah **ke luar** transaksi MySQL. Transaksinya sendiri kini hanya berisi: baca attempt/ujian, INSERT attempt, bulk INSERT snapshot, commit. Siswa yang ditolak gate (HTTP 425) tidak lagi mengambil koneksi pool MySQL sama sekali; preflight sekarang menghitung `exam_open` (status, jendela waktu, target) dalam satu round-trip yang sama, non-locking.
+- Selesai: pembersihan dead-code fallback pada hitung `option_count` di scoring (kolom teks opsi memang tidak diseleksi).
+- Jawab: tidak ada perubahan semantik; tayangan batch/dedup `mutation_id` tetap.
+- Perubahan belum diukur k6; angka tetap menunggu run lokal/staging sesuai [local-run.md](local-run.md).
+
 Perubahan yang siap diukur:
 
 - Mulai/load: pembacaan sumber soal dibagi melalui singleflight lokal dan cache Redis dengan TTL pendek; setiap attempt masih membuat snapshot 40 soal di MySQL.

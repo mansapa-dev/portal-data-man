@@ -137,7 +137,9 @@ export class ScoringService {
         const points = Number(row.points); result.maximum += points;
         if (row.answer === null) result.blank++;
         else {
-          const available = Number(row.option_count ?? [row.option_a,row.option_b,row.option_c,row.option_d,row.option_e].filter((value) => String(value ?? '').trim() !== '').length);
+          // option_count dihitung di SQL; kolom teks opsi sengaja tidak
+          // diseleksi agar payload tidak berat.
+          const available = Number(row.option_count);
           const score = fraction(row.question_type, row.correct_answer, row.answer, available);
           result.earned += points * score;
           if (score >= 1) result.correct++; else result.wrong++;

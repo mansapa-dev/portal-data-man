@@ -39,10 +39,14 @@ test('start retries a concurrent unique-key winner and resumes its attempt', asy
   };
   const pool = {
     async execute(sql) {
-      // Satu query preflight: siswa + keberadaan attempt (LEFT JOIN).
+      // Satu query preflight: siswa + keberadaan attempt + field ujian (LEFT JOIN).
       if (sql.startsWith('SELECT s.id')) {
         preflightReads++;
-        return [[{ id: 1, portal_class_id: null, grade_snapshot: 'X', attempt_id: preflightReads === 1 ? null : 10 }]];
+        return [[{ id: 1, portal_class_id: null, grade_snapshot: 'X', attempt_id: preflightReads === 1 ? null : 10, gate_exam_id: 5, exam_open: 1 }]];
+      }
+      // Pemanasan sumber soal berjalan di luar transaksi melalui pool.
+      if (sql.startsWith('SELECT id,question_type')) {
+        return [[{ id: 42, question_type: 'MULTIPLE_CHOICE', question_text: 'Question', option_a: 'A', option_b: 'B', option_c: null, option_d: null, option_e: null, correct_answer: 'A', points: 1 }]];
       }
       throw new Error(`Unexpected pool SQL: ${sql}`);
     },

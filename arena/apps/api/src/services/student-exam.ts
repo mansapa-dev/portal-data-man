@@ -105,15 +105,49 @@ export class StudentExamService {
     // can then deadlock while inserting adjacent keys in the unique index. That
     // is why only the non-locking existence check happens here; the row itself
     // is locked later, inside the transaction, when it actually exists.
+    //
+    // The same round-trip also fetches the exam's admission fields (LEFT JOIN on
+    // the exam primary key; the bound exam id matches at most one row) so the
+    // Redis grade gate below can run before any pooled connection is acquired.
     const [students] = await this.pool.execute<RowDataPacket[]>(
-      `SELECT s.id,s.portal_class_id,s.nisn,s.name_snapshot,s.class_snapshot,s.grade_snapshot,s.academic_year_snapshot,a.id attempt_id
+      `SELECT s.id,s.portal_class_id,s.nisn,s.name_snapshot,s.class_snapshot,s.grade_snapshot,s.academic_year_snapshot,a.id attempt_id,
+        e.id gate_exam_id,
+        (e.status='ACTIVE' AND UTC_TIMESTAMP(3) BETWEEN e.starts_at AND e.ends_at AND e.grade=s.grade_snapshot
+          AND (NOT EXISTS(SELECT 1 FROM exam_target_classes all_tc WHERE all_tc.exam_id=e.id) OR EXISTS(SELECT 1 FROM exam_target_classes tc WHERE tc.exam_id=e.id AND tc.portal_class_id=s.portal_class_id))
+          AND (NOT EXISTS(SELECT 1 FROM exam_target_students all_ts WHERE all_ts.exam_id=e.id) OR EXISTS(SELECT 1 FROM exam_target_students ts WHERE ts.exam_id=e.id AND ts.student_id=s.id))) exam_open,
+        e.academic_year,e.semester,e.starts_at,e.session_number
        FROM students s LEFT JOIN exam_attempts a ON a.student_id=s.id AND a.exam_id=?
-       WHERE s.id=? AND s.is_active=1 AND s.cbt_status='ACTIVE' LIMIT 1`,
-      [examId, studentId],
+       LEFT JOIN exams e ON e.id=? WHERE s.id=? AND s.is_active=1 AND s.cbt_status='ACTIVE' LIMIT 1`,
+      [examId, examId, studentId],
     );
     const student = students[0];
     if (!student) throw Object.assign(new Error('Siswa tidak ditemukan atau tidak aktif'), { statusCode: 403 });
     const hasExistingAttempt = Boolean(student.attempt_id);
+    if (!hasExistingAttempt && student.gate_exam_id != null && Number(student.exam_open)) {
+      // Gate antrean tingkat (Redis) berjalan DI LUAR transaksi database, hanya
+      // saat ujian sudah memang terbuka untuk siswa ini (status, jendela waktu,
+      // dan target sudah lolos di query preflight). Selama gate berada di dalam
+      // transaksi, setiap start menahan koneksi pool MySQL selama latensi Redis,
+      // dan ratusan siswa yang masih menunggu giliran mengantre pool hanya untuk
+      // lalu ditolak 425. Di sini siswa yang belum dibuka tingkatnya tidak pernah
+      // menyentuh pool MySQL, dan transaksi MySQL berhenti memegang latensi Redis.
+      await this.admission?.assertCanStart(
+        { academic_year: student.academic_year, semester: student.semester, starts_at: student.starts_at, session_number: student.session_number },
+        student.grade_snapshot,
+      );
+      // Warm-up cache sumber soal juga di luar transaksi: query `questions`,
+      // Redis GET/SET, dan parsing JSON 40 soal tidak lagi memperpanjang waktu
+      // koneksi ditahan. Transaksi tetap memanggil loader (akan jadi cache hit)
+      // supaya validasi "Soal ujian belum tersedia" tetap berjalan di sana.
+      await loadExamQuestionSource(examId, async () => {
+        const [rows] = await this.pool.execute<RowDataPacket[]>(
+          `SELECT id,question_type,question_text,option_a,option_b,option_c,option_d,option_e,correct_answer,points
+           FROM questions WHERE exam_id=? AND status='ACTIVE' ORDER BY id`,
+          [examId],
+        );
+        return rows;
+      });
+    }
     const acquireStarted = performance.now();
     const connection = await this.pool.getConnection();
     const poolWaitMs = performance.now() - acquireStarted;
@@ -141,7 +175,7 @@ export class StudentExamService {
       // ratusan siswa menekan "Mulai" pada detik yang sama.
       let createdQuestions: RowDataPacket[] | undefined;
       if (!attempt) {
-        await this.admission?.assertCanStart({ academic_year: exam.academic_year, semester: exam.semester, starts_at: exam.starts_at, session_number: exam.session_number }, student.grade_snapshot);
+        // Gate antrean sudah dievaluasi sebelum transaksi (lihat di atas).
         const source = await loadExamQuestionSource(examId, async () => {
           const [rows] = await connection.execute<RowDataPacket[]>('SELECT id,question_type,question_text,option_a,option_b,option_c,option_d,option_e,correct_answer,points FROM questions WHERE exam_id=? AND status=\'ACTIVE\' ORDER BY id', [examId]);
           return rows;
