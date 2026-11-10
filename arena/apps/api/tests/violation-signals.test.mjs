@@ -38,6 +38,13 @@ test('sinyal pelanggaran utama tetap menaikkan hitungan server', async () => {
   assert.ok(statements.some((statement) => statement.sql.startsWith('UPDATE exam_attempts')));
 });
 
+test('APP_OVERLAY (overlay asisten/Gemini di atas layar) dihitung menuju terminasi', async () => {
+  const { service, statements } = serviceFor('APP_OVERLAY');
+  const result = await service.recordViolation(4, 9, 'event-key-overlay-01', 'APP_OVERLAY', { ip: '127.0.0.1', userAgent: 'arena-android', clientOccurredAt: '2026-11-09T03:02:03.000Z' });
+  assert.deepEqual(result, { recorded: true, count: 1, threshold: 3, action: 'AUTO_SUBMIT', terminated: false });
+  assert.ok(statements.some((statement) => statement.sql.startsWith('UPDATE exam_attempts')));
+});
+
 function rollupServiceFor(type, settingsRows = [{ key_name: 'violation_termination_threshold', value: '3' }], startCount = 0) {
   const statements = [];
   let rollupPending = 3; // COUNT termasuk baris yang baru di-INSERT (2 sebelumnya + 1)

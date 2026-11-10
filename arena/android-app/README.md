@@ -4,6 +4,14 @@ This is a new Android WebView shell for the Arena web app. It does not contain t
 
 The app enables Android `FLAG_SECURE`, hides non-system overlays where Android supports it, blocks obscured touches, disables file/content access and mixed content, disables third-party cookies, restricts top-level navigation to the configured Arena HTTPS origin, and covers the app in multi-window mode.
 
+Behavior hardening (signals diteruskan ke web app):
+
+- Setiap kali host berhenti (`onPause`, `onUserLeaveHint`) atau kehilangan fokus jendela — misalnya overlay Gemini/asisten sistem muncul di atas layar ujian — aplikasi menyuntikkan event `arena-host-hidden` ke halaman. Halaman ujian mencatatnya sebagai pelanggaran `APP_OVERLAY` yang dihitung menuju threshold terminasi di server. Sinyal satu episode yang sama (TAB_HIDDEN, WINDOW_BLUR, APP_OVERLAY) digabungkan client ke satu `event_key` sehingga satu episode tombol home dihitung hanya satu pelanggaran.
+- Layar tidak mati sendiri: selama attempt ujian aktif, halaman memanggil `ArenaApp.setKeepScreenOn(true)` (bridge kecil satu tombol) sehingga `FLAG_KEEP_SCREEN_ON` menahan layar dan screen timeout tidak memicu pelanggaran palsu. Setelah ujian selesai/ditinggalkan, halaman melepasnya (`false`). Pada browser biasa, halataman memakai Screen Wake Lock API dengan re-request otomatis saat tab kembali terlihat.
+- `FLAG_SECURE` membuat konten ujian tidak dapat ditangkap asisten (Circle to Search/Gemini menampilkan layar tersensor), dan screenshot recents dinonaktifkan pada API 34+ (`setRecentsScreenshotEnabled(false)`). Overlay asisten sendiri tidak bisa diblokir penuh oleh aplikasi biasa; blokir penuh tombol home/asisten butuh mode kiosk (device owner / Lock Task). Sampai itu, setiap overlay tetap tercatat sebagai pelanggaran dan tampil di portal pengawas.
+
+Catatan pengawas: layar menyala penuh selama ujian menguras baterai lebih cepat — sarankan peserta membawa pengisi daya atau power bank saat sesi lebih dari 45 menit.
+
 Build against a deployment origin supplied locally; no school domain is assumed:
 
 ```sh

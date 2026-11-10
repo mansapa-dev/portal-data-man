@@ -53,6 +53,7 @@ function getViolationLabel(value: unknown): string {
     DEVTOOLS_SHORTCUT: 'Membuka Developer Tools',
     BROWSER_SHORTCUT: 'Shortcut navigasi browser',
     SPLIT_SCREEN_SUSPECTED: 'Terindikasi layar ganda (split-screen)',
+    APP_OVERLAY: 'Overlay asisten (Gemini) muncul di atas layar ujian',
     OTHER: 'Aktivitas mencurigakan lainnya',
   };
   return map[type] ?? type;
