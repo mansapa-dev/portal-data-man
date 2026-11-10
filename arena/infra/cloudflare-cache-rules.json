@@ -1,0 +1,19 @@
+{
+  "description": "Merge these rules with the existing zone cache rules; do not replace the zone ruleset. Both expressions are scoped to arena.man1palembang.sch.id.",
+  "rules": [
+    {
+      "description": "Arena public Vite assets only",
+      "expression": "(http.host eq \"arena.man1palembang.sch.id\" and starts_with(http.request.uri.path, \"/assets/\") and http.request.method in {\"GET\" \"HEAD\"})",
+      "action": "set_cache_settings",
+      "action_parameters": { "cache": true },
+      "enabled": true
+    },
+    {
+      "description": "Arena dynamic and authenticated responses never cached (keep after asset rule)",
+      "expression": "(http.host eq \"arena.man1palembang.sch.id\" and not starts_with(http.request.uri.path, \"/assets/\"))",
+      "action": "set_cache_settings",
+      "action_parameters": { "cache": false },
+      "enabled": true
+    }
+  ]
+}

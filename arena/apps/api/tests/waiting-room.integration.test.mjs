@@ -27,6 +27,8 @@ test('FIFO lifecycle, duplicate join, full timer, guarded exam, and durable retr
     const [[attempt]]=await f.pool.execute('SELECT started_at,expires_at,TIMESTAMPDIFF(SECOND,started_at,expires_at) duration FROM exam_attempts WHERE exam_id=? AND student_id=?',[f.examId,a]);
     assert.equal(Number(attempt.duration),1800,'Full duration starts on claim, not on queue entry/admission');
     assert.equal((await f.service.authorize(f.examId,a,admitted.admit_token)).status,'IN_EXAM');
+    await f.redis.script('FLUSH');
+    assert.equal((await f.service.authorize(f.examId,a,admitted.admit_token)).status,'IN_EXAM','cached command must recover from NOSCRIPT');
     assert.equal((await f.service.join(f.examId,a)).status,'IN_EXAM','An active student never requeues');
     await f.pool.execute("UPDATE exam_attempts SET status='COMPLETED' WHERE exam_id=? AND student_id=?",[f.examId,a]);
     await f.service.finish(f.examId,a);
@@ -121,7 +123,7 @@ test('a crash after MySQL COMMIT is recovered without a duplicate attempt or a n
     const admitted=await f.service.status(f.examId,student);
     let failed=false;
     const proxy=new Proxy(f.redis,{get(target,property){
-      if(property==='eval')return (...args)=>{if(args[8]==='restore' && !failed){failed=true;return Promise.reject(new Error('Simulated process failure after COMMIT'));}return target.eval(...args);};
+      if(property==='arenaWaitingTransition')return (...args)=>{if(args[6]==='restore' && !failed){failed=true;return Promise.reject(new Error('Simulated process failure after COMMIT'));}return target.arenaWaitingTransition(...args);};
       const value=Reflect.get(target,property);return typeof value==='function'?value.bind(target):value;
     }});
     const interrupted=new WaitingRoomService(proxy,f.pool),exams=new StudentExamService(f.pool);

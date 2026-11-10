@@ -1,0 +1,9 @@
+# Private/local Redis only. Configure ACL/TLS separately for remote Redis.
+bind 127.0.0.1
+protected-mode yes
+appendonly yes
+appendfsync everysec
+maxmemory 1gb
+# BullMQ keys must not be evicted. MySQL reconciliation recovers finalization
+# after Redis loss; monitor memory and rejected writes before this limit.
+maxmemory-policy noeviction

@@ -128,6 +128,8 @@ elseif op == 'finish' then
 elseif op == 'guard' then
   if not data.token or redis.call('HGET',sk,'token')~=data.token then return cjson.encode({error='ADMIT_TOKEN_INVALID'}) end
   if state~='IN_EXAM' and not (data.finished==true and state=='FINISHED') then return cjson.encode({error='ADMIT_REQUIRED'}) end
+  -- Autosave/heartbeat only need authorization, not the queue dashboard.
+  return cjson.encode({status=state})
 end
 if op=='release' and availability()=='OPEN' then
   local due = now>=number('next_batch_at_ms',now+1)

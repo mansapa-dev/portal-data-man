@@ -1,238 +1,256 @@
-# Panduan Re-deploy Arena ke Production
+# Redeploy ARENA — kapasitas 1.200 siswa
 
-Panduan ini untuk server production dengan layout saat ini:
-checkout repositori di `/srv/repos/portal-data-man`, aplikasi Arena di
-`/srv/repos/portal-data-man/arena`, dan API dijalankan PM2 cluster
-(3 proses, `apps/api/dist/server.js`) melalui `infra/ecosystem.config.cjs`.
-Panduan staging tetap ada di [staging-vps.md](staging-vps.md).
+Target: **arena.man1palembang.sch.id**, VPS **4 vCPU / RAM 16 GB / disk 120 GB**.
+MySQL dan Redis berada pada VPS yang sama. Panduan memakai checkout
+`/srv/repos/portal-data-man`; sesuaikan bila lokasi aktual berbeda. Jalankan npm
+serta PM2 sebagai user aplikasi yang selama ini menjalankan ARENA, bukan root.
 
-> Aturan yang tidak boleh dilanggar:
-> 1. Jangan pernah menimpa/menghapus `.env`, secret, `/var/lib/arena/question-images`, signing key OIDC, atau data database.
-> 2. `scripts/migrate-local.mjs` **bukan** migrator idempotent — jangan pernah dijalankan ulang di database production yang sudah berisi tabel.
-> 3. Reload/restart API hanya pada jendela tanpa ujian berjalan. Finalizer ujian berjalan di dalam proses API; saat API mati, finalizer juga berhenti.
+Rilis ini menambahkan migrasi **014**, finalizer BullMQ terpisah, worker FIFO
+terpisah, optimasi Redis, dan konfigurasi CDN. API tetap menyimpan jawaban ke
+MySQL sebelum mengembalikan sukses. Cloudflare dan VPS belum diubah oleh agent.
 
-## 0. Isi rilis ini (untuk verifikasi)
+## 1. Persiapan dan backup
 
-Rilis ruang tunggu FIFO menggantikan gate tingkat. Baca [panduan ruang tunggu](../ops/waiting-room.md) untuk state machine, pengujian dan persistensi Redis.
-
-- **Mulai ujian**: join FIFO Redis per ujian, lalu worker melepas maksimal
-  300 siswa per 10 detik. Claim token diperlukan untuk membuat attempt;
-  durasi penuh mulai pada claim, bukan ketika masuk ruang tunggu.
-- **Simpan jawaban**: client mengirim batch tiap 3–4 detik, maksimal 40
-  jawaban per transaksi; retry atas respons hilang tetap idempotent lewat
-  `mutation_id`; konflik revisi lintas tab tetap `409` dan di-retry client.
-- **Selesai ujian**: submit idempotent per `(student_id, exam_id)`; scoring
-  tetap sinkron di MySQL; waktu habis menghitung hasil dari jawaban tersimpan.
-- Endpoint verifikasi kunci:
-  - `POST /api/student/exams/:id/waiting/join` lalu `/waiting/claim` — siswa yang belum admitted tidak dapat membuka soal/API ujian.
-  - `POST /api/student/exams/:id/answers/batch` — `200` + `revisions` per soal; `409` untuk konflik revisi/tab lain.
-  - `POST /api/student/exams/:id/submit` — hasil sama meski di-submit dua kali ( dua tab/dua permintaan).
-  - `GET /api/admin/waiting-room/:id` dan `POST /api/admin/waiting-room/:id/release` — kontrol batch dan pengaturan FIFO dari portal admin.
-
-## 1. Checklist pra-deploy
-
-Jalankan di mesin lokal sebelum menyentuh server, dari `arena/`:
-
-```bash
-npm ci
-npm run build                          # apps/api/dist + apps/web/dist wajib sukses
-node --test apps/api/tests/*.test.mjs # siapkan DB/Redis uji untuk test integrasi
-```
-
-Di server, sebelum mulai:
-
-- [ ] Tidak ada ujian berjalan:
-      `SELECT COUNT(*) FROM exam_attempts WHERE status='IN_PROGRESS';` → wajib 0,
-      atau reload hanya dengan persetujuan pengawas.
-- [ ] Backup database dan folder upload:
-      `mysqldump --single-transaction <db-arena> > /backup/arena-$(date +%F-%H%M).sql`
-      plus salinan `/var/lib/arena/question-images`.
-- [ ] Catat konfigurasi runtime saat ini (`pm2 describe arena-api`:
-      `cwd`, jumlah instance, environment) dan `pm2 logs arena-api --lines 50 --nostream`
-      sebagai pembanding setelah deploy.
-- [ ] Cek `max_connections` MySQL vs `DB_POOL_SIZE × jumlah instance`
-      (produksi: 12 × 3 = 36) dan beban layanan lain di VPS yang sama.
-
-## 2. Update source di server
+Lakukan saat tidak ada ujian aktif. Hentikan penerimaan peserta melalui panel
+admin dan verifikasi tidak ada attempt IN_PROGRESS. Jangan menimpa `.env`,
+secret, database, maupun `/var/lib/arena/question-images`.
 
 ```bash
 cd /srv/repos/portal-data-man
-git status                            # harus bersih; jika ada perubahan lokal:
-# git stash push -u -m "backup sebelum deploy $(date +%F)"
+# Harus bersih; simpan perubahan lokal secara terpisah jika ada.
+git status --short
+export ARENA_PREVIOUS_COMMIT="$(git rev-parse HEAD)"
+export ARENA_BACKUP_DIR="$HOME/arena-backups/$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$ARENA_BACKUP_DIR"
+chmod 700 "$ARENA_BACKUP_DIR"
+printf '%s\n' "$ARENA_PREVIOUS_COMMIT" > "$ARENA_BACKUP_DIR/previous-commit.txt"
+# Sesuaikan nama database dan akun DB; password dimasukkan melalui prompt.
+export ARENA_DB='arena'
+mysql -u arena_migrator -p "$ARENA_DB" -e "SELECT COUNT(*) active_attempts FROM exam_attempts WHERE status='IN_PROGRESS';"
+mysqldump -u arena_migrator -p --single-transaction --routines --triggers \
+  "$ARENA_DB" > "$ARENA_BACKUP_DIR/database.sql"
+test -s "$ARENA_BACKUP_DIR/database.sql"
+chmod 600 "$ARENA_BACKUP_DIR/database.sql"
+cp -a arena/apps/web/dist "$ARENA_BACKUP_DIR/web-dist"
+# Jalankan dengan akun yang dapat membaca direktori upload.
+tar -czf "$ARENA_BACKUP_DIR/question-images.tar.gz" -C /var/lib/arena question-images
+pm2 status
+```
+
+Pastikan backup berhasil dan dapat dipulihkan. Catat commit sebelumnya, versi
+Node/MySQL/Redis, serta lokasi vhost Nginx. Jangan membagikan dump atau keluaran
+konfigurasi yang memuat kredensial. Sisakan ruang disk untuk backup, build,
+Redis AOF, dan log; 120 GB bukan seluruhnya kapasitas data yang bebas digunakan.
+
+## 2. Ambil source dan build
+
+```bash
+cd /srv/repos/portal-data-man
 git pull --ff-only origin main
-cd arena && git log --oneline -1      # catat commit rilis yang dideploy
+git log -1 --oneline
+cd arena
+node --version                         # Node 22+ wajib
+npm ci
+npm run build                         # API dan frontend keduanya harus lulus
+node --test apps/api/tests/finalization-policy.test.mjs \
+  apps/api/tests/violation-signals.test.mjs \
+  apps/api/tests/violation-terminal.test.mjs \
+  apps/api/tests/expired-finalizer.test.mjs \
+  apps/api/tests/exam-batch-answer.test.mjs
+ls apps/api/dist/server.js apps/api/dist/finalization-worker.js \
+   apps/api/dist/waiting-worker.js apps/web/dist/index.html
+# Simpan aset hash lama untuk browser yang masih membuka halaman lama.
+cp -an "$ARENA_BACKUP_DIR/web-dist/assets/." apps/web/dist/assets/
 ```
 
-Jangan menimpa `.env`/secret atau folder storage apa pun.
+Jangan melanjutkan bila install/build gagal. Jangan memperbaiki kegagalan dengan
+mengubah lockfile di VPS atau mematikan verifikasi TLS. Build frontend lokal
+pada sesi audit ini belum diverifikasi; langkah build lengkap di atas wajib.
 
-## 3. Migrasi database (hanya file baru)
+## 3. Terapkan migrasi 014 sebelum restart proses
 
-Rilis ini menambahkan `012_waiting_room.sql`. Terapkan file ini sebelum
-reload API; jangan mengulang `001`–`011` yang sudah diterapkan. Periksa file baru
-dengan `git show --stat origin/main -- arena/database` atau
-`git diff <release-lama>..<release-baru> -- database/migrations`.
-
-Jika ada file migrasi baru `NNN_xxx.sql`, terapkan satu per satu sebagai user
-DDL, bukan user runtime (`arena_app`):
-
-```bash
-mysql -u <arena_migrator> -p <db-arena> < database/migrations/NNN_xxx.sql
-```
-
-Pastikan:
-
-- File baru bersifat additif (kolom/indeks/tabel baru). File `005` destruktif dan tidak boleh dijalankan ulang.
-- Verifikasi hasil lewat `INFORMATION_SCHEMA`:
-  ```sql
-  SELECT TABLE_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
-  WHERE TABLE_SCHEMA = DATABASE() AND COLUMN_NAME = '<kolom-baru>';
-  SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS
-  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '<tabel>' GROUP BY INDEX_NAME;
-  ```
-- `npm run demo:migrate` hanya untuk database baru/kosong; jangan pernah
-  diulang di production (lihat aturan nomor 2 di atas).
-
-## 4. Build di server
+Periksa bahwa migrasi 001–013 sudah diterapkan. Bila tertinggal, tinjau dan
+terapkan hanya migrasi yang belum ada. **Jangan menjalankan
+`scripts/migrate-local.mjs` atau `npm run demo:migrate` di database production.**
 
 ```bash
 cd /srv/repos/portal-data-man/arena
-npm ci                                # jangan sebagai root; pakai user pemilik directory
-npm run build
-ls -l apps/api/dist/server.js apps/web/dist/index.html   # wajib ada
+mysql -u arena_migrator -p "$ARENA_DB" < database/migrations/014_session_capacity.sql
+mysql -u arena_migrator -p "$ARENA_DB" -e \
+  "SHOW COLUMNS FROM exam_attempts LIKE 'termination_action'; SHOW INDEX FROM exam_attempts WHERE Key_name='idx_arena_attempt_finalization';"
 ```
 
-Jangan jalankan build saat ujian berjalan (menghabiskan CPU/RAM server).
+014 menambah kolom keputusan terminasi dan indeks finalisasi. Migrasi dapat
+diulang. Attempt TERMINATED lama yang belum mempunyai hasil ditandai **LOCK**
+secara konservatif, karena keputusan historisnya tidak tersimpan. Tinjau kasus
+itu melalui admin; jangan melakukan bulk unlock. Reset admin menghapus penanda
+LOCK pada attempt yang dipulihkan. Hasil yang sudah ada tidak dihapus.
 
-## 5. Environment
+## 4. Environment, MySQL, dan Redis
 
-Tinjau konfigurasi proses sebelum reload:
+Pertahankan credential yang sudah benar. Pastikan environment setiap proses
+memuat DATABASE_URL, REDIS_URL, AUTH_TOKEN_SECRET, PIN_ENCRYPTION_KEY serta
+konfigurasi OIDC/Portal Data yang sudah digunakan. Jangan merotasi key PIN atau
+AUTH_TOKEN_SECRET sebagai bagian redeploy ini. Isi `.env` harus memakai format
+dotenv yang dapat dibaca Node `--env-file`.
 
-```bash
-pm2 describe arena-api | grep -E "cwd|script|exec mode|instances"
-# Tinjau variabel EXAM_/DB_/REDIS (jangan salin nilainya ke tiket/log/chat)
-```
+Untuk layanan pada VPS yang sama, gunakan alamat privat/loopback. Redis harus
+**AOF aktif** dan **maxmemory-policy noeviction**. Jangan membuka port Redis,
+MySQL, atau API ke internet. Contoh konfigurasi:
 
-Nilai yang diharapkan setelah rilis ini (per proses, di environment PM2/server):
+- `infra/redis-capacity.conf.example`: AOF everysec, batas memori 1 GB.
+- `infra/mysql-16gb.cnf.example`: buffer pool 6 GB, max_connections 100,
+  commit durable tetap aktif.
 
-```dotenv
-WAITING_BATCH_SIZE=300
-WAITING_BATCH_INTERVAL_MS=10000
-WAITING_HEARTBEAT_TIMEOUT_MS=90000
-WAITING_CLAIM_TIMEOUT_MS=120000
-WAITING_WORKER_ENABLED=true
-WAITING_WORKER_TICK_MS=1000
-EXAM_QUESTION_SOURCE_TTL_MS=2000
-EXAM_QUESTION_REDIS_TTL_MS=2000
-REDIS_URL=redis://<host-pribadi>:6379      # wajib; tanpa Redis gate jatuh ke 503 yang aman
-DB_POOL_SIZE=12
-DB_QUEUE_LIMIT=10000
-```
+Gabungkan nilai dengan konfigurasi service yang sudah ada; jangan mengganti
+seluruh konfigurasi Redis/MySQL atau ACL/password. Restart service hanya pada
+jendela maintenance dan verifikasi koneksinya kembali. Sesuaikan alokasi jika
+VPS juga menjalankan aplikasi lain. Jangan menjalankan CONFIG GET/CLI dengan
+password yang kemudian disalin ke log atau chat.
 
-Jangan menaruh nilai rahasia (`DATABASE_URL`, `REDIS_URL` dengan password,
-`AUTH_TOKEN_SECRET`) ke `infra/ecosystem.config.cjs`. Setelah mengubah
-environment: `pm2 startOrReload infra/ecosystem.config.cjs --update-env`.
+Profil PM2 membatasi total koneksi aplikasi menjadi **46**: API 3×12,
+finalizer 6, waiting worker 4. Rolling reload dapat membuka koneksi tambahan
+sementara; sisakan headroom untuk migrator, admin, dan layanan lain.
 
-## 6. Aktifkan rilis (PM2 cluster, tanpa henti)
+## 5. Aktifkan API dan kedua worker
 
-API membaca `apps/api/dist/server.js` saat proses mulai, jadi cukup reload
-proses agar dist baru dipakai:
+Ecosystem sekarang memuat:
+
+| Proses | Jumlah | Fungsi |
+| --- | --- | --- |
+| arena-api | 3 | HTTP API; finalizer/FIFO internal dimatikan |
+| arena-finalization | 1 | Scanner MySQL + BullMQ, konkurensi 4 |
+| arena-waiting | 1 | Melepas peserta FIFO |
+
+PM2 tidak otomatis membaca `.env`. Perintah berikut memuatnya melalui Node dan
+meneruskannya ke PM2 tanpa mencetak nilai. Bila server memakai secret manager,
+gunakan mekanisme injeksi yang sama untuk **ketiga nama proses**. Pastikan shell
+deploy tidak mengekspor credential lama yang menimpa `.env`.
 
 ```bash
 cd /srv/repos/portal-data-man/arena
-pm2 startOrReload infra/ecosystem.config.cjs --update-env   # ARENA_DIR pakai env manager server
+node --env-file=.env --input-type=module <<'NODE'
+import { spawnSync } from 'node:child_process';
+const result = spawnSync('pm2', ['startOrReload', 'infra/ecosystem.config.cjs', '--update-env'], {
+  env: { ...process.env, ARENA_DIR: process.cwd() }, stdio: 'inherit',
+});
+if (result.error) throw result.error;
+process.exit(result.status ?? 1);
+NODE
 pm2 status
-pm2 logs arena-api --lines 100
-pm2 save
+pm2 logs arena-api --lines 50 --nostream
+pm2 logs arena-finalization --lines 50 --nostream
+pm2 logs arena-waiting --lines 50 --nostream
 ```
 
-Catatan rolling reload:
+Jangan hanya reload arena-api: tanpa kedua worker, antrean masuk dan finalisasi
+latar belakang tidak berjalan. Pastikan tidak ada worker lama yang dijalankan
+oleh systemd/cron/PM2 dengan nama lain. Hentikan hanya worker duplikat yang sudah
+diidentifikasi. Setelah semua verifikasi lulus, jalankan `pm2 save`.
 
-- Mode `cluster` menyalakan instance baru sebelum yang lama mati; setiap
-  instance baru membuka kembali koneksi pool MySQL (tambahan sementara
-  `3 × DB_POOL_SIZE`). Pastikan MySQL sanggup menampung lonjakan itu.
-- Permintaan siswa yang terpotong reload sudah dilengkapi retry di client;
-  yang gagal pasti tampil sebagai `409/503` sesekali — pantau log dan
-  status badge "Jawaban belum tersimpan" di halaman ujian.
+## 6. Nginx dan Cloudflare
 
-## 7. Verifikasi (wajib lulus sebelum jendela deploy ditutup)
+Pada vhost `arena.man1palembang.sch.id`, document root tetap menunjuk ke
+`/srv/repos/portal-data-man/arena/apps/web/dist`. Gabungkan blok di
+`infra/nginx-static.conf` dengan vhost aktual; bila sudah ada location `/assets/`
+atau `/index.html`, sesuaikan blok itu, jangan menambah duplikat. Pertahankan
+proxy `/api`, `/auth`, `/health`, serta konfigurasi SSE pada lokasi ujian.
 
 ```bash
-pm2 status
+sudo nginx -t
+# Hanya lanjut bila nginx -t lulus.
+sudo systemctl reload nginx
+```
+
+Di dashboard Cloudflare untuk zona `man1palembang.sch.id`:
+
+1. Record DNS `arena` mengarah ke IP VPS yang benar dan berstatus **Proxied**.
+2. SSL/TLS **Full (strict)**, dengan sertifikat origin yang valid.
+3. Tambahkan/merge dua Cache Rules dari `infra/cloudflare-cache-rules.json`.
+   Ekspresinya sudah memakai hostname production. Cache hanya `/assets/` untuk
+   GET/HEAD, mengikuti Cache-Control origin. Letakkan bypass dinamis sesudahnya
+   dan periksa rule lain agar tidak menimpa bypass itu.
+4. Jangan memakai Cache Everything atau challenge interaktif pada API ujian.
+   API, auth, HTML, dan gambar soal privat tidak boleh mendapat cache hit.
+   Pertahankan aturan zona lain yang tidak terkait ARENA.
+5. Jangan purge seluruh aset saat ujian. Bila diperlukan, purge URL HTML yang
+   berubah; nama file build baru sudah memiliki hash.
+
+Verifikasi dengan DevTools/curl: permintaan berulang terhadap satu URL JS/CSS
+build harus beralih ke `CF-Cache-Status: HIT`. Respons API terautentikasi harus
+memuat no-store dan tidak HIT, termasuk ketika diakses dua siswa berbeda.
+Jangan menyalin cookie/token peserta ke tiket atau log.
+
+## 7. Verifikasi sebelum membuka sesi
+
+```bash
 curl -fsS http://127.0.0.1:3001/health/live
-curl -fsS http://127.0.0.1:3001/health/ready   # harus menunjukkan DB (dan Redis) siap
-nginx -t && systemctl is-active nginx           # hanya jika infra/ berubah di rilis
+curl -fsS http://127.0.0.1:3001/health/ready
+curl -sSI https://arena.man1palembang.sch.id/
+pm2 status
 ```
 
-Untuk uji alur, gunakan akun ujian dummy, bukan data siswa asli:
+Health API saja tidak membuktikan worker berjalan. Dengan akun/ujian dummy:
 
-1. **Daftar + mulai**: daftar ujian tampil; tombol Mulai membuat attempt dan
-   menyajikan soal (status ujian, jendela waktu, target kelas/siswa tetap
-   diverifikasi server).
-2. **Gate tingkat**: ujian dengan gate aktif; siswa pada tingkat yang belum
-   dibuka harus melihat halaman antrean/menunggu — bukan error 425 mentah di
-   layar, dan log API tidak menunjukkan antrean pool MySQL yang memanjang.
-3. **Simpan jawaban**: isi pilihan tunggal, multiple response, dan isian
-   pendek; indikator "Semua perubahan tersimpan" muncul; refresh halaman
-   memuat ulang jawaban yang sama.
-4. **Selesai ujian**: SELESAI → hasil tampil; hasil sama setelah refresh
-   (submit idempotent); submit ganda dari dua tab tidak menggandakan
-   `exam_results`.
-5. **Waktu habis**: pada ujian dummy berdurasi singkat, biarkan kadaluarsa →
-   hasil dihitung dari jawaban tersimpan.
-6. **Kontrol pembukaan tingkat (admin)**: `GET /api/admin/exam-admission?exam_id=…`
-   menampilkan stage saat ini; aksi `advance` dari portal admin menaikkan
-   `current_grade` dan menulis audit `EXAM_ADMISSION_ADVANCED`.
+- Join waiting room → admitted → claim; durasi mulai saat claim.
+- Simpan beberapa jenis jawaban, tunggu status tersimpan, refresh dan cocokkan.
+- Submit dua kali; hasil tetap satu dan nilainya konsisten.
+- Biarkan attempt dummy kedaluwarsa sambil browser ditutup; worker harus membuat
+  hasil setelah scanner berjalan (interval normal 10 detik, ditambah antrean).
+- Kebijakan LOCK: pada ambang 3, pelanggaran pertama/kedua tetap IN_PROGRESS,
+  ketiga TERMINATED; hasil tidak muncul otomatis dan direct submit ditolak.
+  Reset oleh admin memulihkan sesi sesuai aturan waktu yang berlaku.
+- Pantau error Redis, retry BullMQ, pool MySQL, CPU, RAM, disk, dan log.
 
-Integritas data pasca-deploy:
+SQL pemantauan backlog (read-only):
 
-```bash
-mysql <db-arena> -e "SELECT status, COUNT(*) FROM exam_attempts GROUP BY status;"
-mysql <db-arena> -e "SELECT COUNT(*) results, COUNT(DISTINCT attempt_id) uniq FROM exam_results;"
+```sql
+SELECT COUNT(*) expired_pending
+FROM exam_attempts a
+WHERE a.status='IN_PROGRESS' AND a.expires_at<=UTC_TIMESTAMP(3);
+SELECT a.termination_action,COUNT(*) terminated_without_result
+FROM exam_attempts a
+WHERE a.status='TERMINATED'
+  AND NOT EXISTS(SELECT 1 FROM exam_results r WHERE r.attempt_id=a.id)
+GROUP BY a.termination_action;
 ```
 
-`results == uniq` wajib. Jika tidak cocok, jangan panik dan jangan hapus
-data: catat commit rilis, simpan `pm2 logs`, dan ikuti proses rollback di
-bagian 8 untuk memulihkan layanan, lalu investigasi dengan data yang utuh.
+LOCK tanpa hasil memang disengaja. AUTO_SUBMIT tanpa hasil yang terus menumpuk
+perlu investigasi worker. Setelah lolos, `pm2 save` dan buka antrean kembali.
 
-## 8. Rollback
+## 8. Rollback / kegagalan deployment
 
-Rollback kode dengan mengembalikan commit stabil; tidak ada "un-migrate":
+Jika build atau migrasi gagal sebelum restart, hentikan langkah deploy dan
+pertahankan proses lama selama investigasi; jangan menjalankan kode baru tanpa
+014. Jika ada kemungkinan proses lama restart, kembalikan artefak build yang
+sesuai sebelum mengizinkannya menerima trafik lagi.
 
-```bash
-cd /srv/repos/portal-data-man
-git log --oneline -5
-git checkout <commit-stabil>
-cd arena && npm ci && npm run build
-pm2 startOrReload infra/ecosystem.config.cjs --update-env
-```
+Jika rilis sudah aktif dan perlu rollback:
 
-Prinsipnya:
+1. Tutup admission baru, gunakan maintenance, dan koordinasikan attempt aktif.
+2. Hentikan kedua worker baru: `pm2 stop arena-finalization arena-waiting`.
+3. Baca SHA dari `previous-commit.txt`, checkout revisi tersebut, lalu install dan
+   build ulang **saat maintenance**. Jangan reset/hapus data database.
+4. Jangan langsung membuka layanan dengan kode lama: kode sebelum rilis ini
+   mengabaikan termination_action dan dapat menilai attempt LOCK. Rollback aman
+   memerlukan versi yang mempertahankan perlindungan LOCK, atau tetap maintenance
+   sampai hotfix tersedia. Mematikan finalizer saja tidak menutup direct submit.
+5. Hapus entri worker PM2 baru hanya jika rollback telah dipastikan tidak memakai
+   worker tersebut; startOrReload ecosystem lama tidak otomatis menghapusnya.
+6. Pertahankan kolom/indeks 014 dan semua jawaban/hasil. Jangan restore backup
+   database menimpa transaksi baru. Pulihkan konfigurasi Nginx/Cloudflare hanya
+   untuk perubahan ARENA yang memang perlu dibatalkan, lalu verifikasi ulang.
 
-- Skema database selalu dibuat additif sehingga kode lama boleh berjalan
-  di database baru; kolom/indeks baru tidak perlu dibalik.
-- Untuk menghentikan admission baru, pause antrean melalui panel admin.
-  Tidak ada env bypass FIFO; `EXAM_GRADE_ADMISSION_ENABLED` sudah tidak digunakan.
-  Rollback ke kode lama juga perlu web lama; pertahankan tabel additif dan data.
-- Deployment tidak pernah menghapus data (attempt, jawaban, hasil).
-  Jangan memulihkan backup dengan cara menimpa database production kecuali
-  disetujui pemilik data dan paham data yang hilang sejak backup.
-- Komponen infrastruktur (nginx, sysctl, drop-in systemd, Redis) hanya
-  disentuh bila `infra/` berubah pada rilis; panduan per komponen ada di
-  [../ops/README.md](../ops/README.md).
+## 9. Bukti pengujian dan batasnya
 
-## 9. Catatan operasional pasca-rilis
+Lihat [laporan kapasitas](../perf/capacity-1200.md) dan JSON benchmark terkait.
+Uji lokal 1.200 siswa dengan tiga proses API dan interval batch 3 detik:
+autosave p95 38 ms, submit p95 748 ms, 12.000 jawaban serta 1.200 hasil
+terverifikasi. Burst langsung memiliki autosave p95 837 ms. Executor lokal
+memiliki batas RAM 32 GB, sehingga angka itu bukan SLA untuk VPS 16 GB.
 
-- **Diagnostik tanpa PII**: set `ARENA_EXAM_DIAGNOSTICS=true` hanya selama
-  jendela ujian untuk melihat p50/p95/p99 per event (`exam_start`,
-  `exam_batch`, `exam_autosave`, `exam_heartbeat`, `exam_admission`); matikan
-  kembali setelah gelombang.
-- **Ruang tunggu**: gunakan panel admin untuk melepas batch atau mengubah
-  ukuran/interval. Pantau worker dan Redis AOF/noeviction; tanpa worker,
-  antrean tetap tersimpan tetapi tidak maju. Terapkan konfigurasi SSE nginx
-  pada rilis ini agar proxy tidak menahan event.
-- **Cache soal 2 detik**: hasil edit soal oleh admin hanya perhitungkan
-  attempt yang dimulai setelah TTL berlalu; ini keputusan desain untuk
-  melindungi kecepatan mulai, bukan bug.
-- **Ukuran pool 12 × 3 = 36**: naikkan `DB_POOL_SIZE` hanya dengan
-  membandingkan `pool_wait_ms` diagnostik, `max_connections` MySQL, dan
-  beban layanan lain di VPS.
+Sebelum ujian produksi, rehearsal harus mencakup 1.200 login/admission,
+putus-sambung jaringan, dashboard pengawas, dan durasi ujian penuh. Jangan
+menjalankan skrip load test pada data peserta production. Dua tes reset lama
+masih gagal; temuan pencabutan sesi staf dan pengikatan SSO ke browser juga
+masih terbuka. Rilis kapasitas ini bukan pernyataan audit keamanan selesai.

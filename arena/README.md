@@ -87,3 +87,10 @@ Ganti contoh origin dengan domain resmi. Jangan mendistribusikan APK debug sebag
 Arena belum dinyatakan siap menggantikan CBT dan belum memiliki klaim kapasitas peserta. Sebelum pilot, verifikasi konfigurasi database dan server staging, uji workflow siswa/staf secara end-to-end, uji sinkronisasi/reconciliation, uji pemulihan koneksi dan konkurensi submit, lalu jalankan load test bertahap. Catat SLO p95/p99, error, durabilitas jawaban yang sudah diakui, antrean pool, lock MySQL, CPU, memori, dan event-loop delay.
 
 Panduan rilis staging ke VPS untuk `staging.arena.man1palembang.sch.id` ada di [docs/deployment/staging-vps.md](docs/deployment/staging-vps.md). Dokumen tersebut adalah prosedur persiapan; domain, DNS, MySQL server, Portal Data, Nginx, dan VPS belum diverifikasi atau diubah.
+
+## Profil kapasitas 1.200 siswa
+
+Konfigurasi VPS 4 vCPU / 16 GB, indeks tambahan, worker BullMQ, aturan CDN
+Cloudflare, urutan migrasi, dan hasil pengujian lokal tersedia di
+[capacity-1200.md](docs/perf/capacity-1200.md). Terapkan migrasi 014 sebelum
+menjalankan versi API ini. Hasil lokal tidak menggantikan rehearsal produksi.

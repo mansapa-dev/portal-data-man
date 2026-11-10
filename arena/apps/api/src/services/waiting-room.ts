@@ -37,6 +37,7 @@ export class WaitingRoomService {
       heartbeat_timeout_ms: options.heartbeat_timeout_ms ?? Number(process.env.WAITING_HEARTBEAT_TIMEOUT_MS ?? 90000),
       claim_timeout_ms: options.claim_timeout_ms ?? Number(process.env.WAITING_CLAIM_TIMEOUT_MS ?? 120000),
     };
+    if (redis && typeof redis.defineCommand === 'function') redis.defineCommand('arenaWaitingTransition', { numberOfKeys: 6, lua: waitingRoomLua });
     this.secret = options.secret ?? (process.env.AUTH_TOKEN_SECRET || 'local-development-only');
     if (!Object.values(this.defaults).every(Number.isSafeInteger) || ![0,1].includes(this.defaults.queue_open) || this.defaults.batch_size<1 || this.defaults.batch_size>1000 || this.defaults.batch_interval_ms<1000 || this.defaults.batch_interval_ms>3600000 || this.defaults.heartbeat_timeout_ms<1000 || this.defaults.heartbeat_timeout_ms>600000 || this.defaults.claim_timeout_ms<1000 || this.defaults.claim_timeout_ms>600000) throw new Error('Konfigurasi waiting room tidak valid');
   }
@@ -202,11 +203,18 @@ export class WaitingRoomService {
     return {...result,released_count:released?.length ?? 0,stream_ticket:this.streamTicket(examId,studentId,authExpiry)};
   }
 
+  private transition(args: string[]) {
+    const client = this.redis as Redis & { arenaWaitingTransition?: (...args: string[]) => Promise<string> };
+    // ioredis caches the Lua SHA and retries EVAL after NOSCRIPT (e.g. Redis restart).
+    // Keep eval fallback for lightweight test doubles.
+    return client.arenaWaitingTransition ? client.arenaWaitingTransition(...args) : client.eval(waitingRoomLua, 6, ...args);
+  }
+
   private async run(examId:number,studentId:number,op:string,data:Record<string,unknown>={}) {
     if (!this.redis || this.redis.status!=='ready') throw fail('REDIS_UNAVAILABLE','Ruang tunggu belum tersedia. Sistem akan mencoba kembali.',503);
     const base=waitingBase(examId);
     let parsed:WaitingView & {error?:string};
-    try { parsed=JSON.parse(await this.redis.eval(waitingRoomLua,6,`${base}:meta`,`${base}:waiting`,`${base}:heartbeats`,`${base}:admitted`,`${base}:sequence`,`${base}:counts`,op,String(studentId),JSON.stringify(data),base) as string); }
+    try { parsed=JSON.parse(await this.transition([`${base}:meta`,`${base}:waiting`,`${base}:heartbeats`,`${base}:admitted`,`${base}:sequence`,`${base}:counts`,op,String(studentId),JSON.stringify(data),base]) as string); }
     catch(cause) { throw Object.assign(fail('REDIS_UNAVAILABLE','Ruang tunggu belum tersedia.',503),{cause:new Error(cause instanceof Error?cause.message:'Redis command failed')}); }
     if (parsed.error) { const [message,status]=errors[parsed.error] ?? ['Transisi ruang tunggu tidak valid.',409]; throw fail(parsed.error,message,status); }
     if (!Array.isArray(parsed.released)) parsed.released=[];

@@ -116,7 +116,7 @@ export class ScoringService {
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
-      const [attemptRows] = await connection.execute<RowDataPacket[]>('SELECT id,status,expires_at,(expires_at<=UTC_TIMESTAMP(3)) expired FROM exam_attempts WHERE student_id=? AND exam_id=? FOR UPDATE', [studentId, examId]);
+      const [attemptRows] = await connection.execute<RowDataPacket[]>('SELECT id,status,expires_at,termination_action,(expires_at<=UTC_TIMESTAMP(3)) expired FROM exam_attempts WHERE student_id=? AND exam_id=? FOR UPDATE', [studentId, examId]);
       const attempt = attemptRows[0];
       if (!attempt) throw Object.assign(new Error('Sesi ujian tidak ditemukan'), { statusCode: 404 });
       const [existingRows] = await connection.execute<RowDataPacket[]>('SELECT question_count,correct_count,wrong_count,blank_count,earned_points,maximum_points,score FROM exam_results WHERE attempt_id=?', [attempt.id]);
@@ -127,6 +127,7 @@ export class ScoringService {
         await connection.commit();
         return this.format(existing, isRemedial, scoreCap, followUpType);
       }
+      if (attempt.status === 'TERMINATED' && attempt.termination_action === 'LOCK') throw Object.assign(new Error('Sesi dikunci; pemulihan memerlukan admin'), { statusCode: 409 });
       if (finalizeOnly && attempt.status === 'IN_PROGRESS' && !Number(attempt.expired)) throw Object.assign(new Error('Ujian masih aktif'), { statusCode: 409 });
       if (!['IN_PROGRESS', 'TERMINATED'].includes(attempt.status)) throw Object.assign(new Error('Ujian tidak dapat disubmit'), { statusCode: 409 });
       // Optimized query: Only select necessary scoring columns and calculate option_count in SQL,
@@ -211,10 +212,13 @@ export class ScoringService {
           counted = true;
         }
       }
-      if (counted) await connection.execute('UPDATE exam_attempts SET violation_count=LEAST(255,violation_count+1),status=IF(violation_count+1>=?,\'TERMINATED\',status) WHERE id=?', [policy.threshold, attempt.id]);
-      await connection.commit();
       const count = Number(attempt.violation_count) + Number(counted);
       terminated = counted && count >= policy.threshold;
+      if (counted) await connection.execute(
+        "UPDATE exam_attempts SET violation_count=?,status=IF(?,'TERMINATED',status),termination_action=IF(?,?,termination_action),completed_at=IF(?,UTC_TIMESTAMP(3),completed_at) WHERE id=?",
+        [count, terminated, terminated, policy.action, terminated, attempt.id],
+      );
+      await connection.commit();
       const outcome: { recorded: boolean; count: number; threshold: number; action: ViolationAction; terminated: boolean; hasil?: unknown } = { recorded: inserted, count, threshold: policy.threshold, action: policy.action, terminated };
       // Release the connection *before* calling submit so it can acquire its own
       // connection from the pool without risk of exhaustion when pool is small.

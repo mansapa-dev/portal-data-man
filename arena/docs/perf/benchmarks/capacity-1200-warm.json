@@ -1,0 +1,22 @@
+{
+  "students": 1200,
+  "api_processes": 3,
+  "waiting_state": "warm",
+  "scope": "Local HTTP autosave/submit and BullMQ expiry; excludes login, admission, browser, CDN and production hardware",
+  "autosave": {
+    "requests": 3600,
+    "p95_ms": 837,
+    "p99_ms": 871
+  },
+  "submit": {
+    "requests": 600,
+    "p95_ms": 656,
+    "p99_ms": 657
+  },
+  "overload_retries": 0,
+  "queue_ms": 1163,
+  "results": 1200,
+  "answers_verified": 12000,
+  "minimum_revision": 3,
+  "scores": 100
+}

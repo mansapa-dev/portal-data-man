@@ -51,6 +51,14 @@ const app = Fastify({
   maxRequestsPerSocket: 1_000,
 });
 await app.register(helmet);
+app.addHook('onSend', async (request, reply, payload) => {
+  if (/^\/(api|auth|health)(\/|$)/.test(request.url)) {
+    reply.header('Cache-Control', 'private, no-store');
+    reply.header('CDN-Cache-Control', 'no-store');
+    reply.header('Cloudflare-CDN-Cache-Control', 'no-store');
+  }
+  return payload;
+});
 await app.register(sensible);
 // The error handler MUST be registered before any route plugin: `await app.register(...)`
 // boots each plugin immediately, and plugin contexts that finish loading before a
@@ -59,7 +67,9 @@ await app.register(sensible);
 app.setErrorHandler((error, request, reply) => {
   if ((error as { statusCode?: number }).statusCode !== 425) request.log.error({ err: error }, 'request failed');
   const candidate = error as Error & { statusCode?: number };
-  const status = error instanceof z.ZodError ? 422 : candidate.statusCode && candidate.statusCode >= 400 && candidate.statusCode < 600 ? candidate.statusCode : 500;
+  const overloaded = /Queue limit reached|No connections available/.test(candidate.message);
+  if (overloaded) reply.header('Retry-After', '2');
+  const status = overloaded ? 503 : error instanceof z.ZodError ? 422 : candidate.statusCode && candidate.statusCode >= 400 && candidate.statusCode < 600 ? candidate.statusCode : 500;
   if (status === 425) reply.header('Retry-After', '7');
   return reply.status(status).send({ error: status >= 500 ? 'Internal server error' : error instanceof z.ZodError ? error.issues.map((issue)=>issue.message).join(', ') : candidate.message });
 });

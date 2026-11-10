@@ -1,0 +1,20 @@
+{
+  "students": 1200,
+  "scope": "Local HTTP autosave/submit and BullMQ expiry; excludes login, admission, browser, CDN and production hardware",
+  "autosave": {
+    "requests": 3600,
+    "p95_ms": 2647,
+    "p99_ms": 3749
+  },
+  "submit": {
+    "requests": 600,
+    "p95_ms": 2592,
+    "p99_ms": 2709
+  },
+  "overload_retries": 1226,
+  "queue_ms": 1154,
+  "results": 1200,
+  "answers_verified": 12000,
+  "minimum_revision": 3,
+  "scores": 100
+}

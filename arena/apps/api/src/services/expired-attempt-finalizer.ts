@@ -21,7 +21,8 @@ export class ExpiredAttemptFinalizer {
     // GET_LOCK below still guarantees only one instance works on the backlog.
     private readonly maxRunMs = 40_000,
     private readonly maxBatches = 40,
-    private readonly concurrency = 12,
+    private readonly concurrency = 4,
+    private readonly enqueue?: (studentId: number, examId: number) => Promise<void>,
   ) {}
 
   start() {
@@ -58,24 +59,27 @@ export class ExpiredAttemptFinalizer {
       let finalized = 0, failed = 0, scanned = 0, batches = 0;
       while (batches < this.maxBatches && Date.now() < deadline) {
         const [attempts] = await this.pool.query<RowDataPacket[]>(
-          `SELECT student_id,exam_id FROM exam_attempts
-           WHERE (status='IN_PROGRESS' AND expires_at<=UTC_TIMESTAMP(3))
-              OR (status='TERMINATED' AND NOT EXISTS (
-                SELECT 1 FROM exam_results r WHERE r.attempt_id=exam_attempts.id
-              ))
+          `(SELECT student_id,exam_id,expires_at,id FROM exam_attempts
+            WHERE status='IN_PROGRESS' AND expires_at<=UTC_TIMESTAMP(3)
+            ORDER BY expires_at,id LIMIT ?)
+           UNION ALL
+           (SELECT student_id,exam_id,expires_at,id FROM exam_attempts
+            WHERE status='TERMINATED' AND termination_action='AUTO_SUBMIT'
+              AND NOT EXISTS (SELECT 1 FROM exam_results r WHERE r.attempt_id=exam_attempts.id)
+            ORDER BY expires_at,id LIMIT ?)
            ORDER BY expires_at,id LIMIT ?`,
-          [this.batchSize],
+          [this.batchSize, this.batchSize, this.batchSize],
         );
         if (!attempts.length) break;
         batches++;
         scanned += attempts.length;
         let next = 0, finalizedInBatch = 0;
-        const worker=async()=>{while(true){const index=next++;if(index>=attempts.length)return;const attempt=attempts[index]!;try{await this.scoring.submit(Number(attempt.student_id),Number(attempt.exam_id),true);finalized++;finalizedInBatch++;}catch(error){failed++;this.logger.warn({err:error,student_id:Number(attempt.student_id),exam_id:Number(attempt.exam_id)},'expired attempt finalization failed');}}};
+        const worker=async()=>{while(true){const index=next++;if(index>=attempts.length)return;const attempt=attempts[index]!;try{if(this.enqueue) await this.enqueue(Number(attempt.student_id),Number(attempt.exam_id)); else await this.scoring.submit(Number(attempt.student_id),Number(attempt.exam_id),true);finalized++;finalizedInBatch++;}catch(error){failed++;this.logger.warn({err:error,student_id:Number(attempt.student_id),exam_id:Number(attempt.exam_id)},'expired attempt finalization failed');}}};
         await Promise.all(Array.from({length:Math.min(this.concurrency,attempts.length)},worker));
         // No progress means the remaining rows fail permanently (e.g. missing
         // snapshot). Stop instead of re-selecting the same rows until the
         // deadline; the next interval tick will try again.
-        if (!finalizedInBatch) break;
+        if (this.enqueue || !finalizedInBatch) break;
         // Fewer rows than requested means the backlog is empty.
         if (attempts.length < this.batchSize) break;
       }

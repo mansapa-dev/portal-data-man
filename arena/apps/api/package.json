@@ -7,7 +7,8 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
-    "waiting:worker": "node dist/waiting-worker.js"
+    "waiting:worker": "node dist/waiting-worker.js",
+    "finalization:worker": "node dist/finalization-worker.js"
   },
   "dependencies": {
     "@fastify/helmet": "^13.1.1",
@@ -15,6 +16,7 @@
     "@fastify/sensible": "^6.0.6",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.3",
+    "bullmq": "^6.7.2",
     "fastify": "^5.12.5",
     "ioredis": "^5.11.1",
     "mysql2": "^3.24.5",
