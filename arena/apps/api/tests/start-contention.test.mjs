@@ -48,6 +48,10 @@ test('start retries a concurrent unique-key winner and resumes its attempt', asy
       if (sql.startsWith('SELECT id,question_type')) {
         return [[{ id: 42, question_type: 'MULTIPLE_CHOICE', question_text: 'Question', option_a: 'A', option_b: 'B', option_c: null, option_d: null, option_e: null, correct_answer: 'A', points: 1 }]];
       }
+      // Revision authoritative dibaca sebelum pemanasan (migrasi 015).
+      if (sql.startsWith('SELECT source_revision FROM exams WHERE id=?')) {
+        return [[{ source_revision: 1 }]];
+      }
       throw new Error(`Unexpected pool SQL: ${sql}`);
     },
     async getConnection() { return connection; },

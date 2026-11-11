@@ -140,6 +140,9 @@ export class StudentExamService {
       // Redis GET/SET, dan parsing JSON 40 soal tidak lagi memperpanjang waktu
       // koneksi ditahan. Transaksi tetap memanggil loader (akan jadi cache hit)
       // supaya validasi "Soal ujian belum tersedia" tetap berjalan di sana.
+      // Revision authoritative dibaca dari MySQL (migrasi 015) sebelum loader;
+      // kolom belum ada (deploy belum migrasi) => loader bypass cache, aman.
+      const [revisionRows] = await this.pool.execute<RowDataPacket[]>('SELECT source_revision FROM exams WHERE id=?', [examId]);
       await loadExamQuestionSource(examId, async () => {
         const [rows] = await this.pool.execute<RowDataPacket[]>(
           `SELECT id,question_type,question_text,option_a,option_b,option_c,option_d,option_e,correct_answer,points
@@ -147,7 +150,7 @@ export class StudentExamService {
           [examId],
         );
         return rows;
-      });
+      }, Number(revisionRows[0]?.source_revision));
     }
     const acquireStarted = performance.now();
     const connection = await this.pool.getConnection();
@@ -180,7 +183,7 @@ export class StudentExamService {
         const source = await loadExamQuestionSource(examId, async () => {
           const [rows] = await connection.execute<RowDataPacket[]>('SELECT id,question_type,question_text,option_a,option_b,option_c,option_d,option_e,correct_answer,points FROM questions WHERE exam_id=? AND status=\'ACTIVE\' ORDER BY id', [examId]);
           return rows;
-        });
+        }, Number((exam as { source_revision?: unknown }).source_revision));
         if (!source.length) throw Object.assign(new Error('Soal ujian belum tersedia'), { statusCode: 409 });
         const seed = createHash('sha256').update(`${studentId}:${examId}:${randomBytes(16).toString('hex')}`).digest('hex');
         const orderedIds = shuffle(source.map((q) => Number(q.id)), seed);

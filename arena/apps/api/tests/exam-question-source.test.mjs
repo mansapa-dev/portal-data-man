@@ -1,11 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { StudentExamService } from '../dist/services/student-exam.js';
-import { invalidateExamQuestionSource, loadExamQuestionSource } from '../dist/services/exam-question-source.js';
+import { loadExamQuestionSource } from '../dist/services/exam-question-source.js';
 
 test('concurrent starts share source read and never expose the answer key', async () => {
   const examId = 987654321;
-  invalidateExamQuestionSource(examId);
   let sourceReads = 0;
   let insertId = 0;
   const pool = {
@@ -16,7 +15,7 @@ test('concurrent starts share source read and never expose the answer key', asyn
       return {
         async beginTransaction() {}, async commit() {}, async rollback() {}, release() {},
         async execute(sql) {
-          if (sql.includes('FROM exams e')) return [[{ id: examId, name: 'Ujian Dummy', duration_minutes: 60, ends_at: new Date(Date.now() + 3600000), db_now: new Date() }]];
+          if (sql.includes('FROM exams e')) return [[{ id: examId, name: 'Ujian Dummy', duration_minutes: 60, ends_at: new Date(Date.now() + 3600000), db_now: new Date(), source_revision: 1 }]];
           if (sql.includes('FROM questions WHERE')) {
             sourceReads++;
             await new Promise(resolve => setTimeout(resolve, 20));
@@ -36,6 +35,7 @@ test('concurrent starts share source read and never expose the answer key', asyn
   };
   const service = new StudentExamService(pool);
   const responses = await Promise.all(Array.from({ length: 20 }, (_, i) => service.start(i + 1, examId)));
+  // Semua start bersamaan memakai revision 1 yang sama -> satu fetch bersama.
   assert.equal(sourceReads, 1);
   for (const response of responses) {
     assert.equal(response.soal.length, 1);
@@ -45,16 +45,14 @@ test('concurrent starts share source read and never expose the answer key', asyn
   }
 });
 
-test('invalidating an in-flight read cannot refill the stale cache', async () => {
+test('an in-flight old-revision read cannot refill the new revision cache', async () => {
   const examId = 987654322;
-  invalidateExamQuestionSource(examId);
   let release;
-  const oldRead = loadExamQuestionSource(examId, () => new Promise(resolve => { release = () => resolve([{ id: 1 }]); }));
-  invalidateExamQuestionSource(examId);
-  const freshRead = await loadExamQuestionSource(examId, async () => [{ id: 2 }]);
+  const oldRead = loadExamQuestionSource(examId, () => new Promise(resolve => { release = () => resolve([{ id: 1 }]); }), 1);
+  const freshRead = await loadExamQuestionSource(examId, async () => [{ id: 2 }], 2);
   release();
   await oldRead;
-  const cachedRead = await loadExamQuestionSource(examId, async () => { throw new Error('Stale cache was restored'); });
+  const cachedRead = await loadExamQuestionSource(examId, () => { throw new Error('Stale cache was restored'); }, 2);
   assert.equal(freshRead[0].id, 2);
   assert.equal(cachedRead[0].id, 2);
 });

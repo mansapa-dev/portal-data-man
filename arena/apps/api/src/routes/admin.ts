@@ -9,8 +9,6 @@ import sanitizeHtml from 'sanitize-html';
 import { ScoringService, invalidateViolationThresholdCache, getViolationPolicy } from '../services/scoring.js';
 import { resetTerminatedAttempt } from '../services/attempt-reset.js';
 import { regradeShortAnswerQuestion, regradeShortAnswerAttempt } from '../services/short-answer-regrade.js';
-import { invalidateAllExamQuestionSources } from '../services/exam-question-source.js';
-import { redis } from '../lib/redis.js';
 
 const positive = z.coerce.number().int().positive();
 function pinEncryptionKey(){const secret=process.env.PIN_ENCRYPTION_KEY??process.env.AUTH_TOKEN_SECRET??'';if(secret.length<32)throw Object.assign(new Error('PIN_ENCRYPTION_KEY wajib berisi minimal 32 karakter untuk menampilkan PIN tersimpan'),{statusCode:503});return createHash('sha256').update(secret).digest();}
@@ -25,12 +23,6 @@ function questionDuplicateKey(row:{exam_id:number;question_type:string;question_
 async function resetOne(studentId:number,examId:number,actorId:number,reason:string){return resetTerminatedAttempt(requirePool(),studentId,examId,actorId,'ADMIN',reason);}
 
 export async function adminRoutes(app: FastifyInstance) {
-  app.addHook('onResponse', async (request, reply) => {
-    if (request.method !== 'GET' && request.url.split('?')[0]?.startsWith('/api/admin/questions') && reply.statusCode < 400) {
-      invalidateAllExamQuestionSources();
-      if (redis?.status === 'ready') try { await redis.incr('arena:exam:source:revision'); } catch { /* short local TTL bounds staleness */ }
-    }
-  });
   const admin = (request: FastifyRequest, mutate = false) => requireRole(request, ['ADMIN'], mutate);
   app.get('/api/admin/dashboard', async (request) => {
     admin(request); const pool = requirePool();
