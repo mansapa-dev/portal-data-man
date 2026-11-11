@@ -1,0 +1,61 @@
+{
+  "hash": "c2b87c6f",
+  "configHash": "713c8577",
+  "lockfileHash": "c191fbb5",
+  "browserHash": "7db2696b",
+  "optimized": {
+    "react": {
+      "src": "../../../../../node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "58d741b7",
+      "needsInterop": true
+    },
+    "react-dom": {
+      "src": "../../../../../node_modules/react-dom/index.js",
+      "file": "react-dom.js",
+      "fileHash": "77a26980",
+      "needsInterop": true
+    },
+    "react/jsx-dev-runtime": {
+      "src": "../../../../../node_modules/react/jsx-dev-runtime.js",
+      "file": "react_jsx-dev-runtime.js",
+      "fileHash": "4309a649",
+      "needsInterop": true
+    },
+    "react/jsx-runtime": {
+      "src": "../../../../../node_modules/react/jsx-runtime.js",
+      "file": "react_jsx-runtime.js",
+      "fileHash": "e2f1d1f0",
+      "needsInterop": true
+    },
+    "fflate": {
+      "src": "../../../../../node_modules/fflate/esm/browser.js",
+      "file": "fflate.js",
+      "fileHash": "129736fc",
+      "needsInterop": false
+    },
+    "react-dom/client": {
+      "src": "../../../../../node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "05a10aab",
+      "needsInterop": true
+    },
+    "xlsx": {
+      "src": "../../../../../node_modules/xlsx/xlsx.mjs",
+      "file": "xlsx.js",
+      "fileHash": "949c453a",
+      "needsInterop": false
+    }
+  },
+  "chunks": {
+    "chunk-WIO6PC5N": {
+      "file": "chunk-WIO6PC5N.js"
+    },
+    "chunk-ATB7FFAI": {
+      "file": "chunk-ATB7FFAI.js"
+    },
+    "chunk-BUSYA2B4": {
+      "file": "chunk-BUSYA2B4.js"
+    }
+  }
+}

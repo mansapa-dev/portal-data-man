@@ -1,2 +1,0 @@
-ALTER TABLE exam_follow_up_meta ADD COLUMN IF NOT EXISTS room VARCHAR(100) NULL AFTER type;
-ALTER TABLE exam_follow_up_meta ADD COLUMN IF NOT EXISTS notes TEXT NULL AFTER room;
