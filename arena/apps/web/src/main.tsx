@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { api, ApiError, mutationId, setSession, setExamToken, getExamToken } from './lib/api';
+import { resultPollDelayMs } from './lib/load-shape';
 import type { WaitingView } from './lib/waiting-room';
 import { loadXlsx } from './lib/xlsx';
 import { QuestionBank } from './QuestionBank';
@@ -39,8 +40,9 @@ type UserDraft = {id?:number;role:'ADMIN'|'TEACHER'|'EMPLOYEE';teacher_id:number
 // Tahap 2 — submit async: server membalas "accepted" (submission durable,
 // scoring berjalan di worker) dan endpoint /result membalas "processing"
 // selama penilaian belum selesai.
-const RESULT_POLL_INTERVAL_MS = 2_000;
-const RESULT_POLL_MAX_ATTEMPTS = 20;
+// Tahap 3 — poll memakai backoff + jitter agar 1.200 siswa tidak memanggil
+// /result pada batas 2 detik yang sama.
+const RESULT_POLL_MAX_ATTEMPTS = 14;
 const isPendingResult = (payload: ExamResult | null | undefined) => {
   if (!payload) return false;
   const status = String(payload.status ?? '');
@@ -48,16 +50,18 @@ const isPendingResult = (payload: ExamResult | null | undefined) => {
 };
 async function waitForResult(examId: number): Promise<ExamResult | null> {
   for (let attempt = 0; attempt < RESULT_POLL_MAX_ATTEMPTS; attempt++) {
+    let submissionState: string | null = null;
     try {
       const payload = await api<ExamResult>(`/api/student/exams/${examId}/result`);
       if (!isPendingResult(payload)) return payload;
+      submissionState = payload.submission_state ?? null;
     } catch (error) {
       const status = (error as { statusCode?: number })?.statusCode;
       // 404/403/409 yang menetap = bukan kondisi pending; error lain (5xx)
       // masih dicoba pada polling berikutnya.
       if (typeof status === 'number' && status >= 400 && status < 500 && status !== 429) return null;
     }
-    await new Promise<void>(resolve => window.setTimeout(resolve, RESULT_POLL_INTERVAL_MS));
+    await new Promise<void>(resolve => window.setTimeout(resolve, resultPollDelayMs(attempt, submissionState)));
   }
   return null;
 }
