@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api, beacon, mutationId } from './lib/api';
+import { submitJitterMs } from './lib/load-shape';
 
 type MathJaxEngine = { startup?: { promise?: Promise<unknown> }; typesetPromise?: (elements: HTMLElement[]) => Promise<void>; typesetClear?: (elements: HTMLElement[]) => void };
 let mathQueue: Promise<void> = Promise.resolve();
@@ -61,7 +62,13 @@ export function StudentExam({attempt,studentName,studentNisn,answers,flags,busy,
  terminationRef.current=onTerminated;
  useEffect(()=>{if(!submitOpen)return;submitCancelButton.current?.focus();const onKeyDown=(event:KeyboardEvent)=>{if(event.key==='Escape'&&!busy)setSubmitOpen(false);if(event.key==='Tab'){const buttons=submitCancelButton.current?.closest('.student-submit-dialog')?.querySelectorAll<HTMLButtonElement>('button:not([disabled])');if(!buttons?.length)return;const first=buttons[0],last=buttons[buttons.length-1];if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}}};document.addEventListener('keydown',onKeyDown);return()=>{document.removeEventListener('keydown',onKeyDown);submitTrigger.current?.focus();};},[submitOpen,busy]);
  const offset=useRef(attempt.server_time?Date.parse(attempt.server_time)-Date.now():0);
- useEffect(()=>{offset.current=attempt.server_time?Date.parse(attempt.server_time)-Date.now():0;submitting.current=false;setExpiryFailed(false);let expiryStarted=false;const tick=()=>{const seconds=Math.max(0,Math.ceil((Date.parse(attempt.expires_at)-Date.now()-offset.current)/1000));setRemaining(seconds);if(seconds===0&&!expiryStarted&&!submitting.current){expiryStarted=true;submitting.current=true;setSubmitOpen(false);void submitRef.current(true).catch(()=>{submitting.current=false;setExpiryFailed(true);setWarning('Waktu habis. Hasil dihitung dari jawaban yang berhasil tersimpan.');});}};tick();const timer=window.setInterval(tick,1000);return()=>clearInterval(timer);},[attempt.attempt_id]);
+ useEffect(()=>{offset.current=attempt.server_time?Date.parse(attempt.server_time)-Date.now():0;submitting.current=false;setExpiryFailed(false);let expiryStarted=false,expiryTimer=0;const tick=()=>{const seconds=Math.max(0,Math.ceil((Date.parse(attempt.expires_at)-Date.now()-offset.current)/1000));setRemaining(seconds);if(seconds===0&&!expiryStarted&&!submitting.current){expiryStarted=true;submitting.current=true;setSubmitOpen(false);
+  // Tahap 3: attempts yang claim terlambat berbagi ends_at yang sama, sehingga
+  // auto-submit bisa menumpuk jadi ribuan request pada satu detik. Sebarkan
+  // 0..2 dtk; server tetap memfinalisasi hanya jawaban yang sudah tersimpan.
+  const fire=()=>{void submitRef.current(true).catch(()=>{submitting.current=false;setExpiryFailed(true);setWarning('Waktu habis. Hasil dihitung dari jawaban yang berhasil tersimpan.');});};
+  const jitter=submitJitterMs();
+  if(jitter>0)expiryTimer=window.setTimeout(fire,jitter);else fire();}};tick();const timer=window.setInterval(tick,1000);return()=>{clearInterval(timer);window.clearTimeout(expiryTimer);};},[attempt.attempt_id]);
  // Anti layar mati sendiri: selama attempt aktif, minta shell Android menahan
  // layar tetap menyala (FLAG_KEEP_SCREEN_ON). Layar yang mati oleh screen timeout
  // memicu pause/kehilangan fokus yang tercatat pelanggaran, padahal bukan nahas
