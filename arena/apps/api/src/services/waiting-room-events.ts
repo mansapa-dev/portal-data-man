@@ -1,6 +1,8 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Redis } from 'ioredis';
+import { performance } from 'node:perf_hooks';
 import { WAITING_CHANNEL, type WaitingRoomService } from './waiting-room.js';
+import { loadDiagnostics } from '../lib/load-diagnostics.js';
 
 type Client={examId:number;studentId:number;expires:number;reply:FastifyReply;lastPing:number};
 
@@ -60,8 +62,9 @@ export class WaitingRoomEvents {
     }
   }
   private async flush() {
+    const started=performance.now();
     const dirty=new Map(this.dirty);this.dirty.clear();
-    const pending=[...this.clients];let index=0;
+    const pending=[...this.clients];let index=0,reads=0,skipped=0;
     await Promise.all(Array.from({length:Math.min(32,pending.length)},async()=>{
       while(index<pending.length){
         const client=pending[index++]!;
@@ -70,15 +73,17 @@ export class WaitingRoomEvents {
         const changed=dirty.get(client.examId);
         // `undefined` = exam ini tidak berubah; Set = hanya siswa tertentu;
         // null = semua siswa exam ini. Keepalive tetap dikirim saat ping.
-        if(changed===undefined && !ping)continue;
-        if(changed instanceof Set && !changed.has(client.studentId) && !ping)continue;
+        if(changed===undefined && !ping){skipped++;continue;}
+        if(changed instanceof Set && !changed.has(client.studentId) && !ping){skipped++;continue;}
         try {
+          reads++;
           const state=await this.service.status(client.examId,client.studentId);
           this.send(client,'status',this.service.publicView(state,client.examId,client.studentId,client.expires));
           if(ping){client.lastPing=Date.now();client.reply.raw.write(': keepalive\n\n');}
         }catch{this.send(client,'connection',{connected:false});client.reply.raw.end();this.clients.delete(client);}
       }
     }));
+    if(pending.length)loadDiagnostics.record('waiting_sse_flush',{clients:pending.length,reads,skipped,total_ms:Number((performance.now()-started).toFixed(2))});
   }
   async stop(){if(this.timer)clearInterval(this.timer);this.timer=undefined;for(const c of this.clients)c.reply.raw.end();this.clients.clear();await this.inFlight;this.subscriber?.disconnect();}
 }

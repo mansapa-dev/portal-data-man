@@ -1,8 +1,10 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 import type { Redis } from 'ioredis';
 import { waitingRoomLua } from './waiting-room-lua.js';
 import { prewarmExamQuestionSource } from './exam-question-source.js';
+import { loadDiagnostics } from '../lib/load-diagnostics.js';
 
 export type WaitingStatus = 'NOT_JOINED' | 'WAITING' | 'ADMITTED' | 'IN_EXAM' | 'FINISHED' | 'ABANDONED' | 'EXPIRED';
 export type WaitingClaimReceipt = { tokenHash: string; sequence: number | null };
@@ -220,12 +222,20 @@ export class WaitingRoomService {
 
   private async run(examId:number,studentId:number,op:string,data:Record<string,unknown>={},notify=true) {
     if (!this.redis || this.redis.status!=='ready') throw fail('REDIS_UNAVAILABLE','Ruang tunggu belum tersedia. Sistem akan mencoba kembali.',503);
+    const started=performance.now();
     const base=waitingBase(examId);
     let parsed:WaitingView & {error?:string};
     try { parsed=JSON.parse(await this.transition([`${base}:meta`,`${base}:waiting`,`${base}:heartbeats`,`${base}:admitted`,`${base}:sequence`,`${base}:counts`,op,String(studentId),JSON.stringify(data),base]) as string); }
-    catch(cause) { throw Object.assign(fail('REDIS_UNAVAILABLE','Ruang tunggu belum tersedia.',503),{cause:new Error(cause instanceof Error?cause.message:'Redis command failed')}); }
-    if (parsed.error) { const [message,status]=errors[parsed.error] ?? ['Transisi ruang tunggu tidak valid.',409]; throw fail(parsed.error,message,status); }
+    catch(cause) {
+      loadDiagnostics.record('waiting_transition',{op,outcome:'redis_error',total_ms:Number((performance.now()-started).toFixed(2))});
+      throw Object.assign(fail('REDIS_UNAVAILABLE','Ruang tunggu belum tersedia.',503),{cause:new Error(cause instanceof Error?cause.message:'Redis command failed')});
+    }
+    if (parsed.error) {
+      loadDiagnostics.record('waiting_transition',{op,outcome:parsed.error,total_ms:Number((performance.now()-started).toFixed(2))});
+      const [message,status]=errors[parsed.error] ?? ['Transisi ruang tunggu tidak valid.',409]; throw fail(parsed.error,message,status);
+    }
     if (!Array.isArray(parsed.released)) parsed.released=[];
+    loadDiagnostics.record('waiting_transition',{op,outcome:'ok',changed:parsed.changed?1:0,released:parsed.released.length,total_ms:Number((performance.now()-started).toFixed(2))});
     // Notifications are hints: a lost publish must not turn a committed transition
     // into a failed request. Polling and SSE keepalives read the authoritative state.
     // Tahap 3: sertakan siswa yang berubah supaya SSE tidak membaca ulang seluruh

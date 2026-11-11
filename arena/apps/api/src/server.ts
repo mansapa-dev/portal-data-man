@@ -24,6 +24,7 @@ import { ExpiredAttemptFinalizer } from './services/expired-attempt-finalizer.js
 import { closePasswordVerifier, getVerifierStats } from './services/password-verifier.js';
 import { sharedRateLimitStore } from './lib/rate-limit-store.js';
 import { redis } from './lib/redis.js';
+import { loadDiagnostics } from './lib/load-diagnostics.js';
 import { monitorEventLoopDelay } from 'node:perf_hooks';
 
 const eventLoopMonitor = monitorEventLoopDelay({ resolution: 20 });
@@ -39,6 +40,7 @@ const env = z.object({
   ATTEMPT_FINALIZER_INTERVAL_MS: z.coerce.number().int().min(5_000).max(300_000).default(30_000),
   ATTEMPT_FINALIZER_BATCH_SIZE: z.coerce.number().int().min(1).max(100).default(50),
   ARENA_LOGIN_DIAGNOSTICS: z.enum(['true','false']).default('false'),
+  ARENA_LOAD_DIAGNOSTICS: z.enum(['true','false']).default('false'),
   REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(120_000).default(45_000),
 }).parse(process.env);
 
@@ -50,6 +52,7 @@ const app = Fastify({
   keepAliveTimeout: 5_000,
   maxRequestsPerSocket: 1_000,
 });
+loadDiagnostics.start(app.log, env.ARENA_LOAD_DIAGNOSTICS === 'true');
 await app.register(helmet);
 app.addHook('onSend', async (request, reply, payload) => {
   if (/^\/(api|auth|health)(\/|$)/.test(request.url)) {
@@ -132,6 +135,7 @@ const close = async () => {
   await waitingWorker?.stop();
   await waitingEvents.stop();
   await finalizer?.stop();
+  loadDiagnostics.stop();
   await app.close();
   await closePasswordVerifier();
   await pool?.end();

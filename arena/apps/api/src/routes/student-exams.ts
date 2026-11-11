@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { performance } from 'node:perf_hooks';
 import { assertCsrf, claimsFromRequest, rateLimitKey, readToken } from '../lib/auth.js';
 import { requirePool } from '../lib/db.js';
 import { ScoringService } from '../services/scoring.js';
@@ -8,6 +9,7 @@ import { acceptSubmission } from '../services/exam-submission.js';
 import { dispatchFinalization, isSubmitAsyncEnabled } from '../services/submission-dispatch.js';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 import { waitingRoom } from '../lib/waiting-room.js';
+import { loadDiagnostics } from '../lib/load-diagnostics.js';
 import type { WaitingRoomService } from '../services/waiting-room.js';
 
 const examId = z.coerce.number().int().positive();
@@ -64,10 +66,18 @@ export async function studentExamRoutes(app: FastifyInstance, options:{pool?:Poo
     void waiting.finish(exam,studentId).catch(()=>app.log.warn('waiting completion deferred'));
   };
   const claim = async(request:FastifyRequest<{Params:{id:string}}>)=>{
+    const started=performance.now();
     const claims=studentClaims(request);assertCsrf(request,claims);
     z.object({}).strict().parse(request.body ?? {});
     const exam=examId.parse(request.params.id),header=request.headers['x-exam-token'];
-    return waiting.claim(exam,claims.sub,typeof header==='string'?header:'',receipt=>exams.start(claims.sub,exam,0,receipt));
+    try {
+      const result=await waiting.claim(exam,claims.sub,typeof header==='string'?header:'',receipt=>exams.start(claims.sub,exam,0,receipt));
+      loadDiagnostics.record('waiting_claim',{outcome:'ok',total_ms:Number((performance.now()-started).toFixed(2))});
+      return result;
+    } catch(error) {
+      loadDiagnostics.record('waiting_claim',{outcome:String((error as {code?:string}).code ?? 'error'),total_ms:Number((performance.now()-started).toFixed(2))});
+      throw error;
+    }
   };
   app.get('/api/student/exams', async (request) => exams.list(studentClaims(request).sub));
   app.get<{ Params: { id: string } }>('/api/student/exams/:id/admission', { config: { rateLimit: { max: 24, timeWindow: '1 minute', keyGenerator: rateLimitKey } } }, async (request) => {
@@ -108,6 +118,8 @@ export async function studentExamRoutes(app: FastifyInstance, options:{pool?:Poo
     return result;
   });
   app.post<{ Params: { id: string } }>('/api/student/exams/:id/submit', { config: { rateLimit: { max: 10, timeWindow: '1 minute', keyGenerator: rateLimitKey } } }, async (request) => {
+    const started=performance.now();
+    const recordSubmit=(outcome:string)=>loadDiagnostics.record('exam_submit',{outcome,total_ms:Number((performance.now()-started).toFixed(2))});
     const id = examId.parse(request.params.id);
     const claims = await access(request,id,true); assertCsrf(request, claims);
     const body = z.object({ finalize_only: z.boolean().optional() }).strict().parse(request.body ?? {});
@@ -123,12 +135,14 @@ export async function studentExamRoutes(app: FastifyInstance, options:{pool?:Poo
           finishWaiting(id,claims.sub);
           // Akselerator saja: kegagalan enqueue ditutup reconciler (MySQL sumber kebenaran).
           void dispatchFinalization(claims.sub, id);
+          recordSubmit(outcome.kind === 'accepted' ? 'accepted' : 'processing');
           return { status: 'accepted', submission_state: outcome.kind === 'accepted' ? 'RECEIVED' : outcome.state };
         }
         if (outcome.kind === 'done' || outcome.kind === 'result-exists') {
           // Sudah ada hasil (idempoten) → kembalikan hasil lengkap.
           const result = await scoring.submit(claims.sub, id, false);
           finishWaiting(id,claims.sub);
+          recordSubmit('done');
           return result;
         }
         throw Object.assign(new Error('Submission sebelumnya tidak dapat diproses. Hubungi petugas ujian.'),{statusCode:409});
@@ -142,10 +156,13 @@ export async function studentExamRoutes(app: FastifyInstance, options:{pool?:Poo
     }
     const result=await scoring.submit(claims.sub, id, finalizeOnly);
     finishWaiting(id,claims.sub);
+    recordSubmit('sync');
     return result;
   });
   app.get<{ Params: { id: string } }>('/api/student/exams/:id/review', async (request) => scoring.review((await access(request,examId.parse(request.params.id),true)).sub, examId.parse(request.params.id)));
   app.get<{ Params: { id: string } }>('/api/student/exams/:id/result', async (request) => {
+    const started=performance.now();
+    const recordPoll=(outcome:string,submissionState:string|null=null)=>loadDiagnostics.record('exam_result_poll',{outcome,...(submissionState?{submission_state:submissionState}:{}),total_ms:Number((performance.now()-started).toFixed(2))});
     const id=examId.parse(request.params.id),studentId=(await access(request,id,true)).sub;
     let rows;
     try {
@@ -155,14 +172,16 @@ export async function studentExamRoutes(app: FastifyInstance, options:{pool?:Poo
       if ((error as { code?: string }).code !== 'ER_NO_SUCH_TABLE') throw error;
       [rows]=await pool.execute<RowDataPacket[]>(`SELECT a.status,r.question_count jumlah_soal,r.correct_count benar,r.wrong_count salah,r.blank_count kosong,r.score nilai,m.type follow_up_type FROM exam_attempts a LEFT JOIN exam_results r ON r.attempt_id=a.id LEFT JOIN exam_follow_up_meta m ON m.exam_id=a.exam_id WHERE a.student_id=? AND a.exam_id=? LIMIT 1`,[studentId,id]);
     }
-    if(!rows[0])throw Object.assign(new Error('Hasil ujian tidak ditemukan'),{statusCode:404});
+    if(!rows[0]){recordPoll('not_found');throw Object.assign(new Error('Hasil ujian tidak ditemukan'),{statusCode:404});}
     const submissionState=rows[0].submission_state?String(rows[0].submission_state):null;
     if(rows[0].status==='IN_PROGRESS'){
       // Submission durable diterima tetapi scoring belum selesai → frontend
       // menampilkan status pending (bukan error) dan terus polling.
-      if(submissionState==='RECEIVED'||submissionState==='PROCESSING')return{status:'processing',submission_state:submissionState};
+      if(submissionState==='RECEIVED'||submissionState==='PROCESSING'){recordPoll('processing',submissionState);return{status:'processing',submission_state:submissionState};}
+      recordPoll('in_progress');
       throw Object.assign(new Error('Ujian masih berlangsung'),{statusCode:409});
     }
+    recordPoll('ready',submissionState);
     return rows[0];
   });
 }

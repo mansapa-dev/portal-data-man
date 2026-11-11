@@ -74,6 +74,7 @@ State submission: `RECEIVED → PROCESSING → DONE | SKIPPED`.
 | `SUBMIT_LEASE_MS` | `60000` | Durasi lease klaim (clamp 5.000–600.000 ms) |
 | `SUBMIT_LEASE_MAX_ATTEMPTS` | `5` | Batas percobaan klaim (clamp 1–20) |
 | `FINALIZATION_CONCURRENCY` | `4` | Jumlah job finalisasi paralel per worker |
+| `ARENA_LOAD_DIAGNOSTICS` | `false` | `true` = log agregat claim/submit/result/SSE/transisi ruang tunggu |
 
 Lease diperpanjang otomatis setiap `lease/3`. Setelah `lease_attempts` mencapai
 batas, submission menjadi `SKIPPED` dengan `skip_reason='lease_exhausted'` dan
@@ -141,6 +142,27 @@ WHERE a.exam_id = ?;
 
 `attempts = results` berarti tidak ada hasil ganda dan tidak ada submission
 yang hilang.
+
+### 4.4 Diagnostik bentuk beban (Tahap 3)
+
+Set `ARENA_LOAD_DIAGNOSTICS=true` sementara di staging. Setiap 60 detik (atau
+saat 2.048 sampel per event tercapai) API menulis satu baris log
+`load-shape diagnostic window` berisi hitungan outcome dan p50/p95/p99/max
+`total_ms` untuk event berikut:
+
+| Event | Arti |
+|---|---|
+| `waiting_transition` | satu operasi Lua ruang tunggu (`op`, `changed`, `released`) |
+| `waiting_claim` | claim siswa (outcome `ok`, `ADMIT_TOKEN_INVALID`, `CLAIM_BUSY`, …) |
+| `exam_submit` | penerimaan submit (`accepted`, `processing`, `done`, `sync`) |
+| `exam_result_poll` | poll `/result` (`processing`, `ready`, `in_progress`, `not_found`) |
+| `waiting_sse_flush` | satu siklus SSE (`clients`, `reads`, `skipped`) |
+
+Tidak ada NISN, token, atau jawaban yang dicatat. Nonaktifkan kembali setelah
+pengukuran; default `false` dan tidak mengubah perilaku bila mati. Panduan
+pembacaan: `waiting_sse_flush.reads` harus jauh lebih kecil dari `clients`
+selama admission (D5), dan `exam_result_poll.outcome=processing` yang tinggi
+berarti drain worker lebih lambat dari backoff klien.
 
 ## 5. Aktivasi bertahap yang disarankan
 
