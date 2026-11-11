@@ -11,7 +11,7 @@ tidak disisipi skrip pihak ketiga.
 | `Could not establish connection. Receiving end does not exist.` | Ekstensi Chrome/Edge memanggil `chrome.runtime.sendMessage` tanpa penerima | Matikan/nonaktifkan ekstensi; bukan ARENA |
 | `ApolloError: Response not successful: Received status code 403` dari berkas `index-<hash>.js` | Skrip pihak ketiga (ekstensi) memakai Apollo Client | Matikan/nonaktifkan ekstensi; bukan ARENA |
 | `Failed to load resource: ... execute-api.<aws-region>.amazonaws.com ... 403` | Panggilan API pihak ketiga pada origin yang sama | Matikan/nonaktifkan ekstensi atau skrip sisipan; bukan ARENA |
-| `GET /api/student/exams/<id>` → 404 | ARENA tidak menyediakan endpoint ini (hanya daftar `/api/student/exams` dan sub-path-nya) | Permintaan bukan dari ARENA; periksa ekstensi |
+| `GET /api/student/exams` → 404 `Route GET:/api/student/exams/ not found` | **ARENA** — bug nginx: location `^~ /api/student/exams/` mengalihkan path ke bentuk bergaris miring, sedangkan route API terdaftar tanpa garis miring | **Sudah diperbaiki**: prefix nginx tanpa garis miring + API mengabaikan garis miring akhir (lihat §2b) |
 
 Cara memastikan sumbernya:
 
@@ -34,6 +34,36 @@ anonim. Sekarang permintaan itu hanya dilakukan bila penanda portal
 - Siswa/pengelola yang kembali: 1 permintaan sesi (200), tanpa 401.
 
 Commit: `8a78be28` (`fix(arena): skip session probes for anonymous visitors`).
+
+## 2b. Daftar ujian siswa 404 karena garis miring di akhir path
+
+Gejala:siswa tidak melihat jadwal ujian, dan di konsol muncul
+`GET /api/student/exams` → 301 lalu `Route GET:/api/student/exams/ not found`
+(404).
+
+Penyebab: nginx memakai `location ^~ /api/student/exams/` (berakhiran garis
+miring). Untuk path prefix seperti itu nginx mengalihkan (301) permintaan
+tanpa garis miring ke bentuk dengannya, sedangkan Fastify hanya mendaftarkan
+route `/api/student/exams` (tanpa garis miring) sehingga jawabannya 404.
+
+Perbaikan (dua lapis, keduanya sudah ada di repo):
+
+1. `infra/nginx-server.conf`: prefix menjadi `^~ /api/student/exams` tanpa
+   garis miring → tidak ada pengalihan, request diteruskan apa adanya.
+2. API memakai `routerOptions.ignoreTrailingSlash` → path bergaris miring
+   dilayani route yang sama, jadi proxy yang menambah garis miring tidak lagi
+   membuat 404.
+
+Setelah perbaikan, daftar ujian untuk siswa yang sudah login tetap 200 dan
+responsnya identik dengan request tanpa garis miring.
+
+Verifikasi cepat:
+
+```bash
+curl -s -o /dev/null -w 'list=%{http_code}\n' https://arena.man1palembang.sch.id/api/student/exams
+# Expect 401 (route ada, perlu login). 301 = nginx masih pakai prefix bergaris
+# miring. 404 dengan body "Route ... not found" = API lama belum ter-deploy.
+```
 
 ## 3. Rekomendasi untuk komputer ujian
 

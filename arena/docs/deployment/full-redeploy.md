@@ -599,7 +599,12 @@ server {
 
     # Jalur ujian siswa: SSE ruang tunggu + respons ujian.
     # proxy_buffering off wajib agar event SSE tidak tertahan.
-    location ^~ /api/student/exams/ {
+    # PENTING: prefix TIDAK boleh diakhiri garis miring. `location ^~ /api/student/exams/`
+    # membuat nginx mengarahkan (301) /api/student/exams ke /api/student/exams/,
+    # sedangkan Fastify hanya mendaftarkan route tanpa garis miring → 404 dan
+    # daftar ujian siswa gagal dimuat. Prefix tanpa garis miring melayani
+    # kedua bentuk path tanpa pengalihan.
+    location ^~ /api/student/exams {
         access_log off;
         proxy_http_version 1.1;
         proxy_buffering off;
@@ -762,7 +767,8 @@ access_log /var/log/nginx/arena-access.log arena_main buffer=256k flush=5s;
 #### `infra/nginx-server.conf` (dalam server block Arena)
 
 ```nginx
-location ^~ /api/student/exams/ {
+# PENTING: prefix tanpa garis miring. Lihat catatan di §7a.
+location ^~ /api/student/exams {
   access_log off;
   proxy_http_version 1.1;
   proxy_buffering off;
@@ -979,6 +985,9 @@ menghapus definisi proses yang belum tentu ada di ecosystem.
 curl -fsS http://127.0.0.1:3001/health/live
 curl -fsS http://127.0.0.1:3001/health/ready
 pm2 status
+# Daftar ujian siswa harus 401 (tanpa login), BUKAN 301 dan BUKAN 404.
+# 301 berarti nginx mengalihkan path ke versi bergaris miring.
+curl -s -o /dev/null -w 'list=%{http_code}\n' https://arena.man1palembang.sch.id/api/student/exams
 ```
 
 `/health/live` menampilkan event-loop delay dan statistik verifier;
@@ -1104,6 +1113,8 @@ Jika rilis sudah aktif dan harus rollback:
 
 | Gejala | Penyebab umum | Tindakan |
 | --- | --- | --- |
+| Daftar ujian siswa 404 `Route GET:/api/student/exams/ not found` | Nginx memakai `location ^~ /api/student/exams/` sehingga `/api/student/exams` dialihkan 301 ke path bergaris miring | Ubah prefix menjadi `^~ /api/student/exams` (tanpa garis miring) lalu `nginx -t` + reload; API kini juga mengabaikan garis miring akhir |
+| `GET /api/student/exams` → 301 | Location nginx berakhiran garis miring | Sama seperti baris di atas; verifikasi `curl -w '%{http_code}'` |
 | `Could not establish connection. Receiving end does not exist.` di konsol | Ekstensi browser memanggil `chrome.runtime` | Nonaktifkan ekstensi; bukan ARENA (lihat [exam-device-browser.md](../ops/exam-device-browser.md)) |
 | `ApolloError 403` / `execute-api.<aws>.amazonaws.com 403` | Skrip pihak ketiga/ekstensi pada origin yang sama | Nonaktifkan ekstensi atau skrip sisipan |
 | `GET /api/student/exams/<id>` → 404 | Endpoint itu tidak ada di ARENA (hanya daftar dan sub-path) | Bukan dari ARENA; periksa ekstensi |

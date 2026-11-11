@@ -16,6 +16,7 @@ import { supportRoutes } from './routes/support.js';
 import { ssoRoutes } from './routes/sso.js';
 import { portalSyncRoutes } from './routes/portal-sync.js';
 import { rateLimitKey } from './lib/auth.js';
+import { buildAppOptions } from './lib/app-options.js';
 import { setupRoutes } from './routes/setup.js';
 import { staffRoutes } from './routes/staff.js';
 import { questionImageRoutes } from './routes/question-images.js';
@@ -44,14 +45,7 @@ const env = z.object({
   REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(120_000).default(45_000),
 }).parse(process.env);
 
-const app = Fastify({
-  logger: { level: env.LOG_LEVEL, redact: ['req.headers.authorization', 'req.headers.cookie', 'req.body.pin', 'req.body.password'] },
-  trustProxy: env.TRUST_PROXY === 'true',
-  bodyLimit: 64 * 1024,
-  requestTimeout: env.REQUEST_TIMEOUT_MS,
-  keepAliveTimeout: 5_000,
-  maxRequestsPerSocket: 1_000,
-});
+const app = Fastify(buildAppOptions({ logLevel: env.LOG_LEVEL, trustProxy: env.TRUST_PROXY === 'true', requestTimeoutMs: env.REQUEST_TIMEOUT_MS }));
 loadDiagnostics.start(app.log, env.ARENA_LOAD_DIAGNOSTICS === 'true');
 await app.register(helmet);
 app.addHook('onSend', async (request, reply, payload) => {
