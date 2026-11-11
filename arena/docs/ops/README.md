@@ -1,6 +1,10 @@
 # Rencana konfigurasi Arena untuk staging
 
-Antrean per sesi, konfigurasi batch, migrasi, worker, dan pengujian dijelaskan di [waiting-room.md](waiting-room.md). Kontrol tingkat XII/XI/X sudah digantikan FIFO.
+Prosedur redeploy lengkap (backup, build, migrasi 014–016, environment, PM2,
+Nginx/Cloudflare, verifikasi, aktivasi submit asinkron bertahap, rollback, dan
+tuning Tahap 3/4) ada di [deployment/full-redeploy.md](../deployment/full-redeploy.md).
+
+Antrean per sesi, konfigurasi batch, migrasi, worker, dan pengujian dijelaskan di [waiting-room.md](waiting-room.md). Kontrol tingkat XII/XI/X sudah digantikan FIFO. Pemerataan beban menjawab/submit/ruang tunggu dijelaskan di [tahap3-load-distribution-plan.md](tahap3-load-distribution-plan.md).
 
 Semua berkas di `infra/` adalah contoh untuk diterapkan manual setelah uji staging. Tidak ada perubahan sistem yang dilakukan oleh pekerjaan lokal ini. Simpan salinan konfigurasi lama sebelum memasang setiap berkas, jalankan pemeriksaan sintaks, lalu terapkan satu komponen per waktu.
 

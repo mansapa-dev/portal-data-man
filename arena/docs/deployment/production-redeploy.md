@@ -1,5 +1,10 @@
 # Redeploy ARENA — kapasitas 1.200 siswa
 
+> Untuk prosedur lengkap yang mencakup Tahap 3/4 (pemerataan beban, login,
+> pool auth, dan aktivasi submit asinkron bertahap), gunakan
+> [full-redeploy.md](full-redeploy.md). Dokumen ini dipertahankan sebagai
+> catatan rilis kapasitas awal dan tetap akurat untuk migrasi 014–016.
+
 Target: **arena.man1palembang.sch.id**, VPS **4 vCPU / RAM 16 GB / disk 120 GB**.
 MySQL dan Redis berada pada VPS yang sama. Panduan memakai checkout
 `/srv/repos/portal-data-man`; sesuaikan bila lokasi aktual berbeda. Jalankan npm

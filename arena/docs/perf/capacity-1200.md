@@ -58,6 +58,33 @@ and returns only the guard status, avoiding dashboard aggregation on every save.
 The existing frontend retries saves/submits with jitter and mutation IDs. Tune
 the queue against measured latency, not just request counts.
 
+## Login spreading and auth bulkhead (Tahap 4)
+
+A cohort reaching the login form together no longer hits bcrypt workers and the
+shared DB pool as one wave:
+
+- The first student-login request is delayed by a stable NISN phase (last six
+  digits mod 3000 ms) plus random 0–3000 ms, spreading 1,200 logins over roughly
+  six seconds. The delay is client-side and does not change credentials, session
+  lifetime, or server authorization.
+- Busy responses (503/429) are retried with full-jitter exponential backoff
+  (1/2/4/8/10 s, floor 500 ms, up to 8 attempts). The server's `Retry-After`
+  header (seconds or HTTP date) is honored when longer.
+- Student login queries use a lazy, dedicated auth pool
+  (`AUTH_DB_POOL_SIZE=4`, `AUTH_DB_QUEUE_LIMIT=240` per API process) instead of
+  the main exam pool. A login burst therefore cannot consume connections needed
+  by autosave, submit, or result polling. Finalization and waiting workers never
+  open auth connections because the pool is created on first use.
+- The main pool remains 12 connections per API process. The production profile
+  now budgets `3 × (12 + 4) + 6 + 4 = 58` application connections, still within
+  MySQL's 100-connection example profile. Measure pool wait and 503 rates before
+  raising either pool size.
+
+Login diagnostics remain opt-in (`ARENA_LOGIN_DIAGNOSTICS=true`) and never log
+NISN or PIN. Load-shape diagnostics (`ARENA_LOAD_DIAGNOSTICS=true`) cover
+claim/submit/result/SSE behavior. Do not run the capacity harness against
+production student data.
+
 ## Cloudflare CDN
 
 The zone has not been changed. `infra/cloudflare-cache-rules.json` contains rule
