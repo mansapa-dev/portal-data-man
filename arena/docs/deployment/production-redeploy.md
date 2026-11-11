@@ -120,6 +120,36 @@ Catatan eksekusi trigger:
 - Trigger UPDATE menangani perpindahan `exam_id`: revision **kedua** exam
   (OLD dan NEW) dinaikkan dalam satu statement `WHERE id IN (OLD.exam_id, NEW.exam_id)`.
 
+## 3c. Terapkan migrasi 016 sebelum restart proses (Tahap 2, fitur belum aktif)
+
+```bash
+cd /srv/repos/portal-data-man/arena
+mysql -u arena_migrator -p "$ARENA_DB" < database/migrations/016_exam_submissions.sql
+mysql -u arena_migrator -p "$ARENA_DB" -e \
+  "SHOW COLUMNS FROM exam_submissions; SHOW COLUMNS FROM exam_attempts LIKE 'submitted_at';"
+```
+
+016 menambah tabel `exam_submissions` (catatan penerimaan submission durable)
+dan kolom `exam_attempts.submitted_at` (penanda beku jawaban). Migrasi aditif
+dan idempotent (aman diulang), tidak menghapus atau mengubah data ujian yang
+sudah ada.
+
+**Fitur submit asinkron TIDAK diaktifkan pada langkah ini.** Environment
+production tetap `SUBMIT_ASYNC='off'` (lihat `infra/ecosystem.config.cjs`);
+`/submit` memakai jalur sinkron lama seperti sekarang. Kode yang membaca
+tabel/kolom baru sudah punya fallback: bila migrasi belum applied, route
+menangkap `ER_NO_SUCH_TABLE`/`ER_BAD_FIELD_ERROR` dan memakai jalur sinkron.
+
+Rollback (hanya setelah kode yang membaca tabel/kolom ini dilepas, dan setelah
+tidak ada submission `RECEIVED/PROCESSING`):
+
+```bash
+mysql -u arena_migrator -p "$ARENA_DB" < database/rollbacks/016_exam_submissions.sql
+```
+
+Runbook lengkap (aktivasi staging, query invariant, pemantauan, rollback):
+[docs/ops/submission-async.md](../ops/submission-async.md).
+
 ## 4. Environment, MySQL, dan Redis
 
 Pertahankan credential yang sudah benar. Pastikan environment setiap proses
