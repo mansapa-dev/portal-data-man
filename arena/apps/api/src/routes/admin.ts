@@ -9,6 +9,7 @@ import sanitizeHtml from 'sanitize-html';
 import { ScoringService, invalidateViolationThresholdCache, getViolationPolicy } from '../services/scoring.js';
 import { resetTerminatedAttempt } from '../services/attempt-reset.js';
 import { regradeShortAnswerQuestion, regradeShortAnswerAttempt } from '../services/short-answer-regrade.js';
+import { prewarmExamQuestionSource } from '../services/exam-question-source.js';
 
 const positive = z.coerce.number().int().positive();
 function pinEncryptionKey(){const secret=process.env.PIN_ENCRYPTION_KEY??process.env.AUTH_TOKEN_SECRET??'';if(secret.length<32)throw Object.assign(new Error('PIN_ENCRYPTION_KEY wajib berisi minimal 32 karakter untuk menampilkan PIN tersimpan'),{statusCode:503});return createHash('sha256').update(secret).digest();}
@@ -23,6 +24,22 @@ function questionDuplicateKey(row:{exam_id:number;question_type:string;question_
 async function resetOne(studentId:number,examId:number,actorId:number,reason:string){return resetTerminatedAttempt(requirePool(),studentId,examId,actorId,'ADMIN',reason);}
 
 export async function adminRoutes(app: FastifyInstance) {
+  // Mutasi soal menaikkan exams.source_revision via trigger DB (migrasi 015) —
+  // itulah mekanisme invalidasi authoritative. Hook ini hanya mengoptimasi:
+  // mengisi ulang cache Redis revision terbaru segera setelah commit, sehingga
+  // siswa tidak pernah membayar satu kali miss pertama. Fire-and-forget;
+  // kegagalan pre-warm tidak memengaruhi respons admin dan lazy loader tetap
+  // membaca MySQL sebagai sumber kebenaran.
+  app.addHook('onResponse', async (request, reply) => {
+    if (request.method === 'GET' || reply.statusCode >= 400) return;
+    if (!request.url.split('?')[0]?.startsWith('/api/admin/questions')) return;
+    const body = request.body as { exam_id?: unknown; rows?: Array<{ exam_id?: unknown }> } | undefined;
+    const examIds = new Set<number>();
+    const addId = (value: unknown) => { const id = Number(value); if (Number.isSafeInteger(id) && id > 0) examIds.add(id); };
+    addId(body?.exam_id);
+    for (const row of Array.isArray(body?.rows) ? body!.rows! : []) addId(row?.exam_id);
+    for (const examId of examIds) void prewarmExamQuestionSource(requirePool(), examId).catch(() => { /* lazy loader menutup */ });
+  });
   const admin = (request: FastifyRequest, mutate = false) => requireRole(request, ['ADMIN'], mutate);
   app.get('/api/admin/dashboard', async (request) => {
     admin(request); const pool = requirePool();

@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createExamQuestionSource, parseStoredPayload, payloadKey } from '../dist/services/exam-question-source.js';
 
-function fakeRedis({ ready = true, fail = false } = {}) {
+function fakeRedis({ ready = true, fail = false, failSet = false } = {}) {
   const store = new Map();
-  const calls = { get: 0, set: 0 };
+  const calls = { get: 0, set: 0, lock: 0 };
   return {
     status: ready ? 'ready' : 'connecting',
     store,
@@ -16,11 +16,28 @@ function fakeRedis({ ready = true, fail = false } = {}) {
     },
     async set(key, value, mode, ttl) {
       calls.set++;
-      if (fail) throw new Error('redis down');
+      if (fail || failSet) throw new Error('redis down');
       assert.equal(mode, 'PX');
       assert.ok(Number.isFinite(ttl) && ttl > 0, 'TTL PX harus positif');
       store.set(key, value);
       return 'OK';
+    },
+    async lock(key, owner, ttl) {
+      calls.lock++;
+      if (fail) throw new Error('redis down');
+      assert.equal(typeof ttl, 'number');
+      if (store.has(key)) return null;
+      store.set(key, owner);
+      return 'OK';
+    },
+    async setNxPx(key, owner, ttl) {
+      return this.lock(key, owner, ttl);
+    },
+    async eval(script, numKeys, key, owner) {
+      if (fail) throw new Error('redis down');
+      assert.equal(numKeys, 1);
+      if (store.get(key) === owner) { store.delete(key); return 1; }
+      return 0;
     },
   };
 }
@@ -137,4 +154,91 @@ test('expired cache lokal -> diisi ulang dari Redis tanpa fetchRows', async () =
   const again = await src.load(12, fetchRows, 4);
   assert.equal(fetches, 1); // Redis masih memegang payload revision 4
   assert.deepEqual(again, [row(1, 'soal')]);
+});
+
+function fakePool(revision, rows = () => [row(1, 'soal')]) {
+  const calls = { revision: 0, questions: 0 };
+  let revisionBias = 0; // +1 => revision naik setelah fetch (simulasi mutasi)
+  return {
+    calls,
+    bump() { revisionBias++; },
+    async execute(sql) {
+      if (sql.startsWith('SELECT source_revision FROM exams WHERE id=?')) {
+        calls.revision++;
+        return [[{ source_revision: revision + (calls.revision % 2 === 0 ? revisionBias : 0) }]];
+      }
+      if (sql.startsWith('SELECT id,question_type')) {
+        calls.questions++;
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return [rows()];
+      }
+      throw new Error(`Unexpected pool SQL: ${sql}`);
+    },
+  };
+}
+
+test('prewarm: mengisi payload revision terkini, lock dilepas, cache lokal terisi', async () => {
+  const redis = fakeRedis();
+  const { state, clock } = source();
+  const src = createExamQuestionSource({ redis, now: clock, localTtlMs: 5_000, redisTtlMs: 60_000 });
+  const pool = fakePool(7);
+  const outcome = await src.prewarm(21, pool);
+  assert.equal(outcome, 'warmed');
+  assert.ok(redis.store.has(payloadKey(7, 21)));
+  assert.equal(redis.store.get(payloadKey(7, 21)), JSON.stringify({ revision: 7, rows: [row(1, 'soal')] }));
+  assert.equal(redis.store.has('arena:exam:source:warm:v2:21'), false); // lock dilepas
+  // Loader berikutnya dapat data dari cache lokal tanpa fetchRows.
+  const loaded = await src.load(21, async () => { throw new Error('tidak boleh fetch ulang'); }, 7);
+  assert.deepEqual(loaded, [row(1, 'soal')]);
+});
+
+test('prewarm bersamaan dua proses: yang kalah lock skip tanpa fetch DB', async () => {
+  const redis = fakeRedis();
+  const { clock } = source();
+  const src = createExamQuestionSource({ redis, now: clock, localTtlMs: 0, redisTtlMs: 60_000 });
+  const pool = fakePool(3);
+  // Proses pertama memegang lock (simulasi holder hidup): prewarm kedua skip.
+  assert.equal(await redis.lock('arena:exam:source:warm:v2:22', 'proses-lain', 30_000), 'OK');
+  const loser = await src.prewarm(22, pool);
+  assert.equal(loser, 'skipped');
+  assert.equal(pool.calls.questions, 0);
+  // Holder mati tanpa melepas lock -> lock lepas manual (simulasi TTL lewat) -> prewarm jalan.
+  redis.store.delete('arena:exam:source:warm:v2:22');
+  assert.equal(await src.prewarm(22, pool), 'warmed');
+  assert.equal(pool.calls.questions, 1);
+});
+
+test('prewarm: revision berubah di tengah fetch -> tidak menulis payload usang', async () => {
+  const redis = fakeRedis();
+  const { clock } = source();
+  const src = createExamQuestionSource({ redis, now: clock, localTtlMs: 0, redisTtlMs: 60_000 });
+  const pool = fakePool(5);
+  pool.bump(); // revision naik setiap kali fetch selesai
+  const outcome = await src.prewarm(23, pool);
+  assert.equal(outcome, 'skipped');
+  assert.equal(redis.calls.set, 0); // tidak pernah menulis payload dengan revision salah
+});
+
+test('prewarm: redis tidak tersedia atau dinonaktifkan -> skip tanpa menyentuh DB', async () => {
+  const offline = fakeRedis({ ready: false });
+  const { clock } = source();
+  const src = createExamQuestionSource({ redis: offline, now: clock, localTtlMs: 0, redisTtlMs: 60_000 });
+  const pool = fakePool(1);
+  assert.equal(await src.prewarm(24, pool), 'unavailable');
+  assert.equal(pool.calls.revision, 0);
+
+  const redis = fakeRedis();
+  const disabled = createExamQuestionSource({ redis, now: clock, localTtlMs: 0, redisTtlMs: 60_000, prewarmEnabled: false });
+  assert.equal(await disabled.prewarm(24, fakePool(1)), 'skipped');
+  assert.equal(redis.calls.lock, 0);
+});
+
+test('prewarm: SET ditolak (noeviction penuh) -> tetap warmed tanpa throw, lazy loader DB', async () => {
+  const redis = fakeRedis({ failSet: true });
+  const { clock } = source();
+  const src = createExamQuestionSource({ redis, now: clock, localTtlMs: 0, redisTtlMs: 60_000 });
+  const pool = fakePool(9);
+  const outcome = await src.prewarm(25, pool);
+  assert.equal(outcome, 'warmed'); // DB tetap authoritative; lock tetap dilepas
+  assert.equal(redis.store.has('arena:exam:source:warm:v2:25'), false);
 });

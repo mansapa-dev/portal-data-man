@@ -7,8 +7,16 @@ test('concurrent starts share source read and never expose the answer key', asyn
   const examId = 987654321;
   let sourceReads = 0;
   let insertId = 0;
+  const questionRow = [{ id: 1, question_type: 'MULTIPLE_CHOICE', question_text: 'Soal 1', option_a: 'Benar', option_b: 'Salah', option_c: null, option_d: null, option_e: null, correct_answer: 'A', points: 1 }];
   const pool = {
-    async execute(_sql, [_examId, studentId]) {
+    async execute(sql, [_examId, studentId]) {
+      if (sql.startsWith('SELECT source_revision FROM exams WHERE id=?')) return [[{ source_revision: 1 }]];
+      if (sql.startsWith('SELECT id,question_type')) {
+        // Warm-up attempt baru berjalan via pool, di luar transaksi.
+        sourceReads++;
+        await new Promise(resolve => setTimeout(resolve, 20));
+        return [questionRow];
+      }
       return [[{ id: studentId, portal_class_id: 'X', grade_snapshot: 'X' }]];
     },
     async getConnection() {

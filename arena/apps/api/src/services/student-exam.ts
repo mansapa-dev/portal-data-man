@@ -136,12 +136,15 @@ export class StudentExamService {
         { academic_year: student.academic_year, semester: student.semester, starts_at: student.starts_at, session_number: student.session_number },
         student.grade_snapshot,
       );
-      // Warm-up cache sumber soal juga di luar transaksi: query `questions`,
-      // Redis GET/SET, dan parsing JSON 40 soal tidak lagi memperpanjang waktu
-      // koneksi ditahan. Transaksi tetap memanggil loader (akan jadi cache hit)
-      // supaya validasi "Soal ujian belum tersedia" tetap berjalan di sana.
-      // Revision authoritative dibaca dari MySQL (migrasi 015) sebelum loader;
-      // kolom belum ada (deploy belum migrasi) => loader bypass cache, aman.
+    }
+    if (!hasExistingAttempt) {
+      // Warm-up cache sumber soal untuk SEMUA attempt baru (bukan hanya gate),
+      // di luar transaksi: query `questions`, Redis GET/SET, dan parsing JSON
+      // 40 soal tidak lagi memperpanjang waktu koneksi ditahan. Transaksi tetap
+      // memanggil loader (akan jadi cache hit) supaya validasi "Soal ujian belum
+      // tersedia" tetap berjalan di sana. Revision authoritative dibaca dari
+      // MySQL (migrasi 015); kolom belum ada (deploy belum migrasi) => loader
+      // bypass cache, aman.
       const [revisionRows] = await this.pool.execute<RowDataPacket[]>('SELECT source_revision FROM exams WHERE id=?', [examId]);
       await loadExamQuestionSource(examId, async () => {
         const [rows] = await this.pool.execute<RowDataPacket[]>(

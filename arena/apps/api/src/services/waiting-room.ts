@@ -2,6 +2,7 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypt
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 import type { Redis } from 'ioredis';
 import { waitingRoomLua } from './waiting-room-lua.js';
+import { prewarmExamQuestionSource } from './exam-question-source.js';
 
 export type WaitingStatus = 'NOT_JOINED' | 'WAITING' | 'ADMITTED' | 'IN_EXAM' | 'FINISHED' | 'ABANDONED' | 'EXPIRED';
 export type WaitingClaimReceipt = { tokenHash: string; sequence: number | null };
@@ -83,7 +84,14 @@ export class WaitingRoomService {
   async heartbeat(examId:number,studentId:number) { return this.run(examId,studentId,'heartbeat'); }
   async leave(examId:number,studentId:number) { return this.run(examId,studentId,'leave'); }
   async summary(examId:number) { await this.configure(examId); return this.status(examId,0); }
-  async release(examId:number,manual=false,expectedBatch?:number) { return this.run(examId,0,'release',{seed:randomBytes(32).toString('hex'),manual,expected_batch:expectedBatch}); }
+  async release(examId:number,manual=false,expectedBatch?:number) {
+    // Pre-warm sumber soal sebelum batch siswa di-admit: 300 siswa yang masuk
+    // bersamaan tidak boleh jatuh ke query soal MySQL pada saat bersamaan.
+    // Fire-and-forget; kegagalan pre-warm tidak memengaruhi release dan lazy
+    // loader tetap membaca MySQL (revision authoritative dari migrasi 015).
+    if (this.pool) void prewarmExamQuestionSource(this.pool, examId).catch(() => { /* lazy loader menutup */ });
+    return this.run(examId,0,'release',{seed:randomBytes(32).toString('hex'),manual,expected_batch:expectedBatch});
+  }
   async sweep(examId:number) { return this.run(examId,0,'sweep'); }
 
   async logout(studentId:number) {

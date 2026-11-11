@@ -86,6 +86,40 @@ secara konservatif, karena keputusan historisnya tidak tersimpan. Tinjau kasus
 itu melalui admin; jangan melakukan bulk unlock. Reset admin menghapus penanda
 LOCK pada attempt yang dipulihkan. Hasil yang sudah ada tidak dihapus.
 
+## 3b. Terapkan migrasi 015 sebelum restart proses
+
+```bash
+cd /srv/repos/portal-data-man/arena
+mysql -u arena_migrator -p "$ARENA_DB" < database/migrations/015_exam_source_revision.sql
+mysql -u arena_migrator -p "$ARENA_DB" -e \
+  "SHOW COLUMNS FROM exams LIKE 'source_revision'; SELECT TRIGGER_NAME,EVENT_MANIPULATION FROM information_schema.triggers WHERE trigger_schema=DATABASE();"
+```
+
+015 menambah `exams.source_revision` dan tiga trigger di tabel `questions`
+(INSERT/UPDATE/DELETE) yang menaikkan revision dalam transaksi yang sama dengan
+mutasi soal — inilah mekanisme invalidasi cache soal yang authoritative.
+Migrasi dapat diulang (idempotent). **Urutan deploy aman dua arah:** kode
+aplikasi yang membaca revision tetap bypass cache dan selalu membaca MySQL
+bila kolom/revision belum tersedia, jadi kode boleh dideploy sebelum atau
+sesudah migrasi.
+
+Catatan eksekusi trigger:
+
+- **Binlog aktif** (default server production) menuntut `log_bin_trust_function_creators=ON`
+  atau pengguna migrasi berhak SUPER untuk membuat trigger. Bila `arena_migrator`
+  tidak berhak SUPER, set sementara via sesi privileged dan kembalikan:
+  ```bash
+  mysql -u root -p -e "SET GLOBAL log_bin_trust_function_creators=ON;"
+  mysql -u arena_migrator -p "$ARENA_DB" < database/migrations/015_exam_source_revision.sql
+  mysql -u root -p -e "SET GLOBAL log_bin_trust_function_creators=OFF;"
+  ```
+- **Larangan MySQL 1442:** statement yang memutasi `questions` tidak boleh
+  membaca/memutasi tabel `exams` dalam statement yang sama (mis. `INSERT ...
+  SELECT ... FROM exams`). Semua jalur aplikasi saat ini memakai literal
+  exam_id. Pelanggaran gagal LOUD dengan error 1442, bukan korupsi diam-diam.
+- Trigger UPDATE menangani perpindahan `exam_id`: revision **kedua** exam
+  (OLD dan NEW) dinaikkan dalam satu statement `WHERE id IN (OLD.exam_id, NEW.exam_id)`.
+
 ## 4. Environment, MySQL, dan Redis
 
 Pertahankan credential yang sudah benar. Pastikan environment setiap proses

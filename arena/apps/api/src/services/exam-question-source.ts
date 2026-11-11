@@ -28,12 +28,57 @@ const maxEntries = Math.max(1, Math.min(100, Number(process.env.EXAM_QUESTION_SO
 // TTL panjang aman karena kebenaran ditanggung revision di MySQL, bukan TTL.
 // Clamp 1 jam default, maksimum 24 jam.
 const defaultRedisTtlMs = Math.max(1_000, Math.min(24 * 60 * 60 * 1_000, Number(process.env.EXAM_QUESTION_REDIS_TTL_MS ?? 3_600_000) || 3_600_000));
+// Pre-warm: isi payload soal ke Redis sebelum siswa mengakses ujian.
+// EXAM_QUESTION_PREWARM=off menonaktifkan semua trigger pre-warm.
+const defaultPrewarmEnabled = process.env.EXAM_QUESTION_PREWARM !== 'off';
+// Lock anti-stampede: hanya satu proses yang mengisi payload per exam.
+// TTL lock membuat holder yang mati otomatis terlepas (maksimal lockMs).
+const defaultPrewarmLockMs = Math.max(1_000, Math.min(60_000, Number(process.env.EXAM_QUESTION_PREWARM_LOCK_MS ?? 30_000) || 30_000));
 
 export type RedisLike = {
   status: string;
   get(key: string): Promise<string | null>;
   set(key: string, value: string, mode: 'PX', ttl: number): Promise<unknown>;
+  /** SET key value NX PX ttl — 'OK' saat berhasil, null saat key sudah ada. */
+  setNxPx(key: string, owner: string, ttl: number): Promise<string | null>;
+  /** EVAL untuk melepas lock compare-and-delete. */
+  eval(script: string, numKeys: number, ...args: (string | number)[]): Promise<unknown>;
 };
+
+/** Bungkus klien ioredis asli ke kontrak RedisLike (status dibaca live). */
+export function asRedisLike(client: {
+  status: string;
+  get(key: string): Promise<string | null>;
+  set(key: string, value: string, ...rest: unknown[]): Promise<unknown>;
+  eval(script: string, ...args: unknown[]): Promise<unknown>;
+}): RedisLike {
+  // Cast internal: tanda tangan overload ioredis lebih lebar dari yang kita
+  // pakai di sini; perilaku dipertahankan satu-satu.
+  const raw = client as unknown as {
+    status: string;
+    get: (key: string) => Promise<string | null>;
+    set: (...args: unknown[]) => Promise<unknown>;
+    eval: (...args: unknown[]) => Promise<unknown>;
+  };
+  return {
+    get status() { return raw.status; },
+    get: (key) => raw.get(key),
+    set: (key, value, mode, ttl) => raw.set(key, value, mode, ttl),
+    setNxPx: (key, owner, ttl) => raw.set(key, owner, 'NX', 'PX', ttl) as Promise<string | null>,
+    eval: (script, numKeys, ...args) => raw.eval(script, numKeys, ...args),
+  };
+}
+
+export const prewarmLockKey = (examId: number) => `arena:exam:source:warm:v2:${examId}`;
+const unlockScript = `if redis.call('GET',KEYS[1])==ARGV[1] then return redis.call('DEL',KEYS[1]) else return 0 end`;
+
+/** Pool minimal untuk pre-warm; mysql2 Pool memenuhi ini. */
+export type PrewarmPool = {
+  execute(sql: string, params: (string | number)[]): Promise<[RowDataPacket[], unknown?]>;
+};
+
+const REVISION_SELECT = 'SELECT source_revision FROM exams WHERE id=?';
+export const QUESTION_SOURCE_SELECT = `SELECT id,question_type,question_text,option_a,option_b,option_c,option_d,option_e,correct_answer,points FROM questions WHERE exam_id=? AND status='ACTIVE' ORDER BY id`;
 
 type CacheEntry = { revision: number; expiresAt: number; rows: SourceQuestion[] };
 type StoredPayload = { revision?: unknown; rows?: unknown };
@@ -43,11 +88,15 @@ export type ExamQuestionSourceDeps = {
   now?: () => number;
   localTtlMs?: number;
   redisTtlMs?: number;
+  prewarmEnabled?: boolean;
+  prewarmLockMs?: number;
 };
 
 export type ExamQuestionSource = {
   /** revision wajib berasal dari exams.source_revision; undefined => bypass cache. */
   load(examId: number, fetchRows: () => Promise<SourceQuestion[]>, revision?: number): Promise<SourceQuestion[]>;
+  /** Isi payload revision terkini ke Redis. Fire-and-forget; tidak pernah melempar ke request path. */
+  prewarm(examId: number, pool: PrewarmPool): Promise<'warmed' | 'skipped' | 'unavailable'>;
 };
 
 export function payloadKey(revision: number, examId: number): string {
@@ -72,6 +121,8 @@ export function createExamQuestionSource(deps: ExamQuestionSourceDeps = {}): Exa
   const now = deps.now ?? Date.now;
   const localTtl = deps.localTtlMs ?? localTtlMs;
   const redisTtl = deps.redisTtlMs ?? defaultRedisTtlMs;
+  const prewarmEnabled = deps.prewarmEnabled ?? defaultPrewarmEnabled;
+  const prewarmLockMs = deps.prewarmLockMs ?? defaultPrewarmLockMs;
   const cache = new Map<number, CacheEntry>();
   // Single-flight per (examId, revision): request bersamaan berbagi satu fetch.
   const loading = new Map<string, Promise<SourceQuestion[]>>();
@@ -135,12 +186,47 @@ export function createExamQuestionSource(deps: ExamQuestionSourceDeps = {}): Exa
       if (pending) return pending;
       return readThrough(examId, flightKey, fetchRows, revision as number);
     },
+
+    async prewarm(examId, pool) {
+      if (!prewarmEnabled) return 'skipped';
+      if (!redis || redis.status !== 'ready') return 'unavailable';
+      const owner = `${process.pid}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+      const lockAcquired = await redis.setNxPx(prewarmLockKey(examId), owner, prewarmLockMs).catch(() => null);
+      if (lockAcquired !== 'OK') return 'skipped'; // proses lain sedang mengisi; lazy loader menutup sisanya
+      try {
+        // Maks 2 percobaan: revision harus stabil di sekeliling fetch agar
+        // payload yang ditulis benar-benar merepresentasikan revision itu.
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const [beforeRows] = await pool.execute(REVISION_SELECT, [examId]);
+          const revision = Number(beforeRows[0]?.source_revision);
+          if (!Number.isSafeInteger(revision) || revision < 0) return 'unavailable';
+          const cached = cache.get(examId);
+          if (cached && cached.revision >= revision && cached.expiresAt > now()) return 'skipped';
+          const [rows] = await pool.execute(QUESTION_SOURCE_SELECT, [examId]);
+          const [afterRows] = await pool.execute(REVISION_SELECT, [examId]);
+          const revisionAfter = Number(afterRows[0]?.source_revision);
+          if (revisionAfter !== revision) continue; // mutasi soal terjadi di tengah fetch; ulangi
+          if (!rows.length) return 'skipped';
+          try { await redis.set(payloadKey(revision, examId), JSON.stringify({ revision, rows }), 'PX', ttlWithJitter(redisTtl)); } catch { /* Redis penuh/noeviction; lazy loader tetap DB-authoritative */ }
+          remember(examId, revision, rows as SourceQuestion[]);
+          return 'warmed';
+        }
+        return 'skipped';
+      } finally {
+        try { await redis.eval(unlockScript, 1, prewarmLockKey(examId), owner); } catch { /* lock lepas sendiri via TTL */ }
+      }
+    },
   };
 }
 
-/** Instance proses: memakai koneksi Redis singleton aplikasi. */
-export const examQuestionSource = createExamQuestionSource({ redis: defaultRedis ? (defaultRedis as unknown as RedisLike) : null });
+/** Instance proses: memakai koneksi Redis singleton aplikasi via adapter kontrak. */
+export const examQuestionSource = createExamQuestionSource({ redis: defaultRedis ? asRedisLike(defaultRedis) : null });
 
 export function loadExamQuestionSource(examId: number, fetchRows: () => Promise<SourceQuestion[]>, revision?: number): Promise<SourceQuestion[]> {
   return examQuestionSource.load(examId, fetchRows, revision);
+}
+
+/** Pre-warm fire-and-forget; dipanggil dari titik-titik trigger (admin hook, release batch waiting room). */
+export function prewarmExamQuestionSource(pool: PrewarmPool, examId: number): Promise<'warmed' | 'skipped' | 'unavailable'> {
+  return examQuestionSource.prewarm(examId, pool);
 }
