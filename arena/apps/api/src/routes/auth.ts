@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { requirePool } from '../lib/db.js';
+import { requireAuthPool, requirePool } from '../lib/db.js';
 import { assertCsrf, claimsFromRequest, issueToken, newCsrf, normalizeStudentDigits, studentLoginRateLimitKey } from '../lib/auth.js';
 import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
 import { audit } from '../services/audit.js';
@@ -119,7 +119,9 @@ export async function authRoutes(app: FastifyInstance) {
         reply.header('Set-Cookie',`arena_student_session=${response.token}; Path=/; Max-Age=${studentSessionSeconds}; HttpOnly; SameSite=Lax${process.env.NODE_ENV==='production'?'; Secure':''}`);reply.header('Cache-Control','no-store');return response;
       }
       const task=(async()=>{
-        const pool=requirePool();const acquireStarted=performance.now();let connection:PoolConnection;
+        // Bulkhead: login memakai pool auth terpisah agar lonjakan login tidak
+        // menghabiskan koneksi yang dipakai autosave/submit ujian berjalan.
+        const pool=requireAuthPool();const acquireStarted=performance.now();let connection:PoolConnection;
         try{connection=await pool.getConnection();}catch{throw Object.assign(new Error('Koneksi basis data sedang sibuk. Coba lagi sebentar.'),{statusCode:503,retryAfter:2});}finally{poolWaitMs=performance.now()-acquireStarted;}
         let rows:RowDataPacket[];
         try{const queryStarted=performance.now();try{[rows]=await connection.execute<RowDataPacket[]>('SELECT id,nisn,name_snapshot,class_snapshot,grade_snapshot,pin_hash,cbt_status FROM students WHERE nisn=? AND is_active=1 LIMIT 1',[nisn]);}finally{lookupMs=performance.now()-queryStarted;}}

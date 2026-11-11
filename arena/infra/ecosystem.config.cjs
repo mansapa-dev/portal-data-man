@@ -12,6 +12,9 @@ module.exports = {
       LOG_LEVEL: 'warn',
       DB_POOL_SIZE: '12',
       DB_QUEUE_LIMIT: '240',
+      // Bulkhead login: 3 proses API x 4 koneksi auth, terpisah dari pool ujian.
+      AUTH_DB_POOL_SIZE: '4',
+      AUTH_DB_QUEUE_LIMIT: '240',
       DB_CONNECT_TIMEOUT_MS: '10000',
       PASSWORD_VERIFY_WORKERS: '1',
       EXAM_QUESTION_SOURCE_TTL_MS: '2000',

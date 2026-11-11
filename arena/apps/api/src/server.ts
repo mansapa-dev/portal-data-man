@@ -3,7 +3,7 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import sensible from '@fastify/sensible';
 import { z } from 'zod';
-import { pool } from './lib/db.js';
+import { closeAuthPool, pool } from './lib/db.js';
 import { authRoutes } from './routes/auth.js';
 import { studentExamRoutes } from './routes/student-exams.js';
 import { waitingRoomRoutes } from './routes/waiting-room.js';
@@ -139,6 +139,7 @@ const close = async () => {
   await app.close();
   await closePasswordVerifier();
   await pool?.end();
+  await closeAuthPool();
   await redis?.quit();
 };
 process.once('SIGINT', () => void close().then(() => process.exit(0)));
