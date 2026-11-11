@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { api, ApiError, mutationId, setSession, setExamToken, getExamToken } from './lib/api';
 import { resultPollDelayMs, autosaveFlushDelayMs, loginStartDelayMs, loginRetryDelayMs } from './lib/load-shape';
+import { restorePlan } from './lib/session-restore';
 import type { WaitingView } from './lib/waiting-room';
 import { loadXlsx } from './lib/xlsx';
 import { QuestionBank } from './QuestionBank';
@@ -324,7 +325,7 @@ function App() {
     const restoreStudent=async()=>{const data=await api<{student:Student;csrf_token:string}>('/api/auth/student/session');if(cancelled)return;localStorage.setItem('arena_active_portal','student');setSession(null,data.csrf_token);setStaff(null);setStudent(data.student);try{const available=await loadExams();if(cancelled)return;const pending=available.find(exam=>['RECEIVED','PROCESSING'].includes(String(exam.submission_state??'')));const active=available.find(exam=>exam.status_attempt==='IN_PROGRESS'&&!['RECEIVED','PROCESSING'].includes(String(exam.submission_state??'')));if(active)await start(active.id);else if(pending){// Submission sudah durable: jangan buka ulang sesi ujian, tunggu hasil.
 setMessage('Ujian sudah dikirim. Nilai ditampilkan setelah penilaian selesai.');void showResult(pending.id);}}catch(error){if(!cancelled)setMessage(error instanceof Error?error.message:'Jadwal ujian gagal dimuat');}};
     const restoreStaff=async()=>{const data=await api<{staff:Staff;csrf_token:string}>('/api/auth/staff/session');if(cancelled)return;localStorage.setItem('arena_active_portal','staff');setSession(null,data.csrf_token);setStudent(null);setStaff(data.staff);};
-    const restore=async()=>{const preferred=localStorage.getItem('arena_active_portal');const attempts=preferred==='staff'?[restoreStaff,restoreStudent]:[restoreStudent,restoreStaff];let lastFailure:unknown;for(const attemptSession of attempts){try{await attemptSession();return;}catch(error){if(cancelled)return;lastFailure=error;const status=(error as {statusCode?:number})?.statusCode;if(status!==401&&status!==403)break;}}if(!cancelled){setSession(null,null);localStorage.removeItem('arena_active_portal');const status=(lastFailure as {statusCode?:number})?.statusCode;if(status!==401&&status!==403)setMessage(lastFailure instanceof Error?lastFailure.message:'Sesi gagal dipulihkan. Coba muat ulang.');}};
+    const restore=async()=>{const plan=restorePlan(localStorage.getItem('arena_active_portal'));if(!plan.length){if(!cancelled)setSession(null,null);return;}const attempts=plan.map(portal=>portal==='staff'?restoreStaff:restoreStudent);let lastFailure:unknown;for(const attemptSession of attempts){try{await attemptSession();return;}catch(error){if(cancelled)return;lastFailure=error;const status=(error as {statusCode?:number})?.statusCode;if(status!==401&&status!==403)break;}}if(!cancelled){setSession(null,null);localStorage.removeItem('arena_active_portal');const status=(lastFailure as {statusCode?:number})?.statusCode;if(status!==401&&status!==403)setMessage(lastFailure instanceof Error?lastFailure.message:'Sesi gagal dipulihkan. Coba muat ulang.');}};
     void restore().finally(()=>{if(!cancelled)setSessionLoading(false);});
     return()=>{cancelled=true;};
   }, []);
