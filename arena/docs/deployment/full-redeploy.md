@@ -1104,6 +1104,9 @@ Jika rilis sudah aktif dan harus rollback:
 
 | Gejala | Penyebab umum | Tindakan |
 | --- | --- | --- |
+| `Could not establish connection. Receiving end does not exist.` di konsol | Ekstensi browser memanggil `chrome.runtime` | Nonaktifkan ekstensi; bukan ARENA (lihat [exam-device-browser.md](../ops/exam-device-browser.md)) |
+| `ApolloError 403` / `execute-api.<aws>.amazonaws.com 403` | Skrip pihak ketiga/ekstensi pada origin yang sama | Nonaktifkan ekstensi atau skrip sisipan |
+| `GET /api/student/exams/<id>` → 404 | Endpoint itu tidak ada di ARENA (hanya daftar dan sub-path) | Bukan dari ARENA; periksa ekstensi |
 | Login terasa lambat 0–6 detik | Jitter login Tahap 4 memang disengaja | Normal; jangan matikan jitter saat ujian |
 | Login 503 berulang | Antrean pool auth penuh / bcrypt sibuk | Periksa `Retry-After`, `AUTH_DB_QUEUE_LIMIT`, koneksi MySQL, dan `ARENA_LOGIN_DIAGNOSTICS` |
 | API 503 `Queue limit reached` | `DB_QUEUE_LIMIT` penuh | Turunkan beban, periksa query lambat/lock; jangan langsung menaikkan limit |
