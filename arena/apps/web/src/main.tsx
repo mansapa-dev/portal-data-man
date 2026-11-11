@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { api, ApiError, mutationId, setSession, setExamToken, getExamToken } from './lib/api';
-import { resultPollDelayMs } from './lib/load-shape';
+import { resultPollDelayMs, autosaveFlushDelayMs } from './lib/load-shape';
 import type { WaitingView } from './lib/waiting-room';
 import { loadXlsx } from './lib/xlsx';
 import { QuestionBank } from './QuestionBank';
@@ -124,7 +124,7 @@ function App() {
   function enqueueBatch(examId:number,attemptId:string,item:{question_id:number;answer:string|null;is_flagged:boolean;base_revision:number;mutation_id:string}):Promise<{revision:number}>{
     return new Promise((resolve,reject)=>{
       batchQueue.current.set(item.question_id,{item,resolve,reject});
-      if(batchTimer.current===null){const delay=submittingAttempt.current?0:3000+Math.floor(Math.random()*1000);batchTimer.current=window.setTimeout(()=>{batchTimer.current=null;void flushBatch(examId,attemptId);},delay);}
+      if(batchTimer.current===null){const delay=submittingAttempt.current?0:autosaveFlushDelayMs(student?.id??0);batchTimer.current=window.setTimeout(()=>{batchTimer.current=null;void flushBatch(examId,attemptId);},delay);}
     });
   }
   function refreshSaveState() {
