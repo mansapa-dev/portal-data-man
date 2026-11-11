@@ -45,7 +45,7 @@ export class WaitingRoomService {
 
   private db() { if (!this.pool) throw fail('DB_UNAVAILABLE','Database belum dikonfigurasi.',503); return this.pool; }
 
-  async configure(examId: number, supplied?: RowDataPacket) {
+  async configure(examId: number, supplied?: RowDataPacket, notify = true) {
     let exam = supplied;
     if (!exam) {
       const [rows] = await this.db().execute<RowDataPacket[]>(`SELECT e.*,w.queue_open,w.batch_size,w.batch_interval_ms,w.heartbeat_timeout_ms,w.claim_timeout_ms
@@ -59,7 +59,7 @@ export class WaitingRoomService {
     const settings = Object.fromEntries(Object.entries(this.defaults).map(([key,value]) => [key,Number(exam![key] ?? value)]));
     if (!this.redis) throw fail('REDIS_UNAVAILABLE','Ruang tunggu belum tersedia.',503);
     await this.redis.sadd(WAITING_REGISTRY,String(examId));
-    return this.run(examId,0,'configure', { ...settings, exam_status: exam.status, starts_at_ms:new Date(exam.starts_at).getTime(), ends_at_ms:new Date(exam.ends_at).getTime(), retention_ms:172800000 });
+    return this.run(examId,0,'configure', { ...settings, exam_status: exam.status, starts_at_ms:new Date(exam.starts_at).getTime(), ends_at_ms:new Date(exam.ends_at).getTime(), retention_ms:172800000 }, notify);
   }
 
   async join(examId: number, studentId: number, rejoin=false) {
@@ -74,7 +74,7 @@ export class WaitingRoomService {
     const exam=rows[0];
     if (!exam) throw fail('EXAM_FORBIDDEN','Ujian tidak tersedia untuk siswa ini.',403);
     if (exam.attempt_id) return this.resume(examId,studentId);
-    await this.configure(examId,exam);
+    await this.configure(examId,exam,false);
     await this.redis!.sadd(`arena:waiting:student:${studentId}`,String(examId));
     await this.redis!.expire(`arena:waiting:student:${studentId}`,172800);
     return this.run(examId,studentId,'join',{rejoin});
@@ -83,7 +83,7 @@ export class WaitingRoomService {
   async status(examId:number,studentId:number) { return this.run(examId,studentId,'status'); }
   async heartbeat(examId:number,studentId:number) { return this.run(examId,studentId,'heartbeat'); }
   async leave(examId:number,studentId:number) { return this.run(examId,studentId,'leave'); }
-  async summary(examId:number) { await this.configure(examId); return this.status(examId,0); }
+  async summary(examId:number) { await this.configure(examId,undefined,false); return this.status(examId,0); }
   async release(examId:number,manual=false,expectedBatch?:number) {
     // Pre-warm sumber soal sebelum batch siswa di-admit: 300 siswa yang masuk
     // bersamaan tidak boleh jatuh ke query soal MySQL pada saat bersamaan.
@@ -136,7 +136,7 @@ export class WaitingRoomService {
       WHERE a.exam_id=? AND a.student_id=? AND s.is_active=1 AND s.cbt_status='ACTIVE'`,[examId,studentId]);
     const attempt=rows[0];
     if (!attempt) throw fail('ATTEMPT_NOT_FOUND','Sesi ujian tidak ditemukan.',404);
-    await this.configure(examId);
+    await this.configure(examId,undefined,false);
     const current=await this.status(examId,studentId);
     const state=attempt.status==='IN_PROGRESS' ? 'IN_EXAM' : 'FINISHED';
     if (current.admit_token && attempt.token_hash===tokenHash(current.admit_token)) {
@@ -218,7 +218,7 @@ export class WaitingRoomService {
     return client.arenaWaitingTransition ? client.arenaWaitingTransition(...args) : client.eval(waitingRoomLua, 6, ...args);
   }
 
-  private async run(examId:number,studentId:number,op:string,data:Record<string,unknown>={}) {
+  private async run(examId:number,studentId:number,op:string,data:Record<string,unknown>={},notify=true) {
     if (!this.redis || this.redis.status!=='ready') throw fail('REDIS_UNAVAILABLE','Ruang tunggu belum tersedia. Sistem akan mencoba kembali.',503);
     const base=waitingBase(examId);
     let parsed:WaitingView & {error?:string};
@@ -228,7 +228,12 @@ export class WaitingRoomService {
     if (!Array.isArray(parsed.released)) parsed.released=[];
     // Notifications are hints: a lost publish must not turn a committed transition
     // into a failed request. Polling and SSE keepalives read the authoritative state.
-    if (parsed.changed) await this.redis.publish(WAITING_CHANNEL,JSON.stringify({examId,version:parsed.version})).catch(()=>{});
+    // Tahap 3: sertakan siswa yang berubah supaya SSE tidak membaca ulang seluruh
+    // exam saat satu siswa join/release. `null` berarti semua klien exam ini.
+    if (parsed.changed && notify) {
+      const students = parsed.released.length ? parsed.released.map(Number) : studentId > 0 ? [studentId] : null;
+      await this.redis.publish(WAITING_CHANNEL,JSON.stringify({examId,version:parsed.version,students})).catch(()=>{});
+    }
     return parsed;
   }
 }

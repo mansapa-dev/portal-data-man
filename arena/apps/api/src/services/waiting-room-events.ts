@@ -7,17 +7,35 @@ type Client={examId:number;studentId:number;expires:number;reply:FastifyReply;la
 export class WaitingRoomEvents {
   private subscriber:Redis|null=null;
   private readonly clients=new Set<Client>();
-  private readonly dirty=new Set<number>();
+  // examId → siswa yang berubah. `null` berarti semua klien exam tersebut.
+  // Tahap 3: satu siswa join/release tidak lagi memaksa pembacaan ulang 1.200 klien.
+  private readonly dirty=new Map<number,Set<number>|null>();
   private timer?:NodeJS.Timeout;
   private inFlight?:Promise<void>;
   constructor(private readonly service:WaitingRoomService) {}
+  private mark(examId:number,students:number[]|null) {
+    if(!Number.isSafeInteger(examId))return;
+    if(students===null){this.dirty.set(examId,null);return;}
+    if(this.dirty.get(examId)===null)return;
+    let changed=this.dirty.get(examId);
+    if(!changed){changed=new Set();this.dirty.set(examId,changed);}
+    for(const studentId of students)if(Number.isSafeInteger(studentId))changed.add(studentId);
+  }
   start() {
     if (this.timer) return;
     if (this.service.redis) {
       this.subscriber=this.service.redis.duplicate();
       this.subscriber.on('error',()=>{}); // connection errors are reflected by SSE fallback, no per-client log
-      this.subscriber.on('ready',()=>{void this.subscriber?.subscribe(WAITING_CHANNEL).catch(()=>{}); for(const client of this.clients)this.dirty.add(client.examId);});
-      this.subscriber.on('message',(_channel,value)=>{try{this.dirty.add(Number(JSON.parse(value).examId));}catch{/* ignore malformed notifications */}});
+      this.subscriber.on('ready',()=>{void this.subscriber?.subscribe(WAITING_CHANNEL).catch(()=>{}); for(const client of this.clients)this.dirty.set(client.examId,null);});
+      this.subscriber.on('message',(_channel,value)=>{
+        try{
+          const payload=JSON.parse(value) as {examId?:unknown;students?:unknown};
+          const examId=Number(payload.examId);
+          if(!Number.isSafeInteger(examId))return;
+          // Pesan lama/tanpa daftar siswa diperlakukan sebagai "semua klien".
+          this.mark(examId,Array.isArray(payload.students)?payload.students.map(Number):null);
+        }catch{/* ignore malformed notifications */}
+      });
     }
     this.timer=setInterval(()=>{if(!this.inFlight)this.inFlight=this.flush().finally(()=>{this.inFlight=undefined;});},5000);
     this.timer.unref();
@@ -42,14 +60,18 @@ export class WaitingRoomEvents {
     }
   }
   private async flush() {
-    const dirty=new Set(this.dirty);this.dirty.clear();
+    const dirty=new Map(this.dirty);this.dirty.clear();
     const pending=[...this.clients];let index=0;
     await Promise.all(Array.from({length:Math.min(32,pending.length)},async()=>{
       while(index<pending.length){
         const client=pending[index++]!;
         if(Date.now()/1000>=client.expires){this.send(client,'expired',{});client.reply.raw.end();this.clients.delete(client);continue;}
         const ping=Date.now()-client.lastPing>=25000;
-        if(!dirty.has(client.examId) && !ping)continue;
+        const changed=dirty.get(client.examId);
+        // `undefined` = exam ini tidak berubah; Set = hanya siswa tertentu;
+        // null = semua siswa exam ini. Keepalive tetap dikirim saat ping.
+        if(changed===undefined && !ping)continue;
+        if(changed instanceof Set && !changed.has(client.studentId) && !ping)continue;
         try {
           const state=await this.service.status(client.examId,client.studentId);
           this.send(client,'status',this.service.publicView(state,client.examId,client.studentId,client.expires));
