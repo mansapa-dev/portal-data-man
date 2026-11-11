@@ -54,7 +54,16 @@ test('real HTTP join → admit → claim → answer → submit; every exam API r
     assert.equal(saved.statusCode,200,saved.body);
     const submitted=await app.inject({method:'POST',url:`${prefix}/submit`,headers,payload:{}});
     assert.equal(submitted.statusCode,200,submitted.body);
-    assert.equal((await f.service.status(f.examId,a)).status,'FINISHED');
+    // Tahap 3: waiting.finish sengaja dilepas setelah response submit, jadi
+    // status FINISHED bisa tertinggal beberapa milidetik. Rekonsiler tetap
+    // menjamin eventual state; test ini menunggu sebentar, bukan mengubah
+    // kontrak penerimaan submit.
+    let finished=false;
+    for(let i=0;i<100&&!finished;i++){
+      finished=(await f.service.status(f.examId,a)).status==='FINISHED';
+      if(!finished)await new Promise(resolve=>setTimeout(resolve,20));
+    }
+    assert.equal(finished,true,'deferred waiting.finish must eventually mark the student FINISHED');
     assert.equal((await app.inject({method:'GET',url:`${prefix}/result`,headers})).statusCode,200);
     assert.equal((await app.inject({method:'GET',url:`${prefix}/review`,headers})).statusCode,200);
     assert.equal((await app.inject({method:'POST',url:`${prefix}/heartbeat`,headers,payload:{}})).statusCode,403);

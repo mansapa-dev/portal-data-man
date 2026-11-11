@@ -56,6 +56,13 @@ export async function studentExamRoutes(app: FastifyInstance, options:{pool?:Poo
     await waiting.authorize(exam,claims.sub,token,finished);
     return claims;
   };
+  // Tahap 3: status ruang tunggu bukan syarat penerimaan submit. Penerimaan
+  // durable sudah commit di TX1 (atau hasil sudah ada), jadi sinkronisasi
+  // FINISHED ke MySQL/Redis dijalankan setelah response dilepas. Rekonsiler
+  // ruang tunggu dan `resume` memulihkan state bila proses berhenti di sela.
+  const finishWaiting=(exam:number,studentId:number)=>{
+    void waiting.finish(exam,studentId).catch(()=>app.log.warn('waiting completion deferred'));
+  };
   const claim = async(request:FastifyRequest<{Params:{id:string}}>)=>{
     const claims=studentClaims(request);assertCsrf(request,claims);
     z.object({}).strict().parse(request.body ?? {});
@@ -97,7 +104,7 @@ export async function studentExamRoutes(app: FastifyInstance, options:{pool?:Poo
     const {exam_token: _token,...payload}=z.object({exam_token:z.string().max(64).optional()}).passthrough().parse(request.body);
     const body = violationSchema.parse(payload);
     const result=await scoring.recordViolation(claims.sub, examId.parse(request.params.id), body.event_key, body.type, { ip: request.ip, userAgent: request.headers['user-agent'] ?? '', clientOccurredAt: body.client_occurred_at ?? null, questionNo: body.question_no });
-    if(result.terminated)try{await waiting.finish(examId.parse(request.params.id),claims.sub);}catch{app.log.warn('waiting completion deferred');}
+    if(result.terminated)finishWaiting(examId.parse(request.params.id),claims.sub);
     return result;
   });
   app.post<{ Params: { id: string } }>('/api/student/exams/:id/submit', { config: { rateLimit: { max: 10, timeWindow: '1 minute', keyGenerator: rateLimitKey } } }, async (request) => {
@@ -113,7 +120,7 @@ export async function studentExamRoutes(app: FastifyInstance, options:{pool?:Poo
         if (outcome.kind === 'accepted' || outcome.kind === 'processing') {
           // Durasi ruang tunggu berakhir setelah penerimaan durable, bukan
           // setelah scoring selesai (desain A3 N6).
-          try{await waiting.finish(id,claims.sub);}catch{app.log.warn('waiting completion deferred');}
+          finishWaiting(id,claims.sub);
           // Akselerator saja: kegagalan enqueue ditutup reconciler (MySQL sumber kebenaran).
           void dispatchFinalization(claims.sub, id);
           return { status: 'accepted', submission_state: outcome.kind === 'accepted' ? 'RECEIVED' : outcome.state };
@@ -121,7 +128,7 @@ export async function studentExamRoutes(app: FastifyInstance, options:{pool?:Poo
         if (outcome.kind === 'done' || outcome.kind === 'result-exists') {
           // Sudah ada hasil (idempoten) → kembalikan hasil lengkap.
           const result = await scoring.submit(claims.sub, id, false);
-          try{await waiting.finish(id,claims.sub);}catch{app.log.warn('waiting completion deferred');}
+          finishWaiting(id,claims.sub);
           return result;
         }
         throw Object.assign(new Error('Submission sebelumnya tidak dapat diproses. Hubungi petugas ujian.'),{statusCode:409});
@@ -134,7 +141,7 @@ export async function studentExamRoutes(app: FastifyInstance, options:{pool?:Poo
       }
     }
     const result=await scoring.submit(claims.sub, id, finalizeOnly);
-    try{await waiting.finish(id,claims.sub);}catch{app.log.warn('waiting completion deferred');}
+    finishWaiting(id,claims.sub);
     return result;
   });
   app.get<{ Params: { id: string } }>('/api/student/exams/:id/review', async (request) => scoring.review((await access(request,examId.parse(request.params.id),true)).sub, examId.parse(request.params.id)));
