@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, ApiError } from './lib/api';
+import { claimDelayMs } from './lib/load-shape';
 import type { WaitingView } from './lib/waiting-room';
 import './styles/exam-admission.css';
 
@@ -13,7 +14,7 @@ export function ExamWaitingRoom({examId,initial,examName,onReady,onCancel}:{exam
   useEffect(()=>{
     let active=true,claiming=false,terminal=false,realtime=false;
     let stream:EventSource|null=null;
-    let pollTimer=0,heartbeatTimer=0,reconnectTimer=0;
+    let pollTimer=0,heartbeatTimer=0,reconnectTimer=0,claimTimer=0;
     const heartbeatDelay=()=>Math.max(2000,Math.min(20000,current.current.heartbeat_timeout_ms/3))*(0.9+Math.random()*0.2);
     const path=`/api/student/exams/${examId}/waiting`;
     function error(error:unknown){
@@ -30,7 +31,16 @@ export function ExamWaitingRoom({examId,initial,examName,onReady,onCancel}:{exam
       setNotice('');
       if((next.status==='ADMITTED' || next.status==='IN_EXAM') && next.admit_token && !claiming){
         claiming=true;setBusy(true);
-        try{await ready.current(next.admit_token);}catch(cause){error(cause);}finally{claiming=false;if(active)setBusy(false);}
+        const token=next.admit_token;
+        // Tahap 3: sebar claim di dalam jendela batch admission. Tanpa jitter,
+        // 300 siswa yang di-admit bersamaan melakukan claim pada detik yang sama.
+        const delay=next.status==='ADMITTED'?claimDelayMs(next.batch_interval_ms):0;
+        const runClaim=async()=>{
+          if(!active||terminal||current.current.admit_token!==token){claiming=false;if(active)setBusy(false);return;}
+          try{await ready.current(token);}catch(cause){error(cause);}finally{claiming=false;if(active)setBusy(false);}
+        };
+        if(delay>0)claimTimer=window.setTimeout(()=>{void runClaim();},delay);
+        else void runClaim();
       }
     }
     async function poll(){
@@ -55,7 +65,7 @@ export function ExamWaitingRoom({examId,initial,examName,onReady,onCancel}:{exam
     }
     void accept(current.current);void poll();connect();
     heartbeatTimer=window.setTimeout(()=>{void heartbeat();},heartbeatDelay());
-    return()=>{active=false;stream?.close();window.clearTimeout(pollTimer);window.clearTimeout(heartbeatTimer);window.clearTimeout(reconnectTimer);};
+    return()=>{active=false;stream?.close();window.clearTimeout(pollTimer);window.clearTimeout(heartbeatTimer);window.clearTimeout(reconnectTimer);window.clearTimeout(claimTimer);};
   },[examId,revision]);
 
   async function rejoin(){
