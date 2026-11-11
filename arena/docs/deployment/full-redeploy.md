@@ -54,6 +54,38 @@ Aturan wajib:
   database/Redis, serta konfigurasi OIDC/Portal Data. Jangan merotasinya sebagai
   bagian redeploy ini.
 
+## 1b. Struktur direktori dan paket server
+
+Struktur acuan (sesuaikan path aktual):
+
+```text
+/srv/repos/portal-data-man/          # checkout git
+└── arena/
+    ├── .env                           # secret, tidak di-commit
+    ├── apps/api/dist/                 # hasil build API + worker
+    ├── apps/web/dist/                 # hasil build frontend
+    ├── database/migrations/           # 001–016
+    ├── database/rollbacks/            # 012, 015, 016
+    └── infra/                         # contoh config, diterapkan manual
+/var/lib/arena/question-images/        # upload gambar soal (persisten)
+```
+
+Paket minimum (nama paket menyesuaikan distro):
+
+```bash
+node --version                       # >= 22
+npm --version
+mysql --version                      # MySQL 8.x
+redis-server --version
+nginx -v
+pm2 --version || npm install -g pm2
+```
+
+Buat user aplikasi (bila belum ada) dan pastikan memiliki akses ke checkout,
+`.env`, `apps/*/dist`, serta `/var/lib/arena/question-images`. Jangan menjalankan
+PM2 sebagai root. Pastikan timezone server konsisten (UTC) karena jadwal ujian
+dan `expires_at` memakai `UTC_TIMESTAMP(3)`.
+
 ## 2. Topologi proses dan anggaran koneksi
 
 `infra/ecosystem.config.cjs` menjalankan:
@@ -271,6 +303,100 @@ memakai 240 agar antrean tidak tumbuh tanpa batas.
 - Restart Redis/MySQL hanya pada jendela maintenance dan verifikasi koneksi.
 - Jangan membuka port MySQL, Redis, atau API ke internet.
 
+### 6c. Template `.env` production lengkap
+
+Simpan sebagai `arena/.env`, permission `600`, milik user aplikasi. Nilai
+bertanda `CHANGE_ME` wajib diganti; jangan commit file ini. Generate secret
+dengan `openssl rand -hex 32`.
+
+```dotenv
+# ===== Runtime =====
+NODE_ENV=production
+HOST=127.0.0.1
+PORT=3001
+LOG_LEVEL=warn
+TRUST_PROXY=true
+
+# ===== Database =====
+DATABASE_URL=mysql://arena_app:CHANGE_ME@127.0.0.1:3306/arena
+DB_POOL_SIZE=12
+DB_QUEUE_LIMIT=240
+AUTH_DB_POOL_SIZE=4
+AUTH_DB_QUEUE_LIMIT=240
+DB_CONNECT_TIMEOUT_MS=10000
+
+# ===== Cache soal =====
+EXAM_QUESTION_SOURCE_TTL_MS=2000
+EXAM_QUESTION_SOURCE_CACHE_MAX=16
+EXAM_QUESTION_REDIS_TTL_MS=2000
+EXAM_QUESTION_PREWARM=on
+EXAM_QUESTION_PREWARM_LOCK_MS=30000
+
+# ===== Finalisasi & worker =====
+ATTEMPT_FINALIZER_ENABLED=false
+ATTEMPT_FINALIZER_INTERVAL_MS=30000
+ATTEMPT_FINALIZER_BATCH_SIZE=50
+FINALIZATION_CONCURRENCY=4
+PASSWORD_VERIFY_WORKERS=1
+PASSWORD_VERIFY_QUEUE_LIMIT=5000
+PASSWORD_VERIFY_CONCURRENCY_PER_WORKER=4
+
+# ===== Diagnostik (default mati; nyalakan sementara saat investigasi) =====
+ARENA_EXAM_DIAGNOSTICS=false
+ARENA_LOGIN_DIAGNOSTICS=false
+ARENA_LOAD_DIAGNOSTICS=false
+
+# ===== Secret =====
+AUTH_TOKEN_SECRET=CHANGE_ME_openssl_rand_hex_32
+PIN_ENCRYPTION_KEY=CHANGE_ME_openssl_rand_hex_32_BERBEDA
+SETUP_TOKEN=CHANGE_ME_one_time_token
+
+# ===== Redis =====
+REDIS_URL=redis://127.0.0.1:6379
+REDIS_COMMAND_TIMEOUT_MS=1000
+
+# ===== Ruang tunggu FIFO =====
+WAITING_BATCH_SIZE=300
+WAITING_BATCH_INTERVAL_MS=10000
+WAITING_HEARTBEAT_TIMEOUT_MS=90000
+WAITING_CLAIM_TIMEOUT_MS=60000
+WAITING_WORKER_TICK_MS=1000
+WAITING_WORKER_ENABLED=false
+
+# ===== Submit asinkron (Tahap 2) =====
+SUBMIT_ASYNC=off
+SUBMIT_LEASE_MS=60000
+SUBMIT_LEASE_MAX_ATTEMPTS=5
+
+# ===== Portal Data / SSO =====
+PORTAL_DATA_BASE_URL=https://sipadu.example.sch.id
+PORTAL_DATA_SYNC_CLIENT_ID=
+PORTAL_DATA_SYNC_CLIENT_SECRET=
+OIDC_ISSUER=https://sipadu.example.sch.id/oidc
+OIDC_CLIENT_ID=
+OIDC_REDIRECT_URI=https://arena.example.sch.id/auth/sso/callback
+OIDC_POST_LOGOUT_URI=https://arena.example.sch.id/guru
+ARENA_WEB_URL=https://arena.example.sch.id
+
+# ===== Upload =====
+ARENA_UPLOAD_DIR=/var/lib/arena/question-images
+```
+
+Catatan:
+
+- `WAITING_WORKER_ENABLED=false` dan `ATTEMPT_FINALIZER_ENABLED=false` untuk
+  proses API karena worker berjalan sebagai proses PM2 terpisah. Worker
+  `waiting-worker.js` dan `finalization-worker.js` tetap berjalan tanpa flag
+  tersebut.
+- `SUBMIT_ASYNC=off` wajib di production. Jangan mengubahnya pada redeploy ini.
+- `PIN_ENCRYPTION_KEY` harus permanen. Menggantinya membuat PIN lama tidak bisa
+  didekripsi. Simpan backup terpisah dari database.
+- `TRUST_PROXY=true` hanya jika API benar-benar hanya menerima trafik dari Nginx
+  di host yang sama. Jangan aktifkan bila port API terbuka langsung.
+- PM2 `env` di `infra/ecosystem.config.cjs` **menimpa** nilai `.env` untuk key
+  yang sama (mis. `DB_POOL_SIZE`, `AUTH_DB_POOL_SIZE`, `SUBMIT_ASYNC`). Samakan
+  keduanya bila mengubah nilai; jangan mengandalkan `.env` saja.
+
 ## 7. Nginx, sysctl, dan Cloudflare
 
 1. Pasang directive `infra/nginx-main.conf` pada konteks `main`/`events`,
@@ -298,6 +424,218 @@ curl -sSI https://arena.man1palembang.sch.id/ | head
 Aset berulang harus `CF-Cache-Status: HIT`. Respons API terautentikasi harus
 `no-store` dan tidak HIT, termasuk untuk dua siswa berbeda. Jangan menyalin
 cookie/token peserta ke tiket atau log.
+
+### 7b. Berkas infra lengkap (copy-paste)
+
+Semua berkas di `infra/` adalah **contoh**. Gabungkan dengan konfigurasi yang
+sudah berjalan; jangan menimpa seluruh vhost/konfigurasi service. Jalankan
+`nginx -t`/`mysqld --validate-config` sebelum reload/restart.
+
+#### `infra/ecosystem.config.cjs`
+
+```js
+module.exports = {
+  apps: [{
+    name: 'arena-api',
+    cwd: process.env.ARENA_DIR || '/srv/arena',
+    script: 'apps/api/dist/server.js',
+    exec_mode: 'cluster',
+    instances: 3,
+    kill_timeout: 60000,
+    max_memory_restart: process.env.ARENA_MAX_MEMORY_RESTART || '1200M',
+    env: {
+      NODE_ENV: 'production',
+      LOG_LEVEL: 'warn',
+      DB_POOL_SIZE: '12',
+      DB_QUEUE_LIMIT: '240',
+      // Bulkhead login: 3 proses API x 4 koneksi auth, terpisah dari pool ujian.
+      AUTH_DB_POOL_SIZE: '4',
+      AUTH_DB_QUEUE_LIMIT: '240',
+      DB_CONNECT_TIMEOUT_MS: '10000',
+      PASSWORD_VERIFY_WORKERS: '1',
+      EXAM_QUESTION_SOURCE_TTL_MS: '2000',
+      EXAM_QUESTION_REDIS_TTL_MS: '2000',
+      WAITING_BATCH_SIZE: '300',
+      WAITING_BATCH_INTERVAL_MS: '10000',
+      WAITING_HEARTBEAT_TIMEOUT_MS: '90000',
+      WAITING_CLAIM_TIMEOUT_MS: '60000',
+      WAITING_WORKER_ENABLED: 'false',
+      ATTEMPT_FINALIZER_ENABLED: 'false',
+      // Tahap 2 (submit async) belum diaktifkan di production: proses API
+      // memakai jalur finalisasi sinkron lama sampai migrasi 016 terpasang
+      // dan load test staging selesai.
+      SUBMIT_ASYNC: 'off',
+    },
+  }, {
+    name: 'arena-finalization',
+    max_memory_restart: '512M',
+    cwd: process.env.ARENA_DIR || '/srv/arena',
+    script: 'apps/api/dist/finalization-worker.js',
+    instances: 1,
+    exec_mode: 'fork',
+    kill_timeout: 60000,
+    env: { NODE_ENV: 'production', DB_POOL_SIZE: '6', DB_QUEUE_LIMIT: '24', FINALIZATION_CONCURRENCY: '4' },
+  }, {
+    name: 'arena-waiting',
+    max_memory_restart: '256M',
+    cwd: process.env.ARENA_DIR || '/srv/arena',
+    script: 'apps/api/dist/waiting-worker.js',
+    instances: 1,
+    exec_mode: 'fork',
+    kill_timeout: 60000,
+    env: { NODE_ENV: 'production', DB_POOL_SIZE: '4', DB_QUEUE_LIMIT: '24' },
+  }],
+};
+```
+
+#### `infra/nginx-main.conf` (konteks `main`/`events`)
+
+```nginx
+worker_rlimit_nofile 65535;
+events {
+  worker_connections 8192;
+}
+```
+
+#### `infra/nginx-http.conf` (konteks `http`)
+
+```nginx
+upstream arena_api {
+  server 127.0.0.1:3001;
+  keepalive 128;
+}
+log_format arena_main '$remote_addr - $request_method $uri $status $body_bytes_sent $request_time';
+access_log /var/log/nginx/arena-access.log arena_main buffer=256k flush=5s;
+```
+
+#### `infra/nginx-server.conf` (dalam server block Arena)
+
+```nginx
+location ^~ /api/student/exams/ {
+  access_log off;
+  proxy_http_version 1.1;
+  proxy_buffering off;
+  proxy_cache off;
+  proxy_read_timeout 75s;
+  proxy_set_header Connection "";
+  proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+  proxy_pass http://arena_api;
+}
+```
+
+Lokasi `/api/student/exams/` sengaja mematikan buffering agar SSE ruang tunggu
+dan respons ujian tidak tertahan. Pastikan location `/api`, `/auth`, `/health`,
+dan fallback SPA tetap ada; jangan membuat duplikat.
+
+#### `infra/nginx-static.conf` (dalam server block Arena)
+
+```nginx
+location ^~ /assets/ {
+  try_files $uri =404;
+  add_header Cache-Control "public, max-age=31536000, immutable";
+  add_header X-Content-Type-Options nosniff always;
+}
+location = /index.html {
+  add_header Cache-Control "no-cache" always;
+}
+```
+
+`root` harus menunjuk ke `/srv/repos/portal-data-man/arena/apps/web/dist`.
+Jangan menaruh gambar soal privat di `/assets/`.
+
+#### `infra/99-arena.conf` → `/etc/sysctl.d/99-arena.conf`
+
+```ini
+net.core.somaxconn = 4096
+net.ipv4.tcp_max_syn_backlog = 4096
+net.ipv4.ip_local_port_range = 10000 65000
+vm.swappiness = 10
+```
+
+```bash
+sudo cp infra/99-arena.conf /etc/sysctl.d/99-arena.conf
+sudo sysctl --system
+sysctl net.core.somaxconn net.ipv4.tcp_max_syn_backlog vm.swappiness
+```
+
+#### `infra/arena.service.d/limits.conf`
+
+```ini
+[Service]
+LimitNOFILE=65535
+```
+
+Pasang sebagai drop-in untuk service yang menjalankan PM2, lalu:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart <nama-service-pm2>
+ulimit -n    # periksa di shell proses / pm2 describe
+```
+
+#### `infra/mysql-16gb.cnf.example`
+
+```ini
+[mysqld]
+innodb_buffer_pool_size=6G
+max_connections=100
+thread_cache_size=32
+innodb_flush_log_at_trx_commit=1
+sync_binlog=1
+slow_query_log=ON
+long_query_time=0.5
+```
+
+Profil awal untuk VPS 4 vCPU/16 GB yang juga menjalankan Redis dan aplikasi.
+Jangan menaikkan `max_connections` tanpa menyesuaikan RAM. Commit durable
+(`innodb_flush_log_at_trx_commit=1`, `sync_binlog=1`) tidak boleh dimatikan untuk
+mengajar performa.
+
+#### `infra/redis-capacity.conf.example` / `infra/redis.conf.snippet`
+
+```conf
+bind 127.0.0.1
+protected-mode yes
+appendonly yes
+appendfsync everysec
+no-appendfsync-on-rewrite yes
+save ""
+maxmemory 1gb
+maxmemory-policy noeviction
+```
+
+Redis harus privat. `noeviction` wajib karena key BullMQ tidak boleh dibuang.
+Cache soal berisi kunci jawaban untuk server; jangan diekspos ke publik.
+
+#### `infra/cloudflare-cache-rules.json`
+
+```json
+{
+  "description": "Merge these rules with the existing zone cache rules; do not replace the zone ruleset. Both expressions are scoped to arena.man1palembang.sch.id.",
+  "rules": [
+    {
+      "description": "Arena public Vite assets only",
+      "expression": "(http.host eq \"arena.man1palembang.sch.id\" and starts_with(http.request.uri.path, \"/assets/\") and http.request.method in {\"GET\" \"HEAD\"})",
+      "action": "set_cache_settings",
+      "action_parameters": { "cache": true },
+      "enabled": true
+    },
+    {
+      "description": "Arena dynamic and authenticated responses never cached (keep after asset rule)",
+      "expression": "(http.host eq \"arena.man1palembang.sch.id\" and not starts_with(http.request.uri.path, \"/assets/\"))",
+      "action": "set_cache_settings",
+      "action_parameters": { "cache": false },
+      "enabled": true
+    }
+  ]
+}
+```
+
+Gabungkan dua rule di atas dengan ruleset zona yang sudah ada. Rule bypass
+dinamis harus berada **setelah** rule aset. Jangan memakai Cache Everything atau
+challenge interaktif pada API ujian.
 
 ## 8. Jalankan PM2
 
@@ -448,6 +786,38 @@ Jika rilis sudah aktif dan harus rollback:
 - Sebelum ujian production, rehearsal harus mencakup 1.200 login/admission,
   putus-sambung jaringan, dashboard pengawas, dan durasi ujian penuh di staging.
 - Rilis ini bukan pernyataan audit keamanan selesai.
+
+## 13b. Troubleshooting cepat
+
+| Gejala | Penyebab umum | Tindakan |
+| --- | --- | --- |
+| Login terasa lambat 0–6 detik | Jitter login Tahap 4 memang disengaja | Normal; jangan matikan jitter saat ujian |
+| Login 503 berulang | Antrean pool auth penuh / bcrypt sibuk | Periksa `Retry-After`, `AUTH_DB_QUEUE_LIMIT`, koneksi MySQL, dan `ARENA_LOGIN_DIAGNOSTICS` |
+| API 503 `Queue limit reached` | `DB_QUEUE_LIMIT` penuh | Turunkan beban, periksa query lambat/lock; jangan langsung menaikkan limit |
+| `/health/ready` degraded Redis | Redis mati/ACL/timeout | Perbaiki Redis; ujian aktif tetap jalan lewat fallback receipt, admission baru 503 |
+| Migrasi 015 gagal trigger | Binlog butuh `log_bin_trust_function_creators`/SUPER | Set sementara, jalankan migrasi, kembalikan |
+| Error MySQL 1442 saat mutasi soal | Statement memutasi `questions` sambil membaca `exams` | Pisahkan statement; gunakan literal `exam_id` |
+| PM2 memakai env lama | `.env` tidak dimuat atau `env` ecosystem menimpa | Jalankan `startOrReload --update-env` dengan `--env-file=.env`; samakan nilai ecosystem |
+| Aset 404 setelah deploy | File hash lama terhapus | Salin aset lama dari backup (`cp -an`) dan reload |
+| SSE ruang tunggu tidak update | Buffering proxy | Pastikan `proxy_buffering off` dan timeout ≥75 dtk pada lokasi ujian |
+| Attempt expired tidak dapat hasil | Worker finalization mati | `pm2 status`, log worker, cek antrean `exam_submissions` dan job BullMQ |
+| Semua siswa submit lambat | `SUBMIT_ASYNC` masih `off` dan skor sinkron | Normal untuk production; jangan aktifkan async tanpa rehearsal staging |
+| Waktu ujian tidak sesuai | Timezone server/klien | Pastikan server UTC dan klien memakai waktu dari API |
+
+Perintah diagnosa read-only:
+
+```bash
+pm2 status
+pm2 logs arena-api --lines 100 --nostream
+pm2 logs arena-finalization --lines 100 --nostream
+pm2 logs arena-waiting --lines 100 --nostream
+curl -fsS http://127.0.0.1:3001/health/live
+curl -fsS http://127.0.0.1:3001/health/ready
+ss -tanp | grep 3001
+mysql -u arena_migrator -p "$ARENA_DB" -e "SHOW PROCESSLIST;"
+```
+
+Jangan mencetak token, cookie, PIN, atau isi `.env` ke log/tiket.
 
 ## 14. Referensi
 
