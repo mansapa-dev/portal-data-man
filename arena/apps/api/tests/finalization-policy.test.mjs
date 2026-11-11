@@ -9,6 +9,7 @@ test('LOCK blocks direct submit and background finalization before scoring write
     async execute(sql) {
       if (sql.startsWith('SELECT id,status,expires_at')) return [[{ id: 1, status: 'TERMINATED', termination_action: 'LOCK', expired: 1 }]];
       if (sql.startsWith('SELECT question_count')) return [[]];
+      if (sql.startsWith('SELECT state FROM exam_submissions')) return [[]];
       writes.push(sql); throw new Error('Unexpected scoring write');
     },
   };

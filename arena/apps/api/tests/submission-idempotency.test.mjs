@@ -42,6 +42,7 @@ function makePool(attemptOverride = {}, existingResult = null) {
         return [existingResult ? [existingResult] : []];
       }
       if (sql.startsWith('SELECT m.type,e.grade')) return [[]];
+      if (sql.startsWith('SELECT state FROM exam_submissions')) return [[]];
       if (sql.startsWith('SELECT q.question_id,q.question_type')) {
         // Return 3 simple MC questions, all answered correctly
         return [[

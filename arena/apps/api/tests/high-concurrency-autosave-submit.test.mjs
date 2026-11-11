@@ -120,6 +120,8 @@ function createMockDb() {
         }
         // Submit exam meta
         if (sql.startsWith('SELECT m.type,e.grade')) return [[]];
+        // Submission-aware check (Tahap 2): tanpa baris submission → legacy
+        if (sql.startsWith('SELECT state FROM exam_submissions')) return [[]];
         // Submit scoring query (optimized without option text strings)
         if (sql.startsWith('SELECT q.question_id,q.question_type')) {
           const rows = [];

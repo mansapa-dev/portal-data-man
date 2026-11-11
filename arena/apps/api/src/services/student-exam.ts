@@ -68,11 +68,11 @@ export class StudentExamService {
   async list(studentId: number) {
     const [rows] = await this.pool.execute<RowDataPacket[]>(`SELECT e.id,e.name,e.grade,e.duration_minutes,e.session_number,e.starts_at,e.ends_at,e.academic_year,e.semester,m.type follow_up_type,
       a.status attempt_status, ((a.status='IN_PROGRESS' AND a.expires_at>UTC_TIMESTAMP(3)) OR (a.id IS NULL AND e.status='ACTIVE' AND UTC_TIMESTAMP(3) BETWEEN e.starts_at AND e.ends_at AND (NOT EXISTS (SELECT 1 FROM exam_target_classes all_tc WHERE all_tc.exam_id=e.id) OR EXISTS (SELECT 1 FROM exam_target_classes tc WHERE tc.exam_id=e.id AND tc.portal_class_id=s.portal_class_id)) AND (NOT EXISTS(SELECT 1 FROM exam_target_students all_ts WHERE all_ts.exam_id=e.id) OR EXISTS(SELECT 1 FROM exam_target_students ts WHERE ts.exam_id=e.id AND ts.student_id=s.id)))) can_start
-      FROM students s JOIN exams e ON e.grade=s.grade_snapshot LEFT JOIN exam_attempts a ON a.student_id=s.id AND a.exam_id=e.id LEFT JOIN exam_follow_up_meta m ON m.exam_id=e.id
+      FROM students s JOIN exams e ON e.grade=s.grade_snapshot LEFT JOIN exam_attempts a ON a.student_id=s.id AND a.exam_id=e.id LEFT JOIN exam_follow_up_meta m ON m.exam_id=e.id LEFT JOIN exam_submissions sub ON sub.attempt_id=a.id
       WHERE s.id=? AND s.is_active=1 AND s.cbt_status='ACTIVE' AND ((e.status='ACTIVE' AND UTC_TIMESTAMP(3) BETWEEN e.starts_at AND e.ends_at
       AND (NOT EXISTS (SELECT 1 FROM exam_target_classes all_tc WHERE all_tc.exam_id=e.id) OR EXISTS (SELECT 1 FROM exam_target_classes tc WHERE tc.exam_id=e.id AND tc.portal_class_id=s.portal_class_id))
       AND (NOT EXISTS(SELECT 1 FROM exam_target_students all_ts WHERE all_ts.exam_id=e.id) OR EXISTS(SELECT 1 FROM exam_target_students ts WHERE ts.exam_id=e.id AND ts.student_id=s.id))) OR a.id IS NOT NULL) ORDER BY e.starts_at DESC,e.id`, [studentId]);
-    return rows.map((row) => ({ id: Number(row.id), nama_ujian: row.name, tingkat: row.grade, durasi: Number(row.duration_minutes), sesi: Number(row.session_number), tanggal_mulai: row.starts_at, tanggal_selesai: row.ends_at, tahun_ajaran: row.academic_year, semester: row.semester, status_attempt: row.attempt_status, can_start: Boolean(row.can_start), is_special: Boolean(row.follow_up_type), special_type: row.follow_up_type ?? null,
+    return rows.map((row) => ({ id: Number(row.id), nama_ujian: row.name, tingkat: row.grade, durasi: Number(row.duration_minutes), sesi: Number(row.session_number), tanggal_mulai: row.starts_at, tanggal_selesai: row.ends_at, tahun_ajaran: row.academic_year, semester: row.semester, status_attempt: row.attempt_status, submission_state: row.submission_state ?? null, can_start: Boolean(row.can_start), is_special: Boolean(row.follow_up_type), special_type: row.follow_up_type ?? null,
       admission_ticket: !row.attempt_status && Boolean(row.can_start) ? this.admission?.ticket(studentId, Number(row.id), row.grade, { academic_year: row.academic_year, semester: row.semester, starts_at: row.starts_at, session_number: row.session_number }) : undefined }));
   }
 
@@ -293,7 +293,7 @@ export class StudentExamService {
     const poolWaitMs = performance.now() - started;
     try {
       await connection.beginTransaction();
-      const [attempts] = await connection.execute<RowDataPacket[]>('SELECT id,public_id,status,expires_at,(expires_at<=UTC_TIMESTAMP(3)) expired FROM exam_attempts WHERE student_id=? AND exam_id=? FOR UPDATE', [claims.sub, examId]);
+      const [attempts] = await connection.execute<RowDataPacket[]>('SELECT id,public_id,status,expires_at,(expires_at<=UTC_TIMESTAMP(3)) expired,submitted_at FROM exam_attempts WHERE student_id=? AND exam_id=? FOR UPDATE', [claims.sub, examId]);
       const attempt = attempts[0];
       if (!attempt) throw Object.assign(new Error('Sesi ujian tidak ditemukan'), { statusCode: 404 });
       if (attempt.public_id !== input.attempt_id) throw Object.assign(new Error('Sesi ujian berubah; muat ulang halaman'), { statusCode: 409 });
@@ -330,6 +330,7 @@ export class StudentExamService {
           revisions[item.question_id] = revision;
           continue;
         }
+        if (attempt.submitted_at) throw Object.assign(new Error('Ujian sudah tidak aktif'), { statusCode: 409 });
         if (attempt.status !== 'IN_PROGRESS' || Number(attempt.expired)) throw Object.assign(new Error('Ujian sudah tidak aktif'), { statusCode: 409 });
         if (revision !== item.base_revision) throw Object.assign(new Error('Versi jawaban berubah di tab lain'), { statusCode: 409 });
         const nextRevision = revision + 1;
@@ -382,7 +383,7 @@ export class StudentExamService {
                   (q.option_d IS NOT NULL AND q.option_d <> '') AS option_d_available,
                   (q.option_e IS NOT NULL AND q.option_e <> '') AS option_e_available,
                   v.revision, v.mutation_id,
-                  a.id AS answer_id, a.answer, a.is_flagged
+                  a.id AS answer_id, a.answer, a.is_flagged, ea.submitted_at
            FROM exam_attempts ea
            LEFT JOIN attempt_questions q ON q.attempt_id = ea.id AND q.question_id = ?
            LEFT JOIN answer_write_versions v ON v.attempt_id = ea.id AND v.question_id = q.question_id
@@ -415,6 +416,12 @@ export class StudentExamService {
           this.recordDiagnostic('exam_autosave', { outcome: 'duplicate', ...timings, total_ms: Number((performance.now() - started).toFixed(2)) });
           return { question_id: questionId, revision, duplicate: true };
         }
+        // Freeze submission (Tahap 2): TX1 men-set exam_attempts.submitted_at
+        // di transaksi yang sama dengan INSERT exam_submissions; baris attempt
+        // terbaca FOR SHARE di sini sehingga guard selalu melihat versi
+        // ter-commit terbaru (tidak bisa stale oleh MVCC snapshot). Mutation ID
+        // yang sudah pernah sukses tetap dijawab duplicate di atas tanpa tulis.
+        if (current.submitted_at) throw Object.assign(new Error('Jawaban sudah dikirim; tunggu hasil ujian'), { statusCode: 409 });
         if (current.attempt_status !== 'IN_PROGRESS' || Number(current.expired)) throw Object.assign(new Error('Ujian sudah tidak aktif'), { statusCode: 409 });
         if (revision !== input.base_revision) throw Object.assign(new Error('Versi jawaban berubah di tab lain'), { statusCode: 409 });
         phase = performance.now();

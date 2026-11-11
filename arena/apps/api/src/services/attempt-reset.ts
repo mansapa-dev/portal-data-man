@@ -69,21 +69,33 @@ export async function resetTerminatedAttemptInTransaction(
   const [resultRows] = await connection.execute<RowDataPacket[]>(
     'SELECT score, maximum_points, earned_points FROM exam_results WHERE attempt_id=? FOR UPDATE', [attempt.id],
   );
-  const before = {
+  const before: Record<string, unknown> = {
     status: attempt.status,
     violation_count: Number(attempt.violation_count),
     expires_at: attempt.expires_at,
     previous_result: resultRows[0] ?? null,
   };
+  const [submissionRows] = await connection.execute<RowDataPacket[]>(
+    'SELECT state,skip_reason FROM exam_submissions WHERE attempt_id=?', [attempt.id],
+  );
+  before.submission_state = submissionRows[0]?.state ?? null;
   const after = {
     status: 'IN_PROGRESS',
     violation_count: 0,
     expires_at: expiresAt,
     reason: reason.trim().slice(0, 1000),
   };
+  // Invariant I5 (desain A3): reset admin menghapus baris submission dan freeze
+  // marker secara atomik dengan pengembalian status attempt — tidak ada
+  // submission aktif yang bisa memfinalisasi attempt lama setelah reset. Urutan
+  // lock tetap exam_attempts (sudah FOR UPDATE di atas) → exam_submissions.
+  // Worker lama yang sedang memproses submission ini akan mendeteksi baris
+  // hilang via token fencing (completeSubmission → reset_detected) dan
+  // mengembalikan hasil yang ditulisnya.
+  await connection.execute('DELETE FROM exam_submissions WHERE attempt_id=?', [attempt.id]);
   await connection.execute('DELETE FROM exam_results WHERE attempt_id=?', [attempt.id]);
   await connection.execute(
-    "UPDATE exam_attempts SET status='IN_PROGRESS',violation_count=0,termination_action=NULL,completed_at=NULL,expires_at=? WHERE id=?",
+    "UPDATE exam_attempts SET status='IN_PROGRESS',violation_count=0,termination_action=NULL,completed_at=NULL,submitted_at=NULL,expires_at=? WHERE id=?",
     [expiresAt, attempt.id],
   );
   await connection.execute(

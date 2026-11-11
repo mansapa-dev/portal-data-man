@@ -1,4 +1,16 @@
 import type { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise';
+import { deferredError, isDeferredError } from './exam-submission.js';
+
+/**
+ * Opsi finalisasi yang menyesuaikan jalur submission async (Tahap 2):
+ * - `onBehalfOfSubmission`: true hanya untuk submission worker yang memegang
+ *   claim token — mem-bypass pengecekan submission aktif karena finalisasi
+ *   inilah yang diminta submission tersebut.
+ * - `statusOverride`: klasifikasi status akhir dari `accepted_expired` snapshot
+ *   TX1 ('COMPLETED' saat submit sebelum deadline, 'EXPIRED' sesudahnya).
+ *   Attempt TERMINATED tetap TERMINATED (dipertahankan oleh predikat IF).
+ */
+export type SubmitOptions = { onBehalfOfSubmission?: boolean; statusOverride?: string | null };
 
 const violationTypes = new Set(['TAB_HIDDEN','WINDOW_BLUR','FULLSCREEN_EXIT','SCREENSHOT_ATTEMPT','COPY_ATTEMPT','PASTE_ATTEMPT','CUT_ATTEMPT','CONTEXT_MENU_ATTEMPT','DEVTOOLS_SHORTCUT','BROWSER_SHORTCUT','SPLIT_SCREEN_SUSPECTED','MULTI_TAB','TEXT_SELECTION','APP_OVERLAY','OTHER']);
 // Counted types decide automatic termination. WINDOW_BLUR / MULTI_TAB / SPLIT_SCREEN_SUSPECTED
@@ -84,11 +96,11 @@ export class ScoringService {
   private readonly submitInFlight = new Map<string, Promise<unknown>>();
   constructor(private readonly pool: Pool) {}
 
-  async submit(studentId: number, examId: number, finalizeOnly = false): Promise<unknown> {
-    const flightKey = `${studentId}:${examId}:${finalizeOnly}`;
+  async submit(studentId: number, examId: number, finalizeOnly = false, options: SubmitOptions = {}): Promise<unknown> {
+    const flightKey = `${studentId}:${examId}:${finalizeOnly}:${options.onBehalfOfSubmission ? 1 : 0}:${options.statusOverride ?? ''}`;
     const inFlight = this.submitInFlight.get(flightKey);
     if (inFlight) return await inFlight;
-    const task = this.submitWithRetry(studentId, examId, finalizeOnly, 0);
+    const task = this.submitWithRetry(studentId, examId, finalizeOnly, 0, options);
     this.submitInFlight.set(flightKey, task);
     try {
       return await task;
@@ -99,20 +111,20 @@ export class ScoringService {
     }
   }
 
-  private async submitWithRetry(studentId: number, examId: number, finalizeOnly = false, retry = 0): Promise<unknown> {
+  private async submitWithRetry(studentId: number, examId: number, finalizeOnly = false, retry = 0, options: SubmitOptions = {}): Promise<unknown> {
     try {
-      return await this.submitOnce(studentId, examId, finalizeOnly);
+      return await this.submitOnce(studentId, examId, finalizeOnly, options);
     } catch (error) {
       const code = (error as { code?: string }).code;
       if (retry < 2 && ['ER_LOCK_DEADLOCK', 'ER_LOCK_WAIT_TIMEOUT'].includes(code ?? '')) {
         await new Promise((resolve) => setTimeout(resolve, 10 + Math.floor(Math.random() * 30)));
-        return this.submitWithRetry(studentId, examId, finalizeOnly, retry + 1);
+        return this.submitWithRetry(studentId, examId, finalizeOnly, retry + 1, options);
       }
       throw error;
     }
   }
 
-  private async submitOnce(studentId: number, examId: number, finalizeOnly = false) {
+  private async submitOnce(studentId: number, examId: number, finalizeOnly = false, options: SubmitOptions = {}) {
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
@@ -126,6 +138,20 @@ export class ScoringService {
         const { isRemedial, scoreCap, followUpType } = await getExamMeta(connection, examId);
         await connection.commit();
         return this.format(existing, isRemedial, scoreCap, followUpType);
+      }
+      // Submission-aware finalization (proteksi tunggal untuk semua pemanggil
+      // legacy, desain A3 §2): attempt sudah terkunci FOR UPDATE, jadi pembacaan
+      // state submission selalu segar — TX1/claim tidak mungkin commit di antara
+      // lock ini dan keputusan. Submission aktif (RECEIVED/PROCESSING) berarti
+      // keputusan finalisasi milik submission worker; jalur legacy menyerah
+      // dengan 409 SUBMISSION_DEFERRED. Fast path di atas tetap didahulukan
+      // (hasil sudah ada = finalisasi efektif selesai, tidak ada resiko ganda).
+      if (!options.onBehalfOfSubmission) {
+        const [subRows] = await connection.execute<RowDataPacket[]>('SELECT state FROM exam_submissions WHERE attempt_id=? FOR SHARE', [attempt.id]);
+        const subState = String(subRows[0]?.state ?? '');
+        if (subState === 'RECEIVED' || subState === 'PROCESSING') {
+          throw deferredError();
+        }
       }
       if (attempt.status === 'TERMINATED' && attempt.termination_action === 'LOCK') throw Object.assign(new Error('Sesi dikunci; pemulihan memerlukan admin'), { statusCode: 409 });
       if (finalizeOnly && attempt.status === 'IN_PROGRESS' && !Number(attempt.expired)) throw Object.assign(new Error('Ujian masih aktif'), { statusCode: 409 });
@@ -155,7 +181,10 @@ export class ScoringService {
         score = Math.round(scoreCap * 100) / 100;
       }
       await connection.execute(`INSERT INTO exam_results(attempt_id,question_count,correct_count,wrong_count,blank_count,earned_points,maximum_points,score) VALUES(?,?,?,?,?,?,?,?)`, [attempt.id, rows.length, totals.correct, totals.wrong, totals.blank, totals.earned, totals.maximum, score]);
-      await connection.execute("UPDATE exam_attempts SET status=IF(status='TERMINATED','TERMINATED',IF(expires_at<=UTC_TIMESTAMP(3),'EXPIRED','COMPLETED')),completed_at=UTC_TIMESTAMP(3) WHERE id=?", [attempt.id]);
+      // statusOverride mengikuti snapshot accepted_expired TX1 (desain A3):
+      // attempt yang di-submit sebelum deadline → COMPLETED, sesudahnya EXPIRED.
+      // Attempt TERMINATED tetap TERMINATED di mana pun posisinya.
+      await connection.execute(`UPDATE exam_attempts SET status=IF(status='TERMINATED','TERMINATED',COALESCE(?,IF(expires_at<=UTC_TIMESTAMP(3),'EXPIRED','COMPLETED'))),completed_at=UTC_TIMESTAMP(3) WHERE id=?`, [options.statusOverride ?? null, attempt.id]);
       await connection.commit();
       return { jumlah_soal: rows.length, benar: totals.correct, salah: totals.wrong, kosong: totals.blank, total_poin: totals.earned, nilai: score, is_remedial: isRemedial, score_cap: scoreCap, follow_up_type: followUpType, status: 'selesai' };
     } catch (error) {
@@ -219,7 +248,7 @@ export class ScoringService {
         [count, terminated, terminated, policy.action, terminated, attempt.id],
       );
       await connection.commit();
-      const outcome: { recorded: boolean; count: number; threshold: number; action: ViolationAction; terminated: boolean; hasil?: unknown } = { recorded: inserted, count, threshold: policy.threshold, action: policy.action, terminated };
+      const outcome: { recorded: boolean; count: number; threshold: number; action: ViolationAction; terminated: boolean; hasil?: unknown; deferred?: boolean } = { recorded: inserted, count, threshold: policy.threshold, action: policy.action, terminated };
       // Release the connection *before* calling submit so it can acquire its own
       // connection from the pool without risk of exhaustion when pool is small.
       connection.release();
@@ -230,7 +259,16 @@ export class ScoringService {
           // recoverable by an admin through the audited attempt reset.
           outcome.terminated = true;
         } else {
-          outcome.hasil = await this.submit(studentId, examId, true);
+          try {
+            outcome.hasil = await this.submit(studentId, examId, true);
+          } catch (error) {
+            if (!isDeferredError(error)) throw error;
+            // Submission durable aktif (siswa sudah submit manual): finalisasi
+            // ditangguhkan ke submission worker. Terminasi tetap terekam di atas;
+            // hasil akan diterbitkan worker (klasifikasi TERMINATED dipertahankan
+            // oleh statusOverride).
+            outcome.deferred = true;
+          }
         }
       }
       return outcome;
