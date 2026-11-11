@@ -37,3 +37,21 @@ test('a completed start returns its data and cancels the abort timer', async () 
     assert.equal(signal.aborted, false);
   } finally { globalThis.fetch = original; }
 });
+
+test('Retry-After dari server diteruskan ke ApiError untuk backoff login', async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async () => ({
+    ok: false,
+    status: 503,
+    headers: { get: (name) => name === 'retry-after' ? '3' : null },
+    json: async () => ({ error: 'Layanan login sedang sibuk' }),
+  });
+  try {
+    await assert.rejects(api('/api/auth/student/login', { method: 'POST', body: {} }), error => {
+      assert.ok(error instanceof ApiError);
+      assert.equal(error.statusCode, 503);
+      assert.equal(error.retryAfterMs, 3_000);
+      return true;
+    });
+  } finally { globalThis.fetch = original; }
+});

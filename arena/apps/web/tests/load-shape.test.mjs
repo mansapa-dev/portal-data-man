@@ -7,7 +7,7 @@ const source = await readFile(new URL('../src/lib/load-shape.ts', import.meta.ur
 const { outputText } = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
 });
-const { claimDelayMs, submitJitterMs, resultPollDelayMs, autosaveFlushDelayMs } = await import(
+const { claimDelayMs, submitJitterMs, resultPollDelayMs, autosaveFlushDelayMs, loginStartDelayMs, loginRetryDelayMs } = await import(
   `data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`
 );
 
@@ -51,4 +51,24 @@ test('flush autosave tersebar 2,5–5,5 detik dengan phase stabil per siswa', ()
     const value = autosaveFlushDelayMs(i);
     assert.ok(value >= 2_500 && value <= 5_499, `autosave delay ${value} di luar batas`);
   }
+});
+
+test('login pertama disebar 0–6 detik dengan phase stabil dari NISN', () => {
+  assert.equal(loginStartDelayMs('123456', () => 0), 456);
+  assert.equal(loginStartDelayMs('123456', () => 1), 3_456);
+  assert.equal(loginStartDelayMs('abc', () => 0), 0);
+  assert.equal(loginStartDelayMs('abc', () => 1), 3_000);
+  for (let i = 0; i < 200; i++) {
+    const value = loginStartDelayMs(String(1_000_000 + i));
+    assert.ok(value >= 0 && value <= 5_999, `login delay ${value} di luar batas`);
+  }
+});
+
+test('retry login memakai full jitter, lantai 500 ms, dan Retry-After', () => {
+  assert.equal(loginRetryDelayMs(1, 0, () => 0), 500);
+  assert.equal(loginRetryDelayMs(1, 0, () => 1), 1_000);
+  assert.equal(loginRetryDelayMs(3, 0, () => 1), 4_000);
+  assert.equal(loginRetryDelayMs(20, 0, () => 1), 10_000);
+  assert.equal(loginRetryDelayMs(1, 3_000, () => 0), 3_000);
+  assert.equal(loginRetryDelayMs(1, 0, () => 0.5), 500);
 });

@@ -1,11 +1,12 @@
 /**
- * Tahap 3 — pemerataan beban.
+ * Tahap 3–4 — pemerataan beban.
  *
  * Fungsi murni tanpa DOM/React supaya bisa diuji langsung dengan node:test.
  * Semua jeda diberi batas atas yang aman terhadap timeout server:
  * - claim harus selesai jauh sebelum claim_timeout_ms (60 dtk),
  * - auto-submit tetap dianggap finalisasi setelah expiry,
- * - poll hasil memakai backoff agar tidak menumpuk.
+ * - poll hasil memakai backoff agar tidak menumpuk,
+ * - login disebar sebelum request pertama dan retry memakai backoff.
  */
 export type Random = () => number;
 
@@ -47,4 +48,26 @@ export function resultPollDelayMs(
 export function autosaveFlushDelayMs(studentId: number, rng: Random = Math.random): number {
   const phase = Math.abs(Math.trunc(finite(studentId))) % 500;
   return Math.round(2_500 + phase + between(0, 2_500, rng));
+}
+
+/**
+ * Jeda sebelum request login pertama: phase stabil dari digit terakhir NISN
+ * (0–2.999 ms) + random 0–2.999 ms. Kohort 1.200 siswa yang menekan Masuk
+ * bersamaan menyebar dalam ~6 detik, bukan satu gelombang.
+ */
+export function loginStartDelayMs(nisn: string, rng: Random = Math.random): number {
+  const digits = String(nisn ?? '').replace(/\D/g, '');
+  const phase = digits ? Number(digits.slice(-6)) % 3_000 : 0;
+  return phase + Math.floor(between(0, 3_000, rng));
+}
+
+/**
+ * Backoff retry login: full jitter 0..base (base 1, 2, 4, 8, 10 dtk) dengan
+ * lantai 500 ms dan menghormati Retry-After server bila lebih panjang.
+ */
+export function loginRetryDelayMs(attempt: number, retryAfterMs = 0, rng: Random = Math.random): number {
+  const step = Math.max(0, Math.trunc(finite(attempt, 1)) - 1);
+  const base = Math.min(10_000, 1_000 * 2 ** step);
+  const delay = Math.round(between(0, base, rng));
+  return Math.max(500, Math.round(finite(retryAfterMs)), delay);
 }

@@ -4,7 +4,7 @@ const examTokens=new Map<number,string>();
 export function setExamToken(examId:number,value:string){examTokens.set(examId,value);}
 export function getExamToken(examId:number){return examTokens.get(examId);}
 function examTokenForPath(path:string){const match=path.match(/^\/api\/student\/exams\/(\d+)(?:\/|$)/);return match?examTokens.get(Number(match[1])):undefined;}
-export class ApiError extends Error { constructor(message:string,readonly statusCode:number){super(message);this.name='ApiError';} }
+export class ApiError extends Error { constructor(message:string,readonly statusCode:number,readonly retryAfterMs?:number){super(message);this.name='ApiError';} }
 export function setSession(nextToken: string | null, nextCsrf: string | null) { if(csrf!==nextCsrf)examTokens.clear();token = nextToken; csrf = nextCsrf; }
 export async function api<T>(path: string, options: { method?: string; body?: unknown; keepalive?: boolean; timeoutMs?: number } = {}): Promise<T> {
   const controller = options.timeoutMs ? new AbortController() : null;
@@ -25,7 +25,20 @@ export async function api<T>(path: string, options: { method?: string; body?: un
     });
     const data = await response.json().catch(error => { if (controller?.signal.aborted) throw error; return null; }) as T & { error?: string } | null;
     if (response.status === 401 && path.startsWith('/api/admin/')) window.dispatchEvent(new Event('arena:staff-session-expired'));
-    if (!response.ok) throw new ApiError(data?.error ?? `Request gagal (${response.status})`,response.status);
+    if (!response.ok) {
+      // Retry-After (detik atau HTTP-date) dipakai login untuk backoff terarah.
+      let retryAfterMs: number | undefined;
+      const header = response.headers?.get?.('retry-after') ?? null;
+      if (header) {
+        const seconds = Number(header);
+        if (Number.isFinite(seconds) && seconds >= 0) retryAfterMs = seconds * 1000;
+        else {
+          const at = Date.parse(header);
+          if (Number.isFinite(at)) retryAfterMs = Math.max(0, at - Date.now());
+        }
+      }
+      throw new ApiError(data?.error ?? `Request gagal (${response.status})`, response.status, retryAfterMs);
+    }
     return data as T;
   } catch (error) {
     if (controller?.signal.aborted) throw new ApiError('Server belum merespons dalam batas waktu. Silakan coba lagi.', 504);

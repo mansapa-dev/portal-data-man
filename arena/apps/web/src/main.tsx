@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { api, ApiError, mutationId, setSession, setExamToken, getExamToken } from './lib/api';
-import { resultPollDelayMs, autosaveFlushDelayMs } from './lib/load-shape';
+import { resultPollDelayMs, autosaveFlushDelayMs, loginStartDelayMs, loginRetryDelayMs } from './lib/load-shape';
 import type { WaitingView } from './lib/waiting-room';
 import { loadXlsx } from './lib/xlsx';
 import { QuestionBank } from './QuestionBank';
@@ -144,19 +144,30 @@ function App() {
   const loadExams = async () => {const rows=await api<Exam[]>('/api/student/exams');setExams(rows);return rows;};
   async function login(event: React.FormEvent) {
     event.preventDefault(); setBusy(true); setMessage('');
-    const maxRetries = 5;
+    const maxRetries = 8;
+    let started = false;
     try {
       for (let attemptNumber = 1; attemptNumber <= maxRetries; attemptNumber++) {
         try {
+          if (!started) {
+            started = true;
+            // Tahap 4: 1.200 siswa menekan Masuk hampir bersamaan. Sebarkan
+            // request pertama 0–6 dtk (phase NISN + random) supaya worker bcrypt
+            // dan pool auth tidak menerima satu gelombang penuh.
+            const digits = nisn.replace(/\D/g, '');
+            const delay = digits.length >= 8 ? loginStartDelayMs(digits) : 0;
+            if (delay > 0) { setMessage('Menyiapkan koneksi ke server…'); await new Promise((resolve) => setTimeout(resolve, delay)); }
+          }
           const result = await api<{ token: string; csrf_token: string; student: Student }>('/api/auth/student/login', { method: 'POST', body: { nisn, pin } });
           localStorage.setItem('arena_active_portal','student');setSession(result.token, result.csrf_token); setStaff(null);setStudent(result.student); await loadExams();
           return;
         } catch (err: unknown) {
-          const isBusy = (err instanceof ApiError && err.statusCode === 503) || (err instanceof Error && err.message.includes('503'));
+          const status = err instanceof ApiError ? err.statusCode : 0;
+          const isBusy = status === 503 || status === 429 || (err instanceof Error && /503|429/.test(err.message));
           if (isBusy && attemptNumber < maxRetries) {
+            const retryAfterMs = err instanceof ApiError ? err.retryAfterMs : undefined;
             setMessage(`Server sibuk, mencoba lagi... (percobaan ${attemptNumber}/${maxRetries})`);
-            const jitterMs = 1000 + Math.floor(Math.random() * 3000); // 1-4s random jitter
-            await new Promise((resolve) => setTimeout(resolve, jitterMs));
+            await new Promise((resolve) => setTimeout(resolve, loginRetryDelayMs(attemptNumber, retryAfterMs ?? 0)));
             continue;
           }
           throw err;
