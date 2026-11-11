@@ -36,7 +36,7 @@ export class WaitingRoomService {
       batch_size: options.batch_size ?? Number(process.env.WAITING_BATCH_SIZE ?? 300),
       batch_interval_ms: options.batch_interval_ms ?? Number(process.env.WAITING_BATCH_INTERVAL_MS ?? 10000),
       heartbeat_timeout_ms: options.heartbeat_timeout_ms ?? Number(process.env.WAITING_HEARTBEAT_TIMEOUT_MS ?? 90000),
-      claim_timeout_ms: options.claim_timeout_ms ?? Number(process.env.WAITING_CLAIM_TIMEOUT_MS ?? 120000),
+      claim_timeout_ms: options.claim_timeout_ms ?? Number(process.env.WAITING_CLAIM_TIMEOUT_MS ?? 60000),
     };
     if (redis && typeof redis.defineCommand === 'function') redis.defineCommand('arenaWaitingTransition', { numberOfKeys: 6, lua: waitingRoomLua });
     this.secret = options.secret ?? (process.env.AUTH_TOKEN_SECRET || 'local-development-only');

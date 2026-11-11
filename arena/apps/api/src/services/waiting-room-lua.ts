@@ -145,10 +145,10 @@ if op=='release' and availability()=='OPEN' then
       if redis.call('HGET',student,'status')=='WAITING' then
         local seq = redis.call('HGET',student,'sequence')
         local token = redis.sha1hex(data.seed..':'..id..':'..seq)
-        redis.call('HSET',student,'status','ADMITTED','token',token,'admitted_at_ms',now,'claim_deadline_ms',now+number('claim_timeout_ms',120000))
+        redis.call('HSET',student,'status','ADMITTED','token',token,'admitted_at_ms',now,'claim_deadline_ms',now+number('claim_timeout_ms',60000))
         redis.call('ZREM',queue,member)
         redis.call('ZREM',hb,id)
-        redis.call('ZADD',admitted,now+number('claim_timeout_ms',120000),id)
+        redis.call('ZADD',admitted,now+number('claim_timeout_ms',60000),id)
         table.insert(released,id)
         changed = true
       end
@@ -174,7 +174,7 @@ local result = {
   waiting_count=redis.call('ZCARD',queue), admitted_count=redis.call('ZCARD',admitted),
   in_exam_count=tonumber(redis.call('HGET',counts,'in_exam') or '0'), finished_count=tonumber(redis.call('HGET',counts,'finished') or '0'), queue_open=number('queue_open',1),
   batch_size=number('batch_size',300), batch_interval_ms=number('batch_interval_ms',10000),
-  heartbeat_timeout_ms=number('heartbeat_timeout_ms',90000), claim_timeout_ms=number('claim_timeout_ms',120000),
+  heartbeat_timeout_ms=number('heartbeat_timeout_ms',90000), claim_timeout_ms=number('claim_timeout_ms',60000),
   next_batch_at_ms=number('next_batch_at_ms',0), batch_id=number('batch_id',0), server_time_ms=now,
   version=number('version',0), changed=changed, released=released
 }

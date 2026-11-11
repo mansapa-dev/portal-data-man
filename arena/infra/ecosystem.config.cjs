@@ -19,7 +19,7 @@ module.exports = {
       WAITING_BATCH_SIZE: '300',
       WAITING_BATCH_INTERVAL_MS: '10000',
       WAITING_HEARTBEAT_TIMEOUT_MS: '90000',
-      WAITING_CLAIM_TIMEOUT_MS: '120000',
+      WAITING_CLAIM_TIMEOUT_MS: '60000',
       WAITING_WORKER_ENABLED: 'false',
       ATTEMPT_FINALIZER_ENABLED: 'false',
       // Tahap 2 (submit async) belum diaktifkan di production: proses API

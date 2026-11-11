@@ -33,13 +33,15 @@ API dan web harus diperbarui bersamaan. Endpoint gate lama `/admission` memberi 
 | `WAITING_BATCH_SIZE` | `300` | Maksimal siswa per batch dan outstanding admission |
 | `WAITING_BATCH_INTERVAL_MS` | `10000` | Jarak minimum pelepasan |
 | `WAITING_HEARTBEAT_TIMEOUT_MS` | `90000` | WAITING tanpa heartbeat menjadi ABANDONED |
-| `WAITING_CLAIM_TIMEOUT_MS` | `120000` | ADMITTED tanpa claim menjadi EXPIRED |
+| `WAITING_CLAIM_TIMEOUT_MS` | `60000` | ADMITTED tanpa claim menjadi EXPIRED |
 | `WAITING_WORKER_TICK_MS` | `1000` | Interval pemeriksaan worker |
 | `WAITING_WORKER_ENABLED` | `true` | Worker tertanam pada API |
 | `REDIS_URL` | konfigurasi yang sudah ada | Redis bersama seluruh API/worker |
 | `AUTH_TOKEN_SECRET` | konfigurasi yang sudah ada | Secret yang sama pada seluruh API/worker |
 
 Default dipakai bila admin belum menyimpan pengaturan ujian tersebut. Panel **Pengaturan Sistem → Ruang tunggu FIFO** menyediakan jumlah menunggu/admitted/mengerjakan/selesai, pelepasan batch, pause/open, ukuran batch, interval, serta timeout. Pengaturan yang tersimpan mengalahkan env. Perubahan interval dihitung dari pelepasan terakhir; perubahan heartbeat/claim timeout berlaku pada heartbeat/admission berikutnya.
+
+Default claim timeout 60 detik membatasi berapa lama slot ADMITTED yang perangkatnya tidur/tidak claim menahan antrean; siswa tersebut dapat masuk antrean lagi dengan nomor baru. Jitter claim di klien paling lama 8 detik, jauh di bawah batas ini, sehingga siswa yang aktif tidak kehilangan slot karena pemerataan beban.
 
 Worker tertanam cukup untuk instalasi biasa; aman berjalan pada beberapa instance API. Untuk proses worker khusus, atur `WAITING_WORKER_ENABLED=false` pada API dan jalankan dari `arena/`:
 
