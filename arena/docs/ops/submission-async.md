@@ -94,7 +94,7 @@ WHERE (s.state='DONE'          AND (r.id IS NULL OR a.submitted_at IS NULL))
    OR (s.state IN ('RECEIVED','PROCESSING') AND a.submitted_at IS NULL)
    OR (s.state='PROCESSING'   AND (s.claim_token IS NULL OR s.lease_expires_at IS NULL))
    OR (s.state='SKIPPED' AND s.skip_reason='lock'
-       AND a.termination_action IS DISTINCT FROM 'LOCK');
+       AND (a.termination_action IS NULL OR a.termination_action <> 'LOCK'));
 ```
 
 Makna tiap pelanggaran:
