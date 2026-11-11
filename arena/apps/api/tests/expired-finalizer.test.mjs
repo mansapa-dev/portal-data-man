@@ -10,11 +10,27 @@ test('finalizer mengambil attempt terminated tanpa result untuk recovery', async
       if (sql.includes('GET_LOCK')) return [[{ acquired: 1 }]];
       return [[]];
     },
+    async beginTransaction() {},
+    async commit() {},
+    async rollback() {},
+    async execute(sql) {
+      // Route claimSubmission (urutan: attempt lock → submission → results).
+      if (sql.startsWith('SELECT id FROM exam_attempts WHERE student_id')) return [[{ id: 1 }]];
+      if (sql.startsWith('SELECT state,skip_reason FROM exam_submissions')) return [[]];
+      if (sql.startsWith('SELECT COUNT(*) n FROM exam_results')) return [[{ n: 0 }]];
+      throw new Error(`Unexpected SQL: ${sql}`);
+    },
     release() {},
   };
   const pool = {
     async getConnection() { return lock; },
+    async execute(sql) {
+      // Self-heal DONE-tanpa-hasil: tidak ada baris yang memenuhi syarat.
+      if (sql.startsWith("UPDATE exam_submissions s SET s.state='RECEIVED'")) return [{ affectedRows: 0 }];
+      throw new Error(`Unexpected SQL: ${sql}`);
+    },
     async query(sql) {
+      if (sql.startsWith('SELECT s.student_id, s.exam_id FROM exam_submissions')) return [[]];
       query = sql;
       return [[{ student_id: 7, exam_id: 12 }]];
     },
@@ -53,11 +69,25 @@ test('finalizer menguras beberapa batch dalam satu putaran (mass expiry)', async
       if (sql.includes('GET_LOCK')) return [[{ acquired: 1 }]];
       return [[]];
     },
+    async beginTransaction() {},
+    async commit() {},
+    async rollback() {},
+    async execute(sql) {
+      if (sql.startsWith('SELECT id FROM exam_attempts WHERE student_id')) return [[{ id: 1 }]];
+      if (sql.startsWith('SELECT state,skip_reason FROM exam_submissions')) return [[]];
+      if (sql.startsWith('SELECT COUNT(*) n FROM exam_results')) return [[{ n: 0 }]];
+      throw new Error(`Unexpected SQL: ${sql}`);
+    },
     release() {},
   };
   const pool = {
     async getConnection() { return lock; },
-    async query() {
+    async execute(sql) {
+      if (sql.startsWith("UPDATE exam_submissions s SET s.state='RECEIVED'")) return [{ affectedRows: 0 }];
+      throw new Error(`Unexpected SQL: ${sql}`);
+    },
+    async query(sql) {
+      if (sql.startsWith('SELECT s.student_id, s.exam_id FROM exam_submissions')) return [[]];
       // Batch pertama penuh (2 baris) → lanjut; batch kedua 1 baris → selesai.
       batchCalls++;
       return [batchCalls === 1 ? rows.slice(0, 2) : rows.slice(2)];
@@ -86,11 +116,25 @@ test('finalizer berhenti mencoba bila satu batch tidak menghasilkan progres', as
       if (sql.includes('GET_LOCK')) return [[{ acquired: 1 }]];
       return [[]];
     },
+    async beginTransaction() {},
+    async commit() {},
+    async rollback() {},
+    async execute(sql) {
+      if (sql.startsWith('SELECT id FROM exam_attempts WHERE student_id')) return [[{ id: 1 }]];
+      if (sql.startsWith('SELECT state,skip_reason FROM exam_submissions')) return [[]];
+      if (sql.startsWith('SELECT COUNT(*) n FROM exam_results')) return [[{ n: 0 }]];
+      throw new Error(`Unexpected SQL: ${sql}`);
+    },
     release() {},
   };
   const pool = {
     async getConnection() { return lock; },
-    async query() {
+    async execute(sql) {
+      if (sql.startsWith("UPDATE exam_submissions s SET s.state='RECEIVED'")) return [{ affectedRows: 0 }];
+      throw new Error(`Unexpected SQL: ${sql}`);
+    },
+    async query(sql) {
+      if (sql.startsWith('SELECT s.student_id, s.exam_id FROM exam_submissions')) return [[]];
       batchCalls++;
       // Selalu mengembalikan baris yang gagal permanen.
       return [[{ student_id: 5, exam_id: 9 }]];

@@ -37,6 +37,7 @@ test('lock não adquirido: batch pulado sem processar nenhum attempt', async () 
   let queryCount = 0;
   const pool = {
     async getConnection() { return lockNotAcquired; },
+    async execute() { throw new Error('Should not be called'); },
     async query() { queryCount++; return [[]]; },
   };
   const scoring = { submit: async () => { throw new Error('Should not be called'); } };
@@ -62,6 +63,15 @@ test('lock diperoleh: finalisasi dijalankan untuk semua attempt di batch', async
       if (sql.includes('RELEASE_LOCK')) { lockReleased = true; return [[1]]; }
       return [[]];
     },
+    async beginTransaction() {},
+    async commit() {},
+    async rollback() {},
+    async execute(sql) {
+      if (sql.startsWith('SELECT id FROM exam_attempts WHERE student_id')) return [[{ id: 1 }]];
+      if (sql.startsWith('SELECT state,skip_reason FROM exam_submissions')) return [[]];
+      if (sql.startsWith('SELECT COUNT(*) n FROM exam_results')) return [[{ n: 0 }]];
+      throw new Error(`Unexpected SQL: ${sql}`);
+    },
     release() {},
   };
 
@@ -73,6 +83,10 @@ test('lock diperoleh: finalisasi dijalankan untuk semua attempt di batch', async
 
   const pool = {
     async getConnection() { return mockLock; },
+    async execute(sql) {
+      if (sql.startsWith("UPDATE exam_submissions s SET s.state='RECEIVED'")) return [{ affectedRows: 0 }];
+      throw new Error(`Unexpected SQL: ${sql}`);
+    },
     async query(sql) {
       if (sql.includes('IN_PROGRESS') || sql.includes('TERMINATED')) return [attempts];
       return [[]];
@@ -112,11 +126,24 @@ test('gagal finalisasi satu attempt tidak membatalkan yang lain', async () => {
       if (sql.includes('RELEASE_LOCK')) return [[1]];
       return [[]];
     },
+    async beginTransaction() {},
+    async commit() {},
+    async rollback() {},
+    async execute(sql) {
+      if (sql.startsWith('SELECT id FROM exam_attempts WHERE student_id')) return [[{ id: 1 }]];
+      if (sql.startsWith('SELECT state,skip_reason FROM exam_submissions')) return [[]];
+      if (sql.startsWith('SELECT COUNT(*) n FROM exam_results')) return [[{ n: 0 }]];
+      throw new Error(`Unexpected SQL: ${sql}`);
+    },
     release() {},
   };
 
   const pool = {
     async getConnection() { return mockLock; },
+    async execute(sql) {
+      if (sql.startsWith("UPDATE exam_submissions s SET s.state='RECEIVED'")) return [{ affectedRows: 0 }];
+      throw new Error(`Unexpected SQL: ${sql}`);
+    },
     async query(sql) {
       if (sql.includes('IN_PROGRESS') || sql.includes('TERMINATED')) return [attempts];
       return [[]];
@@ -153,11 +180,24 @@ test('batch tidak berjalan bersamaan (running guard aktif)', async () => {
       if (sql.includes('RELEASE_LOCK')) return [[1]];
       return [[]];
     },
+    async beginTransaction() {},
+    async commit() {},
+    async rollback() {},
+    async execute(sql) {
+      if (sql.startsWith('SELECT id FROM exam_attempts WHERE student_id')) return [[{ id: 1 }]];
+      if (sql.startsWith('SELECT state,skip_reason FROM exam_submissions')) return [[]];
+      if (sql.startsWith('SELECT COUNT(*) n FROM exam_results')) return [[{ n: 0 }]];
+      throw new Error(`Unexpected SQL: ${sql}`);
+    },
     release() {},
   };
 
   const pool = {
     async getConnection() { return mockLock; },
+    async execute(sql) {
+      if (sql.startsWith("UPDATE exam_submissions s SET s.state='RECEIVED'")) return [{ affectedRows: 0 }];
+      throw new Error(`Unexpected SQL: ${sql}`);
+    },
     async query(sql) {
       if (sql.includes('IN_PROGRESS') || sql.includes('TERMINATED')) {
         activeRuns++;
