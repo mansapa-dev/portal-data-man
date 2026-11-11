@@ -39,6 +39,7 @@ export class ExpiredAttemptFinalizer {
   private timer: NodeJS.Timeout | undefined;
   private running = false;
   private inFlight: Promise<void> | undefined;
+  private submissionTableAvailable: boolean | undefined;
 
   constructor(
     private readonly pool: Pool,
@@ -77,6 +78,20 @@ export class ExpiredAttemptFinalizer {
     finally { this.running = false; this.inFlight = undefined; }
   }
 
+  /** Probe sekali per proses: apakah tabel exam_submissions sudah ada? */
+  private async hasSubmissionTable(): Promise<boolean> {
+    if (this.submissionTableAvailable !== undefined) return this.submissionTableAvailable;
+    try {
+      await this.pool.query('SELECT 1 FROM exam_submissions LIMIT 1');
+      this.submissionTableAvailable = true;
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      if (code !== 'ER_NO_SUCH_TABLE' && code !== 'ER_BAD_FIELD_ERROR') throw error;
+      this.submissionTableAvailable = false;
+    }
+    return this.submissionTableAvailable;
+  }
+
   private async processPendingSubmissions() {
     const pending = await scanPendingSubmissions(this.pool, this.batchSize);
     if (!pending.length) return;
@@ -112,22 +127,39 @@ export class ExpiredAttemptFinalizer {
       const deadline = Date.now() + this.maxRunMs;
       let finalized = 0, failed = 0, scanned = 0, batches = 0;
       // Self-heal DONE-tanpa-hasil → kembali RECEIVED agar diproses ulang.
-      const healed = await selfHealDoneWithoutResults(this.pool);
-      if (healed > 0) this.logger.warn({ healed }, 'submission DONE-without-results self-healed to RECEIVED');
       // Reconciler submission: RECEIVED / PROCESSING lease-expired → enqueue
       // (akselerator) atau eksekusi langsung ketika antrean tidak tersedia.
-      await this.processPendingSubmissions();
+      // Kedua arm ini toleran terhadap migrasi 016 yang belum diterapkan:
+      // finalisasi legacy harus tetap berjalan.
+      try {
+        const healed = await selfHealDoneWithoutResults(this.pool);
+        if (healed > 0) this.logger.warn({ healed }, 'submission DONE-without-results self-healed to RECEIVED');
+        await this.processPendingSubmissions();
+      } catch (error) {
+        const code = (error as { code?: string }).code;
+        if (code === 'ER_NO_SUCH_TABLE' || code === 'ER_BAD_FIELD_ERROR') {
+          this.logger.warn({ code }, 'exam_submissions belum tersedia (migrasi 016 belum diterapkan); hanya finalisasi legacy yang berjalan');
+        } else {
+          this.logger.error({ err: error }, 'submission reconciliation pass failed');
+        }
+      }
       while (batches < this.maxBatches && Date.now() < deadline) {
+        // Filter NOT EXISTS pada exam_submissions hanya efisiensi, bukan
+        // jaminan kebenaran. Saat migrasi 016 belum diterapkan, query memakai
+        // bentuk lama tanpa filter tersebut.
+        const submissionFilter = await this.hasSubmissionTable()
+          ? 'AND NOT EXISTS (SELECT 1 FROM exam_submissions sub WHERE sub.attempt_id=exam_attempts.id)'
+          : '';
         const [attempts] = await this.pool.query<RowDataPacket[]>(
           `(SELECT student_id,exam_id,expires_at,id FROM exam_attempts
             WHERE status='IN_PROGRESS' AND expires_at<=UTC_TIMESTAMP(3)
-              AND NOT EXISTS (SELECT 1 FROM exam_submissions sub WHERE sub.attempt_id=exam_attempts.id)
+              ${submissionFilter}
             ORDER BY expires_at,id LIMIT ?)
            UNION ALL
            (SELECT student_id,exam_id,expires_at,id FROM exam_attempts
             WHERE status='TERMINATED' AND termination_action='AUTO_SUBMIT'
               AND NOT EXISTS (SELECT 1 FROM exam_results r WHERE r.attempt_id=exam_attempts.id)
-              AND NOT EXISTS (SELECT 1 FROM exam_submissions sub WHERE sub.attempt_id=exam_attempts.id)
+              ${submissionFilter}
             ORDER BY expires_at,id LIMIT ?)
            ORDER BY expires_at,id LIMIT ?`,
           [this.batchSize, this.batchSize, this.batchSize],

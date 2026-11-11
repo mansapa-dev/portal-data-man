@@ -144,10 +144,22 @@ test('S3 — TX1 berjalan saat worker mencoba klaim: klaim menunggu lock attempt
 
     const [tx1Outcome, claimOutcome] = await Promise.all([tx1, claim]);
     assert.deepEqual(tx1Outcome, { kind: 'accepted' });
-    // Worker tidak boleh melihat "tidak ada submission" lalu落后 TX1.
-    assert.equal(claimOutcome.kind, 'claimed');
+    // Dua interleaving sah (A3 §2.3 S3):
+    //  a) TX1 dapat lock lebih dulu → commit submission → klaim membaca
+    //     submission yang sama → 'claimed'.
+    //  b) klaim dapat lock lebih dulu → belum ada submission → 'legacy',
+    //     lalu TX1 membuat submission (tidak hilang, hanya worker yang
+    //     mengambil alih).
+    // Yang TIDAK boleh terjadi: klaim melihat "tidak ada submission" lalu TX1
+    // muncul belakangan pada saat keduanya sudah lewat lock yang sama.
     const submission = await readSubmission(pool, ids.attemptId);
-    assert.equal(submission.state, 'PROCESSING');
+    assert.ok(submission, 'submission TX1 tidak boleh hilang');
+    if (claimOutcome.kind === 'claimed') {
+      assert.equal(submission.state, 'PROCESSING');
+    } else {
+      assert.equal(claimOutcome.kind, 'legacy');
+      assert.equal(submission.state, 'RECEIVED');
+    }
   } finally {
     try { await blocker.rollback(); blocker.release(); } catch { /* sudah dilepas */ }
     await cleanup(pool, ids);

@@ -3,6 +3,7 @@ import { Redis } from 'ioredis';
 import type { Pool } from 'mysql2/promise';
 import type { ScoringService } from './scoring.js';
 import { claimSubmission, completeSubmission, renewLease, skipSubmission, isDeferredError } from './exam-submission.js';
+import type { ClaimOutcome } from './exam-submission.js';
 
 export const FINALIZATION_QUEUE = 'arena-finalization';
 export type FinalizationJob = { studentId: number; examId: number };
@@ -48,7 +49,16 @@ function skipReasonFromError(error: unknown): string {
  *   token, atau menandai SKIPPED untuk 409/404 (LOCK, snapshot hilang, dsb).
  */
 export async function executeSubmissionFinalization(pool: Pool, scoring: ScoringService, studentId: number, examId: number): Promise<unknown> {
-  const claim = await claimSubmission(pool, studentId, examId);
+  let claim: ClaimOutcome;
+  try {
+    claim = await claimSubmission(pool, studentId, examId);
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+    // Migrasi 016 belum diterapkan → belum ada submission durable; jalurkan
+    // finalisasi legacy persis seperti sebelum Tahap 2.
+    if (code !== 'ER_NO_SUCH_TABLE' && code !== 'ER_BAD_FIELD_ERROR') throw error;
+    claim = { kind: 'legacy', attemptId: 0, hadResults: false };
+  }
   if (claim.kind === 'skipped') return { skipped: true, reason: claim.reason };
   if (claim.kind === 'busy') return { deferred: true };
   if (claim.kind === 'legacy') {

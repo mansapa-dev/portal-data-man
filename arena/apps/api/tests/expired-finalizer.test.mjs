@@ -30,6 +30,7 @@ test('finalizer mengambil attempt terminated tanpa result untuk recovery', async
       throw new Error(`Unexpected SQL: ${sql}`);
     },
     async query(sql) {
+      if (sql.startsWith('SELECT 1 FROM exam_submissions')) return [[]];
       if (sql.startsWith('SELECT s.student_id, s.exam_id FROM exam_submissions')) return [[]];
       query = sql;
       return [[{ student_id: 7, exam_id: 12 }]];
@@ -87,6 +88,7 @@ test('finalizer menguras beberapa batch dalam satu putaran (mass expiry)', async
       throw new Error(`Unexpected SQL: ${sql}`);
     },
     async query(sql) {
+      if (sql.startsWith('SELECT 1 FROM exam_submissions')) return [[]];
       if (sql.startsWith('SELECT s.student_id, s.exam_id FROM exam_submissions')) return [[]];
       // Batch pertama penuh (2 baris) → lanjut; batch kedua 1 baris → selesai.
       batchCalls++;
@@ -134,6 +136,7 @@ test('finalizer berhenti mencoba bila satu batch tidak menghasilkan progres', as
       throw new Error(`Unexpected SQL: ${sql}`);
     },
     async query(sql) {
+      if (sql.startsWith('SELECT 1 FROM exam_submissions')) return [[]];
       if (sql.startsWith('SELECT s.student_id, s.exam_id FROM exam_submissions')) return [[]];
       batchCalls++;
       // Selalu mengembalikan baris yang gagal permanen.
@@ -153,4 +156,47 @@ test('finalizer berhenti mencoba bila satu batch tidak menghasilkan progres', as
 
   assert.equal(failures, 1, 'baris gagal tidak boleh diulang terus dalam satu putaran');
   assert.equal(batchCalls, 1);
+});
+
+test('finalizer tetap menfinalisasi attempt legacy ketika migrasi 016 belum diterapkan', async () => {
+  let finalized = 0;
+  let batchQuery = '';
+  const lock = {
+    async query(sql) {
+      if (sql.includes('GET_LOCK')) return [[{ acquired: 1 }]];
+      return [[]];
+    },
+    async beginTransaction() {},
+    async commit() {},
+    async rollback() {},
+    async execute(sql) {
+      // Migrasi 016 belum ada: semua query ke exam_submissions gagal.
+      const error = new Error("Table 'arena.exam_submissions' doesn't exist");
+      error.code = 'ER_NO_SUCH_TABLE';
+      throw error;
+    },
+    release() {},
+  };
+  const pool = {
+    async getConnection() { return lock; },
+    async execute() { const error = new Error("Table 'arena.exam_submissions' doesn't exist"); error.code = 'ER_NO_SUCH_TABLE'; throw error; },
+    async query(sql) {
+      if (sql.startsWith('SELECT 1 FROM exam_submissions')) { const error = new Error("Table 'arena.exam_submissions' doesn't exist"); error.code = 'ER_NO_SUCH_TABLE'; throw error; }
+      if (sql.startsWith('SELECT s.student_id, s.exam_id FROM exam_submissions')) { const error = new Error("Table 'arena.exam_submissions' doesn't exist"); error.code = 'ER_NO_SUCH_TABLE'; throw error; }
+      batchQuery = sql;
+      return [[{ student_id: 7, exam_id: 12 }]];
+    },
+  };
+  const scoring = { async submit(studentId, examId) { finalized++; } };
+  const logger = { info() {}, warn() {}, error() {} };
+  const finalizer = new ExpiredAttemptFinalizer(pool, scoring, logger, 60_000, 50);
+
+  finalizer.start();
+  for (let attempt = 0; attempt < 50 && finalized === 0; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 2));
+  }
+  await finalizer.stop();
+
+  assert.equal(finalized, 1, 'finalisasi legacy harus tetap berjalan');
+  assert.doesNotMatch(batchQuery, /exam_submissions/, 'filter submission harus dilewati saat tabel belum ada');
 });

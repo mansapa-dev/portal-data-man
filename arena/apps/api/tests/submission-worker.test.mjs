@@ -260,6 +260,25 @@ test('worker: cap percobaan habis → SKIPPED lease_exhausted, tidak terus dipro
   assert.equal(state.submission.state, 'SKIPPED');
 });
 
+test('worker: migrasi 016 belum diterapkan (ER_NO_SUCH_TABLE) → fallback finalisasi legacy', async () => {
+  const calls = [];
+  const connection = {
+    async beginTransaction() {},
+    async commit() {},
+    async rollback() {},
+    release() {},
+    async execute() { const error = new Error("Table 'arena.exam_submissions' doesn't exist"); error.code = 'ER_NO_SUCH_TABLE'; throw error; },
+  };
+  const pool = { async getConnection() { return connection; } };
+  const scoring = { async submit(studentId, examId, finalizeOnly) { calls.push({ studentId, examId, finalizeOnly }); return { status: 'selesai' }; } };
+
+  const result = await executeSubmissionFinalization(pool, scoring, 9, 3);
+
+  assert.deepEqual(result, { status: 'selesai' });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].finalizeOnly, true, 'fallback memakai jalur legacy (finalizeOnly)');
+});
+
 test('reconciler: self-heal DONE tanpa exam_results → kembali RECEIVED', async () => {
   const executed = [];
   const pool = {

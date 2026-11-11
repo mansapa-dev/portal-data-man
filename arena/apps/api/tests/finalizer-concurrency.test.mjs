@@ -88,6 +88,7 @@ test('lock diperoleh: finalisasi dijalankan untuk semua attempt di batch', async
       throw new Error(`Unexpected SQL: ${sql}`);
     },
     async query(sql) {
+      if (sql.startsWith('SELECT 1 FROM exam_submissions')) return [[]];
       if (sql.includes('IN_PROGRESS') || sql.includes('TERMINATED')) return [attempts];
       return [[]];
     },
@@ -145,6 +146,7 @@ test('gagal finalisasi satu attempt tidak membatalkan yang lain', async () => {
       throw new Error(`Unexpected SQL: ${sql}`);
     },
     async query(sql) {
+      if (sql.startsWith('SELECT 1 FROM exam_submissions')) return [[]];
       if (sql.includes('IN_PROGRESS') || sql.includes('TERMINATED')) return [attempts];
       return [[]];
     },
@@ -199,6 +201,7 @@ test('batch tidak berjalan bersamaan (running guard aktif)', async () => {
       throw new Error(`Unexpected SQL: ${sql}`);
     },
     async query(sql) {
+      if (sql.startsWith('SELECT 1 FROM exam_submissions')) return [[]];
       if (sql.includes('IN_PROGRESS') || sql.includes('TERMINATED')) {
         activeRuns++;
         maxConcurrent = Math.max(maxConcurrent, activeRuns);

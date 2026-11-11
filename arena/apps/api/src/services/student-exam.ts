@@ -30,8 +30,50 @@ function jsonValue<T>(value: unknown): T {
 export class StudentExamService {
   private readonly diagnosticSamples = new Map<string, Record<string, number | string | boolean>[]>();
   private diagnosticTimer?: NodeJS.Timeout;
+  // Migrasi 016 menambah exam_attempts.submitted_at dan tabel exam_submissions.
+  // Keduanya boleh belum ada bila kode baru ter-deploy sebelum migrasi, sehingga
+  // ketersediaan probed sekali per proses (dengan dedupe promise) dan jalur
+  // lama dipakai sebagai fallback.
+  private freezeColumnProbe?: Promise<boolean>;
+  private submissionTableProbe?: Promise<boolean>;
 
   constructor(private readonly pool: Pool, private readonly diagnostics?: FastifyBaseLogger, private readonly admission?: ExamAdmissionService) {}
+
+  /** true bila kolom exam_attempts.submitted_at tersedia (migrasi 016). */
+  private hasFreezeColumn(): Promise<boolean> {
+    if (!this.freezeColumnProbe) {
+      this.freezeColumnProbe = (async () => {
+        if (typeof this.pool.query !== 'function') return true;
+        try {
+          await this.pool.query('SELECT submitted_at FROM exam_attempts LIMIT 1');
+          return true;
+        } catch (error) {
+          const code = (error as { code?: string }).code;
+          if (code === 'ER_BAD_FIELD_ERROR' || code === 'ER_NO_SUCH_TABLE') return false;
+          throw error;
+        }
+      })();
+    }
+    return this.freezeColumnProbe;
+  }
+
+  /** true bila tabel exam_submissions tersedia (migrasi 016). */
+  private hasSubmissionTable(): Promise<boolean> {
+    if (!this.submissionTableProbe) {
+      this.submissionTableProbe = (async () => {
+        if (typeof this.pool.query !== 'function') return true;
+        try {
+          await this.pool.query('SELECT 1 FROM exam_submissions LIMIT 1');
+          return true;
+        } catch (error) {
+          const code = (error as { code?: string }).code;
+          if (code === 'ER_NO_SUCH_TABLE' || code === 'ER_BAD_FIELD_ERROR') return false;
+          throw error;
+        }
+      })();
+    }
+    return this.submissionTableProbe;
+  }
 
   private recordDiagnostic(event: string, values: Record<string, number | string | boolean>) {
     if (process.env.ARENA_EXAM_DIAGNOSTICS !== 'true' || !this.diagnostics) return;
@@ -66,9 +108,11 @@ export class StudentExamService {
   }
 
   async list(studentId: number) {
+    const submissionJoin = await this.hasSubmissionTable() ? 'LEFT JOIN exam_submissions sub ON sub.attempt_id=a.id' : '';
+    const submissionColumn = await this.hasSubmissionTable() ? ',sub.state submission_state' : '';
     const [rows] = await this.pool.execute<RowDataPacket[]>(`SELECT e.id,e.name,e.grade,e.duration_minutes,e.session_number,e.starts_at,e.ends_at,e.academic_year,e.semester,m.type follow_up_type,
-      a.status attempt_status, ((a.status='IN_PROGRESS' AND a.expires_at>UTC_TIMESTAMP(3)) OR (a.id IS NULL AND e.status='ACTIVE' AND UTC_TIMESTAMP(3) BETWEEN e.starts_at AND e.ends_at AND (NOT EXISTS (SELECT 1 FROM exam_target_classes all_tc WHERE all_tc.exam_id=e.id) OR EXISTS (SELECT 1 FROM exam_target_classes tc WHERE tc.exam_id=e.id AND tc.portal_class_id=s.portal_class_id)) AND (NOT EXISTS(SELECT 1 FROM exam_target_students all_ts WHERE all_ts.exam_id=e.id) OR EXISTS(SELECT 1 FROM exam_target_students ts WHERE ts.exam_id=e.id AND ts.student_id=s.id)))) can_start
-      FROM students s JOIN exams e ON e.grade=s.grade_snapshot LEFT JOIN exam_attempts a ON a.student_id=s.id AND a.exam_id=e.id LEFT JOIN exam_follow_up_meta m ON m.exam_id=e.id LEFT JOIN exam_submissions sub ON sub.attempt_id=a.id
+      a.status attempt_status${submissionColumn}, ((a.status='IN_PROGRESS' AND a.expires_at>UTC_TIMESTAMP(3)) OR (a.id IS NULL AND e.status='ACTIVE' AND UTC_TIMESTAMP(3) BETWEEN e.starts_at AND e.ends_at AND (NOT EXISTS (SELECT 1 FROM exam_target_classes all_tc WHERE all_tc.exam_id=e.id) OR EXISTS (SELECT 1 FROM exam_target_classes tc WHERE tc.exam_id=e.id AND tc.portal_class_id=s.portal_class_id)) AND (NOT EXISTS(SELECT 1 FROM exam_target_students all_ts WHERE all_ts.exam_id=e.id) OR EXISTS(SELECT 1 FROM exam_target_students ts WHERE ts.exam_id=e.id AND ts.student_id=s.id)))) can_start
+      FROM students s JOIN exams e ON e.grade=s.grade_snapshot LEFT JOIN exam_attempts a ON a.student_id=s.id AND a.exam_id=e.id LEFT JOIN exam_follow_up_meta m ON m.exam_id=e.id ${submissionJoin}
       WHERE s.id=? AND s.is_active=1 AND s.cbt_status='ACTIVE' AND ((e.status='ACTIVE' AND UTC_TIMESTAMP(3) BETWEEN e.starts_at AND e.ends_at
       AND (NOT EXISTS (SELECT 1 FROM exam_target_classes all_tc WHERE all_tc.exam_id=e.id) OR EXISTS (SELECT 1 FROM exam_target_classes tc WHERE tc.exam_id=e.id AND tc.portal_class_id=s.portal_class_id))
       AND (NOT EXISTS(SELECT 1 FROM exam_target_students all_ts WHERE all_ts.exam_id=e.id) OR EXISTS(SELECT 1 FROM exam_target_students ts WHERE ts.exam_id=e.id AND ts.student_id=s.id))) OR a.id IS NOT NULL) ORDER BY e.starts_at DESC,e.id`, [studentId]);
@@ -292,8 +336,11 @@ export class StudentExamService {
     const connection = await this.pool.getConnection();
     const poolWaitMs = performance.now() - started;
     try {
+      // Probe ketersediaan kolom dilakukan sebelum transaksi dibuka agar tidak
+      // menahan koneksi pool saat query tambahan.
+      const freezeColumn = await this.hasFreezeColumn() ? ',submitted_at' : '';
       await connection.beginTransaction();
-      const [attempts] = await connection.execute<RowDataPacket[]>('SELECT id,public_id,status,expires_at,(expires_at<=UTC_TIMESTAMP(3)) expired,submitted_at FROM exam_attempts WHERE student_id=? AND exam_id=? FOR UPDATE', [claims.sub, examId]);
+      const [attempts] = await connection.execute<RowDataPacket[]>(`SELECT id,public_id,status,expires_at,(expires_at<=UTC_TIMESTAMP(3)) expired${freezeColumn} FROM exam_attempts WHERE student_id=? AND exam_id=? FOR UPDATE`, [claims.sub, examId]);
       const attempt = attempts[0];
       if (!attempt) throw Object.assign(new Error('Sesi ujian tidak ditemukan'), { statusCode: 404 });
       if (attempt.public_id !== input.attempt_id) throw Object.assign(new Error('Sesi ujian berubah; muat ulang halaman'), { statusCode: 409 });
@@ -365,6 +412,8 @@ export class StudentExamService {
     mark('pool_wait_ms', acquireStarted);
     try {
       let phase = performance.now();
+      // Probe sebelum transaksi: jangan menahan koneksi pool untuk query tambahan.
+      const freezeColumn = await this.hasFreezeColumn() ? ',ea.submitted_at' : '';
       await connection.beginTransaction();
       mark('begin_ms', phase);
       try {
@@ -383,7 +432,7 @@ export class StudentExamService {
                   (q.option_d IS NOT NULL AND q.option_d <> '') AS option_d_available,
                   (q.option_e IS NOT NULL AND q.option_e <> '') AS option_e_available,
                   v.revision, v.mutation_id,
-                  a.id AS answer_id, a.answer, a.is_flagged, ea.submitted_at
+                  a.id AS answer_id, a.answer, a.is_flagged${freezeColumn}
            FROM exam_attempts ea
            LEFT JOIN attempt_questions q ON q.attempt_id = ea.id AND q.question_id = ?
            LEFT JOIN answer_write_versions v ON v.attempt_id = ea.id AND v.question_id = q.question_id
