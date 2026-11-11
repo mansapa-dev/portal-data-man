@@ -86,6 +86,94 @@ Buat user aplikasi (bila belum ada) dan pastikan memiliki akses ke checkout,
 PM2 sebagai root. Pastikan timezone server konsisten (UTC) karena jadwal ujian
 dan `expires_at` memakai `UTC_TIMESTAMP(3)`.
 
+## 1c. Instalasi server dari nol (contoh Ubuntu/Debian)
+
+Lewati bagian ini bila server sudah memiliki Node/MySQL/Redis/Nginx/PM2. Contoh
+perintah untuk Ubuntu 24.04; sesuaikan untuk distro lain. Jalankan sebagai user
+yang berhak `sudo`.
+
+```bash
+sudo apt update
+sudo apt install -y ca-certificates curl gnupg git nginx mysql-server redis-server ufw openssl
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
+sudo npm install -g pm2
+node --version && npm --version && pm2 --version
+```
+
+Buat user aplikasi dan direktori persisten:
+
+```bash
+sudo useradd --system --create-home --shell /bin/bash arena || true
+sudo mkdir -p /srv/repos /var/lib/arena/question-images
+sudo chown -R arena:arena /srv/repos /var/lib/arena
+sudo -iu arena
+```
+
+Siapkan database dan user (ganti password `CHANGE_ME`):
+
+```bash
+sudo mysql <<'SQL'
+CREATE DATABASE IF NOT EXISTS arena CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS 'arena_app'@'127.0.0.1' IDENTIFIED BY 'CHANGE_ME_APP';
+GRANT SELECT,INSERT,UPDATE,DELETE ON arena.* TO 'arena_app'@'127.0.0.1';
+CREATE USER IF NOT EXISTS 'arena_migrator'@'localhost' IDENTIFIED BY 'CHANGE_ME_MIGRATOR';
+GRANT ALL PRIVILEGES ON arena.* TO 'arena_migrator'@'localhost';
+FLUSH PRIVILEGES;
+SQL
+```
+
+`arena_migrator` memerlukan hak trigger untuk migrasi 015. `arena_app` tidak
+perlu DDL. Jangan memakai user `root` untuk aplikasi.
+
+Aktifkan Redis AOF dan `noeviction` (gabungkan dengan konfigurasi yang ada,
+jangan menimpa seluruh file):
+
+```bash
+sudo cp /etc/redis/redis.conf "/etc/redis/redis.conf.bak.$(date +%s)"
+sudo mkdir -p /etc/redis/redis.conf.d
+sudo tee /etc/redis/redis.conf.d/arena.conf >/dev/null <<'CONF'
+appendonly yes
+appendfsync everysec
+no-appendfsync-on-rewrite yes
+save ""
+maxmemory 1gb
+maxmemory-policy noeviction
+CONF
+sudo systemctl restart redis-server
+sudo systemctl enable redis-server
+redis-cli CONFIG GET appendonly maxmemory-policy
+```
+
+Bila direktori `conf.d` tidak dibaca oleh Redis versi tersebut, gabungkan baris
+di atas ke `/etc/redis/redis.conf`. Pastikan `bind 127.0.0.1` dan
+`protected-mode yes`.
+
+Sinkronkan waktu dan firewall:
+
+```bash
+sudo timedatectl set-timezone UTC
+sudo timedatectl status
+sudo ufw allow OpenSSH
+sudo ufw allow 'Nginx Full'
+sudo ufw enable
+```
+
+Bila memakai Cloudflare, batasi port 80/443 hanya ke rentang IP Cloudflare
+sesuai dokumentasi resmi, dan jangan membuka port 3001/3306/6379 ke publik.
+
+Clone source sebagai user aplikasi:
+
+```bash
+sudo -iu arena
+git clone <URL-REPO> /srv/repos/portal-data-man
+cd /srv/repos/portal-data-man
+git log -1 --oneline
+```
+
+Lanjutkan ke §3 (backup) bila database sudah berisi data, atau ke §4–§5 untuk
+database baru.
+
 ## 2. Topologi proses dan anggaran koneksi
 
 `infra/ecosystem.config.cjs` menjalankan:
@@ -238,6 +326,46 @@ Rollback 016 hanya setelah kode baru dilepas dan tidak ada submission
 ```bash
 mysql -u arena_migrator -p "$ARENA_DB" < database/rollbacks/016_exam_submissions.sql
 ```
+
+### 5d. Database baru (fresh install)
+
+Untuk database kosong, terapkan **semua** migrasi 001–016 berurutan. Jangan
+memakai `scripts/migrate-local.mjs`/`npm run demo:migrate` di server production.
+
+```bash
+cat > "$HOME/.my.cnf.arena" <<'EOF'
+[client]
+user=arena_migrator
+password=CHANGE_ME_MIGRATOR
+EOF
+chmod 600 "$HOME/.my.cnf.arena"
+
+cd /srv/repos/portal-data-man/arena
+for f in database/migrations/*.sql; do
+  echo "==> $f"
+  mysql --defaults-extra-file="$HOME/.my.cnf.arena" "$ARENA_DB" < "$f" || {
+    echo "GAGAL: $f"; break;
+  }
+done
+
+mysql --defaults-extra-file="$HOME/.my.cnf.arena" "$ARENA_DB" -e \
+  "SHOW TABLES; SHOW COLUMNS FROM exams LIKE 'source_revision'; \
+   SHOW COLUMNS FROM exam_submissions;"
+rm -f "$HOME/.my.cnf.arena"
+```
+
+Setelah API berjalan, buat admin pertama lewat `POST /api/setup/admin` dengan
+`setup_token` dari `.env`, lalu hapus/rotasi `SETUP_TOKEN` dan restart API agar
+endpoint setup nonaktif:
+
+```bash
+curl -fsS -X POST https://arena.man1palembang.sch.id/api/setup/admin \
+  -H 'Content-Type: application/json' \
+  -d '{"setup_token":"CHANGE_ME","username":"admin","name":"Administrator","password":"CHANGE_ME_MIN_12"}'
+```
+
+Jangan mengirim token/password ke log atau chat. Data siswa/guru tetap diisi
+lewat sinkronisasi Portal Data atau panel admin, bukan seed demo.
 
 ## 6. Environment
 
@@ -424,6 +552,129 @@ curl -sSI https://arena.man1palembang.sch.id/ | head
 Aset berulang harus `CF-Cache-Status: HIT`. Respons API terautentikasi harus
 `no-store` dan tidak HIT, termasuk untuk dua siswa berbeda. Jangan menyalin
 cookie/token peserta ke tiket atau log.
+
+### 7a. Contoh server block Nginx lengkap
+
+Ini contoh **gabungan** untuk vhost Arena. Sesuaikan nama host, path sertifikat,
+dan lokasi log. Jangan menimpa vhost lain di server yang sama.
+
+```nginx
+# /etc/nginx/sites-available/arena.conf
+server {
+    listen 80;
+    listen [::]:80;
+    server_name arena.man1palembang.sch.id;
+
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name arena.man1palembang.sch.id;
+
+    root /srv/repos/portal-data-man/arena/apps/web/dist;
+    index index.html;
+    client_max_body_size 16m;
+
+    ssl_certificate     /etc/letsencrypt/live/arena.man1palembang.sch.id/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/arena.man1palembang.sch.id/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+
+    # Aset Vite ber-hash: cache panjang. Jangan taruh gambar soal privat di sini.
+    location ^~ /assets/ {
+        try_files $uri =404;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        add_header X-Content-Type-Options nosniff always;
+    }
+
+    location = /index.html {
+        add_header Cache-Control "no-cache" always;
+    }
+
+    # Jalur ujian siswa: SSE ruang tunggu + respons ujian.
+    # proxy_buffering off wajib agar event SSE tidak tertahan.
+    location ^~ /api/student/exams/ {
+        access_log off;
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 75s;
+        proxy_send_timeout 75s;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_pass http://arena_api;
+    }
+
+    location /api/ {
+        proxy_http_version 1.1;
+        proxy_read_timeout 75s;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_pass http://arena_api;
+    }
+
+    location /auth/ {
+        proxy_http_version 1.1;
+        proxy_read_timeout 75s;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_pass http://arena_api;
+    }
+
+    location /health/ {
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_pass http://arena_api;
+    }
+
+    # SPA fallback. HTML tidak di-cache; API tetap no-store dari aplikasi.
+    location / {
+        try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache" always;
+    }
+}
+```
+
+Aktifkan dan uji:
+
+```bash
+sudo ln -sfn /etc/nginx/sites-available/arena.conf /etc/nginx/sites-enabled/arena.conf
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+Sertifikat dengan Certbot (bila belum ada):
+
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d arena.man1palembang.sch.id
+sudo systemctl status certbot.timer
+```
+
+Catatan:
+
+- `X-Accel-Buffering: no` juga dikirim aplikasi untuk SSE, tetapi
+  `proxy_buffering off` di Nginx tetap diperlukan.
+- Jika Cloudflare menjadi proxy, pastikan `TRUST_PROXY=true` dan hanya percaya
+  header forwarded dari Nginx/Cloudflare. Jangan membuka port 3001 langsung.
+- Jangan menambahkan `add_header Cache-Control` untuk `/api/`; aplikasi sudah
+  mengirim `no-store` dan `CDN-Cache-Control: no-store`.
 
 ### 7b. Berkas infra lengkap (copy-paste)
 
@@ -660,6 +911,68 @@ finalisasi latar belakang tidak berjalan. Pastikan tidak ada worker duplikat
 dari systemd/cron/PM2 dengan nama lain. Setelah semua verifikasi lulus,
 `pm2 save`.
 
+### 8a. Systemd unit untuk PM2 (opsional tetapi disarankan)
+
+Cara termudah adalah membiarkan PM2 membuat unit sendiri:
+
+```bash
+pm2 startup systemd -u arena --hp /home/arena
+# Jalankan perintah sudo yang dicetak PM2, lalu:
+pm2 save
+sudo systemctl enable --now pm2-arena
+```
+
+Bila ingin unit manual, contoh (sesuaikan path `pm2` dari `command -v pm2` dan
+`npm root -g`):
+
+```ini
+# /etc/systemd/system/arena-pm2.service
+[Unit]
+Description=ARENA PM2 process manager
+After=network-online.target mysql.service redis-server.service
+Wants=network-online.target
+
+[Service]
+Type=forking
+User=arena
+Group=arena
+Environment=PM2_HOME=/home/arena/.pm2
+Environment=NODE_ENV=production
+PIDFile=/home/arena/.pm2/pm2.pid
+ExecStart=/usr/lib/node_modules/pm2/bin/pm2 resurrect
+ExecReload=/usr/lib/node_modules/pm2/bin/pm2 reload all
+ExecStop=/usr/lib/node_modules/pm2/bin/pm2 kill
+Restart=on-failure
+RestartSec=10
+LimitNOFILE=65535
+KillMode=mixed
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now arena-pm2
+sudo systemctl status arena-pm2
+```
+
+Perintah operasional:
+
+```bash
+pm2 status
+pm2 reload infra/ecosystem.config.cjs --update-env
+pm2 restart arena-api arena-finalization arena-waiting --update-env
+pm2 stop arena-api arena-finalization arena-waiting
+pm2 logs arena-api --lines 100
+pm2 save
+```
+
+`pm2 reload` melakukan rolling reload untuk mode cluster; tetap tutup admission
+saat redeploy besar. Jangan memakai `pm2 delete all` pada production karena
+menghapus definisi proses yang belum tentu ada di ecosystem.
+
 ## 9. Verifikasi sebelum membuka sesi
 
 ```bash
@@ -818,6 +1131,29 @@ mysql -u arena_migrator -p "$ARENA_DB" -e "SHOW PROCESSLIST;"
 ```
 
 Jangan mencetak token, cookie, PIN, atau isi `.env` ke log/tiket.
+
+## 13c. Checklist go-live
+
+Cetak/centang sebelum membuka admission:
+
+- [ ] Tidak ada attempt `IN_PROGRESS`; admission ditutup.
+- [ ] Backup database, `web-dist`, dan gambar soal ada; dump lolos uji baca.
+- [ ] Commit sebelumnya tercatat di `previous-commit.txt`.
+- [ ] `git status` bersih dan `git log -1` sesuai rilis.
+- [ ] `npm ci` dan `npm run build` lulus.
+- [ ] Migrasi 014, 015, 016 terverifikasi (kolom, indeks, trigger, tabel).
+- [ ] `.env` permission 600, secret asli, `SUBMIT_ASYNC=off`.
+- [ ] Nilai `DB_POOL_SIZE`/`AUTH_DB_POOL_SIZE` di `.env` dan ecosystem sama.
+- [ ] Redis AOF `everysec`, `noeviction`, hanya loopback.
+- [ ] `nginx -t` lulus; vhost, aset, API, auth, health, SSE terpasang.
+- [ ] Cloudflare Proxied + Full (strict); aset HIT; API no-store.
+- [ ] `pm2 status`: 3 API + finalization + waiting online.
+- [ ] `/health/live` dan `/health/ready` OK.
+- [ ] Login dummy, waiting/claim, autosave, submit ganda, expiry, LOCK lulus.
+- [ ] Tidak ada error berulang di log API/worker.
+- [ ] `pm2 save` dijalankan.
+- [ ] Dashboard monitoring pool wait, 503, CPU, RAM, disk, Redis, backlog siap.
+- [ ] Rencana rollback dan kontak penanggung jawab tersedia.
 
 ## 14. Referensi
 
