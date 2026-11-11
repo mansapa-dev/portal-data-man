@@ -22,6 +22,10 @@ module.exports = {
       WAITING_CLAIM_TIMEOUT_MS: '120000',
       WAITING_WORKER_ENABLED: 'false',
       ATTEMPT_FINALIZER_ENABLED: 'false',
+      // Tahap 2 (submit async) belum diaktifkan di production: proses API
+      // memakai jalur finalisasi sinkron lama sampai migrasi 016 terpasang
+      // dan load test staging selesai.
+      SUBMIT_ASYNC: 'off',
     },
   }, {
     name: 'arena-finalization',

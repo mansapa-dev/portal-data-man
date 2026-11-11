@@ -4,6 +4,8 @@ import { assertCsrf, claimsFromRequest, rateLimitKey, readToken } from '../lib/a
 import { requirePool } from '../lib/db.js';
 import { ScoringService } from '../services/scoring.js';
 import { StudentExamService } from '../services/student-exam.js';
+import { acceptSubmission } from '../services/exam-submission.js';
+import { dispatchFinalization, isSubmitAsyncEnabled } from '../services/submission-dispatch.js';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 import { waitingRoom } from '../lib/waiting-room.js';
 import type { WaitingRoomService } from '../services/waiting-room.js';
@@ -99,18 +101,61 @@ export async function studentExamRoutes(app: FastifyInstance, options:{pool?:Poo
     return result;
   });
   app.post<{ Params: { id: string } }>('/api/student/exams/:id/submit', { config: { rateLimit: { max: 10, timeWindow: '1 minute', keyGenerator: rateLimitKey } } }, async (request) => {
-    const claims = await access(request,examId.parse(request.params.id),true); assertCsrf(request, claims);
+    const id = examId.parse(request.params.id);
+    const claims = await access(request,id,true); assertCsrf(request, claims);
     const body = z.object({ finalize_only: z.boolean().optional() }).strict().parse(request.body ?? {});
-    const result=await scoring.submit(claims.sub, examId.parse(request.params.id), body.finalize_only ?? false);
-    try{await waiting.finish(examId.parse(request.params.id),claims.sub);}catch{app.log.warn('waiting completion deferred');}
+    const finalizeOnly = body.finalize_only ?? false;
+    if (isSubmitAsyncEnabled()) {
+      try {
+        // TX1: durable acceptance. Commit transaksi = batas penerimaan; scoring
+        // dikerjakan worker secara asinkron.
+        const outcome = await acceptSubmission(pool, claims.sub, id, { finalizeOnly });
+        if (outcome.kind === 'accepted' || outcome.kind === 'processing') {
+          // Durasi ruang tunggu berakhir setelah penerimaan durable, bukan
+          // setelah scoring selesai (desain A3 N6).
+          try{await waiting.finish(id,claims.sub);}catch{app.log.warn('waiting completion deferred');}
+          // Akselerator saja: kegagalan enqueue ditutup reconciler (MySQL sumber kebenaran).
+          void dispatchFinalization(claims.sub, id);
+          return { status: 'accepted', submission_state: outcome.kind === 'accepted' ? 'RECEIVED' : outcome.state };
+        }
+        if (outcome.kind === 'done' || outcome.kind === 'result-exists') {
+          // Sudah ada hasil (idempoten) → kembalikan hasil lengkap.
+          const result = await scoring.submit(claims.sub, id, false);
+          try{await waiting.finish(id,claims.sub);}catch{app.log.warn('waiting completion deferred');}
+          return result;
+        }
+        throw Object.assign(new Error('Submission sebelumnya tidak dapat diproses. Hubungi petugas ujian.'),{statusCode:409});
+      } catch (error) {
+        const code = (error as { code?: string }).code;
+        // Migrasi 016 belum diterapkan → fallback ke jalur sinkron lama (deploy
+        // jendela: migration sebelum restart kode).
+        if (code !== 'ER_NO_SUCH_TABLE' && code !== 'ER_BAD_FIELD_ERROR') throw error;
+        app.log.warn({ err: error, code }, 'exam_submissions belum tersedia; fallback finalisasi sinkron');
+      }
+    }
+    const result=await scoring.submit(claims.sub, id, finalizeOnly);
+    try{await waiting.finish(id,claims.sub);}catch{app.log.warn('waiting completion deferred');}
     return result;
   });
   app.get<{ Params: { id: string } }>('/api/student/exams/:id/review', async (request) => scoring.review((await access(request,examId.parse(request.params.id),true)).sub, examId.parse(request.params.id)));
   app.get<{ Params: { id: string } }>('/api/student/exams/:id/result', async (request) => {
     const id=examId.parse(request.params.id),studentId=(await access(request,id,true)).sub;
-    const [rows]=await pool.execute<RowDataPacket[]>(`SELECT a.status,r.question_count jumlah_soal,r.correct_count benar,r.wrong_count salah,r.blank_count kosong,r.score nilai,m.type follow_up_type FROM exam_attempts a LEFT JOIN exam_results r ON r.attempt_id=a.id LEFT JOIN exam_follow_up_meta m ON m.exam_id=a.exam_id WHERE a.student_id=? AND a.exam_id=? LIMIT 1`,[studentId,id]);
+    let rows;
+    try {
+      [rows]=await pool.execute<RowDataPacket[]>(`SELECT a.status,r.question_count jumlah_soal,r.correct_count benar,r.wrong_count salah,r.blank_count kosong,r.score nilai,m.type follow_up_type,s.state submission_state FROM exam_attempts a LEFT JOIN exam_results r ON r.attempt_id=a.id LEFT JOIN exam_follow_up_meta m ON m.exam_id=a.exam_id LEFT JOIN exam_submissions s ON s.attempt_id=a.id WHERE a.student_id=? AND a.exam_id=? LIMIT 1`,[studentId,id]);
+    } catch (error) {
+      // Migrasi 016 belum diterapkan → query tanpa join submission.
+      if ((error as { code?: string }).code !== 'ER_NO_SUCH_TABLE') throw error;
+      [rows]=await pool.execute<RowDataPacket[]>(`SELECT a.status,r.question_count jumlah_soal,r.correct_count benar,r.wrong_count salah,r.blank_count kosong,r.score nilai,m.type follow_up_type FROM exam_attempts a LEFT JOIN exam_results r ON r.attempt_id=a.id LEFT JOIN exam_follow_up_meta m ON m.exam_id=a.exam_id WHERE a.student_id=? AND a.exam_id=? LIMIT 1`,[studentId,id]);
+    }
     if(!rows[0])throw Object.assign(new Error('Hasil ujian tidak ditemukan'),{statusCode:404});
-    if(rows[0].status==='IN_PROGRESS')throw Object.assign(new Error('Ujian masih berlangsung'),{statusCode:409});
+    const submissionState=rows[0].submission_state?String(rows[0].submission_state):null;
+    if(rows[0].status==='IN_PROGRESS'){
+      // Submission durable diterima tetapi scoring belum selesai → frontend
+      // menampilkan status pending (bukan error) dan terus polling.
+      if(submissionState==='RECEIVED'||submissionState==='PROCESSING')return{status:'processing',submission_state:submissionState};
+      throw Object.assign(new Error('Ujian masih berlangsung'),{statusCode:409});
+    }
     return rows[0];
   });
 }

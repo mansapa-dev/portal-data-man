@@ -36,6 +36,32 @@ type Staff = { id: number; nama: string; username?: string; role: string; capabi
 type ExamDraft = { id?:number; name:string; grade:string; duration_minutes:number; session_number:number; starts_at:string; ends_at:string; academic_year:string; semester:'ODD'|'EVEN'; subject_name:string; status:'DRAFT'|'ACTIVE'|'INACTIVE'|'ARCHIVED'; target_class_ids:string[]; target_student_ids:number[] };
 type UserDraft = {id?:number;role:'ADMIN'|'TEACHER'|'EMPLOYEE';teacher_id:number|null;employee_id:number|null;username:string;name:string;password:string;status:'ACTIVE'|'DISABLED'};
 
+// Tahap 2 — submit async: server membalas "accepted" (submission durable,
+// scoring berjalan di worker) dan endpoint /result membalas "processing"
+// selama penilaian belum selesai.
+const RESULT_POLL_INTERVAL_MS = 2_000;
+const RESULT_POLL_MAX_ATTEMPTS = 20;
+const isPendingResult = (payload: ExamResult | null | undefined) => {
+  if (!payload) return false;
+  const status = String(payload.status ?? '');
+  return status === 'accepted' || status === 'processing';
+};
+async function waitForResult(examId: number): Promise<ExamResult | null> {
+  for (let attempt = 0; attempt < RESULT_POLL_MAX_ATTEMPTS; attempt++) {
+    try {
+      const payload = await api<ExamResult>(`/api/student/exams/${examId}/result`);
+      if (!isPendingResult(payload)) return payload;
+    } catch (error) {
+      const status = (error as { statusCode?: number })?.statusCode;
+      // 404/403/409 yang menetap = bukan kondisi pending; error lain (5xx)
+      // masih dicoba pada polling berikutnya.
+      if (typeof status === 'number' && status >= 400 && status < 500 && status !== 429) return null;
+    }
+    await new Promise<void>(resolve => window.setTimeout(resolve, RESULT_POLL_INTERVAL_MS));
+  }
+  return null;
+}
+
 function App() {
   const [student, setStudent] = useState<Student | null>(null);
   const [staff, setStaff] = useState<Staff | null>(null);
@@ -247,19 +273,30 @@ function App() {
       }
       let completed:ExamResult | null=null;
       for(let retry=0;retry<5;retry++){
-        try{completed=await api<ExamResult>(`/api/student/exams/${attempt.exam.id}/submit`,{method:'POST',body:finalizeOnly?{finalize_only:true}:{}});break;}
+        try{
+          const ack=await api<ExamResult>(`/api/student/exams/${attempt.exam.id}/submit`,{method:'POST',body:finalizeOnly?{finalize_only:true}:{}});
+          // Tahap 2: server dapat membalas "accepted" — submission sudah durable
+          // tetapi scoring masih berjalan di worker. Tunggu hasil lewat polling.
+          completed=isPendingResult(ack)?null:ack;
+          break;
+        }
         catch(error){
           const retryable=!(error instanceof ApiError)||error.statusCode>=500||error.statusCode===429;
           if(!retryable||retry===4)throw error;
           await new Promise<void>(resolve=>window.setTimeout(resolve,Math.round(Math.min(4000,300*2**retry)*(0.7+Math.random()*0.6))));
         }
       }
-      if(!completed)throw new Error('Hasil ujian belum diterima');
+      if(!completed){
+        setMessage('Ujian diterima. Hasil sedang dihitung...');
+        const published=await waitForResult(attempt.exam.id);
+        if(!published)throw new Error('Ujian sudah dikirim, tetapi hasil belum tersedia. Coba muat ulang halaman beberapa saat lagi.');
+        completed=published;
+      }
       setMessage(''); setResultExamId(attempt.exam.id); setResultExamName(attempt.exam.nama_ujian); setReview(null); setReviewError(''); setResult(completed); setAttempt(null); await loadExams();
     } catch (error) { setMessage(finalizeOnly?'Waktu habis. Hasil belum dapat dimuat; coba lagi saat koneksi tersedia.':error instanceof Error ? error.message : 'Submit gagal'); throw error; }
     finally { submittingAttempt.current=false;setBusy(false); }
   }
-  async function showResult(examId:number){setBusy(true);setMessage('');setReview(null);setReviewError('');try{if(!getExamToken(examId)){const access=await api<WaitingView>(`/api/student/exams/${examId}/waiting/resume`,{method:'POST',body:{},timeoutMs:10000});if(access.admit_token)setExamToken(examId,access.admit_token);}setResultExamId(examId);setResultExamName(exams.find(item=>item.id===examId)?.nama_ujian??'');setResult(await api<ExamResult>(`/api/student/exams/${examId}/result`));}catch(error){setMessage(error instanceof Error?error.message:'Hasil belum tersedia');}finally{setBusy(false);}}
+  async function showResult(examId:number){setBusy(true);setMessage('');setReview(null);setReviewError('');try{if(!getExamToken(examId)){const access=await api<WaitingView>(`/api/student/exams/${examId}/waiting/resume`,{method:'POST',body:{},timeoutMs:10000});if(access.admit_token)setExamToken(examId,access.admit_token);}setResultExamId(examId);setResultExamName(exams.find(item=>item.id===examId)?.nama_ujian??'');const payload=await api<ExamResult>(`/api/student/exams/${examId}/result`);if(isPendingResult(payload)){setMessage('Hasil sedang dihitung. Tunggu sebentar, lalu muat ulang halaman ini.');const published=await waitForResult(examId);if(!published)return;setResult(published);return;}setResult(payload);}catch(error){setMessage(error instanceof Error?error.message:'Hasil belum tersedia');}finally{setBusy(false);}}
   async function loadReview(){if(resultExamId===null)return;setReviewLoading(true);setReviewError('');try{const data=await api<{soal:{id:number;pertanyaan?:string;status:string}[]}>(`/api/student/exams/${resultExamId}/review`);if(!data.soal?.length)throw new Error('Data soal review belum tersedia. Hubungi petugas ujian.');setReview(data);}catch(error){setReview(null);setReviewError(error instanceof Error?error.message:'Review gagal dimuat');}finally{setReviewLoading(false);}}
   function terminated(hasil:ExamResult|null){setResultExamId(attempt?.exam.id??null);setResultExamName(attempt?.exam.nama_ujian??'');setAttempt(null);setResult(hasil??{status:'TERMINATED'});setReview(null);setReviewError('');setReviewLoading(false);void loadExams();}
   async function logout() { try { await api('/api/auth/logout', { method: 'POST', body: {} }); } catch { /* disconnected queues expire by heartbeat */ } try{sessionStorage.removeItem('arena_waiting_exam');}catch{}localStorage.removeItem('arena_active_portal');setSession(null, null); setWaitingExam(null); waitingRestored.current=null; setStudent(null); setStaff(null); setAttempt(null); setResult(null); setExams([]); }
@@ -269,7 +306,8 @@ function App() {
     const query=new URLSearchParams(window.location.search);const portalHint=query.get('portal');
     if(portalHint==='staff'||portalHint==='student'){localStorage.setItem('arena_active_portal',portalHint);history.replaceState(null,'',window.location.pathname);}
     if(token&&csrf){localStorage.setItem('arena_active_portal','staff');setSession(token,csrf);history.replaceState(null,'',window.location.pathname);void api<{staff:Staff}>('/api/auth/me').then(data=>{if(!cancelled){setStudent(null);setStaff(data.staff);}}).catch(error=>{if(!cancelled)setMessage(error instanceof Error?error.message:'SSO gagal');}).finally(()=>{if(!cancelled)setSessionLoading(false);});return()=>{cancelled=true;};}
-    const restoreStudent=async()=>{const data=await api<{student:Student;csrf_token:string}>('/api/auth/student/session');if(cancelled)return;localStorage.setItem('arena_active_portal','student');setSession(null,data.csrf_token);setStaff(null);setStudent(data.student);try{const available=await loadExams();if(cancelled)return;const active=available.find(exam=>exam.status_attempt==='IN_PROGRESS');if(active)await start(active.id);}catch(error){if(!cancelled)setMessage(error instanceof Error?error.message:'Jadwal ujian gagal dimuat');}};
+    const restoreStudent=async()=>{const data=await api<{student:Student;csrf_token:string}>('/api/auth/student/session');if(cancelled)return;localStorage.setItem('arena_active_portal','student');setSession(null,data.csrf_token);setStaff(null);setStudent(data.student);try{const available=await loadExams();if(cancelled)return;const pending=available.find(exam=>['RECEIVED','PROCESSING'].includes(String(exam.submission_state??'')));const active=available.find(exam=>exam.status_attempt==='IN_PROGRESS'&&!['RECEIVED','PROCESSING'].includes(String(exam.submission_state??'')));if(active)await start(active.id);else if(pending){// Submission sudah durable: jangan buka ulang sesi ujian, tunggu hasil.
+setMessage('Ujian sudah dikirim. Nilai ditampilkan setelah penilaian selesai.');void showResult(pending.id);}}catch(error){if(!cancelled)setMessage(error instanceof Error?error.message:'Jadwal ujian gagal dimuat');}};
     const restoreStaff=async()=>{const data=await api<{staff:Staff;csrf_token:string}>('/api/auth/staff/session');if(cancelled)return;localStorage.setItem('arena_active_portal','staff');setSession(null,data.csrf_token);setStudent(null);setStaff(data.staff);};
     const restore=async()=>{const preferred=localStorage.getItem('arena_active_portal');const attempts=preferred==='staff'?[restoreStaff,restoreStudent]:[restoreStudent,restoreStaff];let lastFailure:unknown;for(const attemptSession of attempts){try{await attemptSession();return;}catch(error){if(cancelled)return;lastFailure=error;const status=(error as {statusCode?:number})?.statusCode;if(status!==401&&status!==403)break;}}if(!cancelled){setSession(null,null);localStorage.removeItem('arena_active_portal');const status=(lastFailure as {statusCode?:number})?.statusCode;if(status!==401&&status!==403)setMessage(lastFailure instanceof Error?lastFailure.message:'Sesi gagal dipulihkan. Coba muat ulang.');}};
     void restore().finally(()=>{if(!cancelled)setSessionLoading(false);});
