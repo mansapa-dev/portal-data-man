@@ -1,8 +1,10 @@
 # Starting profile for a shared 4-vCPU / 16-GB VPS. Measure before increasing.
 [mysqld]
 innodb_buffer_pool_size=6G
-max_connections=100
-thread_cache_size=32
+max_connections=300
+thread_cache_size=64
+table_open_cache=4000
+innodb_log_file_size=1G
 innodb_flush_log_at_trx_commit=1
 sync_binlog=1
 slow_query_log=ON

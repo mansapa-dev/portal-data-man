@@ -90,6 +90,7 @@ const sessionRateLimit = {
 };
 await app.register(rateLimit, sessionRateLimit);
 
+app.get('/health', async () => ({ status: 'ok' }));
 app.get('/health/live', async () => ({
   status: 'ok',
   eventLoopDelayMs: {
@@ -100,6 +101,16 @@ app.get('/health/live', async () => ({
   },
   verifier: getVerifierStats(),
 }));
+app.get('/ready', async (_request, reply) => {
+  if (!pool) return reply.serviceUnavailable('Database is not configured');
+  try {
+    await pool.query('SELECT 1');
+    if (redis && redis.status !== 'ready') return reply.code(503).send({ status: 'degraded', database: 'ok', redis: 'unavailable' });
+    return { status: 'ok', database: 'ok', redis: redis ? 'ok' : 'not-configured' };
+  } catch {
+    return reply.code(503).send({ status: 'degraded', database: 'unavailable' });
+  }
+});
 app.get('/health/ready', async (_request, reply) => {
   if (!pool) return reply.serviceUnavailable('Database is not configured');
   try {
