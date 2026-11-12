@@ -1,9 +1,15 @@
+const path = require('node:path');
+
+// Auto-detect root arena directory: respects ARENA_DIR if provided,
+// otherwise resolves to the parent directory of infra/
+const arenaDir = process.env.ARENA_DIR || path.resolve(__dirname, '..');
+
 const instances = 3;
 const basePort = 3001;
 
 const apiApps = Array.from({ length: instances }, (_, i) => ({
   name: `arena-api-${i + 1}`,
-  cwd: process.env.ARENA_DIR || '/srv/arena',
+  cwd: arenaDir,
   script: 'apps/api/dist/server.js',
   exec_mode: 'fork',
   instances: 1,
@@ -24,7 +30,7 @@ const apiApps = Array.from({ length: instances }, (_, i) => ({
     PASSWORD_VERIFY_QUEUE_TIMEOUT_MS: '20000',
     PASSWORD_VERIFY_CONCURRENCY_PER_WORKER: '1',
     EXAM_QUESTION_SOURCE_TTL_MS: '2000',
-    EXAM_QUESTION_REDIS_TTL_MS: '2000',
+    EXAM_QUESTION_REDIS_TTL_MS: '3600000',
     WAITING_BATCH_SIZE: '300',
     WAITING_BATCH_INTERVAL_MS: '10000',
     WAITING_HEARTBEAT_TIMEOUT_MS: '90000',
@@ -35,6 +41,7 @@ const apiApps = Array.from({ length: instances }, (_, i) => ({
     SUBMIT_ASYNC: 'on',
     SUBMIT_LEASE_MS: '60000',
     SUBMIT_LEASE_MAX_ATTEMPTS: '5',
+    ARENA_UPLOAD_DIR: process.env.ARENA_UPLOAD_DIR || '/srv/arena/storage/question-images',
   },
 }));
 
@@ -44,7 +51,7 @@ module.exports = {
     {
       name: 'arena-finalization',
       max_memory_restart: '512M',
-      cwd: process.env.ARENA_DIR || '/srv/arena',
+      cwd: arenaDir,
       script: 'apps/api/dist/finalization-worker.js',
       instances: 1,
       exec_mode: 'fork',
@@ -60,7 +67,7 @@ module.exports = {
     {
       name: 'arena-waiting',
       max_memory_restart: '256M',
-      cwd: process.env.ARENA_DIR || '/srv/arena',
+      cwd: arenaDir,
       script: 'apps/api/dist/waiting-worker.js',
       instances: 1,
       exec_mode: 'fork',
