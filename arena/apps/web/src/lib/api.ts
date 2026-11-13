@@ -4,7 +4,13 @@ const examTokens=new Map<number,string>();
 export function setExamToken(examId:number,value:string){examTokens.set(examId,value);}
 export function getExamToken(examId:number){return examTokens.get(examId);}
 function examTokenForPath(path:string){const match=path.match(/^\/api\/student\/exams\/(\d+)(?:\/|$)/);return match?examTokens.get(Number(match[1])):undefined;}
-export class ApiError extends Error { constructor(message:string,readonly statusCode:number,readonly retryAfterMs?:number){super(message);this.name='ApiError';} }
+export class ApiError extends Error {
+  constructor(message:string,readonly statusCode:number,readonly retryAfterMs?:number,readonly code?:string,readonly retryable=false,readonly requestId?:string){super(message);this.name='ApiError';}
+}
+export function isRetryableRequest(error:unknown): boolean {
+  if (!(error instanceof ApiError)) return true; // network reset/aborted fetch
+  return error.retryable || [408,425,429,502,503,504].includes(error.statusCode);
+}
 export function setSession(nextToken: string | null, nextCsrf: string | null) { if(csrf!==nextCsrf)examTokens.clear();token = nextToken; csrf = nextCsrf; }
 export async function api<T>(path: string, options: { method?: string; body?: unknown; keepalive?: boolean; timeoutMs?: number } = {}): Promise<T> {
   const controller = options.timeoutMs ? new AbortController() : null;
@@ -23,7 +29,7 @@ export async function api<T>(path: string, options: { method?: string; body?: un
       },
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
     });
-    const data = await response.json().catch(error => { if (controller?.signal.aborted) throw error; return null; }) as T & { error?: string } | null;
+    const data = await response.json().catch(error => { if (controller?.signal.aborted) throw error; return null; }) as T & { error?: string; code?: string; retryable?: boolean; request_id?: string } | null;
     if (response.status === 401 && path.startsWith('/api/admin/')) window.dispatchEvent(new Event('arena:staff-session-expired'));
     if (!response.ok) {
       // Retry-After (detik atau HTTP-date) dipakai login untuk backoff terarah.
@@ -37,7 +43,7 @@ export async function api<T>(path: string, options: { method?: string; body?: un
           if (Number.isFinite(at)) retryAfterMs = Math.max(0, at - Date.now());
         }
       }
-      throw new ApiError(data?.error ?? `Request gagal (${response.status})`, response.status, retryAfterMs);
+      throw new ApiError(data?.error ?? `Request gagal (${response.status})`, response.status, retryAfterMs, data?.code, data?.retryable === true, data?.request_id);
     }
     return data as T;
   } catch (error) {

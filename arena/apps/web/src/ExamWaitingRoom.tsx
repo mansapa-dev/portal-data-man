@@ -35,9 +35,22 @@ export function ExamWaitingRoom({examId,initial,examName,onReady,onCancel}:{exam
         // Tahap 3: sebar claim di dalam jendela batch admission. Tanpa jitter,
         // 300 siswa yang di-admit bersamaan melakukan claim pada detik yang sama.
         const delay=next.status==='ADMITTED'?claimDelayMs(next.batch_interval_ms):0;
-        const runClaim=async()=>{
-          if(!active||terminal||current.current.admit_token!==token){claiming=false;if(active)setBusy(false);return;}
-          try{await ready.current(token);}catch(cause){error(cause);}finally{claiming=false;if(active)setBusy(false);}
+        const runClaim=async(attemptCount=1)=>{
+          if(!active||terminal||current.current.admit_token!==token){claimTimer=0;claiming=false;if(active)setBusy(false);return;}
+          try{
+            await ready.current(token);
+            claimTimer=0;
+          }catch(cause){
+            error(cause);
+            if(active && !terminal && current.current.admit_token===token && attemptCount<=5){
+              const retryDelay=Math.min(8000,1500*(2**(attemptCount-1)))*(0.8+Math.random()*0.4);
+              claimTimer=window.setTimeout(()=>{void runClaim(attemptCount+1);},retryDelay);
+              return;
+            }
+            claimTimer=0;
+          }finally{
+            if(!claimTimer){claiming=false;if(active)setBusy(false);}
+          }
         };
         if(delay>0)claimTimer=window.setTimeout(()=>{void runClaim();},delay);
         else void runClaim();

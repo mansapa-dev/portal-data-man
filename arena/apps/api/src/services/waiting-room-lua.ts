@@ -102,8 +102,9 @@ elseif op == 'claim_begin' then
 elseif op == 'claim_abort' then
   if state=='ADMITTED' and redis.call('HGET',sk,'claim_owner')==data.owner then
     redis.call('HDEL',sk,'claim_owner','claim_lease_until_ms')
-    redis.call('ZADD',admitted,tonumber(redis.call('HGET',sk,'claim_deadline_ms') or '0'),sid)
-    expire(sid)
+    local deadline = math.max(tonumber(redis.call('HGET',sk,'claim_deadline_ms') or '0'), now + 45000)
+    redis.call('HSET',sk,'claim_deadline_ms',deadline)
+    redis.call('ZADD',admitted,deadline,sid)
   end
 elseif op == 'restore' then
   local old = state

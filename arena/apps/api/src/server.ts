@@ -63,12 +63,25 @@ await app.register(sensible);
 // (including zod 422 payloads) fall back to Fastify's default handler as HTTP 500.
 app.setErrorHandler((error, request, reply) => {
   if ((error as { statusCode?: number }).statusCode !== 425) request.log.error({ err: error }, 'request failed');
-  const candidate = error as Error & { statusCode?: number };
-  const overloaded = /Queue limit reached|No connections available/.test(candidate.message);
-  if (overloaded) reply.header('Retry-After', '2');
+  const candidate = error as Error & { statusCode?: number; code?: string };
+  const errorCode = typeof candidate.code === 'string' ? candidate.code : '';
+  const isDbTransient = /ER_LOCK_WAIT_TIMEOUT|ER_LOCK_DEADLOCK|ETIMEDOUT|ECONNRESET|PROTOCOL_CONNECTION_LOST/.test(errorCode || candidate.message);
+  const overloaded = isDbTransient || /Queue limit reached|No connections available/.test(candidate.message);
   const status = overloaded ? 503 : error instanceof z.ZodError ? 422 : candidate.statusCode && candidate.statusCode >= 400 && candidate.statusCode < 600 ? candidate.statusCode : 500;
+  const retryAfter = overloaded ? 2 : status === 425 ? 7 : undefined;
+  if (retryAfter !== undefined) reply.header('Retry-After', String(retryAfter));
   if (status === 425) reply.header('Retry-After', '7');
-  return reply.status(status).send({ error: status >= 500 ? 'Internal server error' : error instanceof z.ZodError ? error.issues.map((issue)=>issue.message).join(', ') : candidate.message });
+  const code = errorCode || (overloaded ? 'TEMPORARY_OVERLOAD' : error instanceof z.ZodError ? 'VALIDATION_ERROR' : status >= 500 ? 'INTERNAL_ERROR' : 'REQUEST_REJECTED');
+  const retryable = status === 408 || status === 425 || status === 429 || status === 502 || status === 503 || status === 504 || isDbTransient;
+  reply.header('X-Request-Id', request.id);
+  return reply.status(status).send({
+    success: false,
+    code,
+    error: status >= 500 ? 'Internal server error' : error instanceof z.ZodError ? error.issues.map((issue)=>issue.message).join(', ') : candidate.message,
+    retryable,
+    ...(retryAfter !== undefined ? { retry_after: retryAfter } : {}),
+    request_id: request.id,
+  });
 });
 const finalizer = pool && env.ATTEMPT_FINALIZER_ENABLED === 'true'
   ? new ExpiredAttemptFinalizer(pool, new ScoringService(pool), app.log, env.ATTEMPT_FINALIZER_INTERVAL_MS, env.ATTEMPT_FINALIZER_BATCH_SIZE)

@@ -28,6 +28,7 @@ function jsonValue<T>(value: unknown): T {
 }
 
 export class StudentExamService {
+  private static readonly heartbeatWritten = new Map<string, number>();
   private readonly diagnosticSamples = new Map<string, Record<string, number | string | boolean>[]>();
   private diagnosticTimer?: NodeJS.Timeout;
   // Migrasi 016 menambah exam_attempts.submitted_at dan tabel exam_submissions.
@@ -307,6 +308,15 @@ export class StudentExamService {
 
   async heartbeat(studentId: number, examId: number) {
     const started = performance.now();
+    const key = `${studentId}:${examId}`;
+    const now = Date.now();
+    const last = StudentExamService.heartbeatWritten.get(key) ?? 0;
+    // Storage optimization: throttle database write. Jika heartbeat sudah tercatat
+    // dalam 90 detik terakhir, langsung kembalikan authoritative server_time tanpa
+    // menyita koneksi database pool dan tanpa membebani small writes storage Rocket.
+    if (now - last < 90_000) {
+      return { server_time: new Date().toISOString() };
+    }
     let acquireMs = 0;
     let queryMs = 0;
     const acquireStarted = performance.now();
@@ -322,6 +332,13 @@ export class StudentExamService {
         [studentId, examId],
       );
       queryMs = performance.now() - queryStarted;
+      StudentExamService.heartbeatWritten.set(key, now);
+      if (StudentExamService.heartbeatWritten.size > 10_000) {
+        const cutoff = now - 180_000;
+        for (const [k, time] of StudentExamService.heartbeatWritten) {
+          if (time < cutoff) StudentExamService.heartbeatWritten.delete(k);
+        }
+      }
     } finally {
       connection.release();
       this.recordDiagnostic('exam_heartbeat', { acquire_ms: Number(acquireMs.toFixed(2)), query_ms: Number(queryMs.toFixed(2)), total_ms: Number((performance.now() - started).toFixed(2)) });
@@ -340,7 +357,7 @@ export class StudentExamService {
       // menahan koneksi pool saat query tambahan.
       const freezeColumn = await this.hasFreezeColumn() ? ',submitted_at' : '';
       await connection.beginTransaction();
-      const [attempts] = await connection.execute<RowDataPacket[]>(`SELECT id,public_id,status,expires_at,(expires_at<=UTC_TIMESTAMP(3)) expired${freezeColumn} FROM exam_attempts WHERE student_id=? AND exam_id=? FOR UPDATE`, [claims.sub, examId]);
+      const [attempts] = await connection.execute<RowDataPacket[]>(`SELECT id,public_id,status,expires_at,(expires_at<=UTC_TIMESTAMP(3)) expired${freezeColumn} FROM exam_attempts WHERE student_id=? AND exam_id=? FOR SHARE`, [claims.sub, examId]);
       const attempt = attempts[0];
       if (!attempt) throw Object.assign(new Error('Sesi ujian tidak ditemukan'), { statusCode: 404 });
       if (attempt.public_id !== input.attempt_id) throw Object.assign(new Error('Sesi ujian berubah; muat ulang halaman'), { statusCode: 409 });
@@ -380,6 +397,16 @@ export class StudentExamService {
         if (attempt.submitted_at) throw Object.assign(new Error('Ujian sudah tidak aktif'), { statusCode: 409 });
         if (attempt.status !== 'IN_PROGRESS' || Number(attempt.expired)) throw Object.assign(new Error('Ujian sudah tidak aktif'), { statusCode: 409 });
         if (revision !== item.base_revision) throw Object.assign(new Error('Versi jawaban berubah di tab lain'), { statusCode: 409 });
+
+        // Eliminasi redundant/no-op write:
+        // Jika jawaban dan is_flagged di DB sudah identik dengan yang dikirim dan row sudah ada di versions:
+        const currentAnswer = row.answer ?? null;
+        const currentFlagged = Boolean(row.is_flagged);
+        if (row.revision !== null && currentAnswer === answer && currentFlagged === item.is_flagged) {
+          revisions[item.question_id] = revision;
+          continue;
+        }
+
         const nextRevision = revision + 1;
         updates.push({ questionId: item.question_id, answer, flagged: item.is_flagged, revision: nextRevision, mutationId: item.mutation_id });
         revisions[item.question_id] = nextRevision;
@@ -391,7 +418,7 @@ export class StudentExamService {
         await connection.query('INSERT INTO answer_write_versions(attempt_id,question_id,revision,mutation_id) VALUES ? ON DUPLICATE KEY UPDATE revision=VALUES(revision),mutation_id=VALUES(mutation_id)', [versionValues]);
       }
       await connection.commit();
-      this.recordDiagnostic('exam_batch', { outcome: 'saved', batch_size: ids.length, pool_wait_ms: Number(poolWaitMs.toFixed(2)), total_ms: Number((performance.now() - started).toFixed(2)) });
+      this.recordDiagnostic('exam_batch', { outcome: 'saved', batch_size: ids.length, updates_count: updates.length, pool_wait_ms: Number(poolWaitMs.toFixed(2)), total_ms: Number((performance.now() - started).toFixed(2)) });
       return { revisions };
     } catch (error) {
       try { await connection.rollback(); } catch { /* no active transaction */ }
@@ -473,6 +500,16 @@ export class StudentExamService {
         if (current.submitted_at) throw Object.assign(new Error('Jawaban sudah dikirim; tunggu hasil ujian'), { statusCode: 409 });
         if (current.attempt_status !== 'IN_PROGRESS' || Number(current.expired)) throw Object.assign(new Error('Ujian sudah tidak aktif'), { statusCode: 409 });
         if (revision !== input.base_revision) throw Object.assign(new Error('Versi jawaban berubah di tab lain'), { statusCode: 409 });
+
+        // Storage optimization: eliminasi redundant write bila nilai jawaban dan flag identik
+        if (current.answer_id !== null && current.revision !== null && (current.answer ?? null) === answer && Boolean(current.is_flagged) === input.is_flagged) {
+          phase = performance.now();
+          await connection.commit();
+          mark('commit_ms', phase);
+          this.recordDiagnostic('exam_autosave', { outcome: 'no_change', ...timings, total_ms: Number((performance.now() - started).toFixed(2)) });
+          return { question_id: questionId, answer, is_flagged: input.is_flagged, revision, saved_at: new Date().toISOString() };
+        }
+
         phase = performance.now();
         if (current.answer_id !== null) {
           if (current.answer !== answer || Boolean(current.is_flagged) !== input.is_flagged) await connection.execute('UPDATE student_answers SET answer=?,is_flagged=?,answered_at=UTC_TIMESTAMP(3) WHERE id=?', [answer, Number(input.is_flagged), current.answer_id]);

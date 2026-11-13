@@ -10,7 +10,9 @@ const common = {
 } as const;
 
 export const pool = databaseUrl
-  ? mysql.createPool({ uri: databaseUrl, ...common, connectionLimit: Number(process.env.DB_POOL_SIZE ?? 12), queueLimit: Number(process.env.DB_QUEUE_LIMIT ?? 10_000) })
+  // A missing env var must retain admission control. A 10,000-request default
+  // turns a transient MySQL stall into an in-memory queue and retry cascade.
+  ? mysql.createPool({ uri: databaseUrl, ...common, connectionLimit: Number(process.env.DB_POOL_SIZE ?? 12), queueLimit: Number(process.env.DB_QUEUE_LIMIT ?? 240) })
   : null;
 
 // Bulkhead login: query autentikasi memakai pool kecil sendiri supaya lonjakan

@@ -31,6 +31,17 @@ export function submitJitterMs(rng: Random = Math.random): number {
  */
 export const RESULT_POLL_BASE_MS = [2_000, 2_000, 3_000, 4_500, 6_000, 8_000, 10_000] as const;
 
+/**
+ * Poll hasil tidak boleh mengubah kegagalan aplikasi permanen menjadi traffic
+ * berulang. Tanpa status berarti browser terputus sebelum menerima respons,
+ * sehingga aman dijadwalkan ulang dengan backoff. HTTP 500 sengaja tidak ada
+ * di daftar ini: penyebabnya harus terlihat di observability, bukan dipukul
+ * ulang oleh seluruh cohort siswa.
+ */
+export function shouldContinueResultPolling(statusCode?: number): boolean {
+  return statusCode === undefined || [408, 425, 429, 502, 503, 504].includes(statusCode);
+}
+
 export function resultPollDelayMs(
   attempt: number,
   submissionState?: string | null,

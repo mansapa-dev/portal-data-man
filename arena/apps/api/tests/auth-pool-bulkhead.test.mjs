@@ -37,3 +37,16 @@ test('tanpa DATABASE_URL login memberi 503, bukan crash', async () => {
     process.env.DATABASE_URL = previous;
   }
 });
+
+test('pool ujian memiliki fallback antrean terbatas bila env tidak terpasang', async () => {
+  const previous = process.env.DB_QUEUE_LIMIT;
+  delete process.env.DB_QUEUE_LIMIT;
+  try {
+    const isolated = await import('../dist/lib/db.js?default-queue-limit');
+    assert.equal(isolated.pool.pool.config.queueLimit, 240);
+    await isolated.pool.end();
+  } finally {
+    if (previous === undefined) delete process.env.DB_QUEUE_LIMIT;
+    else process.env.DB_QUEUE_LIMIT = previous;
+  }
+});

@@ -7,7 +7,7 @@ const source = await readFile(new URL('../src/lib/load-shape.ts', import.meta.ur
 const { outputText } = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
 });
-const { claimDelayMs, submitJitterMs, resultPollDelayMs, autosaveFlushDelayMs, loginStartDelayMs, loginRetryDelayMs } = await import(
+const { claimDelayMs, submitJitterMs, resultPollDelayMs, autosaveFlushDelayMs, loginStartDelayMs, loginRetryDelayMs, shouldContinueResultPolling } = await import(
   `data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`
 );
 
@@ -71,4 +71,13 @@ test('retry login memakai full jitter, lantai 500 ms, dan Retry-After', () => {
   assert.equal(loginRetryDelayMs(20, 0, () => 1), 10_000);
   assert.equal(loginRetryDelayMs(1, 3_000, () => 0), 3_000);
   assert.equal(loginRetryDelayMs(1, 0, () => 0.5), 500);
+});
+
+test('poll hasil hanya berlanjut untuk gangguan sementara', () => {
+  assert.equal(shouldContinueResultPolling(undefined), true);
+  assert.equal(shouldContinueResultPolling(503), true);
+  assert.equal(shouldContinueResultPolling(429), true);
+  assert.equal(shouldContinueResultPolling(500), false);
+  assert.equal(shouldContinueResultPolling(409), false);
+  assert.equal(shouldContinueResultPolling(422), false);
 });

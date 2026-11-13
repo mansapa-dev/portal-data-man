@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { api, ApiError, mutationId, setSession, setExamToken, getExamToken } from './lib/api';
-import { resultPollDelayMs, autosaveFlushDelayMs, loginStartDelayMs, loginRetryDelayMs } from './lib/load-shape';
+import { api, ApiError, isRetryableRequest, mutationId, setSession, setExamToken, getExamToken } from './lib/api';
+import { resultPollDelayMs, autosaveFlushDelayMs, loginStartDelayMs, loginRetryDelayMs, shouldContinueResultPolling } from './lib/load-shape';
 import { restorePlan } from './lib/session-restore';
 import type { WaitingView } from './lib/waiting-room';
 import { loadXlsx } from './lib/xlsx';
@@ -44,6 +44,25 @@ type UserDraft = {id?:number;role:'ADMIN'|'TEACHER'|'EMPLOYEE';teacher_id:number
 // Tahap 3 — poll memakai backoff + jitter agar 1.200 siswa tidak memanggil
 // /result pada batas 2 detik yang sama.
 const RESULT_POLL_MAX_ATTEMPTS = 14;
+
+function getLocalDraft(attemptId: string): { answers: Record<number, string>; flags: Record<number, boolean>; dirtyIds: number[] } | null {
+  try {
+    const raw = localStorage.getItem(`arena_draft_${attemptId}`);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+function setLocalDraft(attemptId: string, answers: Record<number, string>, flags: Record<number, boolean>, dirtyIds: number[]) {
+  try {
+    localStorage.setItem(`arena_draft_${attemptId}`, JSON.stringify({ answers, flags, dirtyIds, updatedAt: Date.now() }));
+  } catch {}
+}
+function clearLocalDraft(attemptId: string) {
+  try {
+    localStorage.removeItem(`arena_draft_${attemptId}`);
+  } catch {}
+}
 const isPendingResult = (payload: ExamResult | null | undefined) => {
   if (!payload) return false;
   const status = String(payload.status ?? '');
@@ -58,9 +77,9 @@ async function waitForResult(examId: number): Promise<ExamResult | null> {
       submissionState = payload.submission_state ?? null;
     } catch (error) {
       const status = (error as { statusCode?: number })?.statusCode;
-      // 404/403/409 yang menetap = bukan kondisi pending; error lain (5xx)
-      // masih dicoba pada polling berikutnya.
-      if (typeof status === 'number' && status >= 400 && status < 500 && status !== 429) return null;
+      // Jangan membuat semua siswa mengulang HTTP 500 yang kemungkinan adalah
+      // bug aplikasi. Hanya kegagalan sementara/network yang dipoll kembali.
+      if (!shouldContinueResultPolling(typeof status === 'number' ? status : undefined)) return null;
     }
     await new Promise<void>(resolve => window.setTimeout(resolve, resultPollDelayMs(attempt, submissionState)));
   }
@@ -109,6 +128,9 @@ function App() {
   const revisionState = useRef<Record<number, number>>({});
   const failedSaves = useRef(new Set<number>());
   const submittingAttempt = useRef(false);
+  const persistedAnswers = useRef<Record<number, string>>({});
+  const persistedFlags = useRef<Record<number, boolean>>({});
+  const localDirtyIds = useRef(new Set<number>());
   function flushBatch(examId:number, attemptId:string): Promise<void> {
     if (batchTimer.current !== null) { window.clearTimeout(batchTimer.current); batchTimer.current = null; }
     if (batchInFlight.current) return batchInFlight.current.then(() => flushBatch(examId, attemptId));
@@ -131,13 +153,13 @@ function App() {
   function refreshSaveState() {
     setSaveState(failedSaves.current.size ? 'error' : pending.current.size || timers.current.size ? 'saving' : 'saved');
   }
-  function queueSaveRetry(questionId:number){
+  function queueSaveRetry(questionId:number,retryAfterMs=0){
     if(submittingAttempt.current||retryTimers.current.has(questionId))return;
     const attemptCount=(retryAttempts.current.get(questionId)??0)+1;
     if(attemptCount>5)return;
     retryAttempts.current.set(questionId,attemptCount);
     const base=Math.min(60_000,5_000*2**(attemptCount-1));
-    const delay=Math.round(base*(0.8+Math.random()*0.4));
+    const delay=Math.max(retryAfterMs,Math.round(base*(0.8+Math.random()*0.4)));
     const timer=window.setTimeout(()=>{retryTimers.current.delete(questionId);const draft=latestDraft.current.get(questionId)??retryDraft.current.get(questionId);if(draft&&!submittingAttempt.current)void save(draft.question,draft.answer,draft.flagged).catch(()=>undefined);},delay);
     retryTimers.current.set(questionId,timer);
   }
@@ -163,8 +185,7 @@ function App() {
           localStorage.setItem('arena_active_portal','student');setSession(result.token, result.csrf_token); setStaff(null);setStudent(result.student); await loadExams();
           return;
         } catch (err: unknown) {
-          const status = err instanceof ApiError ? err.statusCode : 0;
-          const isBusy = status === 503 || status === 429 || (err instanceof Error && /503|429/.test(err.message));
+          const isBusy = isRetryableRequest(err);
           if (isBusy && attemptNumber < maxRetries) {
             const retryAfterMs = err instanceof ApiError ? err.retryAfterMs : undefined;
             setMessage(`Server sibuk, mencoba lagi... (percobaan ${attemptNumber}/${maxRetries})`);
@@ -210,7 +231,31 @@ function App() {
       const savedAnswers: Record<number, string> = {}; const savedRevisions: Record<number, number> = {};
       const savedFlags: Record<number, boolean> = {};
       result.jawaban.forEach((item) => { savedAnswers[item.question_id] = item.answer ?? ''; savedRevisions[item.question_id] = item.revision; savedFlags[item.question_id] = item.is_flagged; });
-      revisionState.current = savedRevisions; failedSaves.current.clear(); setSaveState('saved'); setAnswers(savedAnswers); setFlags(savedFlags);
+      revisionState.current = savedRevisions; failedSaves.current.clear(); setSaveState('saved');
+      persistedAnswers.current = { ...savedAnswers };
+      persistedFlags.current = { ...savedFlags };
+      const draft = getLocalDraft(result.attempt_id);
+      if (draft && draft.dirtyIds && draft.dirtyIds.length > 0) {
+        const mergedAnswers = { ...savedAnswers, ...draft.answers };
+        const mergedFlags = { ...savedFlags, ...draft.flags };
+        for (const id of draft.dirtyIds) {
+          localDirtyIds.current.add(id);
+          const q = result.soal.find(item => item.id === id);
+          if (q) latestDraft.current.set(id, { question: q, answer: mergedAnswers[id] ?? '', flagged: mergedFlags[id] ?? false });
+        }
+        setAnswers(mergedAnswers);
+        setFlags(mergedFlags);
+        window.setTimeout(() => {
+          for (const id of localDirtyIds.current) {
+            const q = result.soal.find(item => item.id === id);
+            if (q) void save(q, mergedAnswers[id] ?? '', mergedFlags[id] ?? false).catch(() => undefined);
+          }
+        }, 800);
+      } else {
+        setAnswers(savedAnswers);
+        setFlags(savedFlags);
+        localDirtyIds.current.clear();
+      }
     } finally { setBusy(false); }
   }
   async function openWaitingAttempt(token:string) {
@@ -228,26 +273,61 @@ function App() {
           const draft=latestDraft.current.get(question.id)!;const retryable=retryDraft.current.get(question.id);const payload=retryable&&retryable.answer===draft.answer&&retryable.flagged===draft.flagged?retryable:{...draft,mutationId:mutationId()};retryDraft.current.set(question.id,payload);latestDraft.current.delete(question.id);setSaveState(failedSaves.current.size?'error':'saving');
           const result=await enqueueBatch(attempt.exam.id,attempt.attempt_id,{question_id:question.id,answer:payload.answer||null,is_flagged:payload.flagged,base_revision:revisionState.current[question.id]??0,mutation_id:payload.mutationId});
           revisionState.current={...revisionState.current,[question.id]:result.revision};
+          persistedAnswers.current[question.id] = payload.answer ?? '';
+          persistedFlags.current[question.id] = payload.flagged;
+          localDirtyIds.current.delete(question.id);
+          if (attempt) setLocalDraft(attempt.attempt_id, answers, flags, [...localDirtyIds.current]);
           retryDraft.current.delete(question.id);
           failedSaves.current.delete(question.id);
           retryAttempts.current.delete(question.id);
           if (!failedSaves.current.size) setMessage('');
         }
-      }catch(error){const pendingDraft=retryDraft.current.get(question.id);const newest=latestDraft.current.get(question.id)??pendingDraft;if(newest){latestDraft.current.set(question.id,newest);failedSaves.current.add(question.id);const retryable=!(error instanceof ApiError)||(error.statusCode>=500||error.statusCode===429);if(retryable)queueSaveRetry(question.id);}else failedSaves.current.add(question.id);setMessage(error instanceof Error?error.message:'Jawaban belum tersimpan');throw error;}
+      }catch(error){const pendingDraft=retryDraft.current.get(question.id);const newest=latestDraft.current.get(question.id)??pendingDraft;if(newest){latestDraft.current.set(question.id,newest);failedSaves.current.add(question.id);const retryable=isRetryableRequest(error);if(retryable)queueSaveRetry(question.id,error instanceof ApiError?error.retryAfterMs??0:0);}else failedSaves.current.add(question.id);setMessage(error instanceof Error?error.message:'Jawaban belum tersimpan');throw error;}
     })();
     pending.current.set(question.id, request);
     try { await request; } finally { if (pending.current.get(question.id) === request) pending.current.delete(question.id); refreshSaveState(); }
   }
   function change(question: Question, value: string) {
-    setAnswers((current) => ({ ...current, [question.id]: value }));
+    const trimmed = value;
+    const currentFlag = flags[question.id] ?? false;
+    setAnswers((current) => ({ ...current, [question.id]: trimmed }));
+    if (attempt) {
+      localDirtyIds.current.add(question.id);
+      setLocalDraft(attempt.attempt_id, { ...answers, [question.id]: trimmed }, flags, [...localDirtyIds.current]);
+    }
+    // Storage-aware dirty check: jika jawaban sama dengan server, jangan trigger write
+    if ((persistedAnswers.current[question.id] ?? '') === trimmed && (persistedFlags.current[question.id] ?? false) === currentFlag) {
+      if (attempt) {
+        localDirtyIds.current.delete(question.id);
+        setLocalDraft(attempt.attempt_id, answers, flags, [...localDirtyIds.current]);
+      }
+      const old = timers.current.get(question.id); if (old) window.clearTimeout(old); timers.current.delete(question.id);
+      refreshSaveState();
+      return;
+    }
     const retry=retryTimers.current.get(question.id);if(retry)window.clearTimeout(retry);retryTimers.current.delete(question.id);retryAttempts.current.delete(question.id);
     const old = timers.current.get(question.id); if (old) window.clearTimeout(old);
-    timers.current.set(question.id, window.setTimeout(() => { timers.current.delete(question.id); void save(question, value).catch(() => undefined); }, 350));
+    timers.current.set(question.id, window.setTimeout(() => { timers.current.delete(question.id); void save(question, trimmed).catch(() => undefined); }, 350));
     refreshSaveState();
   }
   function toggleFlag(question: Question) {
     const next = !(flags[question.id] ?? false);
+    const currentAnswer = answers[question.id] ?? '';
     setFlags((current) => ({ ...current, [question.id]: next }));
+    if (attempt) {
+      localDirtyIds.current.add(question.id);
+      setLocalDraft(attempt.attempt_id, answers, { ...flags, [question.id]: next }, [...localDirtyIds.current]);
+    }
+    // Storage-aware dirty check: jika flag dan answer sama dengan server, jangan trigger write
+    if ((persistedAnswers.current[question.id] ?? '') === currentAnswer && (persistedFlags.current[question.id] ?? false) === next) {
+      if (attempt) {
+        localDirtyIds.current.delete(question.id);
+        setLocalDraft(attempt.attempt_id, answers, flags, [...localDirtyIds.current]);
+      }
+      const old = timers.current.get(question.id); if (old) window.clearTimeout(old); timers.current.delete(question.id);
+      refreshSaveState();
+      return;
+    }
     const retry=retryTimers.current.get(question.id);if(retry)window.clearTimeout(retry);retryTimers.current.delete(question.id);retryAttempts.current.delete(question.id);
     const old = timers.current.get(question.id); if (old) window.clearTimeout(old);
     timers.current.set(question.id, window.setTimeout(() => { timers.current.delete(question.id); void save(question, answers[question.id] ?? '', next).catch(() => undefined); }, 350));
@@ -280,10 +360,33 @@ function App() {
       }
       else {
         for (const [questionId] of due) { const question = attempt.soal.find((item) => item.id === questionId); if (question) latestDraft.current.set(questionId,{question,answer:answers[questionId]??'',flagged:flags[questionId]??false}); }
-        while(timers.current.size||pending.current.size||latestDraft.current.size){
-          for(const[questionId,timer]of timers.current){window.clearTimeout(timer);timers.current.delete(questionId);const question=attempt.soal.find(item=>item.id===questionId);if(question)latestDraft.current.set(questionId,{question,answer:answers[questionId]??'',flagged:flags[questionId]??false});}
-          const questionIds=new Set([...pending.current.keys(),...latestDraft.current.keys()]);
-          await Promise.all([...questionIds].map(questionId=>{const draft=latestDraft.current.get(questionId);return draft?save(draft.question,draft.answer,draft.flagged):pending.current.get(questionId)!;}));
+        // Batch consolidation: kirim seluruh dirty answers yang tersisa dalam 1 request batch
+        if (latestDraft.current.size > 0 || batchQueue.current.size > 0) {
+          const dirtyList = [...latestDraft.current.values()];
+          latestDraft.current.clear();
+          for (const draft of dirtyList) {
+            const mutId = mutationId();
+            retryDraft.current.set(draft.question.id, { ...draft, mutationId: mutId });
+            void enqueueBatch(attempt.exam.id, attempt.attempt_id, {
+              question_id: draft.question.id,
+              answer: draft.answer || null,
+              is_flagged: draft.flagged,
+              base_revision: revisionState.current[draft.question.id] ?? 0,
+              mutation_id: mutId,
+            }).then((res) => {
+              revisionState.current = { ...revisionState.current, [draft.question.id]: res.revision };
+              persistedAnswers.current[draft.question.id] = draft.answer ?? '';
+              persistedFlags.current[draft.question.id] = draft.flagged;
+              localDirtyIds.current.delete(draft.question.id);
+              failedSaves.current.delete(draft.question.id);
+            }).catch(() => {
+              failedSaves.current.add(draft.question.id);
+            });
+          }
+          await flushBatch(attempt.exam.id, attempt.attempt_id);
+        }
+        if (pending.current.size) {
+          await Promise.allSettled([...pending.current.values()]);
         }
         if (failedSaves.current.size) throw new Error('Ada jawaban yang belum tersimpan. Coba simpan lagi sebelum mengirim ujian.');
       }
@@ -297,9 +400,10 @@ function App() {
           break;
         }
         catch(error){
-          const retryable=!(error instanceof ApiError)||error.statusCode>=500||error.statusCode===429;
+          const retryable=isRetryableRequest(error);
           if(!retryable||retry===4)throw error;
-          await new Promise<void>(resolve=>window.setTimeout(resolve,Math.round(Math.min(4000,300*2**retry)*(0.7+Math.random()*0.6))));
+          const retryAfterMs=error instanceof ApiError?error.retryAfterMs??0:0;
+          await new Promise<void>(resolve=>window.setTimeout(resolve,Math.max(retryAfterMs,Math.round(Math.min(4000,300*2**retry)*(0.7+Math.random()*0.6)))));
         }
       }
       if(!completed){
@@ -308,7 +412,7 @@ function App() {
         if(!published)throw new Error('Ujian sudah dikirim, tetapi hasil belum tersedia. Coba muat ulang halaman beberapa saat lagi.');
         completed=published;
       }
-      setMessage(''); setResultExamId(attempt.exam.id); setResultExamName(attempt.exam.nama_ujian); setReview(null); setReviewError(''); setResult(completed); setAttempt(null); await loadExams();
+      setMessage(''); setResultExamId(attempt.exam.id); setResultExamName(attempt.exam.nama_ujian); setReview(null); setReviewError(''); clearLocalDraft(attempt.attempt_id); setResult(completed); setAttempt(null); await loadExams();
     } catch (error) { setMessage(finalizeOnly?'Waktu habis. Hasil belum dapat dimuat; coba lagi saat koneksi tersedia.':error instanceof Error ? error.message : 'Submit gagal'); throw error; }
     finally { submittingAttempt.current=false;setBusy(false); }
   }
@@ -332,6 +436,15 @@ setMessage('Ujian sudah dikirim. Nilai ditampilkan setelah penilaian selesai.');
   useEffect(()=>{if(!staff)return;const timer=window.setInterval(()=>{void api<{staff:Staff;csrf_token:string}>('/api/auth/staff/session').then(data=>{setSession(null,data.csrf_token);setStaff(data.staff);}).catch(()=>{setSession(null,null);setStaff(null);setMessage('Sesi berakhir. Silakan masuk kembali.');});},6*60*60*1000);return()=>window.clearInterval(timer);},[staff?.id]);
   useEffect(()=>{const expired=()=>{setSession(null,null);setStaff(null);setStaffLoginOpen(true);setMessage('Sesi pengelola berakhir. Masuk kembali untuk menyimpan perubahan.');};window.addEventListener('arena:staff-session-expired',expired);return()=>window.removeEventListener('arena:staff-session-expired',expired);},[]);
   useEffect(() => () => {timers.current.forEach((timer) => window.clearTimeout(timer));retryTimers.current.forEach((timer)=>window.clearTimeout(timer));}, []);
+  useEffect(() => {
+    const onOnline = () => {
+      if (attempt && localDirtyIds.current.size > 0) {
+        void retrySave();
+      }
+    };
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [attempt]);
   useEffect(() => {
     if (!attempt) return;
     let timer = 0;

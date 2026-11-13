@@ -5,7 +5,7 @@ import ts from 'typescript';
 
 const source = await readFile(new URL('../src/lib/api.ts', import.meta.url), 'utf8');
 const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } });
-const { api, ApiError } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
+const { api, ApiError, isRetryableRequest } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
 const pendingUntilAbort = (signal) => new Promise((_, reject) => {
   const abort = () => reject(Object.assign(new Error('Aborted'), { name: 'AbortError' }));
   if (signal.aborted) abort(); else signal.addEventListener('abort', abort, { once: true });
@@ -54,4 +54,12 @@ test('Retry-After dari server diteruskan ke ApiError untuk backoff login', async
       return true;
     });
   } finally { globalThis.fetch = original; }
+});
+
+test('retry classification hanya mengulang kegagalan sementara', () => {
+  assert.equal(isRetryableRequest(new ApiError('timeout', 504)), true);
+  assert.equal(isRetryableRequest(new ApiError('busy', 503, 2000, 'TEMPORARY_OVERLOAD', true)), true);
+  assert.equal(isRetryableRequest(new ApiError('invalid', 422, undefined, 'VALIDATION_ERROR', false)), false);
+  assert.equal(isRetryableRequest(new ApiError('server error', 500, undefined, 'INTERNAL_ERROR', false)), false);
+  assert.equal(isRetryableRequest(new Error('connection reset')), true);
 });
