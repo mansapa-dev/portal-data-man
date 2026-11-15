@@ -1,7 +1,7 @@
 # Full redeploy ARENA — 1.200 siswa per sesi
 
 Panduan ini adalah prosedur lengkap untuk memasang ulang ARENA dari checkout
-bersih: backup, build, migrasi 014–016, environment, PM2, Nginx/Cloudflare,
+bersih: backup, build, migrasi 014–017, environment, PM2, Nginx/Cloudflare,
 verifikasi, aktivasi bertahap submit asinkron, pemantauan, dan rollback.
 
 Target acuan: **arena.man1palembang.sch.id**, VPS **4 vCPU / RAM 16 GB / disk
@@ -64,7 +64,7 @@ Struktur acuan (sesuaikan path aktual):
     ├── .env                           # secret, tidak di-commit
     ├── apps/api/dist/                 # hasil build API + worker
     ├── apps/web/dist/                 # hasil build frontend
-    ├── database/migrations/           # 001–016
+    ├── database/migrations/           # 001–017
     ├── database/rollbacks/            # 012, 015, 016
     └── infra/                         # contoh config, diterapkan manual
 /var/lib/arena/question-images/        # upload gambar soal (persisten)
@@ -327,9 +327,25 @@ Rollback 016 hanya setelah kode baru dilepas dan tidak ada submission
 mysql -u arena_migrator -p "$ARENA_DB" < database/rollbacks/016_exam_submissions.sql
 ```
 
-### 5d. Database baru (fresh install)
+### 5d. Migrasi 017 — arsip soal dan indeks filter
 
-Untuk database kosong, terapkan **semua** migrasi 001–016 berurutan. Jangan
+```bash
+mysql -u arena_migrator -p "$ARENA_DB" < database/migrations/017_question_archive_filters.sql
+mysql -u arena_migrator -p "$ARENA_DB" -e \
+  "SHOW COLUMNS FROM questions LIKE 'status'; \
+   SHOW INDEX FROM questions WHERE Key_name='idx_arena_question_status_exam'; \
+   SHOW INDEX FROM violations WHERE Key_name='idx_arena_violation_type_time';"
+```
+
+017 menambah status `ARCHIVED` pada bank soal (arsip tetap tersimpan, tetapi
+tidak dipakai sebagai sumber soal ujian) dan indeks untuk filter log
+pelanggaran, daftar kelas/tingkat, hasil ujian, serta daftar soal per status.
+Migrasi idempotent dan tidak menghapus data. Soal berstatus `ARCHIVED` masih
+dapat dihapus permanen dari bank soal bila memang diinginkan.
+
+### 5e. Database baru (fresh install)
+
+Untuk database kosong, terapkan **semua** migrasi 001–017 berurutan. Jangan
 memakai `scripts/migrate-local.mjs`/`npm run demo:migrate` di server production.
 
 ```bash

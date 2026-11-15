@@ -111,9 +111,9 @@ export function StudentExam({attempt,studentName,studentNisn,answers,flags,busy,
   };
  },[attempt.attempt_id]);
  useEffect(()=>{
-  let active=true,constrained=false,wasFullscreen=false,blurTimer=0,pingTimer=0,viewportTimer=0,multiTabCooldown=0;
+  let active=true,constrained=false,wasFullscreen=false,blurTimer=0,hiddenTimer=0,pingTimer=0,viewportTimer=0,multiTabCooldown=0,leaving=false;
   const record=(type:'TAB_HIDDEN'|'WINDOW_BLUR'|'FULLSCREEN_EXIT'|'SCREENSHOT_ATTEMPT'|'COPY_ATTEMPT'|'PASTE_ATTEMPT'|'CUT_ATTEMPT'|'CONTEXT_MENU_ATTEMPT'|'DEVTOOLS_SHORTCUT'|'BROWSER_SHORTCUT'|'SPLIT_SCREEN_SUSPECTED'|'MULTI_TAB'|'TEXT_SELECTION'|'APP_OVERLAY'|'OTHER')=>{
-   if(submitting.current)return;
+   if(submitting.current||leaving)return;
    const now=Date.now();if(now-(lastEvent.current[type]??0)<5000)return;lastEvent.current[type]=now;
    // Satu episode "keluar dari layar" (tekan home, overlay asisten, blur) sering
    // memicu beberapa sinyal hampir bersamaan. Semua sinyal grup ini memakai satu
@@ -131,13 +131,22 @@ export function StudentExam({attempt,studentName,studentNisn,answers,flags,busy,
     else setWarning(`Pelanggaran tercatat (${result.count}/${result.threshold??3}). Tetap di halaman ujian dan ikuti arahan pengawas.`);
    }).catch(error=>{if(active){beacon(`/api/student/exams/${attempt.exam.id}/violations`,{event_key:eventKey,type,client_occurred_at:new Date().toISOString(),question_no:currentQuestion.current});setWarning(`Sinyal belum tercatat: ${(error as Error).message}`);}});
   };
-  const visibility=()=>{if(document.hidden)record('TAB_HIDDEN');};
+  const visibility=()=>{
+   window.clearTimeout(hiddenTimer);
+   // Beri jeda singkat sebelum mencatat tab tersembunyi. Refresh/reload memang
+   // sempat membuat document.hidden=true, tetapi timer dibatalkan oleh
+   // pagehide/beforeunload sehingga refresh tidak pernah dihitung pelanggaran.
+   if(document.hidden&&!leaving)hiddenTimer=window.setTimeout(()=>{if(!leaving&&document.hidden)record('TAB_HIDDEN');},750);
+  };
   // Bridge dari shell Android (arena-host-hidden): shell menyuntikkan event ini
   // tiap kali host berhenti (onPause/onUserLeaveHint) atau kehilangan fokus —
   // mis. overlay Gemini/asisten sistem muncul di atas layar ujian. Tanpa bridge
   // ini, overlay sering tidak menandai document.hidden sehingga tak terdeteksi.
   const hostHidden=()=>{record('APP_OVERLAY');};
-  const pagehide=()=>{record('OTHER');};
+  // Refresh (F5), reload, atau menutup tab bukan pelanggaran. Tandai teardown
+  // halaman agar sinyal hidden/blur yang menyusul tidak ikut tercatat; jangan
+  // pernah mengirim event pelanggaran dari pagehide/beforeunload.
+  const leavingPage=()=>{leaving=true;};
   const clipboard=(type:'COPY_ATTEMPT'|'PASTE_ATTEMPT'|'CUT_ATTEMPT')=>(event:ClipboardEvent)=>{event.preventDefault();record(type);};
   const contextMenu=(event:MouseEvent)=>{event.preventDefault();record('CONTEXT_MENU_ATTEMPT');};
   const blockSelection=(event:Event)=>{
@@ -217,12 +226,12 @@ export function StudentExam({attempt,studentName,studentNisn,answers,flags,busy,
   // tidak menyusutkan layar untuk membuka dua kolom halaman dalam satu tab.
   const blockGesture=(event:Event)=>{event.preventDefault();};
   document.addEventListener('visibilitychange',visibility);document.addEventListener('arena-host-hidden',hostHidden);document.addEventListener('copy',copy,true);document.addEventListener('paste',paste,true);document.addEventListener('cut',cut,true);document.addEventListener('contextmenu',contextMenu,true);document.addEventListener('selectstart',blockSelection,true);document.addEventListener('dragstart',blockSelection,true);document.addEventListener('selectionchange',selectionChange);document.addEventListener('gesturestart',blockGesture);document.addEventListener('gesturechange',blockGesture);document.addEventListener('keydown',keydown,true);document.addEventListener('fullscreenchange',fullscreenchange);
-  window.addEventListener('resize',viewport);window.addEventListener('orientationchange',orientation);window.addEventListener('pagehide',pagehide);
+  window.addEventListener('resize',viewport);window.addEventListener('orientationchange',orientation);window.addEventListener('pagehide',leavingPage);window.addEventListener('beforeunload',leavingPage);
   // iOS Safari: pinch-zoom mengubah visualViewport tanpa window resize.
   window.visualViewport?.addEventListener('resize',viewport);
   window.visualViewport?.addEventListener('scroll',viewport);
   window.addEventListener('blur',blur);window.addEventListener('focus',focus);viewport();
-  return()=>{active=false;document.removeEventListener('visibilitychange',visibility);document.removeEventListener('arena-host-hidden',hostHidden);document.removeEventListener('copy',copy,true);document.removeEventListener('paste',paste,true);document.removeEventListener('cut',cut,true);document.removeEventListener('contextmenu',contextMenu,true);document.removeEventListener('selectstart',blockSelection,true);document.removeEventListener('dragstart',blockSelection,true);document.removeEventListener('selectionchange',selectionChange);document.removeEventListener('gesturestart',blockGesture);document.removeEventListener('gesturechange',blockGesture);document.removeEventListener('keydown',keydown,true);document.removeEventListener('fullscreenchange',fullscreenchange);window.removeEventListener('resize',viewport);window.removeEventListener('orientationchange',orientation);window.removeEventListener('pagehide',pagehide);window.visualViewport?.removeEventListener('resize',viewport);window.visualViewport?.removeEventListener('scroll',viewport);window.removeEventListener('blur',blur);window.removeEventListener('focus',focus);window.clearTimeout(viewportTimer);window.clearTimeout(blurTimer);window.clearInterval(pingTimer);try{channel?.close();}catch{/* already closed */}};
+  return()=>{active=false;document.removeEventListener('visibilitychange',visibility);document.removeEventListener('arena-host-hidden',hostHidden);document.removeEventListener('copy',copy,true);document.removeEventListener('paste',paste,true);document.removeEventListener('cut',cut,true);document.removeEventListener('contextmenu',contextMenu,true);document.removeEventListener('selectstart',blockSelection,true);document.removeEventListener('dragstart',blockSelection,true);document.removeEventListener('selectionchange',selectionChange);document.removeEventListener('gesturestart',blockGesture);document.removeEventListener('gesturechange',blockGesture);document.removeEventListener('keydown',keydown,true);document.removeEventListener('fullscreenchange',fullscreenchange);window.removeEventListener('resize',viewport);window.removeEventListener('orientationchange',orientation);window.removeEventListener('pagehide',leavingPage);window.removeEventListener('beforeunload',leavingPage);window.clearTimeout(hiddenTimer);window.visualViewport?.removeEventListener('resize',viewport);window.visualViewport?.removeEventListener('scroll',viewport);window.removeEventListener('blur',blur);window.removeEventListener('focus',focus);window.clearTimeout(viewportTimer);window.clearTimeout(blurTimer);window.clearInterval(pingTimer);try{channel?.close();}catch{/* already closed */}};
  },[attempt.attempt_id]);
  // Silent attempt at exam start: Chrome requires a user gesture, so this succeeds
  // when the iframe flow already had one and stays harmless otherwise. The manual

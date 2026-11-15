@@ -37,6 +37,24 @@ function getStatusLabel(value: unknown): string {
   return map[status] ?? (status || 'Belum Ditentukan');
 }
 
+const VIOLATION_TYPE_OPTIONS = [
+  'TAB_HIDDEN',
+  'WINDOW_BLUR',
+  'APP_OVERLAY',
+  'FULLSCREEN_EXIT',
+  'MULTI_TAB',
+  'SPLIT_SCREEN_SUSPECTED',
+  'SCREENSHOT_ATTEMPT',
+  'COPY_ATTEMPT',
+  'PASTE_ATTEMPT',
+  'CUT_ATTEMPT',
+  'TEXT_SELECTION',
+  'CONTEXT_MENU_ATTEMPT',
+  'DEVTOOLS_SHORTCUT',
+  'BROWSER_SHORTCUT',
+  'OTHER',
+] as const;
+
 function getViolationLabel(value: unknown): string {
   const type = String(value ?? '');
   const map: Record<string, string> = {
@@ -246,8 +264,19 @@ export function StaffOperations({
   const [sessionStatus, setSessionStatus] = useState('IN_PROGRESS');
   const [sessionConnection, setSessionConnection] = useState('ALL');
 
+  // Filter Log Pelanggaran (server-side agar pagination tetap akurat).
+  const [violationFilters, setViolationFilters] = useState({ exam: '', class: '', grade: '', type: '', q: '' });
+  const [violationSearch, setViolationSearch] = useState('');
+  const [violationExamOptions, setViolationExamOptions] = useState<Array<[string, string]>>([]);
+  const [violationClassOptions, setViolationClassOptions] = useState<string[]>([]);
+  const [violationGradeOptions, setViolationGradeOptions] = useState<string[]>([]);
+  const violationFiltersRef = useRef(violationFilters);
+
   const pageRef = useRef(1);
   const resultCursors = useRef<number[]>([0]);
+  const loadInFlight = useRef(false);
+  const pendingLoadPage = useRef<number | null>(null);
+  const loadRef = useRef<((nextPage?: number) => void) | null>(null);
 
   const path =
     view === 'dashboard'
@@ -268,9 +297,23 @@ export function StaffOperations({
 
   async function load(nextPage = pageRef.current) {
     if (document.hidden) return;
+    // Jangan biarkan polling 45 detik menumpuk bila server sedang lambat.
+    // Permintaan terbaru (mis. perubahan filter) dijalankan sekali setelah
+    // permintaan yang sedang berjalan selesai, memakai state terbaru.
+    if (loadInFlight.current) { pendingLoadPage.current = nextPage; return; }
+    loadInFlight.current = true;
     try {
+      const params = new URLSearchParams({ page: String(nextPage), limit: '100' });
+      if (view === 'violations') {
+        const filters = violationFiltersRef.current;
+        if (filters.exam) params.set('exam_id', filters.exam);
+        if (filters.class) params.set('class_name', filters.class);
+        if (filters.grade) params.set('grade', filters.grade);
+        if (filters.type) params.set('type', filters.type);
+        if (filters.q) params.set('q', filters.q);
+      }
       const response = await api<unknown>(
-        ['sessions', 'violations'].includes(view) ? `${path}?page=${nextPage}&limit=100` : path
+        ['sessions', 'violations'].includes(view) ? `${path}?${params}` : path
       );
       const normalized = Array.isArray(response)
         ? response
@@ -296,6 +339,19 @@ export function StaffOperations({
         ]);
       } else {
         setRows(normalized);
+        if (view === 'violations') {
+          const classes = normalized.map((row) => String(row.class_snapshot ?? '')).filter(Boolean);
+          const grades = normalized.flatMap((row) => [row.grade_snapshot, row.exam_grade, row.grade]).map((value) => String(value ?? '')).filter(Boolean);
+          setViolationClassOptions((current) => [...new Set([...current, ...classes])].sort());
+          setViolationGradeOptions((current) => [...new Set([...current, ...grades])].sort());
+          setViolationExamOptions((current) => {
+            const options = new Map(current);
+            for (const row of normalized) {
+              if (row.exam_id != null && row.exam_name != null) options.set(String(row.exam_id), String(row.exam_name));
+            }
+            return [...options.entries()].sort((a, b) => a[1].localeCompare(b[1], 'id'));
+          });
+        }
       }
 
       pageRef.current = nextPage;
@@ -303,12 +359,49 @@ export function StaffOperations({
       setLastLoaded(new Date());
     } catch (e) {
       setNotice((e as Error).message);
+    } finally {
+      loadInFlight.current = false;
+      const pending = pendingLoadPage.current;
+      pendingLoadPage.current = null;
+      if (pending != null) loadRef.current?.(pending);
     }
   }
+  loadRef.current = (nextPage?: number) => { void load(nextPage); };
+
+  function applyViolationFilters(patch: Partial<typeof violationFilters>) {
+    const next = { ...violationFiltersRef.current, ...patch };
+    if (JSON.stringify(next) === JSON.stringify(violationFiltersRef.current)) return;
+    violationFiltersRef.current = next;
+    setViolationFilters(next);
+    void load(1);
+  }
+
+  function resetViolationFilters() {
+    const empty = { exam: '', class: '', grade: '', type: '', q: '' };
+    violationFiltersRef.current = empty;
+    setViolationFilters(empty);
+    setViolationSearch('');
+    void load(1);
+  }
+
+  useEffect(() => {
+    if (view !== 'violations') return;
+    const timer = window.setTimeout(() => applyViolationFilters({ q: violationSearch.trim() }), 300);
+    return () => window.clearTimeout(timer);
+  }, [violationSearch, view]);
 
   useEffect(() => {
     setRows([]);
     setNotice('');
+    if (view === 'violations') {
+      const empty = { exam: '', class: '', grade: '', type: '', q: '' };
+      violationFiltersRef.current = empty;
+      setViolationFilters(empty);
+      setViolationSearch('');
+      setViolationExamOptions([]);
+      setViolationClassOptions([]);
+      setViolationGradeOptions([]);
+    }
     void load(1);
 
     if (view === 'assignments' && admin) {
@@ -1054,6 +1147,58 @@ export function StaffOperations({
       {/* View: Log Pelanggaran */}
       {view === 'violations' && (
         <div className="operations-violations staff-workspace-container">
+          <div className="operations-filter-card">
+            <div className="operations-filter-grid">
+              <label>
+                Ujian
+                <select value={violationFilters.exam} onChange={(event) => applyViolationFilters({ exam: event.target.value })}>
+                  <option value="">Semua Ujian</option>
+                  {violationExamOptions.map(([id, name]) => (
+                    <option key={id} value={id}>{name}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Kelas
+                <select value={violationFilters.class} onChange={(event) => applyViolationFilters({ class: event.target.value })}>
+                  <option value="">Semua Kelas</option>
+                  {violationClassOptions.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Tingkat
+                <select value={violationFilters.grade} onChange={(event) => applyViolationFilters({ grade: event.target.value })}>
+                  <option value="">Semua Tingkat</option>
+                  {violationGradeOptions.map((grade) => (
+                    <option key={grade} value={grade}>Tingkat {grade}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Jenis Pelanggaran
+                <select value={violationFilters.type} onChange={(event) => applyViolationFilters({ type: event.target.value })}>
+                  <option value="">Semua Jenis</option>
+                  {VIOLATION_TYPE_OPTIONS.map((type) => (
+                    <option key={type} value={type}>{getViolationLabel(type)}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Cari Peserta / Ujian
+                <input
+                  value={violationSearch}
+                  maxLength={120}
+                  placeholder="NISN, nama siswa, atau nama ujian"
+                  onChange={(event) => setViolationSearch(event.target.value)}
+                />
+              </label>
+              <button type="button" className="btn btn-secondary" onClick={resetViolationFilters}>
+                <i className="fa-solid fa-filter-circle-xmark" /> Reset filter
+              </button>
+            </div>
+          </div>
           {admin && Boolean(restoreCandidates.length) && (
             <div className="violation-bulk-actions" role="group" aria-label="Pemulihan sesi massal">
               <label>
@@ -1184,7 +1329,7 @@ export function StaffOperations({
               <div className="operations-empty">
                 <i className="fa-solid fa-shield-check" style={{ color: '#16a34a' }} />
                 <strong>Tidak Ada Catatan Pelanggaran</strong>
-                <span>Semua sesi ujian berlangsung tertib tanpa laporan indikasi pelanggaran.</span>
+                <span>{Object.values(violationFilters).some(Boolean) ? 'Tidak ada catatan pelanggaran yang cocok dengan filter.' : 'Semua sesi ujian berlangsung tertib tanpa laporan indikasi pelanggaran.'}</span>
               </div>
             )}
           </div>

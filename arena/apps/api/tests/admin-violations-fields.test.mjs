@@ -23,3 +23,18 @@ test('rute reset staff menolak parameter id non-digit (400) sebelum parsing', ()
     'guard digit harus ada di rute reset staff',
   );
 });
+
+test('log pelanggaran mendukung filter kelas, tingkat, jenis, dan urutan stabil', () => {
+  for (const source of [adminSource, staffSource]) {
+    assert.ok(source.includes('s.grade_snapshot=?'), 'filter tingkat memakai grade_snapshot siswa');
+    assert.ok(source.includes('s.class_snapshot=?'), 'filter kelas memakai class_snapshot siswa');
+    assert.ok(source.includes('v.type=?'), 'filter jenis pelanggaran memakai violations.type');
+    assert.ok(source.includes('ORDER BY v.occurred_at DESC,v.id DESC'), 'urutan pelanggaran stabil untuk pagination');
+  }
+});
+
+test('bank soal menyediakan arsip dan pemulihan tanpa menghapus data', () => {
+  assert.ok(adminSource.includes("'/api/admin/questions/:id/archive'"), 'rute arsip soal tersedia');
+  assert.ok(adminSource.includes("'/api/admin/questions/:id/restore'"), 'rute pemulihan soal tersedia');
+  assert.ok(adminSource.includes("SET status='ARCHIVED' WHERE id=?"), 'arsip mengubah status, bukan menghapus baris');
+});
