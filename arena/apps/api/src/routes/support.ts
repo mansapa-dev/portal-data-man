@@ -47,7 +47,7 @@ function ticketRateKey(request: FastifyRequest) {
   return `support-ticket:ip:${request.ip}`;
 }
 function ulid(){const chars='0123456789ABCDEFGHJKMNPQRSTVWXYZ';let t=Date.now(),s='';for(let i=0;i<10;i++){s=chars[t%32]+s;t=Math.floor(t/32);}for(const x of randomBytes(16))s+=chars[x&31];return s;}
-function ticketSelect() { return `SELECT t.public_id id,t.student_id studentId,s.nisn,s.name_snapshot studentName,s.class_snapshot className,t.exam_id examId,e.name examName,t.category,t.message,t.status,t.handled_by,t.staff_note staffNote,t.resolution_type resolutionType,t.created_at createdAt,t.updated_at updatedAt,t.resolved_at resolvedAt,u.name handlerName,a.status attemptStatus,a.violation_count violationCount FROM support_tickets t JOIN students s ON s.id=t.student_id LEFT JOIN exams e ON e.id=t.exam_id LEFT JOIN exam_attempts a ON a.id=t.attempt_id LEFT JOIN users u ON u.id=t.handled_by`; }
+function ticketSelect() { return `SELECT t.public_id id,t.student_id studentId,s.nisn,s.name_snapshot studentName,s.class_snapshot className,t.exam_id examId,e.name examName,e.subject_name subjectName,t.category,t.message,t.status,t.handled_by,t.staff_note staffNote,t.resolution_type resolutionType,t.created_at createdAt,t.updated_at updatedAt,t.resolved_at resolvedAt,u.name handlerName,a.status attemptStatus,a.violation_count violationCount FROM support_tickets t JOIN students s ON s.id=t.student_id LEFT JOIN exams e ON e.id=t.exam_id LEFT JOIN exam_attempts a ON a.id=t.attempt_id LEFT JOIN users u ON u.id=t.handled_by`; }
 export async function supportRoutes(app: FastifyInstance) {
   app.post('/api/student/support-tickets/request', { config: { rateLimit: { max: 5, timeWindow: '5 minutes', keyGenerator: ticketRateKey } } }, async (request) => {
     const hasStudentCredential = request.headers.authorization?.startsWith('Bearer ') || request.headers.cookie?.split(';').some((part) => part.trim().startsWith('arena_student_session='));
@@ -74,9 +74,19 @@ export async function supportRoutes(app: FastifyInstance) {
   });
   app.get('/api/student/support-tickets', async (request) => { const claims=requireRole(request,['STUDENT']);const [rows]=await requirePool().execute<RowDataPacket[]>(`${ticketSelect()} WHERE t.student_id=? ORDER BY t.updated_at DESC LIMIT 20`,[claims.sub]);return rows; });
   app.get('/api/staff/support-tickets', async (request) => {
-    const claims=requireRole(request,['ADMIN','TEACHER','EMPLOYEE']); const query=z.object({status:z.enum(['ALL','OPEN','IN_PROGRESS','RESOLVED','CLOSED']).default('ALL')}).parse(request.query); const pool=requirePool();
+    const claims=requireRole(request,['ADMIN','TEACHER','EMPLOYEE']); const query=z.object({status:z.enum(['ALL','OPEN','IN_PROGRESS','RESOLVED','CLOSED']).default('ALL'),subject:z.string().trim().max(100).optional()}).parse(request.query); const pool=requirePool();
     if(claims.role!=='ADMIN'&&!(await canHandle(pool,claims.sub))) throw Object.assign(new Error('Akses tiket hanya untuk petugas piket'),{statusCode:403});
-    const where=query.status==='ALL'?'':' AND t.status=?';const params=(query.status==='ALL'?[]:[query.status]) as string[];const [rows]=await pool.execute<RowDataPacket[]>(`${ticketSelect()} WHERE 1=1${where} ORDER BY FIELD(t.status,'OPEN','IN_PROGRESS','RESOLVED','CLOSED'),t.updated_at DESC LIMIT 200`,params);return rows;
+    // Mapel tidak disimpan di support_tickets; diambil dari ujian yang ditautkan tiket.
+    let where='';const params:string[]=[];
+    if(query.status!=='ALL'){where+=' AND t.status=?';params.push(query.status);}
+    if(query.subject){where+=' AND e.subject_name=?';params.push(query.subject);}
+    const [rows]=await pool.execute<RowDataPacket[]>(`${ticketSelect()} WHERE 1=1${where} ORDER BY FIELD(t.status,'OPEN','IN_PROGRESS','RESOLVED','CLOSED'),t.updated_at DESC LIMIT 200`,params);return rows;
+  });
+  app.get('/api/staff/support-tickets/subjects', async (request) => {
+    const claims=requireRole(request,['ADMIN','TEACHER','EMPLOYEE']); const pool=requirePool();
+    if(claims.role!=='ADMIN'&&!(await canHandle(pool,claims.sub))) throw Object.assign(new Error('Akses tiket hanya untuk petugas piket'),{statusCode:403});
+    const [rows]=await pool.query<RowDataPacket[]>("SELECT DISTINCT e.subject_name FROM support_tickets t JOIN exams e ON e.id=t.exam_id WHERE e.subject_name IS NOT NULL AND e.subject_name<>'' ORDER BY e.subject_name LIMIT 200");
+    return rows.map((row)=>String(row.subject_name));
   });
   app.post<{Params:{id:string}}>('/api/staff/support-tickets/:id/status', async (request) => {
     const claims=requireRole(request,['ADMIN','TEACHER','EMPLOYEE'],true); const body=z.object({status:z.enum(['OPEN','IN_PROGRESS','RESOLVED','CLOSED']),note:z.string().max(1000).default('')}).strict().parse(request.body);const pool=requirePool();

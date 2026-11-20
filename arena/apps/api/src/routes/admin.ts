@@ -176,14 +176,14 @@ export async function adminRoutes(app: FastifyInstance) {
   });
   app.get('/api/admin/portal-classes', async (request) => { admin(request); const [rows] = await requirePool().query<RowDataPacket[]>('SELECT portal_class_id,code,name,grade,academic_year FROM portal_classes WHERE status=\'ACTIVE\' ORDER BY grade,name LIMIT 1000'); return rows; });
   app.get('/api/admin/exam-form-options',async(request)=>{admin(request);const pool=requirePool();const[years]=await pool.query<RowDataPacket[]>('SELECT portal_academic_year_id,name,is_active FROM portal_academic_years ORDER BY is_active DESC,name DESC');const[semesters]=await pool.query<RowDataPacket[]>('SELECT portal_semester_id,portal_academic_year_id,type,academic_year,is_active FROM portal_semesters ORDER BY is_active DESC,academic_year DESC,type');const[subjects]=await pool.query<RowDataPacket[]>('SELECT id,code,name FROM subjects WHERE status=\'ACTIVE\' ORDER BY name LIMIT 500');return{years,semesters,subjects};});
-  app.get('/api/admin/exams', async (request) => { admin(request); const [rows] = await requirePool().query<RowDataPacket[]>(`SELECT e.id,e.public_id,e.name,e.grade,e.duration_minutes,e.session_number,e.starts_at,e.ends_at,e.academic_year,e.semester,e.subject_name,e.status,m.type follow_up_type,m.source_exam_id,
+  app.get('/api/admin/exams', async (request) => { admin(request); const query=z.object({date_from:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),date_to:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()}).parse(request.query);const filters:string[]=[];const params:string[]=[];if(query.date_from){filters.push("DATE(e.starts_at + INTERVAL 7 HOUR)>=?");params.push(query.date_from);}if(query.date_to){filters.push("DATE(e.starts_at + INTERVAL 7 HOUR)<=?");params.push(query.date_to);}const dateWhere=filters.length?`WHERE ${filters.join(' AND ')}`:''; const [rows] = await requirePool().execute<RowDataPacket[]>(`SELECT e.id,e.public_id,e.name,e.grade,e.duration_minutes,e.session_number,e.starts_at,e.ends_at,e.academic_year,e.semester,e.subject_name,e.status,m.type follow_up_type,m.source_exam_id,
       COALESCE(q.question_count,0) question_count,COALESCE(a.attempt_count,0) attempt_count,COALESCE(tc.class_count,0) class_count,tc.class_names,COALESCE(ts.target_student_count,0) target_student_count
       FROM exams e LEFT JOIN exam_follow_up_meta m ON m.exam_id=e.id
       LEFT JOIN (SELECT exam_id,COUNT(*) question_count FROM questions GROUP BY exam_id) q ON q.exam_id=e.id
       LEFT JOIN (SELECT exam_id,COUNT(*) attempt_count FROM exam_attempts GROUP BY exam_id) a ON a.exam_id=e.id
       LEFT JOIN (SELECT x.exam_id,COUNT(*) class_count,GROUP_CONCAT(pc.name ORDER BY pc.name SEPARATOR ', ') class_names FROM exam_target_classes x JOIN portal_classes pc ON pc.portal_class_id=x.portal_class_id GROUP BY x.exam_id) tc ON tc.exam_id=e.id
       LEFT JOIN (SELECT exam_id,COUNT(*) target_student_count FROM exam_target_students GROUP BY exam_id) ts ON ts.exam_id=e.id
-      ORDER BY e.starts_at DESC LIMIT 500`); return rows; });
+      ${dateWhere} ORDER BY e.starts_at DESC LIMIT 500`,params); return rows; });
   app.post<{Params:{id:string}}>('/api/admin/exams/:id/duplicate',async(request)=>{
     const claims=admin(request,true),sourceId=positive.parse(request.params.id),pool=requirePool(),connection=await pool.getConnection();let newId=0;
     try{
