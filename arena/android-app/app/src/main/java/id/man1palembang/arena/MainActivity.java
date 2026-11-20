@@ -1,6 +1,7 @@
 package id.man1palembang.arena;
 
 import android.app.Activity;
+import android.app.ActivityManager;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.net.Uri;
@@ -8,8 +9,11 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.view.Gravity;
 import android.view.View;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
@@ -28,6 +32,13 @@ public final class MainActivity extends Activity {
     private WebView webView;
     private View multiWindowShield;
     private String arenaOrigin;
+    // Mode ujian: immersive fullscreen + screen pinning (Lock Task). Diaktifkan
+    // halaman ujian lewat ArenaApp.setExamMode(true) dan dilepas ketika siswa
+    // membuka bantuan, ada error, waktu habis, atau sesi selesai.
+    private boolean examMode = false;
+    // Dialog konfirmasi screen pinning mengambil fokus jendela; jangan sampai
+    // episode itu tercatat sebagai pelanggaran siswa. Diisi saat startLockTask.
+    private long pinningGraceUntil = 0L;
     // Grace fokus 1 detik: dialog sistem (volume, notifikasi, kamera) mengembalikan
     // fokus dalam sekejap dan tidak dihitung; overlay/aplikasi lain yang benar-benar
     // menutup layar tetap tercatat setelah grace berlalu.
@@ -36,7 +47,15 @@ public final class MainActivity extends Activity {
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) getWindow().setHideOverlayWindows(true);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // Butuh permission normal HIDE_OVERLAY_WINDOWS (lihat manifest).
+            // Dibungkus try/catch agar OEM yang menolak tidak membuat app crash.
+            try {
+                getWindow().setHideOverlayWindows(true);
+            } catch (RuntimeException ignored) {
+                /* overlay tetap dicatat lewat sinyal fokus/tab hidden */
+            }
+        }
         // API 34+: tidak menyimpan screenshot ke recents/task switcher.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) setRecentsScreenshotEnabled(false);
         arenaOrigin = configuredOrigin();
@@ -61,6 +80,7 @@ public final class MainActivity extends Activity {
         boolean restored = state != null && webView.restoreState(state) != null;
         if (!restored) webView.loadUrl(arenaOrigin + "/");
         updateMultiWindowShield();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) registerPredictiveBack();
     }
 
     private String configuredOrigin() {
@@ -142,25 +162,117 @@ public final class MainActivity extends Activity {
         if (!hasFocus) {
             pendingFocusLoss = new Runnable() { @Override public void run() { notifyHostHidden(); } };
             focusHandler.postDelayed(pendingFocusLoss, 1000L);
+        } else if (examMode) {
+            // System bar bisa muncul lagi setelah dialog/overlay; paksa sembunyi.
+            applyExamSystemUi(true);
+            // Setelah pinning diterima, fokus kembali normal: hentikan grace agar
+            // percobaan Home berikutnya tetap tercatat.
+            ActivityManager manager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+            if (manager != null && manager.getLockTaskModeState() != ActivityManager.LOCK_TASK_MODE_NONE) {
+                pinningGraceUntil = 0L;
+            }
         }
     }
     @Override protected void onSaveInstanceState(Bundle state) { if (webView != null) webView.saveState(state); super.onSaveInstanceState(state); }
     private void notifyHostHidden() {
         if (webView == null) return;
+        // Saat mode ujian baru dimulai, dialog pinning sistem boleh mengambil
+        // fokus tanpa dihitung sebagai upaya keluar siswa.
+        if (examMode && SystemClock.uptimeMillis() < pinningGraceUntil) return;
         try {
             webView.evaluateJavascript("try{document.dispatchEvent(new CustomEvent('arena-host-hidden'))}catch(e){}", null);
         } catch (RuntimeException ignored) { /* detached webview or during teardown */ }
     }
-    @Override public void onBackPressed() { if (webView != null && webView.canGoBack()) webView.goBack(); else super.onBackPressed(); }
-    @Override protected void onDestroy() { focusHandler.removeCallbacksAndMessages(null); if (webView != null) { webView.stopLoading(); webView.removeJavascriptInterface("ArenaApp"); webView.setWebChromeClient(null); webView.setWebViewClient(null); webView.destroy(); webView = null; } super.onDestroy(); }
+    /** Sembunyikan/tampilkan status bar & navigation bar (mode immersive). */
+    private void applyExamSystemUi(boolean enabled) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Api30SystemUi.apply(this, enabled);
+            return;
+        }
+        View decor = getWindow().getDecorView();
+        if (enabled) {
+            decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    | View.SYSTEM_UI_FLAG_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
+        } else {
+            decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+        }
+    }
+
+    /** Isolasi API 30+ agar perangkat lama tidak memverifikasi kelas yang belum ada. */
+    @android.annotation.TargetApi(Build.VERSION_CODES.R)
+    private static final class Api30SystemUi {
+        static void apply(Activity activity, boolean enabled) {
+            WindowInsetsController controller = activity.getWindow().getInsetsController();
+            if (controller == null) return;
+            if (enabled) {
+                controller.hide(WindowInsets.Type.systemBars());
+                controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            } else {
+                controller.show(WindowInsets.Type.systemBars());
+                controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_DEFAULT);
+            }
+        }
+    }
 
     /**
-     * Bridge halaman ujian -> shell. Selama attempt ujian aktif, halaman memanggil
-     * ArenaApp.setKeepScreenOn(true) agar layar tidak mati sendiri oleh screen
-     * timeout; layar yang tadinya mati oleh sistem memicu pause/fokus hilang yang
-     * tercatat sebagai pelanggaran. Capability ini sengaja hanya satu tombol
-     * boolean: tanpa file, tanpa konten, tanpa navigasi, aman jika disentuh
-     * halaman mana pun di dalam webview (yang hanya memuat origin Arena).
+     * Screen pinning / Lock Task. Tanpa device owner Android menampilkan dialog
+     * konfirmasi pin sekali; setelah dipin, tombol Home/Recents tidak bisa
+     * meninggalkan aplikasi. Untuk kiosk penuh (tanpa gesture unpin), daftarkan
+     * paket lewat device owner / MDM.
+     */
+    private void startExamLock() {
+        try {
+            ActivityManager manager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+            if (manager != null && manager.getLockTaskModeState() == ActivityManager.LOCK_TASK_MODE_NONE) {
+                pinningGraceUntil = SystemClock.uptimeMillis() + 12000L;
+                startLockTask();
+            }
+        } catch (RuntimeException ignored) {
+            /* perangkat/OEM menolak screen pinning; immersive tetap aktif */
+        }
+    }
+
+    private void stopExamLock() {
+        pinningGraceUntil = 0L;
+        try {
+            ActivityManager manager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+            if (manager != null && manager.getLockTaskModeState() != ActivityManager.LOCK_TASK_MODE_NONE) {
+                stopLockTask();
+            }
+        } catch (RuntimeException ignored) {
+            /* tidak sedang terkunci */
+        }
+    }
+
+    private void handleBack() {
+        // Selama mode ujian, tombol Back tidak boleh meninggalkan layar ujian.
+        if (examMode) return;
+        if (webView != null && webView.canGoBack()) webView.goBack(); else finish();
+    }
+
+    @Override public void onBackPressed() { handleBack(); }
+
+    /** API 33+ memakai OnBackInvokedDispatcher (predictive back). */
+    @android.annotation.TargetApi(Build.VERSION_CODES.TIRAMISU)
+    private void registerPredictiveBack() {
+        getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                new android.window.OnBackInvokedCallback() {
+                    @Override public void onBackInvoked() { handleBack(); }
+                });
+    }
+    @Override protected void onDestroy() { if (examMode) { examMode = false; stopExamLock(); } focusHandler.removeCallbacksAndMessages(null); if (webView != null) { webView.stopLoading(); webView.removeJavascriptInterface("ArenaApp"); webView.setWebChromeClient(null); webView.setWebViewClient(null); webView.destroy(); webView = null; } super.onDestroy(); }
+
+    /**
+     * Bridge halaman ujian -> shell. Hanya dua kemampuan boolean yang aman:
+     * - setKeepScreenOn: menahan layar agar tidak mati oleh screen timeout;
+     * - setExamMode: immersive fullscreen + screen pinning selama ujian.
+     * Tanpa akses file, konten, atau navigasi, sehingga aman dipanggil halaman
+     * mana pun di dalam webview (yang hanya memuat origin Arena).
      */
     public final class ArenaBridge {
         @JavascriptInterface public void setKeepScreenOn(final boolean enabled) {
@@ -171,5 +283,22 @@ public final class MainActivity extends Activity {
                 }
             });
         }
+
+        /**
+         * Aktifkan/nonaktifkan mode ujian: immersive fullscreen + screen pinning.
+         * Halaman ujian memanggil ini saat attempt aktif dan melepasnya ketika
+         * siswa membuka bantuan, mengalami error, waktu habis, atau selesai.
+         */
+        @JavascriptInterface public void setExamMode(final boolean enabled) {
+            runOnUiThread(new Runnable() {
+                @Override public void run() {
+                    examMode = enabled;
+                    applyExamSystemUi(enabled);
+                    if (enabled) startExamLock(); else stopExamLock();
+                }
+            });
+        }
+
+        @JavascriptInterface public boolean isExamMode() { return examMode; }
     }
 }

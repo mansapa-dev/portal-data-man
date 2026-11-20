@@ -1,6 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
-    <application android:theme="@android:style/Theme.Material.Light.NoActionBar" android:label="Arena CBT" android:usesCleartextTraffic="false" android:allowBackup="false">
+    <uses-permission android:name="android.permission.HIDE_OVERLAY_WINDOWS" />
+    <application android:theme="@android:style/Theme.Material.Light.NoActionBar" android:label="Arena CBT" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:usesCleartextTraffic="false" android:allowBackup="false">
         <activity android:name=".MainActivity" android:exported="true" android:resizeableActivity="false" android:screenOrientation="unspecified">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

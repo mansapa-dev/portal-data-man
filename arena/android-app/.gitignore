@@ -1,0 +1,12 @@
+# Android/Gradle output
+.gradle/
+build/
+local.properties
+
+# Signing material: JANGAN pernah di-commit.
+keystore/
+*.jks
+*.keystore
+
+# Hasil build yang dibagikan
+dist/

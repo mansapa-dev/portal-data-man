@@ -75,6 +75,14 @@ Untuk ujian berpengawasan, sekolah/panitia perlu menetapkan dan mengumumkan pros
 
 IP, user-agent, dan waktu dari klien adalah metadata yang dapat tidak akurat atau dipalsukan. Batasi akses metadata ke administrator, tentukan masa retensinya, dan jangan gunakan sebagai satu-satunya dasar sanksi. Layar penuh dan pemblokiran shortcut bergantung pada kemampuan browser/perangkat dan dapat dilewati; perangkat ujian terkunci atau aplikasi kiosk terkelola memerlukan kebijakan serta pengujian perangkat tersendiri.
 
+### Mode ujian per platform
+
+Selama attempt aktif, halaman ujian mengunci navigasi dan melepasnya hanya ketika siswa membuka Bantuan, ada error penyimpanan yang perlu ditangani, waktu habis, atau ujian selesai/dikunci.
+
+- **Laptop/browser:** halaman masuk layar penuh, tombol Back dijebak lewat History API, refresh/tutup tab memunculkan konfirmasi, dan shortcut F5/Ctrl+R/Alt+←/→ diblokir. Browser tetap bisa menutup tab jika pengguna memaksa; catat sebagai sinyal, bukan bukti.
+- **Android (shell Arena):** halaman memanggil `ArenaApp.setExamMode(true)`. Shell menyembunyikan status/navigation bar, memblokir Back (termasuk predictive back API 33+), dan memulai screen pinning sehingga Home/Recents tidak meninggalkan aplikasi. Untuk kiosk penuh tanpa gesture unpin, daftarkan aplikasi lewat device owner/MDM; lihat [`android-app/README.md`](android-app/README.md).
+- **iOS/iPadOS:** Safari tidak mengizinkan situs memblokir tombol Home atau gesture sistem. Gunakan **Guided Access** (Pengaturan → Aksesibilitas → Guided Access) yang diaktifkan pengawas sebelum ujian; mode web tetap berjalan best-effort (fullscreen bila didukung, trap Back, konfirmasi refresh).
+
 API berjalan pada port 3001 dan Vite pada port 5173. Atur `DATABASE_URL`, `AUTH_TOKEN_SECRET` acak minimal 32 karakter, serta credential OIDC/Portal Data sesuai kebutuhan. Untuk gambar bank soal, atur `ARENA_UPLOAD_DIR` ke direktori persisten yang dibackup bersama database.
 
 ## Prototipe Android Arena

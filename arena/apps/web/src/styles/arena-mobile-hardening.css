@@ -73,6 +73,31 @@
   font-size: 11px;
 }
 
+/* Aksi di header katalog mapel: badge jumlah + tombol "Lihat semua soal". */
+.admin-workspace.dashboard-layout .dash-body .question-subject-catalog > header .question-catalog-actions {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.admin-workspace.dashboard-layout .dash-body .question-subject-catalog > header .question-catalog-actions > span {
+  padding: 6px 9px;
+  border-radius: 18px;
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+@media (max-width: 650px) {
+  .admin-workspace.dashboard-layout .dash-body .question-subject-catalog > header .question-catalog-actions {
+    justify-content: flex-start;
+  }
+}
+
 /* Daftar soal: pertahankan struktur sel tabel, lalu tata tombol di dalam sel aksi. */
 .admin-workspace.dashboard-layout .dash-body .question-results-table-scroll {
   max-width: 100%;
@@ -83,24 +108,52 @@
 
 .admin-workspace.dashboard-layout .dash-body .question-results-table {
   width: 100%;
-  min-width: 1260px;
+  min-width: 1080px;
   table-layout: fixed;
   border: 0;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
-.admin-workspace.dashboard-layout .dash-body .question-results-table th:nth-child(1) { width: 48px; }
-.admin-workspace.dashboard-layout .dash-body .question-results-table th:nth-child(2) { width: 34%; }
-.admin-workspace.dashboard-layout .dash-body .question-results-table th:nth-child(3) { width: 15%; }
-.admin-workspace.dashboard-layout .dash-body .question-results-table th:nth-child(4) { width: 12%; }
-.admin-workspace.dashboard-layout .dash-body .question-results-table th:nth-child(5) { width: 62px; }
-.admin-workspace.dashboard-layout .dash-body .question-results-table th:nth-child(6) { width: 62px; }
-.admin-workspace.dashboard-layout .dash-body .question-results-table th:nth-child(7) { width: 76px; }
-.admin-workspace.dashboard-layout .dash-body .question-results-table th:nth-child(8) { width: 228px; }
+/* 9 kolom: pilih · No. · Pertanyaan · Ujian · Tingkat · Kunci · Poin · Status · Aksi */
+.admin-workspace.dashboard-layout .dash-body .question-results-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.admin-workspace.dashboard-layout .dash-body .question-results-table th:nth-child(1) { width: 46px; }
+.admin-workspace.dashboard-layout .dash-body .question-results-table th:nth-child(2) { width: 56px; }
+.admin-workspace.dashboard-layout .dash-body .question-results-table th:nth-child(3) { width: auto; }
+.admin-workspace.dashboard-layout .dash-body .question-results-table th:nth-child(4) { width: 17%; }
+.admin-workspace.dashboard-layout .dash-body .question-results-table th:nth-child(5) { width: 12%; }
+.admin-workspace.dashboard-layout .dash-body .question-results-table th:nth-child(6) { width: 64px; }
+.admin-workspace.dashboard-layout .dash-body .question-results-table th:nth-child(7) { width: 60px; }
+.admin-workspace.dashboard-layout .dash-body .question-results-table th:nth-child(8) { width: 88px; }
+.admin-workspace.dashboard-layout .dash-body .question-results-table th:nth-child(9) { width: 224px; }
 
 .admin-workspace.dashboard-layout .dash-body .question-results-table :is(th, td) {
   box-sizing: border-box;
   padding: 12px 10px;
   vertical-align: top;
+}
+
+.admin-workspace.dashboard-layout .dash-body .question-results-table tbody td {
+  border-bottom: 1px solid var(--border);
+}
+
+.admin-workspace.dashboard-layout .dash-body .question-results-table tbody tr:last-child td {
+  border-bottom: 0;
 }
 
 .admin-workspace.dashboard-layout .dash-body .question-results-table tbody tr:nth-child(even) td {
@@ -111,9 +164,36 @@
   background: var(--primary-soft);
 }
 
+.admin-workspace.dashboard-layout .dash-body .question-results-table :is(td, th):first-child {
+  padding-inline: 6px;
+  text-align: center;
+}
+
+.admin-workspace.dashboard-layout .dash-body .question-results-table input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.admin-workspace.dashboard-layout .dash-body .question-results-table tbody td small {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.admin-workspace.dashboard-layout .dash-body .question-results-table tbody td:nth-child(6),
+.admin-workspace.dashboard-layout .dash-body .question-results-table tbody td:nth-child(7) {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .admin-workspace.dashboard-layout .dash-body .question-results-table .question-list-content {
   max-width: none;
-  gap: 8px;
+  gap: 6px;
 }
 
 .admin-workspace.dashboard-layout .dash-body .question-results-table .question-list-content > strong {
@@ -122,7 +202,10 @@
 }
 
 .admin-workspace.dashboard-layout .dash-body .question-results-table .question-list-content > div {
-  gap: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  color: var(--text-muted);
   font-size: 11px;
   line-height: 1.45;
 }
@@ -137,7 +220,7 @@
 .admin-workspace.dashboard-layout .dash-body .question-results-table .question-row-actions button {
   width: 100%;
   min-width: 0;
-  min-height: 34px;
+  min-height: 32px;
   margin: 0;
   padding: 6px;
   font-size: 10px;
