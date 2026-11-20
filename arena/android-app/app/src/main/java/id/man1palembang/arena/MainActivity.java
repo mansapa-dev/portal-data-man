@@ -10,6 +10,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.WindowInsets;
@@ -22,13 +23,20 @@ import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.ValueCallback;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.net.URI;
 
 public final class MainActivity extends Activity {
+    private static final String TAG = "ArenaExam";
+    // Shell memeriksa sendiri apakah halaman ujian sedang tampil. Ini lapisan
+    // pengaman kalau bundle web yang termuat belum/terlambat memanggil bridge.
+    private static final long EXAM_PROBE_INTERVAL_MS = 1500L;
+    private static final int MAX_LOCK_RETRIES = 3;
     private WebView webView;
     private View multiWindowShield;
     private String arenaOrigin;
@@ -39,11 +47,35 @@ public final class MainActivity extends Activity {
     // Dialog konfirmasi screen pinning mengambil fokus jendela; jangan sampai
     // episode itu tercatat sebagai pelanggaran siswa. Diisi saat startLockTask.
     private long pinningGraceUntil = 0L;
+    private int lockRetries = 0;
     // Grace fokus 1 detik: dialog sistem (volume, notifikasi, kamera) mengembalikan
     // fokus dalam sekejap dan tidak dihitung; overlay/aplikasi lain yang benar-benar
     // menutup layar tetap tercatat setelah grace berlalu.
     private final Handler focusHandler = new Handler(Looper.getMainLooper());
     private Runnable pendingFocusLoss;
+    private final Handler probeHandler = new Handler(Looper.getMainLooper());
+    private final Runnable examProbe = new Runnable() {
+        @Override public void run() {
+            probeHandler.postDelayed(this, EXAM_PROBE_INTERVAL_MS);
+            if (webView == null) return;
+            try {
+                webView.evaluateJavascript(
+                        "(function(){try{var a=document.documentElement.getAttribute('data-arena-exam');"
+                                + "if(a==='off')return 'off';if(a==='on')return 'on';"
+                                + "return document.querySelector('.student-exam')?'on':'none';}catch(e){return 'none';}})()",
+                        new ValueCallback<String>() {
+                            @Override public void onReceiveValue(String value) {
+                                String signal = value == null ? "none" : value.replace("\"", "").trim();
+                                boolean shouldLock = "on".equals(signal);
+                                if (shouldLock != examMode) applyExamState(shouldLock);
+                                maybeRepin();
+                            }
+                        });
+            } catch (RuntimeException error) {
+                Log.w(TAG, "exam probe failed", error);
+            }
+        }
+    };
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
@@ -81,6 +113,7 @@ public final class MainActivity extends Activity {
         if (!restored) webView.loadUrl(arenaOrigin + "/");
         updateMultiWindowShield();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) registerPredictiveBack();
+        startExamProbe();
     }
 
     private String configuredOrigin() {
@@ -122,6 +155,9 @@ public final class MainActivity extends Activity {
             @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (request.isForMainFrame()) view.loadData("<meta name='viewport' content='width=device-width'><p style='font:16px sans-serif;padding:24px'>Arena tidak dapat dijangkau. Periksa koneksi lalu muat ulang.</p>", "text/html", "UTF-8");
             }
+            @Override public void onPageFinished(WebView view, String url) {
+                startExamProbe();
+            }
         });
     }
 
@@ -141,7 +177,7 @@ public final class MainActivity extends Activity {
     }
     @Override public void onMultiWindowModeChanged(boolean value) { super.onMultiWindowModeChanged(value); updateMultiWindowShield(); }
     @Override public void onMultiWindowModeChanged(boolean value, Configuration configuration) { super.onMultiWindowModeChanged(value, configuration); updateMultiWindowShield(); }
-    @Override protected void onResume() { super.onResume(); if (webView != null) webView.onResume(); if (multiWindowShield != null) updateMultiWindowShield(); }
+    @Override protected void onResume() { super.onResume(); if (webView != null) webView.onResume(); if (multiWindowShield != null) updateMultiWindowShield(); startExamProbe(); }
     @Override protected void onPause() {
         // Suntik event sebelum webView.onPause() supaya halaman sempat mengirim
         // pelanggaran lewat fetch keepalive. Salah satu pesan di pause/resume/fokus
@@ -170,6 +206,11 @@ public final class MainActivity extends Activity {
             ActivityManager manager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
             if (manager != null && manager.getLockTaskModeState() != ActivityManager.LOCK_TASK_MODE_NONE) {
                 pinningGraceUntil = 0L;
+            } else {
+                // Dialog pin ditutup tanpa menerima kunci; coba lagi sebentar lagi.
+                probeHandler.postDelayed(new Runnable() {
+                    @Override public void run() { maybeRepin(); }
+                }, 1200L);
             }
         }
     }
@@ -225,14 +266,25 @@ public final class MainActivity extends Activity {
      * paket lewat device owner / MDM.
      */
     private void startExamLock() {
+        ActivityManager manager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+        if (manager == null) return;
+        if (manager.getLockTaskModeState() != ActivityManager.LOCK_TASK_MODE_NONE) {
+            pinningGraceUntil = 0L;
+            return;
+        }
+        pinningGraceUntil = SystemClock.uptimeMillis() + 12000L;
+        boolean firstAttempt = lockRetries == 0;
         try {
-            ActivityManager manager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
-            if (manager != null && manager.getLockTaskModeState() == ActivityManager.LOCK_TASK_MODE_NONE) {
-                pinningGraceUntil = SystemClock.uptimeMillis() + 12000L;
-                startLockTask();
+            startLockTask();
+            Log.i(TAG, "startLockTask requested");
+            if (firstAttempt) {
+                Toast.makeText(this, "Mode ujian aktif. Tekan Pin/OK pada dialog agar tidak bisa keluar.", Toast.LENGTH_LONG).show();
             }
-        } catch (RuntimeException ignored) {
-            /* perangkat/OEM menolak screen pinning; immersive tetap aktif */
+        } catch (RuntimeException error) {
+            Log.w(TAG, "startLockTask failed", error);
+            if (firstAttempt) {
+                Toast.makeText(this, "Perangkat menolak kunci layar. Layar penuh tetap aktif.", Toast.LENGTH_LONG).show();
+            }
         }
     }
 
@@ -242,10 +294,54 @@ public final class MainActivity extends Activity {
             ActivityManager manager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
             if (manager != null && manager.getLockTaskModeState() != ActivityManager.LOCK_TASK_MODE_NONE) {
                 stopLockTask();
+                Log.i(TAG, "stopLockTask requested");
             }
         } catch (RuntimeException ignored) {
             /* tidak sedang terkunci */
         }
+    }
+
+    /**
+     * Terapkan status mode ujian dari bridge web maupun hasil probe DOM.
+     * Idempoten supaya pemanggilan berulang (React effect, polling) aman.
+     */
+    private void applyExamState(boolean enabled) {
+        if (enabled == examMode) return;
+        examMode = enabled;
+        Log.i(TAG, "examMode=" + enabled);
+        applyExamSystemUi(enabled);
+        if (enabled) {
+            lockRetries = 0;
+            startExamLock();
+        } else {
+            stopExamLock();
+            Toast.makeText(this, "Kunci ujian dilepas.", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /**
+     * Kalau dialog Pin ditolak / hilang, coba ajukan lagi (maksimal beberapa
+     * kali) supaya siswa tidak lolos hanya karena salah tekan dialog.
+     */
+    private void maybeRepin() {
+        if (!examMode) return;
+        ActivityManager manager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+        if (manager == null) return;
+        if (manager.getLockTaskModeState() != ActivityManager.LOCK_TASK_MODE_NONE) {
+            pinningGraceUntil = 0L;
+            return;
+        }
+        if (SystemClock.uptimeMillis() < pinningGraceUntil) return;
+        if (lockRetries >= MAX_LOCK_RETRIES) return;
+        lockRetries++;
+        Log.i(TAG, "repin attempt " + lockRetries);
+        startExamLock();
+        Toast.makeText(this, "Layar ujian belum terkunci. Tekan Pin/OK pada dialog.", Toast.LENGTH_LONG).show();
+    }
+
+    private void startExamProbe() {
+        probeHandler.removeCallbacks(examProbe);
+        probeHandler.postDelayed(examProbe, 400L);
     }
 
     private void handleBack() {
@@ -265,7 +361,7 @@ public final class MainActivity extends Activity {
                     @Override public void onBackInvoked() { handleBack(); }
                 });
     }
-    @Override protected void onDestroy() { if (examMode) { examMode = false; stopExamLock(); } focusHandler.removeCallbacksAndMessages(null); if (webView != null) { webView.stopLoading(); webView.removeJavascriptInterface("ArenaApp"); webView.setWebChromeClient(null); webView.setWebViewClient(null); webView.destroy(); webView = null; } super.onDestroy(); }
+    @Override protected void onDestroy() { if (examMode) { examMode = false; stopExamLock(); } focusHandler.removeCallbacksAndMessages(null); probeHandler.removeCallbacksAndMessages(null); if (webView != null) { webView.stopLoading(); webView.removeJavascriptInterface("ArenaApp"); webView.setWebChromeClient(null); webView.setWebViewClient(null); webView.destroy(); webView = null; } super.onDestroy(); }
 
     /**
      * Bridge halaman ujian -> shell. Hanya dua kemampuan boolean yang aman:
@@ -292,9 +388,7 @@ public final class MainActivity extends Activity {
         @JavascriptInterface public void setExamMode(final boolean enabled) {
             runOnUiThread(new Runnable() {
                 @Override public void run() {
-                    examMode = enabled;
-                    applyExamSystemUi(enabled);
-                    if (enabled) startExamLock(); else stopExamLock();
+                    applyExamState(enabled);
                 }
             });
         }

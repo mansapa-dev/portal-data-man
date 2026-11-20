@@ -70,6 +70,15 @@ const firstGestureFullscreen = () => {
 
 export function setExamMode(enabled: boolean): void {
   const host = window as ArenaHostWindow;
+  // Penanda untuk shell Android: shell juga memeriksa atribut ini sendiri,
+  // sehingga kunci layar tidak bergantung pada satu panggilan bridge saja.
+  // Nilai 'off' penting agar shell tidak mengunci ulang saat siswa membuka
+  // dialog bantuan atau saat jawaban gagal disimpan.
+  try {
+    document.documentElement.setAttribute('data-arena-exam', enabled ? 'on' : 'off');
+  } catch {
+    /* dokumen belum siap */
+  }
   try {
     host.ArenaApp?.setExamMode?.(enabled);
   } catch {

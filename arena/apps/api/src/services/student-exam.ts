@@ -235,8 +235,11 @@ export class StudentExamService {
         if (!source.length) throw Object.assign(new Error('Soal ujian belum tersedia'), { statusCode: 409 });
         const seed = createHash('sha256').update(`${studentId}:${examId}:${randomBytes(16).toString('hex')}`).digest('hex');
         const orderedIds = shuffle(source.map((q) => Number(q.id)), seed);
+        // Soal benar/salah tidak diacak: urutan selalu Benar (A) lalu Salah (B)
+        // agar siswa tidak bingung membaca opsi.
+        const fixedOrderIds = new Set(source.filter((q) => String(q.question_type) === 'TRUE_FALSE').map((q) => Number(q.id)));
         const mapping: Record<string, string[]> = {};
-        for (const questionId of orderedIds) mapping[String(questionId)] = shuffle(options, `${seed}:${questionId}`);
+        for (const questionId of orderedIds) mapping[String(questionId)] = fixedOrderIds.has(questionId) ? ['A', 'B'] : shuffle(options, `${seed}:${questionId}`);
         const publicId = ulid();
         const fullEnd = new Date(exam.db_now as string | Date).getTime() + Number(exam.duration_minutes) * 60_000;
         const expiresAt = new Date(receipt ? fullEnd : Math.min(fullEnd,new Date(exam.ends_at as string | Date).getTime()));
@@ -384,7 +387,7 @@ export class StudentExamService {
             if (answer.length > 500) throw Object.assign(new Error('Jawaban terlalu panjang'), { statusCode: 422 });
           } else {
             const letters = [...new Set(answer.toUpperCase().split(',').map((part) => part.trim()).filter(Boolean))].sort();
-            if (!letters.length || (row.question_type === 'MULTIPLE_CHOICE' && letters.length !== 1) || letters.some((letter) => !['A','B','C','D','E'].includes(letter) || !row[`option_${letter.toLowerCase()}_available`])) throw Object.assign(new Error('Pilihan jawaban tidak valid'), { statusCode: 422 });
+            if (!letters.length || ((row.question_type === 'MULTIPLE_CHOICE' || row.question_type === 'TRUE_FALSE') && letters.length !== 1) || letters.some((letter) => !['A','B','C','D','E'].includes(letter) || !row[`option_${letter.toLowerCase()}_available`])) throw Object.assign(new Error('Pilihan jawaban tidak valid'), { statusCode: 422 });
             answer = letters.join(',');
           }
         }
@@ -479,7 +482,7 @@ export class StudentExamService {
             if (answer.length > 500) throw Object.assign(new Error('Jawaban terlalu panjang'), { statusCode: 422 });
           } else {
             const letters = [...new Set(answer.toUpperCase().split(',').filter(Boolean))].sort();
-            if (!letters.length || (current.question_type === 'MULTIPLE_CHOICE' && letters.length !== 1) || letters.some((letter) => !['A', 'B', 'C', 'D', 'E'].includes(letter) || !current[`option_${letter.toLowerCase()}_available`])) throw Object.assign(new Error('Pilihan jawaban tidak valid'), { statusCode: 422 });
+            if (!letters.length || ((current.question_type === 'MULTIPLE_CHOICE' || current.question_type === 'TRUE_FALSE') && letters.length !== 1) || letters.some((letter) => !['A', 'B', 'C', 'D', 'E'].includes(letter) || !current[`option_${letter.toLowerCase()}_available`])) throw Object.assign(new Error('Pilihan jawaban tidak valid'), { statusCode: 422 });
             answer = letters.join(',');
           }
         }

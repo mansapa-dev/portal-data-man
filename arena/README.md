@@ -60,6 +60,7 @@ mysql -u root -p arena < database/migrations/014_session_capacity.sql
 mysql -u root -p arena < database/migrations/015_exam_source_revision.sql
 mysql -u root -p arena < database/migrations/016_exam_submissions.sql
 mysql -u root -p arena < database/migrations/017_question_archive_filters.sql
+mysql -u root -p arena < database/migrations/018_true_false_question_type.sql
 npm run dev
 ```
 
