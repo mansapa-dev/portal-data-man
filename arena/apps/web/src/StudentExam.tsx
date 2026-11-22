@@ -11,6 +11,8 @@ function ActiveQuestionMath({question, children}: {question: ExamQuestion; child
   const element = container.current;
   if (!element) return;
   let active = true;
+  // Dekode gambar secara asinkron agar layar tidak tersendat saat soal berisi foto.
+  element.querySelectorAll('img').forEach((image) => { image.decoding = 'async'; });
   // Unicode text and images render natively. Only invoke MathJax when the
   // question or an option contains supported TeX delimiters or MathML.
   const text = element.textContent ?? '';
@@ -240,6 +242,21 @@ export function StudentExam({attempt,studentName,studentNisn,answers,flags,busy,
  const expired=remaining===0;
  useEffect(()=>{const active=!helpOpen&&!expired&&saveState!=='error';fullscreenRequested.current=active;setExamMode(active);},[attempt.attempt_id,helpOpen,expired,saveState]);
  useEffect(()=>()=>{fullscreenRequested.current=false;setExamMode(false);},[]);
+ // Muat lebih awal gambar pada dua soal berikutnya supaya perpindahan soal
+ // tidak menunggu unduhan, tanpa membebani jaringan saat ujian baru dimulai.
+ const preloaded=useRef<HTMLImageElement[]>([]);
+ useEffect(()=>{
+  const urls=new Set<string>();
+  const parser=new DOMParser();
+  for(const item of attempt.soal.slice(current+1,current+3)){
+   for(const html of [item.pertanyaan,...item.opsi.map(option=>option.text)]){
+    const doc=parser.parseFromString(html??'','text/html');
+    doc.querySelectorAll('img[src]').forEach(image=>{const src=image.getAttribute('src');if(src&&!src.startsWith('data:'))urls.add(src);});
+   }
+  }
+  preloaded.current=[...urls].slice(0,8).map(src=>{const image=new Image();image.decoding='async';image.src=src;return image;});
+  return ()=>{preloaded.current=[];};
+ },[current,attempt.attempt_id]);
  // Traceable screenshot overlay: NCAA-inspectable CSS-only repeated name/NIS pattern.
  const watermark=useRef<string>('');
  if(!watermark.current&&studentNisn){

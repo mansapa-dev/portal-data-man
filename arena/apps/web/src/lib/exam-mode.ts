@@ -61,11 +61,50 @@ const requestFullscreen = () => {
 
 // Browser mewajibkan gesture pengguna untuk fullscreen. Saat mode ujian aktif,
 // ketukan/penekanan tombol pertama dipakai untuk masuk fullscreen otomatis.
+// Listener sengaja TIDAK dilepas sampai fullscreen benar-benar aktif: sebagian
+// WebView Android menolak permintaan pertama, dan tanpa ini siswa kehilangan
+// kesempatan berikutnya tanpa mengetuk ulang layar.
 const firstGestureFullscreen = () => {
   if (!examModeActive) return;
-  requestFullscreen();
+  const root = document.documentElement;
+  const detach = () => {
+    window.removeEventListener('pointerdown', firstGestureFullscreen, true);
+    window.removeEventListener('keydown', firstGestureFullscreen, true);
+  };
+  if (document.fullscreenElement || typeof root.requestFullscreen !== 'function') {
+    detach();
+    return;
+  }
+  void root.requestFullscreen().then(() => {
+    if (document.fullscreenElement) detach();
+  }).catch(() => {
+    /* coba lagi pada gesture berikutnya */
+  });
+};
+
+// Banyak HP Android (Xiaomi/Realme/Oppo/Samsung) melepas fullscreen saat aplikasi
+// di-background, ditarik dari Recents, atau saat notifikasi menutupi layar.
+// Begitu mode ujian masih aktif, pasang lagi pemicu gesture supaya siswa cukup
+// menyentuh layar sekali untuk kembali terkunci, tanpa perlu keluar ujian.
+const rearmFullscreenGesture = () => {
+  if (!examModeActive || document.fullscreenElement) return;
   window.removeEventListener('pointerdown', firstGestureFullscreen, true);
   window.removeEventListener('keydown', firstGestureFullscreen, true);
+  window.addEventListener('pointerdown', firstGestureFullscreen, true);
+  window.addEventListener('keydown', firstGestureFullscreen, true);
+};
+
+const onFullscreenChange = () => {
+  if (!examModeActive) return;
+  rearmFullscreenGesture();
+};
+
+const onVisibilityForFullscreen = () => {
+  if (document.hidden) return;
+  // Kembali dari background: coba langsung (sebagian WebView mengizinkannya),
+  // lalu siapkan gesture sebagai fallback.
+  requestFullscreen();
+  rearmFullscreenGesture();
 };
 
 export function setExamMode(enabled: boolean): void {
@@ -103,6 +142,8 @@ export function setExamMode(enabled: boolean): void {
     window.addEventListener('pointerdown', firstGestureFullscreen, true);
     window.addEventListener('keydown', firstGestureFullscreen, true);
     document.addEventListener('keydown', blockNavigationKeys, true);
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('visibilitychange', onVisibilityForFullscreen);
     requestFullscreen();
   } else {
     window.removeEventListener('popstate', trapPopState);
@@ -110,6 +151,9 @@ export function setExamMode(enabled: boolean): void {
     window.removeEventListener('pointerdown', firstGestureFullscreen, true);
     window.removeEventListener('keydown', firstGestureFullscreen, true);
     document.removeEventListener('keydown', blockNavigationKeys, true);
+    document.removeEventListener('fullscreenchange', onFullscreenChange);
+    document.removeEventListener('visibilitychange', onVisibilityForFullscreen);
+    historyTrapped = false;
     try {
       if (document.fullscreenElement) void document.exitFullscreen?.().catch(() => {});
     } catch {

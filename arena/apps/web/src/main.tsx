@@ -33,7 +33,7 @@ import './styles/exam-list.css';
 
 type Student = { id: number; nisn: string; nama: string; kelas: string | null; tingkat: string | null };
 type Question = { id: number; tipe: string; pertanyaan: string; opsi: { key: string; text: string }[]; poin: number };
-type Attempt = { attempt_id: string; exam: { id: number; nama_ujian: string }; expires_at: string; soal: Question[]; jawaban: { question_id: number; answer: string | null; is_flagged: boolean; revision: number }[] };
+type Attempt = { attempt_id: string; exam: { id: number; nama_ujian: string }; expires_at: string; server_time?: string; soal: Question[]; jawaban: { question_id: number; answer: string | null; is_flagged: boolean; revision: number }[] };
 type Staff = { id: number; nama: string; username?: string; role: string; capabilities?: {teacher:boolean;proctor:boolean;tickets?:boolean} };
 type ExamDraft = { id?:number; name:string; grade:string; duration_minutes:number; session_number:number; starts_at:string; ends_at:string; academic_year:string; semester:'ODD'|'EVEN'; subject_name:string; status:'DRAFT'|'ACTIVE'|'INACTIVE'|'ARCHIVED'; target_class_ids:string[]; target_student_ids:number[] };
 type UserDraft = {id?:number;role:'ADMIN'|'TEACHER'|'EMPLOYEE';teacher_id:number|null;employee_id:number|null;username:string;name:string;password:string;status:'ACTIVE'|'DISABLED'};
@@ -131,6 +131,17 @@ function App() {
   const persistedAnswers = useRef<Record<number, string>>({});
   const persistedFlags = useRef<Record<number, boolean>>({});
   const localDirtyIds = useRef(new Set<number>());
+  // Snapshot terbaru untuk pemulihan lokal. Saat request simpan selesai, state
+  // React bisa masih tertinggal; draft harus selalu memakai nilai terbaru agar
+  // jawaban yang baru diketik tidak tertimpa versi lama.
+  const answersRef = useRef<Record<number, string>>({});
+  const flagsRef = useRef<Record<number, boolean>>({});
+  answersRef.current = answers;
+  flagsRef.current = flags;
+  const draftTimer = useRef<number | null>(null);
+  function writeDraftNow(){if(!attempt)return;if(draftTimer.current!==null){window.clearTimeout(draftTimer.current);draftTimer.current=null;}setLocalDraft(attempt.attempt_id,answersRef.current,flagsRef.current,[...localDirtyIds.current]);}
+  function scheduleDraftWrite(){if(!attempt)return;if(draftTimer.current!==null)return;draftTimer.current=window.setTimeout(()=>{draftTimer.current=null;writeDraftNow();},150);}
+  function cancelDraftWrite(){if(draftTimer.current!==null){window.clearTimeout(draftTimer.current);draftTimer.current=null;}}
   function flushBatch(examId:number, attemptId:string): Promise<void> {
     if (batchTimer.current !== null) { window.clearTimeout(batchTimer.current); batchTimer.current = null; }
     if (batchInFlight.current) return batchInFlight.current.then(() => flushBatch(examId, attemptId));
@@ -235,14 +246,21 @@ function App() {
       persistedAnswers.current = { ...savedAnswers };
       persistedFlags.current = { ...savedFlags };
       const draft = getLocalDraft(result.attempt_id);
-      if (draft && draft.dirtyIds && draft.dirtyIds.length > 0) {
-        const mergedAnswers = { ...savedAnswers, ...draft.answers };
-        const mergedFlags = { ...savedFlags, ...draft.flags };
+      if (draft && Array.isArray(draft.dirtyIds) && draft.dirtyIds.length > 0) {
+        // Hanya jawaban yang tercatat dirty yang diambil dari draft. Jawaban lain
+        // tetap memakai versi server agar draft lama tidak menimpa jawaban yang
+        // sudah tersimpan.
+        const mergedAnswers = { ...savedAnswers };
+        const mergedFlags = { ...savedFlags };
         for (const id of draft.dirtyIds) {
+          mergedAnswers[id] = draft.answers?.[id] ?? '';
+          mergedFlags[id] = draft.flags?.[id] ?? false;
           localDirtyIds.current.add(id);
           const q = result.soal.find(item => item.id === id);
           if (q) latestDraft.current.set(id, { question: q, answer: mergedAnswers[id] ?? '', flagged: mergedFlags[id] ?? false });
         }
+        answersRef.current = mergedAnswers;
+        flagsRef.current = mergedFlags;
         setAnswers(mergedAnswers);
         setFlags(mergedFlags);
         window.setTimeout(() => {
@@ -252,6 +270,8 @@ function App() {
           }
         }, 800);
       } else {
+        answersRef.current = savedAnswers;
+        flagsRef.current = savedFlags;
         setAnswers(savedAnswers);
         setFlags(savedFlags);
         localDirtyIds.current.clear();
@@ -276,7 +296,7 @@ function App() {
           persistedAnswers.current[question.id] = payload.answer ?? '';
           persistedFlags.current[question.id] = payload.flagged;
           localDirtyIds.current.delete(question.id);
-          if (attempt) setLocalDraft(attempt.attempt_id, answers, flags, [...localDirtyIds.current]);
+          scheduleDraftWrite();
           retryDraft.current.delete(question.id);
           failedSaves.current.delete(question.id);
           retryAttempts.current.delete(question.id);
@@ -289,17 +309,18 @@ function App() {
   }
   function change(question: Question, value: string) {
     const trimmed = value;
-    const currentFlag = flags[question.id] ?? false;
-    setAnswers((current) => ({ ...current, [question.id]: trimmed }));
+    const currentFlag = flagsRef.current[question.id] ?? false;
+    answersRef.current = { ...answersRef.current, [question.id]: trimmed };
+    setAnswers(answersRef.current);
     if (attempt) {
       localDirtyIds.current.add(question.id);
-      setLocalDraft(attempt.attempt_id, { ...answers, [question.id]: trimmed }, flags, [...localDirtyIds.current]);
+      scheduleDraftWrite();
     }
     // Storage-aware dirty check: jika jawaban sama dengan server, jangan trigger write
     if ((persistedAnswers.current[question.id] ?? '') === trimmed && (persistedFlags.current[question.id] ?? false) === currentFlag) {
       if (attempt) {
         localDirtyIds.current.delete(question.id);
-        setLocalDraft(attempt.attempt_id, answers, flags, [...localDirtyIds.current]);
+        scheduleDraftWrite();
       }
       const old = timers.current.get(question.id); if (old) window.clearTimeout(old); timers.current.delete(question.id);
       refreshSaveState();
@@ -307,22 +328,23 @@ function App() {
     }
     const retry=retryTimers.current.get(question.id);if(retry)window.clearTimeout(retry);retryTimers.current.delete(question.id);retryAttempts.current.delete(question.id);
     const old = timers.current.get(question.id); if (old) window.clearTimeout(old);
-    timers.current.set(question.id, window.setTimeout(() => { timers.current.delete(question.id); void save(question, trimmed).catch(() => undefined); }, 350));
+    timers.current.set(question.id, window.setTimeout(() => { timers.current.delete(question.id); void save(question, trimmed, currentFlag).catch(() => undefined); }, 350));
     refreshSaveState();
   }
   function toggleFlag(question: Question) {
-    const next = !(flags[question.id] ?? false);
-    const currentAnswer = answers[question.id] ?? '';
-    setFlags((current) => ({ ...current, [question.id]: next }));
+    const next = !(flagsRef.current[question.id] ?? false);
+    const currentAnswer = answersRef.current[question.id] ?? '';
+    flagsRef.current = { ...flagsRef.current, [question.id]: next };
+    setFlags(flagsRef.current);
     if (attempt) {
       localDirtyIds.current.add(question.id);
-      setLocalDraft(attempt.attempt_id, answers, { ...flags, [question.id]: next }, [...localDirtyIds.current]);
+      scheduleDraftWrite();
     }
     // Storage-aware dirty check: jika flag dan answer sama dengan server, jangan trigger write
     if ((persistedAnswers.current[question.id] ?? '') === currentAnswer && (persistedFlags.current[question.id] ?? false) === next) {
       if (attempt) {
         localDirtyIds.current.delete(question.id);
-        setLocalDraft(attempt.attempt_id, answers, flags, [...localDirtyIds.current]);
+        scheduleDraftWrite();
       }
       const old = timers.current.get(question.id); if (old) window.clearTimeout(old); timers.current.delete(question.id);
       refreshSaveState();
@@ -330,7 +352,7 @@ function App() {
     }
     const retry=retryTimers.current.get(question.id);if(retry)window.clearTimeout(retry);retryTimers.current.delete(question.id);retryAttempts.current.delete(question.id);
     const old = timers.current.get(question.id); if (old) window.clearTimeout(old);
-    timers.current.set(question.id, window.setTimeout(() => { timers.current.delete(question.id); void save(question, answers[question.id] ?? '', next).catch(() => undefined); }, 350));
+    timers.current.set(question.id, window.setTimeout(() => { timers.current.delete(question.id); void save(question, answersRef.current[question.id] ?? '', next).catch(() => undefined); }, 350));
     refreshSaveState();
   }
   async function retrySave() {
@@ -338,7 +360,7 @@ function App() {
     for(const timer of retryTimers.current.values())window.clearTimeout(timer);retryTimers.current.clear();retryAttempts.current.clear();
     await Promise.allSettled([...failedSaves.current].map(questionId => {
       const question = attempt.soal.find(item => item.id === questionId);
-      return question ? save(question, answers[questionId] ?? '', flags[questionId] ?? false) : Promise.resolve();
+      return question ? save(question, answersRef.current[questionId] ?? '', flagsRef.current[questionId] ?? false) : Promise.resolve();
     }));
   }
   async function submit(finalizeOnly = false) {
@@ -412,14 +434,14 @@ function App() {
         if(!published)throw new Error('Ujian sudah dikirim, tetapi hasil belum tersedia. Coba muat ulang halaman beberapa saat lagi.');
         completed=published;
       }
-      setMessage(''); setResultExamId(attempt.exam.id); setResultExamName(attempt.exam.nama_ujian); setReview(null); setReviewError(''); clearLocalDraft(attempt.attempt_id); setResult(completed); setAttempt(null); await loadExams();
+      setMessage(''); setResultExamId(attempt.exam.id); setResultExamName(attempt.exam.nama_ujian); setReview(null); setReviewError(''); cancelDraftWrite(); clearLocalDraft(attempt.attempt_id); setResult(completed); setAttempt(null); await loadExams();
     } catch (error) { setMessage(finalizeOnly?'Waktu habis. Hasil belum dapat dimuat; coba lagi saat koneksi tersedia.':error instanceof Error ? error.message : 'Submit gagal'); throw error; }
     finally { submittingAttempt.current=false;setBusy(false); }
   }
   async function showResult(examId:number){setBusy(true);setMessage('');setReview(null);setReviewError('');try{if(!getExamToken(examId)){const access=await api<WaitingView>(`/api/student/exams/${examId}/waiting/resume`,{method:'POST',body:{},timeoutMs:10000});if(access.admit_token)setExamToken(examId,access.admit_token);}setResultExamId(examId);setResultExamName(exams.find(item=>item.id===examId)?.nama_ujian??'');const payload=await api<ExamResult>(`/api/student/exams/${examId}/result`);if(isPendingResult(payload)){setMessage('Hasil sedang dihitung. Tunggu sebentar, lalu muat ulang halaman ini.');const published=await waitForResult(examId);if(!published)return;setResult(published);return;}setResult(payload);}catch(error){setMessage(error instanceof Error?error.message:'Hasil belum tersedia');}finally{setBusy(false);}}
   async function loadReview(){if(resultExamId===null)return;setReviewLoading(true);setReviewError('');try{const data=await api<{soal:{id:number;pertanyaan?:string;status:string}[]}>(`/api/student/exams/${resultExamId}/review`);if(!data.soal?.length)throw new Error('Data soal review belum tersedia. Hubungi petugas ujian.');setReview(data);}catch(error){setReview(null);setReviewError(error instanceof Error?error.message:'Review gagal dimuat');}finally{setReviewLoading(false);}}
-  function terminated(hasil:ExamResult|null){setResultExamId(attempt?.exam.id??null);setResultExamName(attempt?.exam.nama_ujian??'');setAttempt(null);setResult(hasil??{status:'TERMINATED'});setReview(null);setReviewError('');setReviewLoading(false);void loadExams();}
-  async function logout() { try { await api('/api/auth/logout', { method: 'POST', body: {} }); } catch { /* disconnected queues expire by heartbeat */ } try{sessionStorage.removeItem('arena_waiting_exam');}catch{}localStorage.removeItem('arena_active_portal');setSession(null, null); setWaitingExam(null); waitingRestored.current=null; setStudent(null); setStaff(null); setAttempt(null); setResult(null); setExams([]); }
+  function terminated(hasil:ExamResult|null){const attemptId=attempt?.attempt_id??null;cancelDraftWrite();if(attemptId)clearLocalDraft(attemptId);setResultExamId(attempt?.exam.id??null);setResultExamName(attempt?.exam.nama_ujian??'');setAttempt(null);setResult(hasil??{status:'TERMINATED'});setReview(null);setReviewError('');setReviewLoading(false);void loadExams();}
+  async function logout() { try { await api('/api/auth/logout', { method: 'POST', body: {} }); } catch { /* disconnected queues expire by heartbeat */ } try{sessionStorage.removeItem('arena_waiting_exam');}catch{}if(attempt)clearLocalDraft(attempt.attempt_id);localStorage.removeItem('arena_active_portal');setSession(null, null); setWaitingExam(null); waitingRestored.current=null; setStudent(null); setStaff(null); setAttempt(null); setResult(null); setExams([]); }
   useEffect(() => {
     let cancelled=false;
     const params=new URLSearchParams(window.location.hash.slice(1));const token=params.get('token'),csrf=params.get('csrf');
@@ -442,8 +464,29 @@ setMessage('Ujian sudah dikirim. Nilai ditampilkan setelah penilaian selesai.');
         void retrySave();
       }
     };
+    const onOffline = () => {
+      if (attempt) setMessage('Koneksi terputus. Jawaban tetap aman di perangkat dan dikirim otomatis setelah tersambung kembali.');
+    };
     window.addEventListener('online', onOnline);
-    return () => window.removeEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => { window.removeEventListener('online', onOnline); window.removeEventListener('offline', onOffline); };
+  }, [attempt]);
+  // Pastikan draft terbaru tersimpan saat siswa menutup/menyembunyikan halaman,
+  // lalu coba kirim ulang jawaban yang tertunda ketika layar kembali aktif.
+  useEffect(() => {
+    if (!attempt) return;
+    const flushDraft = () => writeDraftNow();
+    const onVisibility = () => {
+      if (document.hidden) { writeDraftNow(); return; }
+      if (localDirtyIds.current.size > 0 && !submittingAttempt.current) void retrySave();
+    };
+    window.addEventListener('pagehide', flushDraft);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('pagehide', flushDraft);
+      document.removeEventListener('visibilitychange', onVisibility);
+      cancelDraftWrite();
+    };
   }, [attempt]);
   useEffect(() => {
     if (!attempt) return;
@@ -453,6 +496,23 @@ setMessage('Ujian sudah dikirim. Nilai ditampilkan setelah penilaian selesai.');
       timer = window.setTimeout(heartbeat, 45_000 + Math.floor(Math.random() * 15_000));
     };
     timer = window.setTimeout(heartbeat, 45_000 + Math.floor(Math.random() * 15_000));
+    return () => window.clearTimeout(timer);
+  }, [attempt]);
+  // Jaring pengaman menjelang waktu habis: paksa simpan semua jawaban yang masih
+  // tertahan di antrean lokal 10 detik sebelum expires_at, bukan menunggu submit
+  // otomatis (yang bisa ditolak server setelah waktu habis).
+  useEffect(() => {
+    if (!attempt) return;
+    const offset = attempt.server_time ? Date.parse(attempt.server_time) - Date.now() : 0;
+    const remaining = Date.parse(attempt.expires_at) - Date.now() - offset;
+    if (!Number.isFinite(remaining) || remaining <= 0) return;
+    const timer = window.setTimeout(() => {
+      for (const [id, pendingTimer] of timers.current) { window.clearTimeout(pendingTimer); timers.current.delete(id); }
+      for (const id of localDirtyIds.current) {
+        const question = attempt.soal.find((item) => item.id === id);
+        if (question) void save(question, answersRef.current[id] ?? '', flagsRef.current[id] ?? false).catch(() => undefined);
+      }
+    }, Math.max(1000, remaining - 10_000));
     return () => window.clearTimeout(timer);
   }, [attempt]);
 
@@ -524,7 +584,7 @@ function StaffPanel({ staff,onLogout,darkMode,onToggleTheme }: { staff: Staff;on
   const [resultSemester,setResultSemester]=useState('');
   const [resultExams,setResultExams]=useState<Array<Record<string,unknown>>>([]);
   const [ticketStatus,setTicketStatus]=useState('ALL');
-  const [ticketSubject,setTicketSubject]=useState('');
+  const [ticketSubjectFilters,setTicketSubjectFilters]=useState<string[]>([]);
   const [ticketSubjects,setTicketSubjects]=useState<string[]>([]);
   const [ticketNotes,setTicketNotes]=useState<Record<string,string>>({});
   const [ticketReasons,setTicketReasons]=useState<Record<string,string>>({});
@@ -584,10 +644,11 @@ function StaffPanel({ staff,onLogout,darkMode,onToggleTheme }: { staff: Staff;on
   const load = async (key=view) => { if(key==='exams'){await loadAdminExams();return;}setBusy(true);setNotice('');try{setData(await api(key.startsWith('/api/')?key:routes[key]));}catch(error){setNotice(error instanceof Error?error.message:'Data gagal dimuat');}finally{setBusy(false);} };
   async function regradeShortAnswers(){if(!resultExam)return;setBusy(true);setNotice('Menghitung ulang nilai isian...');try{let cursor=0,checked=0,changed=0;for(let batch=0;batch<1000;batch++){const result=await api<{checked:number;changed:number;next_cursor:number|null}>(`/api/admin/exams/${resultExam}/regrade-short-answers`,{method:'POST',body:{cursor}});checked+=result.checked;changed+=result.changed;if(result.next_cursor===null){setNotice(`${checked} hasil diperiksa; ${changed} nilai berubah.`);await loadResults(resultPage);setNotice(`${checked} hasil diperiksa; ${changed} nilai berubah.`);return;}cursor=result.next_cursor;}throw new Error('Batas 100.000 hasil tercapai. Ulangi proses untuk melanjutkan.');}catch(error){setNotice(error instanceof Error?error.message:'Hitung ulang gagal');}finally{setBusy(false);}}
   async function loadResults(page=1){const params=new URLSearchParams({page:String(page),limit:'50'});if(resultExam)params.set('exam_id',resultExam);if(resultGrade)params.set('grade',resultGrade);if(resultClass)params.set('class_name',resultClass);if(resultYear)params.set('year',resultYear);if(resultSemester)params.set('semester',resultSemester);if(resultQuery.trim())params.set('q',resultQuery.trim());setBusy(true);setNotice('');try{setData(await api(`/api/admin/results?${params}`));setResultPage(page);}catch(error){setNotice(error instanceof Error?error.message:'Hasil gagal dimuat');}finally{setBusy(false);}}
-  async function loadTickets(status=ticketStatus,subject=ticketSubject){setBusy(true);setNotice('');try{const params=new URLSearchParams({status});if(subject)params.set('subject',subject);setData(await api(`/api/staff/support-tickets?${params}`));}catch(error){setNotice(error instanceof Error?error.message:'Tiket gagal dimuat');}finally{setBusy(false);}}
+  async function loadTickets(status=ticketStatus,subjects=ticketSubjectFilters){setBusy(true);setNotice('');try{const params=new URLSearchParams({status});for(const subject of subjects)params.append('subject',subject);setData(await api(`/api/staff/support-tickets?${params}`));}catch(error){setNotice(error instanceof Error?error.message:'Tiket gagal dimuat');}finally{setBusy(false);}}
+  function toggleTicketSubject(subject:string,checked:boolean){const next=checked?[...new Set([...ticketSubjectFilters,subject])]:ticketSubjectFilters.filter(item=>item!==subject);setTicketSubjectFilters(next);void loadTickets(ticketStatus,next);}
   useEffect(()=>{setPinCredentials([]);if(view!=='students')setData((current:unknown)=>{if(typeof current!=='object'||current===null||!('items'in current))return current;const rows=(current as{items:unknown}).items;if(!Array.isArray(rows))return current;return{...current,items:rows.map(row=>typeof row==='object'&&row!==null?{...row,pin:null}:row)};});if(view==='students'&&admin)void loadStudents(1,'');else if(view==='results'&&admin)void loadResults(1);else if(view==='tickets')void loadTickets();else if(['teacherExams','teacherResults'].includes(view))void load('/api/teacher/dashboard');else if(!['dashboard','sessions','violations','assignments','questions','cards'].includes(view))void load(view);},[view]);
   useEffect(()=>{if(view==='results'&&admin)void api<Array<Record<string,unknown>>>('/api/admin/exams').then(setResultExams).catch(()=>undefined);},[view,admin]);
-  useEffect(()=>{if(view!=='tickets')return;const timer=window.setInterval(()=>{if(!document.hidden)void loadTickets(ticketStatus,ticketSubject);},45_000);return()=>window.clearInterval(timer);},[view,ticketStatus,ticketSubject]);
+  useEffect(()=>{if(view!=='tickets')return;const timer=window.setInterval(()=>{if(!document.hidden)void loadTickets(ticketStatus,ticketSubjectFilters);},45_000);return()=>window.clearInterval(timer);},[view,ticketStatus,ticketSubjectFilters]);
   useEffect(()=>{if(view!=='tickets')return;void api<string[]>('/api/staff/support-tickets/subjects').then(rows=>setTicketSubjects(Array.isArray(rows)?rows:[])).catch(()=>setTicketSubjects([]));},[view]);
   useEffect(()=>{if((view==='exams'||view==='students'||view==='results'||view==='reports')&&admin)void api<Array<Record<string,unknown>>>('/api/admin/portal-classes').then(setClassChoices).catch((error)=>setNotice(error instanceof Error?error.message:'Daftar kelas gagal dimuat'));},[view,admin]);
   useEffect(()=>{if(view==='exams'&&admin)void api<typeof examFormOptions>('/api/admin/exam-form-options').then(setExamFormOptions).catch((error)=>setNotice(error instanceof Error?error.message:'Referensi formulir ujian gagal dimuat'));},[view,admin]);
@@ -819,7 +880,7 @@ function StaffPanel({ staff,onLogout,darkMode,onToggleTheme }: { staff: Staff;on
       {typeof data==='object'&&data!==null&&Array.isArray((data as {items?:unknown[]}).items)&&<><div style={{overflowX:'auto'}}><table style={{width:'100%',marginTop:12,textAlign:'left'}}><thead><tr><th>Pilih</th><th>NISN</th><th>Nama</th><th>Kelas</th><th>Status</th><th>PIN</th><th>Attempt</th></tr></thead><tbody>{((data as {items:Array<Record<string,unknown>>}).items).map((row)=><tr key={String(row.id)}><td><input type="checkbox" checked={selectedStudents.includes(Number(row.id))} onChange={(event)=>setSelectedStudents((current)=>event.target.checked?[...new Set([...current,Number(row.id)])]:current.filter((id)=>id!==Number(row.id)))}/></td><td>{String(row.nisn)}</td><td>{String(row.name_snapshot)}</td><td>{String(row.class_snapshot??'')}</td><td>{String(row.cbt_status)}</td><td>{row.pin?String(row.pin):row.pin_configured?'PIN perlu diterbitkan ulang':'Belum ada'}</td><td>{String(row.attempt_status??'')}</td></tr>)}</tbody></table></div><p>Halaman {String((data as {page:number}).page)} · total {String((data as {total:number}).total)} siswa</p><button disabled={busy||studentPage<=1} onClick={()=>void loadStudents(studentPage-1)}>Sebelumnya</button> <button disabled={busy||studentPage*50>=Number((data as {total:number}).total)} onClick={()=>void loadStudents(studentPage+1)}>Berikutnya</button></>}
       {pinCredentials.length>0&&<section style={{...card,background:'#fff8e1'}}><h3>PIN baru diterbitkan</h3><p>PIN tersimpan terenkripsi agar admin dapat mencetak ulang kartu. Bagikan hanya kepada siswa yang bersangkutan.</p><div style={{overflowX:'auto'}}><table style={{width:'100%',textAlign:'left'}}><thead><tr><th>NISN</th><th>Nama</th><th>PIN</th></tr></thead><tbody>{pinCredentials.map((credential)=><tr key={credential.student_id}><td>{credential.nisn}</td><td>{credential.name}</td><td><strong>{credential.pin}</strong></td></tr>)}</tbody></table></div><button type="button" onClick={printNewPinCards}>Cetak kartu PIN</button> <button type="button" onClick={exportNewPinCards}>Unduh Excel PIN</button> <button onClick={()=>setPinCredentials([])}>Tutup PIN</button></section>}
     </div>}
-    {view==='tickets'&&Array.isArray(data)&&<section className="admin-page-card"><header className="admin-card-heading"><div><span className="section-kicker">BANTUAN PESERTA</span><h2>Tiket bantuan</h2><p>Ambil tiket, catat penyelesaian, dan pantau statusnya.</p></div><button type="button" className="btn btn-secondary" onClick={()=>void loadTickets()}>Perbarui</button></header><div className="admin-ticket-toolbar"><label>Status<select value={ticketStatus} onChange={event=>{setTicketStatus(event.target.value);void loadTickets(event.target.value,ticketSubject);}}>{[['ALL','Semua'],['OPEN','Menunggu'],['IN_PROGRESS','Ditangani'],['RESOLVED','Selesai'],['CLOSED','Ditutup']].map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><label>Mata pelajaran<select value={ticketSubject} onChange={event=>{setTicketSubject(event.target.value);void loadTickets(ticketStatus,event.target.value);}}><option value="">Semua mata pelajaran</option>{ticketSubjects.map(subject=><option key={subject} value={subject}>{subject}</option>)}{ticketSubject&&!ticketSubjects.includes(ticketSubject)&&<option value={ticketSubject}>{ticketSubject}</option>}</select></label><button type="button" className="btn btn-secondary" disabled={busy} onClick={()=>{setTicketStatus('ALL');setTicketSubject('');void loadTickets('ALL','');}}>Reset filter</button><span>{data.length} tiket</span></div><div className="admin-ticket-list">{(data as Array<Record<string,unknown>>).map(ticket=>{const mine=Number(ticket.handled_by)===staff.id;return <article className="admin-ticket-card" key={String(ticket.id)}><header><div><strong>{String(ticket.studentName)}</strong><span>{String(ticket.nisn)} · {String(ticket.className??'Kelas tidak tercatat')}</span></div><span className={`admin-status status-${String(ticket.status).toLowerCase()}`}>{({OPEN:'Menunggu',IN_PROGRESS:'Ditangani',RESOLVED:'Selesai',CLOSED:'Ditutup'} as Record<string,string>)[String(ticket.status)]??String(ticket.status)}</span></header><p>{String(ticket.message)}</p><div className="admin-ticket-meta"><span>{String(ticket.category)}</span>{Boolean(ticket.subjectName)&&<span>{String(ticket.subjectName)}</span>}{Boolean(ticket.examName)&&<span>{String(ticket.examName)}</span>}<span>{ticket.createdAt?new Date(String(ticket.createdAt)).toLocaleString('id-ID'):'Waktu tidak tersedia'}</span>{Boolean(ticket.handlerName)&&<span>Petugas: {String(ticket.handlerName)}</span>}</div>{Boolean(ticket.staffNote)&&<p className="admin-ticket-note">Catatan: {String(ticket.staffNote)}</p>}{ticket.status==='IN_PROGRESS'&&mine&&<label className="admin-ticket-input">Catatan penyelesaian<textarea value={ticketNotes[String(ticket.id)]??''} onChange={event=>setTicketNotes(previous=>({...previous,[String(ticket.id)]:event.target.value}))} maxLength={1000} rows={2} placeholder="Jelaskan tindakan untuk peserta"/></label>}{ticket.status==='IN_PROGRESS'&&admin&&['TERMINATED','EXPIRED','COMPLETED'].includes(String(ticket.attemptStatus??'').toUpperCase())&&<label className="admin-ticket-input">Alasan pemulihan sesi<input value={ticketReasons[String(ticket.id)]??''} onChange={event=>setTicketReasons(previous=>({...previous,[String(ticket.id)]:event.target.value}))} maxLength={1000} placeholder="Alasan pemulihan minimal 3 karakter"/></label>}<div className="admin-ticket-actions">{ticket.status==='OPEN'&&<button className="btn btn-secondary" disabled={busy} onClick={()=>void ticketAction(ticket,'IN_PROGRESS')}>Ambil tiket</button>}{ticket.status==='IN_PROGRESS'&&mine&&<button className="btn btn-primary" disabled={busy} onClick={()=>void ticketAction(ticket,'RESOLVED')}>Selesaikan</button>}{ticket.status==='IN_PROGRESS'&&admin&&['TERMINATED','EXPIRED','COMPLETED'].includes(String(ticket.attemptStatus??'').toUpperCase())&&<button className="btn btn-warning" disabled={busy} onClick={()=>void resetTicketAttempt(ticket)}>Pulihkan sesi CBT</button>}</div></article>;})}{!data.length&&<div className="admin-empty-state"><i className="fa-solid fa-headset"/><strong>Belum ada tiket bantuan</strong><span>Tiket sesuai status akan tampil di sini.</span></div>}</div></section>}
+    {view==='tickets'&&Array.isArray(data)&&<section className="admin-page-card"><header className="admin-card-heading"><div><span className="section-kicker">BANTUAN PESERTA</span><h2>Tiket bantuan</h2><p>Ambil tiket, catat penyelesaian, dan pantau statusnya.</p></div><button type="button" className="btn btn-secondary" onClick={()=>void loadTickets()}>Perbarui</button></header><div className="admin-ticket-toolbar"><label>Status<select value={ticketStatus} onChange={event=>{setTicketStatus(event.target.value);void loadTickets(event.target.value,ticketSubjectFilters);}}>{[['ALL','Semua'],['OPEN','Menunggu'],['IN_PROGRESS','Ditangani'],['RESOLVED','Selesai'],['CLOSED','Ditutup']].map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><details className="ticket-subject-filter"><summary><i className="fa-solid fa-book-open"/> {ticketSubjectFilters.length?`Mapel dipilih (${ticketSubjectFilters.length})`:'Semua mata pelajaran'}</summary><div className="ticket-subject-panel"><div className="ticket-subject-panel-head"><strong>Pilih mata pelajaran</strong><span>{ticketSubjectFilters.length}/{ticketSubjects.length}</span></div><div className="ticket-subject-panel-actions"><button type="button" disabled={busy||!ticketSubjects.length||ticketSubjectFilters.length===ticketSubjects.length} onClick={()=>{setTicketSubjectFilters(ticketSubjects);void loadTickets(ticketStatus,ticketSubjects);}}>Pilih semua</button><button type="button" disabled={busy||!ticketSubjectFilters.length} onClick={()=>{setTicketSubjectFilters([]);void loadTickets(ticketStatus,[]);}}>Kosongkan</button></div><div className="ticket-subject-options" role="group" aria-label="Mata pelajaran tiket">{ticketSubjects.map(subject=><label key={subject}><input type="checkbox" checked={ticketSubjectFilters.includes(subject)} onChange={event=>toggleTicketSubject(subject,event.target.checked)}/><span>{subject}</span></label>)}{!ticketSubjects.length&&<p className="ticket-subject-empty">Belum ada mapel pada tiket.</p>}</div></div></details><button type="button" className="btn btn-secondary" disabled={busy} onClick={()=>{setTicketStatus('ALL');setTicketSubjectFilters([]);void loadTickets('ALL',[]);}}>Reset filter</button><span>{data.length} tiket</span></div><div className="admin-ticket-list">{(data as Array<Record<string,unknown>>).map(ticket=>{const mine=Number(ticket.handled_by)===staff.id;return <article className="admin-ticket-card" key={String(ticket.id)}><header><div><strong>{String(ticket.studentName)}</strong><span>{String(ticket.nisn)} · {String(ticket.className??'Kelas tidak tercatat')}</span></div><span className={`admin-status status-${String(ticket.status).toLowerCase()}`}>{({OPEN:'Menunggu',IN_PROGRESS:'Ditangani',RESOLVED:'Selesai',CLOSED:'Ditutup'} as Record<string,string>)[String(ticket.status)]??String(ticket.status)}</span></header><p>{String(ticket.message)}</p><div className="admin-ticket-meta"><span>{String(ticket.category)}</span>{Boolean(ticket.subjectName)&&<span>{String(ticket.subjectName)}</span>}{Boolean(ticket.examName)&&<span>{String(ticket.examName)}</span>}<span>{ticket.createdAt?new Date(String(ticket.createdAt)).toLocaleString('id-ID'):'Waktu tidak tersedia'}</span>{Boolean(ticket.handlerName)&&<span>Petugas: {String(ticket.handlerName)}</span>}</div>{Boolean(ticket.staffNote)&&<p className="admin-ticket-note">Catatan: {String(ticket.staffNote)}</p>}{ticket.status==='IN_PROGRESS'&&mine&&<label className="admin-ticket-input">Catatan penyelesaian<textarea value={ticketNotes[String(ticket.id)]??''} onChange={event=>setTicketNotes(previous=>({...previous,[String(ticket.id)]:event.target.value}))} maxLength={1000} rows={2} placeholder="Jelaskan tindakan untuk peserta"/></label>}{ticket.status==='IN_PROGRESS'&&admin&&['TERMINATED','EXPIRED','COMPLETED'].includes(String(ticket.attemptStatus??'').toUpperCase())&&<label className="admin-ticket-input">Alasan pemulihan sesi<input value={ticketReasons[String(ticket.id)]??''} onChange={event=>setTicketReasons(previous=>({...previous,[String(ticket.id)]:event.target.value}))} maxLength={1000} placeholder="Alasan pemulihan minimal 3 karakter"/></label>}<div className="admin-ticket-actions">{ticket.status==='OPEN'&&<button className="btn btn-secondary" disabled={busy} onClick={()=>void ticketAction(ticket,'IN_PROGRESS')}>Ambil tiket</button>}{ticket.status==='IN_PROGRESS'&&mine&&<button className="btn btn-primary" disabled={busy} onClick={()=>void ticketAction(ticket,'RESOLVED')}>Selesaikan</button>}{ticket.status==='IN_PROGRESS'&&admin&&['TERMINATED','EXPIRED','COMPLETED'].includes(String(ticket.attemptStatus??'').toUpperCase())&&<button className="btn btn-warning" disabled={busy} onClick={()=>void resetTicketAttempt(ticket)}>Pulihkan sesi CBT</button>}</div></article>;})}{!data.length&&<div className="admin-empty-state"><i className="fa-solid fa-headset"/><strong>Belum ada tiket bantuan</strong><span>Tiket sesuai status akan tampil di sini.</span></div>}</div></section>}
     {view==='reports'&&<div style={card}><label>Ujian <select value={reportExamId} onChange={(event)=>{setReportGrade('');setReportClass('');void loadReport(event.target.value,'','');}}><option value="">Pilih ujian</option>{Array.isArray(data)&&(data as Array<Record<string,unknown>>).map((exam)=><option key={String(exam.id)} value={String(exam.id)}>{String(exam.name)}</option>)}</select></label><div className="admin-result-filters"><label>Tingkat<select value={reportGrade} onChange={event=>{setReportGrade(event.target.value);setReportClass('');setReportData(null);}}><option value="">Semua tingkat</option>{['X','XI','XII'].map(grade=><option key={grade} value={grade}>{grade}</option>)}</select></label><label>Kelas<select value={reportClass} onChange={event=>{setReportClass(event.target.value);setReportData(null);}}><option value="">Semua kelas</option>{classChoices.filter(item=>!reportGrade||String(item.grade)===reportGrade).map(item=><option key={String(item.portal_class_id)} value={String(item.name)}>{String(item.name)}</option>)}</select></label><button type="button" className="btn btn-primary" disabled={!reportExamId||busy} onClick={()=>void loadReport(reportExamId)}>Terapkan filter</button></div>{reportData&&<><div className="admin-result-filters">{([['ministry','Kementerian / yayasan'],['office','Kantor / kanwil'],['school','Nama sekolah'],['address','Alamat'],['principal','Kepala madrasah'],['principalNip','NIP kepala madrasah'],['curriculum','Wakur kurikulum'],['curriculumNip','NIP wakur kurikulum']] as const).map(([key,label])=><label key={key}>{label}<input value={reportIdentity[key]} onChange={event=>setReportIdentity(previous=>({...previous,[key]:event.target.value}))} maxLength={191}/></label>)}</div><p>Kop dan nama penanda tangan akan muncul pada cetak/PDF serta lembar identitas Excel. Untuk PDF, pilih "Simpan sebagai PDF" pada dialog cetak browser. Logo tercetak pada kartu dan laporan; Excel memuat kop teks sekolah.</p><div className="admin-print-preview"><img src="/assets/img/logo-man1-palembang.png" alt="Lambang MAN 1 Palembang"/><div><span>{reportIdentity.ministry}</span><span>{reportIdentity.office}</span><strong>{reportIdentity.school}</strong><small>{reportIdentity.address}</small></div></div><div className="operations-monitor-actions"><button type="button" className="btn btn-primary" disabled={busy} onClick={()=>void printReport()}>Cetak / simpan PDF</button><button type="button" className="btn btn-secondary" disabled={busy} onClick={()=>void exportReport()}>Unduh laporan Excel</button></div><h3>Ringkasan hasil</h3><dl style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:12}}>{Object.entries((reportData.summary??{}) as Record<string,unknown>).map(([key,value])=><div key={key}><dt>{key.replaceAll('_',' ')}</dt><dd>{value===null?'—':String(value)}</dd></div>)}</dl><h3>Distribusi nilai</h3><table style={{width:'100%',textAlign:'left'}}><thead><tr><th>Rentang mulai</th><th>Jumlah peserta</th></tr></thead><tbody>{(Array.isArray(reportData.distribution)?reportData.distribution as Array<Record<string,unknown>>:[]).map((row,index)=><tr key={index}><td>{String(row.score_band)}</td><td>{String(row.students)}</td></tr>)}</tbody></table></>}</div>}
     {view==='results'&&typeof data==='object'&&data!==null&&Array.isArray((data as {items?:unknown[]}).items)&&<section className="admin-page-card"><header className="admin-card-heading"><div><span className="section-kicker">REKAP NILAI</span><h2>Hasil seluruh ujian</h2><p>Cari hasil berdasarkan ujian, tingkat, kelas, atau peserta.</p></div><div className="operations-monitor-actions">{resultExam&&<button className="btn btn-secondary" type="button" disabled={busy} onClick={()=>void regradeShortAnswers()}>Hitung ulang nilai isian</button>}<button className="btn btn-secondary" type="button" disabled={busy} onClick={()=>void exportResults()}>Unduh hasil sesuai filter Excel</button><button className="btn btn-secondary" type="button" disabled={busy} onClick={()=>void printResults()}>Cetak hasil sesuai filter / PDF</button></div></header><form className="admin-result-filters" onSubmit={event=>{event.preventDefault();void loadResults(1);}}><label>Ujian<select value={resultExam} onChange={event=>setResultExam(event.target.value)}><option value="">Semua ujian</option>{resultExams.map(exam=><option key={String(exam.id)} value={String(exam.id)}>{String(exam.name)}</option>)}</select></label><label>Tahun ajaran<select value={resultYear} onChange={event=>setResultYear(event.target.value)}><option value="">Semua tahun</option>{[...new Set(resultExams.map(exam=>String(exam.academic_year??'')).filter(Boolean))].map(year=><option key={year}>{year}</option>)}</select></label><label>Semester<select value={resultSemester} onChange={event=>setResultSemester(event.target.value)}><option value="">Semua semester</option><option value="ODD">Ganjil</option><option value="EVEN">Genap</option></select></label><label>Tingkat<select value={resultGrade} onChange={event=>{setResultGrade(event.target.value);setResultClass('');}}><option value="">Semua tingkat</option>{['X','XI','XII'].map(grade=><option key={grade}>{grade}</option>)}</select></label><label>Kelas<select value={resultClass} onChange={event=>setResultClass(event.target.value)}><option value="">Semua kelas</option>{classChoices.filter(item=>!resultGrade||String(item.grade)===resultGrade).map(item=><option key={String(item.portal_class_id)} value={String(item.name)}>{String(item.name)}</option>)}</select></label><label>Cari peserta<input value={resultQuery} onChange={event=>setResultQuery(event.target.value)} placeholder="Nama atau NISN"/></label><button className="btn btn-primary" disabled={busy}>Terapkan</button><button type="button" className="btn btn-secondary" onClick={()=>{setResultExam('');setResultGrade('');setResultClass('');setResultYear('');setResultSemester('');setResultQuery('');setResultPage(1);void load('/api/admin/results?page=1&limit=50');}}>Reset</button></form><div className="admin-table-scroll"><table><thead><tr><th>Siswa</th><th>Kelas</th><th>Ujian</th><th>Skor</th><th>Benar</th><th>Salah</th><th>Kosong</th><th>Selesai</th></tr></thead><tbody>{((data as {items:Array<Record<string,unknown>>}).items).map(row=><tr key={String(row.id)}><td>{String(row.name_snapshot)} · {String(row.nisn)}</td><td>{String(row.class_snapshot??'')}</td><td>{String(row.exam_name)}</td><td><strong>{String(row.score)}</strong></td><td>{String(row.correct_count)}</td><td>{String(row.wrong_count)}</td><td>{String(row.blank_count)}</td><td>{new Date(String(row.created_at)).toLocaleString('id-ID')}</td></tr>)}</tbody></table>{!(data as {items:unknown[]}).items.length&&<p className="operations-empty">Belum ada hasil sesuai filter.</p>}</div><div className="operations-pagination"><span>Halaman {resultPage} · {(data as {total:number}).total} hasil</span><button type="button" className="btn btn-secondary" disabled={busy||resultPage<=1} onClick={()=>void loadResults(resultPage-1)}>Sebelumnya</button><button type="button" className="btn btn-secondary" disabled={busy||resultPage*50>=Number((data as {total:number}).total)} onClick={()=>void loadResults(resultPage+1)}>Berikutnya</button></div></section>}
   </div></main></section>;

@@ -74,12 +74,13 @@ export async function supportRoutes(app: FastifyInstance) {
   });
   app.get('/api/student/support-tickets', async (request) => { const claims=requireRole(request,['STUDENT']);const [rows]=await requirePool().execute<RowDataPacket[]>(`${ticketSelect()} WHERE t.student_id=? ORDER BY t.updated_at DESC LIMIT 20`,[claims.sub]);return rows; });
   app.get('/api/staff/support-tickets', async (request) => {
-    const claims=requireRole(request,['ADMIN','TEACHER','EMPLOYEE']); const query=z.object({status:z.enum(['ALL','OPEN','IN_PROGRESS','RESOLVED','CLOSED']).default('ALL'),subject:z.string().trim().max(100).optional()}).parse(request.query); const pool=requirePool();
+    const claims=requireRole(request,['ADMIN','TEACHER','EMPLOYEE']); const query=z.object({status:z.enum(['ALL','OPEN','IN_PROGRESS','RESOLVED','CLOSED']).default('ALL'),subject:z.union([z.string().trim().max(100),z.array(z.string().trim().max(100))]).optional()}).parse(request.query); const pool=requirePool();
     if(claims.role!=='ADMIN'&&!(await canHandle(pool,claims.sub))) throw Object.assign(new Error('Akses tiket hanya untuk petugas piket'),{statusCode:403});
     // Mapel tidak disimpan di support_tickets; diambil dari ujian yang ditautkan tiket.
     let where='';const params:string[]=[];
     if(query.status!=='ALL'){where+=' AND t.status=?';params.push(query.status);}
-    if(query.subject){where+=' AND e.subject_name=?';params.push(query.subject);}
+    const subjects=[...(Array.isArray(query.subject)?query.subject:query.subject?[query.subject]:[])].filter(Boolean).slice(0,50);
+    if(subjects.length){where+=` AND e.subject_name IN (${subjects.map(()=>'?').join(',')})`;params.push(...subjects);}
     const [rows]=await pool.execute<RowDataPacket[]>(`${ticketSelect()} WHERE 1=1${where} ORDER BY FIELD(t.status,'OPEN','IN_PROGRESS','RESOLVED','CLOSED'),t.updated_at DESC LIMIT 200`,params);return rows;
   });
   app.get('/api/staff/support-tickets/subjects', async (request) => {

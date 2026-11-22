@@ -303,6 +303,21 @@
 .operations-monitor-summary strong{display:block;font-size:1.5rem;color:#24553a}
 .operations-monitor-filters label,.admin-result-filters label,.admin-ticket-toolbar label{display:grid;gap:5px;min-width:160px;font-weight:600}
 .operations-monitor-filters select,.admin-result-filters select,.admin-result-filters input,.admin-ticket-toolbar select{min-height:40px;border:1px solid #cbd5d1;border-radius:8px;padding:8px;background:var(--surface,#fff);color:inherit}
+.ticket-subject-filter{position:relative;min-width:220px}
+.ticket-subject-filter>summary{display:flex;align-items:center;gap:8px;min-height:40px;padding:8px 12px;border:1px solid #cbd5d1;border-radius:8px;background:var(--surface,#fff);color:inherit;font-weight:600;cursor:pointer;list-style:none}
+.ticket-subject-filter>summary::-webkit-details-marker{display:none}
+.ticket-subject-filter>summary::after{content:'\25BE';margin-left:auto;font-size:.75rem;color:#5b6b62}
+.ticket-subject-filter[open]>summary{border-color:#3a8054;box-shadow:0 0 0 3px rgba(58,128,84,.14)}
+.ticket-subject-panel{position:absolute;z-index:40;top:calc(100% + 6px);left:0;width:min(340px,80vw);padding:12px;border:1px solid #cbd5d1;border-radius:12px;background:var(--surface,#fff);box-shadow:0 18px 44px rgba(8,24,14,.18)}
+.ticket-subject-panel-head{display:flex;justify-content:space-between;gap:10px;margin-bottom:8px;font-size:.85rem;color:#42524a}
+.ticket-subject-panel-actions{display:flex;gap:8px;margin-bottom:8px}
+.ticket-subject-panel-actions button{border:1px solid #cbd5d1;border-radius:7px;background:#f4f8f5;color:#24553a;font-weight:700;font-size:.78rem;padding:6px 10px;cursor:pointer}
+.ticket-subject-panel-actions button:disabled{opacity:.55;cursor:not-allowed}
+.ticket-subject-options{display:grid;gap:2px;max-height:280px;overflow:auto}
+.ticket-subject-options label{display:flex;align-items:center;gap:9px;padding:7px 6px;border-radius:7px;font-weight:600;cursor:pointer}
+.ticket-subject-options label:hover{background:#eef6f0}
+.ticket-subject-options input{width:17px;height:17px;accent-color:#2f7d4f;cursor:pointer}
+.ticket-subject-empty{margin:6px 0;color:#68766f;font-size:.8rem}
 .session-online,.session-offline{display:inline-block;border-radius:999px;padding:4px 9px;font-weight:700;font-size:.8rem}
 .session-online{background:#e4f5e7;color:#1f7034}.session-offline{background:#fff1d9;color:#915900}
 .admin-ticket-note,.student-support-reply{background:#eef6f0;color:#184a2a;border-left:3px solid #3a8054;border-radius:5px;padding:9px 12px;margin:8px 0}
