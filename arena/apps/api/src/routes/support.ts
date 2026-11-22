@@ -62,7 +62,7 @@ export async function supportRoutes(app: FastifyInstance) {
       let examId=body.exam_id??null;let attemptId:number|null=null;
       if(examId){const[attempts]=await connection.execute<RowDataPacket[]>('SELECT id FROM exam_attempts WHERE student_id=? AND exam_id=?',[studentId,examId]);attemptId=attempts[0]?Number(attempts[0].id):null;
         if(!attemptId){const[eligibility]=await connection.execute<RowDataPacket[]>(`SELECT e.id FROM exams e JOIN students s ON s.id=? WHERE e.id=? AND e.status='ACTIVE' AND e.grade=s.grade_snapshot AND UTC_TIMESTAMP(3) BETWEEN e.starts_at AND e.ends_at AND (NOT EXISTS(SELECT 1 FROM exam_target_classes tc0 WHERE tc0.exam_id=e.id) OR EXISTS(SELECT 1 FROM exam_target_classes tc WHERE tc.exam_id=e.id AND tc.portal_class_id=s.portal_class_id)) AND (NOT EXISTS(SELECT 1 FROM exam_target_students ts0 WHERE ts0.exam_id=e.id) OR EXISTS(SELECT 1 FROM exam_target_students ts WHERE ts.exam_id=e.id AND ts.student_id=s.id))`,[studentId,examId]);if(!eligibility[0])throw Object.assign(new Error('Ujian tidak terkait dengan siswa ini'),{statusCode:422});}}
-      else if(body.category==='EXAM_LOCKED'){const[attempts]=await connection.execute<RowDataPacket[]>("SELECT id,exam_id FROM exam_attempts WHERE student_id=? AND status='TERMINATED' ORDER BY updated_at DESC,id DESC LIMIT 1",[studentId]);if(attempts[0]){attemptId=Number(attempts[0].id);examId=Number(attempts[0].exam_id);}}
+      else if(body.category==='EXAM_LOCKED'){const[attempts]=await connection.execute<RowDataPacket[]>("SELECT id,exam_id FROM exam_attempts WHERE student_id=? AND (status IN ('TERMINATED','EXPIRED') OR (status='IN_PROGRESS' AND expires_at<=UTC_TIMESTAMP(3))) ORDER BY updated_at DESC,id DESC LIMIT 1",[studentId]);if(attempts[0]){attemptId=Number(attempts[0].id);examId=Number(attempts[0].exam_id);}}
       const[open]=await connection.execute<RowDataPacket[]>(`SELECT public_id id FROM support_tickets WHERE student_id=? AND category=? AND exam_id <=> ? AND status IN ('OPEN','IN_PROGRESS') ORDER BY id DESC LIMIT 1`,[studentId,body.category,examId]);
       if(open[0]){await connection.commit();return open[0];}
       id=ulid();
@@ -107,12 +107,13 @@ export async function supportRoutes(app: FastifyInstance) {
     } catch(error) { try { await connection.rollback(); } catch {} throw error; } finally { connection.release(); }
   });
   app.post<{Params:{id:string}}>('/api/staff/support-tickets/:id/reset', async (request) => {
-    // Session recovery (attempt reset) is ADMIN-only; proctors may take and resolve
-    // tickets but cannot reopen a terminated exam session.
-    const claims=requireRole(request,['ADMIN'],true);const body=z.object({reason:z.string().trim().min(3).max(1000)}).strict().parse(request.body);const pool=requirePool();
+    // Admin dan petugas piket aktif boleh membuka kembali sesi yang terkunci.
+    // Hak petugas diperiksa ulang di dalam transaksi agar perubahan akses langsung berlaku.
+    const claims=requireRole(request,['ADMIN','TEACHER','EMPLOYEE'],true);const body=z.object({reason:z.string().trim().min(3).max(1000)}).strict().parse(request.body);const pool=requirePool();
     const connection=await pool.getConnection();
     try {
       await connection.beginTransaction(); await assertActiveActor(connection,claims.sub,claims.role);
+      await assertActiveTicketHandler(connection,claims.sub,claims.role);
       const [rows]=await connection.execute<RowDataPacket[]>('SELECT id,student_id,exam_id,status,handled_by FROM support_tickets WHERE public_id=? FOR UPDATE',[request.params.id]);const ticket=rows[0];
       if(!ticket) throw Object.assign(new Error('Tiket tidak ditemukan'),{statusCode:404});
       if(['RESOLVED','CLOSED'].includes(ticket.status)) throw Object.assign(new Error('Tiket sudah selesai dan tidak dapat dipulihkan'),{statusCode:409});

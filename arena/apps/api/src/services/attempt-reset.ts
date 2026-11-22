@@ -21,12 +21,18 @@ export async function resetTerminatedAttemptInTransaction(
     throw Object.assign(new Error('Akun atau hak akses petugas sudah tidak aktif'), { statusCode: 403 });
   }
 
-  // Reset after violation termination is an ADMIN-only action: teachers/proctors can
-  // review violations but the session recovery decision (restoring remaining time) is
-  // reserved for the administrator.
-  const authorized = staff.role === 'ADMIN';
+  // Reset sesi boleh dilakukan ADMIN atau petugas piket (proctor) yang aktif.
+  // Keputusan tetap tercatat di audit_logs lengkap dengan peran pelakunya.
+  let authorized = staff.role === 'ADMIN';
   if (!authorized) {
-    throw Object.assign(new Error('Pemulihan sesi hanya dapat dilakukan oleh admin'), { statusCode: 403 });
+    const [proctorRows] = await connection.execute<RowDataPacket[]>(`SELECT (
+      EXISTS(SELECT 1 FROM teacher_exam_assignments a JOIN users u ON ((u.role='TEACHER' AND u.teacher_id=a.teacher_id) OR (u.role='EMPLOYEE' AND u.employee_id=a.employee_id)) WHERE u.id=? AND u.status='ACTIVE' AND a.duty_role='PROCTOR' AND a.exam_id IS NULL)
+      OR EXISTS(SELECT 1 FROM teachers t JOIN users u ON u.teacher_id=t.id WHERE u.id=? AND u.role='TEACHER' AND u.status='ACTIVE' AND t.status='ACTIVE' AND t.proctor_eligible=1)
+    ) ok`, [claimedActor.id, claimedActor.id]);
+    authorized = Boolean(proctorRows[0]?.ok);
+  }
+  if (!authorized) {
+    throw Object.assign(new Error('Pemulihan sesi hanya dapat dilakukan oleh admin atau petugas piket aktif'), { statusCode: 403 });
   }
 
   const [rows] = await connection.execute<RowDataPacket[]>(
@@ -35,9 +41,9 @@ export async function resetTerminatedAttemptInTransaction(
   );
   const attempt = rows[0];
   // Pemulihan sesi bebas: attempt dalam status apa pun (TERMINATED, EXPIRED, COMPLETED,
-  // bahkan IN_PROGRESS) boleh dipulihkan berapa kali pun oleh admin — tidak ada lagi
-  // batas jumlah reset maupun syarat status/pelanggaran. Syaratnya satu: masih ada
-  // sisa waktu yang bisa dikembalikan ke siswa.
+  // bahkan IN_PROGRESS) boleh dipulihkan berapa kali pun oleh admin/petugas piket — tidak
+  // ada lagi batas jumlah reset maupun syarat status/pelanggaran. Syaratnya satu: masih
+  // ada sisa waktu yang bisa dikembalikan ke siswa.
   if (!attempt) {
     throw Object.assign(new Error('Sesi ujian peserta tidak ditemukan'), { statusCode: 404 });
   }

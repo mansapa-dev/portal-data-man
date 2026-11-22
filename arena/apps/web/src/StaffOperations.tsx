@@ -5,7 +5,7 @@ import { AdminOverview } from './AdminOverview';
 
 type Row = Record<string, unknown>;
 
-/** Status sesi yang boleh dipulihkan admin — semuanya bebas, tanpa syarat pelanggaran. */
+/** Status sesi yang boleh dipulihkan admin/petugas piket — semuanya bebas, tanpa syarat pelanggaran. */
 const RECOVERABLE_ATTEMPT_STATUSES = ['TERMINATED', 'EXPIRED', 'COMPLETED', 'IN_PROGRESS'];
 
 function getRowValue(row: Row, key: string): string {
@@ -1307,7 +1307,7 @@ export function StaffOperations({
                       </span>
                     </td>
                     <td>
-                      {admin &&
+                      {(admin || canProctor) &&
                         RECOVERABLE_ATTEMPT_STATUSES.includes(String(row.attempt_status).toUpperCase()) &&
                         row.student_id != null &&
                         row.exam_id != null && (
