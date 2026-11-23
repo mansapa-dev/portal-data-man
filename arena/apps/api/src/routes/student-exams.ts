@@ -117,6 +117,22 @@ export async function studentExamRoutes(app: FastifyInstance, options:{pool?:Poo
     if(result.terminated)finishWaiting(examId.parse(request.params.id),claims.sub);
     return result;
   });
+  // Siswa melaporkan status kehadiran wajah (OK / ABSENT / CAMERA_OFF) agar
+  // pengawas dapat memantau siapa yang sedang wajahnya tidak terdeteksi.
+  // Tidak ada foto/video yang dikirim, hanya sinyal status ringan.
+  app.patch<{ Params: { id: string } }>('/api/student/exams/:id/face-presence', { config: { rateLimit: { max: 60, timeWindow: '1 minute', keyGenerator: rateLimitKey } } }, async (request) => {
+    const claims = await access(request,examId.parse(request.params.id),true,true); assertCsrf(request, claims, { allowBodyToken: true });
+    const {exam_token: _token,...payload}=z.object({exam_token:z.string().max(64).optional()}).passthrough().parse(request.body);
+    const body = z.object({ status: z.enum(['OK','ABSENT','CAMERA_OFF']), client_occurred_at: z.string().datetime({ offset: true }).optional() }).strict().parse(payload);
+    const pool = requirePool();
+    const now = body.client_occurred_at ? new Date(body.client_occurred_at).toISOString() : new Date().toISOString();
+    const [existing] = await pool.execute<RowDataPacket[]>('SELECT id FROM exam_attempts WHERE student_id=? AND exam_id=?', [claims.sub, examId.parse(request.params.id)]);
+    const attempt = existing[0];
+    if (!attempt) throw Object.assign(new Error('Sesi ujian tidak ditemukan'), { statusCode: 404 });
+    const startedAt = body.status === 'ABSENT' || body.status === 'CAMERA_OFF' ? now : null;
+    await pool.execute('UPDATE exam_attempts SET face_status=?, face_absence_started_at=?, updated_at=UTC_TIMESTAMP(3) WHERE id=?', [body.status, startedAt, attempt.id]);
+    return { ok: true, status: body.status, absence_started_at: startedAt };
+  });
   app.post<{ Params: { id: string } }>('/api/student/exams/:id/submit', { config: { rateLimit: { max: 10, timeWindow: '1 minute', keyGenerator: rateLimitKey } } }, async (request) => {
     const started=performance.now();
     const recordSubmit=(outcome:string)=>loadDiagnostics.record('exam_submit',{outcome,total_ms:Number((performance.now()-started).toFixed(2))});

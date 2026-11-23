@@ -260,12 +260,13 @@ export function StudentExam({attempt,studentName,studentNisn,answers,flags,busy,
  useEffect(()=>{const active=!helpOpen&&!expired&&saveState!=='error';fullscreenRequested.current=active;setExamMode(active);},[attempt.attempt_id,helpOpen,expired,saveState]);
  useEffect(()=>()=>{fullscreenRequested.current=false;setExamMode(false);},[]);
  // Pengawasan kehadiran wajah: kamera diproses sepenuhnya di perangkat siswa.
- // Server hanya menerima sinyal "wajah tidak terlihat"/"kamera mati", maksimal
- // sekali per episode, tanpa foto atau video.
+ // Server hanya menerima sinyal status wajah (tanpa foto/video), dan hanya
+ // untuk catatan pengawas — tidak memicu terminasi otomatis.
  useEffect(()=>{
   if(expired)return;
   const privacyInfo='Kamera depan memantau kehadiran wajah. Gambar hanya diproses di perangkat ini dan tidak dikirim ke server.';
   let infoTimer=0;
+  let lastSentStatus: FacePresenceStatus | null = null;
   const hideInfo=()=>{window.clearTimeout(infoTimer);infoTimer=0;setFaceNotice(notice=>notice===privacyInfo?'':notice);};
   const showInfoOnce=()=>{
    if(faceInfoShown.current)return;
@@ -273,24 +274,38 @@ export function StudentExam({attempt,studentName,studentNisn,answers,flags,busy,
    setFaceNotice(privacyInfo);
    infoTimer=window.setTimeout(hideInfo,8000);
   };
+  const reportFace=async(status:FacePresenceStatus)=>{
+   if(status===lastSentStatus)return;
+   lastSentStatus=status;
+   const apiStatus={ok:'OK',absent:'ABSENT',blocked:'CAMERA_OFF',unavailable:'CAMERA_OFF',error:'CAMERA_OFF',starting:'OK'}[status];
+   try{await api(`/api/student/exams/${attempt.exam.id}/face-presence`,{method:'PATCH',keepalive:true,body:{status:apiStatus}});}catch{/* gagal tercatat server, jangan ganggu siswa */};
+  };
   const monitor=createFacePresence({
    onStatus:(status,detail)=>{
     setFaceStatus(status);
     if(status==='starting'){showInfoOnce();return;}
     hideInfo();
-    if(status==='ok')setFaceNotice('');
-    else if(status==='blocked')setFaceNotice('Izin kamera tidak diberikan. Pengawasan wajah tidak berjalan; hubungi pengawas bila kamera bermasalah.');
+    if(status==='ok'){
+     setFaceNotice('');
+     void reportFace('ok');
+    } else if(status==='blocked')setFaceNotice('Izin kamera tidak diberikan. Pengawasan wajah tidak berjalan; hubungi pengawas bila kamera bermasalah.');
     else if(status==='unavailable')setFaceNotice('');
     else if(status==='error'&&detail?.reason==='model')setFaceNotice('');
-    else if(status==='error'&&detail?.reason==='ended')setFaceNotice('Kamera terputus. Arahkan kamera ke wajah atau hubungi pengawas.');
+    else if(status==='error'&&detail?.reason==='ended'){setFaceNotice('Kamera terputus. Arahkan kamera ke wajah atau hubungi pengawas.');void reportFace('error');}
     else if(status==='error')setFaceNotice('Kamera pengawasan belum siap. Bila wajah tidak terpantau, muat ulang halaman atau hubungi pengawas.');
    },
    onAbsent:()=>{
     setFaceNotice('Wajah tidak terdeteksi. Hadapkan wajah ke kamera dan jangan meninggalkan perangkat. Sinyal ini tercatat untuk pengawas.');
     recordRef.current?.('FACE_ABSENT');
+    void reportFace('absent');
+   },
+   onRecovered:()=>{
+    // Wajah kembali terdeteksi: hapus peringatan dan laporkan OK ke server.
+    setFaceNotice('');
+    void reportFace('ok');
    },
    onCameraProblem:(reason)=>{
-    if(reason==='permission'||reason==='ended')recordRef.current?.('FACE_CAMERA_OFF');
+    if(reason==='permission'||reason==='ended'){recordRef.current?.('FACE_CAMERA_OFF');void reportFace('error');}
    },
   });
   void monitor.start();

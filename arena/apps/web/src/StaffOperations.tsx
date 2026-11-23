@@ -97,7 +97,7 @@ function ProctorOverview({
   onNavigate?: (route: 'sessions' | 'tickets') => void;
   compact?: boolean;
 }) {
-  const [summary, setSummary] = useState({ sessions: 0, online: 0, open: 0, handling: 0 });
+  const [summary, setSummary] = useState({ sessions: 0, online: 0, open: 0, handling: 0, faceAbsent: 0 });
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -109,8 +109,9 @@ function ProctorOverview({
       void Promise.all([
         api<Row[]>('/api/teacher/live-sessions?page=1'),
         api<Row[]>('/api/staff/support-tickets'),
+        api<Row[]>('/api/staff/face-absence?limit=200').catch(() => [] as Row[]),
       ])
-        .then(([sessions, tickets]) => {
+        .then(([sessions, tickets, faceRows]) => {
           if (!active) return;
           setSummary({
             sessions: sessions.filter((row) => row.status === 'IN_PROGRESS').length,
@@ -122,6 +123,7 @@ function ProctorOverview({
             ).length,
             open: tickets.filter((row) => row.status === 'OPEN').length,
             handling: tickets.filter((row) => row.status === 'IN_PROGRESS').length,
+            faceAbsent: Array.isArray(faceRows) ? faceRows.length : 0,
           });
         })
         .catch((e) => {
@@ -204,6 +206,18 @@ function ProctorOverview({
             </article>
           </section>
 
+          {summary.faceAbsent > 0 && (
+            <div className="face-absence-alert compact" role="status">
+              <div className="face-absence-alert-head">
+                <i className="fa-solid fa-face-frown" />
+                <div>
+                  <strong>{summary.faceAbsent} peserta wajahnya tidak terpantau</strong>
+                  <span>Buka Pantau Sesi untuk melihat daftar peserta dan durasinya.</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
             <button className="btn btn-primary" type="button" onClick={() => onNavigate?.('sessions')}>
               <i className="fa-solid fa-desktop" /> Pantau Sesi Langsung
@@ -259,6 +273,8 @@ export function StaffOperations({
   const [lastLoaded, setLastLoaded] = useState<Date | null>(null);
   // Pemulihan sesi massal (Log Pelanggaran, admin): pasangan siswa+ujian yang dicentang.
   const [restoreSelection, setRestoreSelection] = useState<string[]>([]);
+  // Pemantauan kehadiran wajah: peserta yang sedang wajahnya tidak terdeteksi.
+  const [faceAbsence, setFaceAbsence] = useState<Row[]>([]);
 
   // Filter Monitoring Sesi
   const [sessionExam, setSessionExam] = useState('');
@@ -434,6 +450,29 @@ export function StaffOperations({
       if (timer) clearInterval(timer);
     };
   }, [path, view, admin]);
+
+  // Pemantauan kehadiran wajah: polling ringan tiap 20 detik hanya saat halaman
+  // sesi terbuka dan terlihat. Tidak ada push real-time agar tidak membebani
+  // server maupun mengganggu pengawas dengan notifikasi palsu.
+  useEffect(() => {
+    if (view !== 'sessions') { setFaceAbsence([]); return; }
+    let active = true;
+    const refresh = () => {
+      if (document.hidden) return;
+      api<Row[]>('/api/staff/face-absence?limit=200')
+        .then((rows) => { if (active) setFaceAbsence(Array.isArray(rows) ? rows : []); })
+        .catch(() => { if (active) setFaceAbsence([]); });
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 20_000);
+    const onVisible = () => { if (!document.hidden) refresh(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [view]);
 
   async function report(id: string, nextPage = 1) {
     setSelectedExam(id);
@@ -960,7 +999,34 @@ export function StaffOperations({
             <span className="status-pill terminated">
               <i className="fa-solid fa-ban" /> <strong>{rows.filter((r) => r.status === 'TERMINATED').length}</strong> Dihentikan (24 jam)
             </span>
+            <span className={`status-pill ${faceAbsence.length ? 'face-absent' : 'neutral'}`}>
+              <i className="fa-solid fa-face-frown" /> <strong>{faceAbsence.length}</strong> Wajah Tidak Terpantau
+            </span>
           </div>
+
+          {/* Peringatan kehadiran wajah: hanya tampil saat ada peserta yang
+              wajahnya tidak terdeteksi. Tidak menghentikan ujian otomatis. */}
+          {faceAbsence.length > 0 && (
+            <div className="face-absence-alert" role="status">
+              <div className="face-absence-alert-head">
+                <i className="fa-solid fa-face-frown" />
+                <div>
+                  <strong>{faceAbsence.length} peserta wajahnya tidak terpantau</strong>
+                  <span>Periksa peserta berikut. Sinyal ini hanya catatan pengawas, tidak menghentikan ujian.</span>
+                </div>
+              </div>
+              <ul className="face-absence-list">
+                {faceAbsence.slice(0, 8).map((row) => (
+                  <li key={String(row.public_id)}>
+                    <strong>{getRowValue(row, 'name_snapshot')}</strong>
+                    <span>{getRowValue(row, 'class_snapshot')} · {getRowValue(row, 'exam_name')}</span>
+                    <em>{row.face_status === 'CAMERA_OFF' ? 'Kamera mati' : `Tidak terlihat ${Number(row.absence_minutes ?? 0)} mnt`}</em>
+                  </li>
+                ))}
+              </ul>
+              {faceAbsence.length > 8 && <small className="face-absence-more">+{faceAbsence.length - 8} peserta lainnya…</small>}
+            </div>
+          )}
 
           {/* Form Filter Responsif */}
           <div className="operations-filter-card">

@@ -9,6 +9,8 @@ export type FacePresenceOptions = {
   onStatus: (status: FacePresenceStatus, detail?: FacePresenceDetail) => void;
   /** Dipanggil sekali per episode saat wajah hilang melewati ambang waktu. */
   onAbsent: (detail: { missingMs: number }) => void;
+  /** Dipanggil sekali saat wajah kembali terdeteksi setelah sebelumnya hilang. */
+  onRecovered?: () => void;
   onCameraProblem?: (reason: 'permission' | 'ended' | 'unsupported' | 'error') => void;
   /** Berapa lama wajah boleh tidak terlihat sebelum dianggap hilang. */
   absentAfterMs?: number;
@@ -177,7 +179,10 @@ export function createFacePresence(options: FacePresenceOptions): FacePresenceMo
 
     if (faces > 0) {
       lastSeenAt = now;
-      absentReported = false;
+      if (absentReported) {
+        absentReported = false;
+        options.onRecovered?.();
+      }
       if (current !== 'ok') setStatus('ok', { faces });
       return;
     }

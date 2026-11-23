@@ -754,3 +754,120 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* --- PEMANTAUAN KEHADIRAN WAJAH (hybrid, tanpa push real-time) --- */
+.status-pill.face-absent {
+  background: #fff7ed;
+  color: #c2410c;
+  border-color: #fed7aa;
+}
+
+.face-absence-alert {
+  border: 1px solid #fed7aa;
+  background: #fff7ed;
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.face-absence-alert.compact {
+  margin: 0 0 14px;
+}
+
+.face-absence-alert-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.face-absence-alert-head > i {
+  color: #c2410c;
+  font-size: 18px;
+  margin-top: 2px;
+}
+
+.face-absence-alert-head strong {
+  display: block;
+  color: #9a3412;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.face-absence-alert-head span {
+  display: block;
+  color: #b45309;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.face-absence-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.face-absence-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+
+.face-absence-list li strong {
+  font-size: 13px;
+  color: var(--text-main);
+}
+
+.face-absence-list li span {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.face-absence-list li em {
+  font-style: normal;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #c2410c;
+}
+
+.face-absence-more {
+  display: block;
+  margin-top: 8px;
+  color: #b45309;
+  font-size: 12px;
+}
+
+:root[data-theme=dark] .status-pill.face-absent {
+  background: rgba(194, 65, 12, 0.15);
+  color: #fdba74;
+  border-color: rgba(253, 186, 116, 0.3);
+}
+
+:root[data-theme=dark] .face-absence-alert {
+  background: rgba(194, 65, 12, 0.1);
+  border-color: rgba(253, 186, 116, 0.25);
+}
+
+:root[data-theme=dark] .face-absence-alert-head strong {
+  color: #fdba74;
+}
+
+:root[data-theme=dark] .face-absence-alert-head span,
+:root[data-theme=dark] .face-absence-more {
+  color: #fcd34d;
+}
+
+@media (max-width: 560px) {
+  .face-absence-list {
+    grid-template-columns: 1fr;
+  }
+  .face-absence-alert {
+    padding: 12px 14px;
+  }
+}
