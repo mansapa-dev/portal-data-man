@@ -101,7 +101,7 @@ export async function resetTerminatedAttemptInTransaction(
   await connection.execute('DELETE FROM exam_submissions WHERE attempt_id=?', [attempt.id]);
   await connection.execute('DELETE FROM exam_results WHERE attempt_id=?', [attempt.id]);
   await connection.execute(
-    "UPDATE exam_attempts SET status='IN_PROGRESS',violation_count=0,termination_action=NULL,completed_at=NULL,submitted_at=NULL,expires_at=? WHERE id=?",
+    "UPDATE exam_attempts SET status='IN_PROGRESS',violation_count=0,termination_action=NULL,completed_at=NULL,submitted_at=NULL,expires_at=?,face_status='UNKNOWN',face_absence_started_at=NULL WHERE id=?",
     [expiresAt, attempt.id],
   );
   await connection.execute(

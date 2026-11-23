@@ -880,6 +880,12 @@ body:has(.student-exam) {
   background: #fffbeb;
 }
 
+.student-exam .face-guard-chip.face-model-error {
+  color: #475569;
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
 .student-exam .face-guard-chip.face-unavailable {
   opacity: 0.6;
 }

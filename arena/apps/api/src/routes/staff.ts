@@ -52,15 +52,22 @@ export async function staffRoutes(app:FastifyInstance){
      class_name:z.string().trim().max(100).optional(),
    }).parse(request.query);
    const admin=claims.role==='ADMIN';
+   // ADMIN melihat semua peserta. Guru/petugas hanya ujian yang ditugaskan,
+   // ditambah pengawas global (duty_role=PROCTOR, exam_id NULL) yang mencakup
+   // seluruh ujian.
    const scope=admin?'':' AND EXISTS(SELECT 1 FROM teacher_exam_assignments x JOIN users u ON (u.teacher_id IS NOT NULL AND u.teacher_id=x.teacher_id) OR (u.employee_id IS NOT NULL AND u.employee_id=x.employee_id) WHERE u.id=? AND (x.exam_id=e.id OR (x.duty_role=\'PROCTOR\' AND x.exam_id IS NULL)))';
    const params:(string|number)[]=admin?[]:[claims.sub];
+   // Hanya attempt aktif dan hanya status wajah yang benar-benar bermasalah.
    const filters:string[]=["a.status='IN_PROGRESS'","a.face_status IN ('ABSENT','CAMERA_OFF')"];
    if(query.exam_id){filters.push('a.exam_id=?');params.push(query.exam_id);}
    if(query.grade){filters.push('s.grade_snapshot=?');params.push(query.grade);}
    if(query.class_name){filters.push('s.class_snapshot=?');params.push(query.class_name);}
-   const where=`WHERE ${filters.join(' AND ')}${scope?' AND '+scope.replace(' AND ','') : ''}`;
-   const[rows]=await requirePool().execute<RowDataPacket[]>(`SELECT a.public_id,a.face_status,a.face_absence_started_at,a.violation_count,s.id student_id,s.nisn,s.name_snapshot,s.class_snapshot,s.grade_snapshot,e.id exam_id,e.name exam_name,e.grade,e.subject_name,c.last_seen_at FROM exam_attempts a JOIN students s ON s.id=a.student_id JOIN exams e ON e.id=a.exam_id LEFT JOIN attempt_connections c ON c.attempt_id=a.id ${where} ORDER BY a.face_absence_started_at ASC,a.id DESC LIMIT ? OFFSET ?`,[...params,query.limit,(query.page-1)*query.limit]);
-   return rows.map((row:RowDataPacket)=>({...row,absence_minutes:row.face_absence_started_at?Math.floor((Date.now()-new Date(String(row.face_absence_started_at)).getTime())/60_000):0}));
+   const where=`WHERE ${filters.join(' AND ')}${scope}`;
+   // Durasi dihitung oleh MySQL terhadap UTC_TIMESTAMP(3), bukan jam proses API,
+   // sehingga konsisten dengan waktu penyimpanan dan tidak terpengaruh zona waktu
+   // perangkat siswa maupun server aplikasi.
+   const[rows]=await requirePool().execute<RowDataPacket[]>(`SELECT a.public_id,a.face_status,a.face_absence_started_at,a.violation_count,COALESCE(TIMESTAMPDIFF(SECOND,a.face_absence_started_at,UTC_TIMESTAMP(3)),0) absence_seconds,s.id student_id,s.nisn,s.name_snapshot,s.class_snapshot,s.grade_snapshot,e.id exam_id,e.name exam_name,e.grade,e.subject_name,c.last_seen_at FROM exam_attempts a JOIN students s ON s.id=a.student_id JOIN exams e ON e.id=a.exam_id LEFT JOIN attempt_connections c ON c.attempt_id=a.id ${where} ORDER BY a.face_absence_started_at ASC,a.id DESC LIMIT ? OFFSET ?`,[...params,query.limit,(query.page-1)*query.limit]);
+   return rows.map((row:RowDataPacket)=>({...row,absence_seconds:Number(row.absence_seconds??0),absence_minutes:Math.floor(Number(row.absence_seconds??0)/60)}));
   });
 app.post<{Params:{id:string}}>('/api/staff/students/:id/reset',async(request)=>{const claims=requireRole(request,['ADMIN','TEACHER','EMPLOYEE'],true);if(!/^\d+$/.test(String(request.params.id)))throw Object.assign(new Error('ID siswa tidak valid'),{statusCode:400});const body=z.object({exam_id:z.coerce.number().int().positive(),reason:z.string().trim().min(3).max(1000)}).strict().parse(request.body),studentId=z.coerce.number().int().positive().parse(request.params.id);return resetTerminatedAttempt(requirePool(),studentId,body.exam_id,claims.sub,claims.role,body.reason);});
 }

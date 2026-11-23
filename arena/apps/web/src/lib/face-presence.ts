@@ -1,7 +1,7 @@
 import cascadeUrl from './face/facefinder.bin?url';
 import { clusterDetections, runCascade, unpackCascade, type CascadeClassifier, type Detection } from './face/pico';
 
-export type FacePresenceStatus = 'starting' | 'ok' | 'absent' | 'blocked' | 'unavailable' | 'error';
+export type FacePresenceStatus = 'starting' | 'ok' | 'absent' | 'blocked' | 'unavailable' | 'error' | 'model-error';
 
 export type FacePresenceDetail = { faces?: number; missingMs?: number; reason?: string };
 
@@ -11,7 +11,7 @@ export type FacePresenceOptions = {
   onAbsent: (detail: { missingMs: number }) => void;
   /** Dipanggil sekali saat wajah kembali terdeteksi setelah sebelumnya hilang. */
   onRecovered?: () => void;
-  onCameraProblem?: (reason: 'permission' | 'ended' | 'unsupported' | 'error') => void;
+  onCameraProblem?: (reason: 'permission' | 'ended' | 'unsupported' | 'no-camera' | 'error') => void;
   /** Berapa lama wajah boleh tidak terlihat sebelum dianggap hilang. */
   absentAfterMs?: number;
   /** Jarak antar sampel. Deteksi berjalan lokal, tidak memanggil server. */
@@ -223,7 +223,10 @@ export function createFacePresence(options: FacePresenceOptions): FacePresenceMo
     try {
       const devices = await media.enumerateDevices?.();
       if (Array.isArray(devices) && devices.length > 0 && !devices.some((device) => device.kind === 'videoinput')) {
+        // Perangkat benar-benar tidak punya kamera: laporkan sebagai masalah
+        // kamera (CAMERA_OFF) agar pengawas tahu monitoring tidak berjalan.
         setStatus('unavailable', { reason: 'no-camera' });
+        options.onCameraProblem?.('no-camera');
         return;
       }
     } catch { /* enumerateDevices tidak wajib */ }
@@ -247,6 +250,11 @@ export function createFacePresence(options: FacePresenceOptions): FacePresenceMo
         options.onCameraProblem?.('permission');
       } else if (name === 'NotFoundError' || name === 'OverconstrainedError') {
         setStatus('unavailable', { reason: 'no-camera' });
+        options.onCameraProblem?.('no-camera');
+      } else if (name === 'NotReadableError' || name === 'AbortError') {
+        // Kamera dipakai proses lain / perangkat gagal membuka stream.
+        setStatus('error', { reason: name });
+        options.onCameraProblem?.('error');
       } else {
         setStatus('error', { reason: name || 'error' });
         options.onCameraProblem?.('error');
@@ -281,7 +289,9 @@ export function createFacePresence(options: FacePresenceOptions): FacePresenceMo
     canvas.height = frameHeight;
     context = canvas.getContext('2d', { willReadFrequently: true });
     if (!context) {
+      // Canvas tidak tersedia: pipeline kamera tidak bisa berjalan.
       setStatus('error', { reason: 'canvas' });
+      options.onCameraProblem?.('error');
       releaseStream();
       return;
     }
@@ -299,8 +309,11 @@ export function createFacePresence(options: FacePresenceOptions): FacePresenceMo
     const ready = await loadClassifier();
     if (stopped) return;
     if (!ready) {
-      // Kamera hidup tetapi model gagal dimuat: jangan menghukum siswa.
-      setStatus('error', { reason: 'model' });
+      // Kamera hidup tetapi model deteksi gagal dimuat. Ini gangguan teknis,
+      // BUKAN bukti siswa tidak hadir: bedakan statusnya (model-error) agar
+      // frontend tidak mengirim ABSENT/CAMERA_OFF maupun mencatat pelanggaran.
+      setStatus('model-error', { reason: 'model' });
+      releaseStream();
       return;
     }
 

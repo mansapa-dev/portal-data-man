@@ -6,6 +6,7 @@ import { requirePool } from '../lib/db.js';
 import { ScoringService } from '../services/scoring.js';
 import { StudentExamService } from '../services/student-exam.js';
 import { acceptSubmission } from '../services/exam-submission.js';
+import { nextFacePresenceUpdate } from '../services/face-presence.js';
 import { dispatchFinalization, isSubmitAsyncEnabled } from '../services/submission-dispatch.js';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 import { waitingRoom } from '../lib/waiting-room.js';
@@ -121,17 +122,48 @@ export async function studentExamRoutes(app: FastifyInstance, options:{pool?:Poo
   // pengawas dapat memantau siapa yang sedang wajahnya tidak terdeteksi.
   // Tidak ada foto/video yang dikirim, hanya sinyal status ringan.
   app.patch<{ Params: { id: string } }>('/api/student/exams/:id/face-presence', { config: { rateLimit: { max: 60, timeWindow: '1 minute', keyGenerator: rateLimitKey } } }, async (request) => {
-    const claims = await access(request,examId.parse(request.params.id),true,true); assertCsrf(request, claims, { allowBodyToken: true });
+    const exam = examId.parse(request.params.id);
+    // `finished=true` hanya untuk validasi token/CSRF/tiket seperti endpoint
+    // pelanggaran. Status IN_PROGRESS TIDAK dijamin oleh access(), jadi wajib
+    // diperiksa ulang di dalam transaksi di bawah.
+    const claims = await access(request,exam,true,true); assertCsrf(request, claims, { allowBodyToken: true });
     const {exam_token: _token,...payload}=z.object({exam_token:z.string().max(64).optional()}).passthrough().parse(request.body);
+    // client_occurred_at diterima demi kompatibilitas tetapi DIABAIKAN. Durasi
+    // ketidakhadiran selalu memakai jam server (UTC_TIMESTAMP) supaya jam
+    // perangkat siswa tidak bisa memperpendek/memanipulasi durasi.
     const body = z.object({ status: z.enum(['OK','ABSENT','CAMERA_OFF']), client_occurred_at: z.string().datetime({ offset: true }).optional() }).strict().parse(payload);
-    const pool = requirePool();
-    const now = body.client_occurred_at ? new Date(body.client_occurred_at).toISOString() : new Date().toISOString();
-    const [existing] = await pool.execute<RowDataPacket[]>('SELECT id FROM exam_attempts WHERE student_id=? AND exam_id=?', [claims.sub, examId.parse(request.params.id)]);
-    const attempt = existing[0];
-    if (!attempt) throw Object.assign(new Error('Sesi ujian tidak ditemukan'), { statusCode: 404 });
-    const startedAt = body.status === 'ABSENT' || body.status === 'CAMERA_OFF' ? now : null;
-    await pool.execute('UPDATE exam_attempts SET face_status=?, face_absence_started_at=?, updated_at=UTC_TIMESTAMP(3) WHERE id=?', [body.status, startedAt, attempt.id]);
-    return { ok: true, status: body.status, absence_started_at: startedAt };
+    const connection = await requirePool().getConnection();
+    try {
+      await connection.beginTransaction();
+      // Lock baris attempt milik siswa+ujian ini. FOR UPDATE mencegah dua
+      // laporan bersamaan saling menimpa timestamp secara tidak konsisten.
+      const [rows] = await connection.execute<RowDataPacket[]>('SELECT id,status,face_status,face_absence_started_at FROM exam_attempts WHERE student_id=? AND exam_id=? FOR UPDATE', [claims.sub, exam]);
+      const attempt = rows[0];
+      if (!attempt) throw Object.assign(new Error('Sesi ujian tidak ditemukan'), { statusCode: 404 });
+      if (attempt.status !== 'IN_PROGRESS') throw Object.assign(new Error('Sesi ujian sudah tidak aktif'), { statusCode: 409 });
+      const decision = nextFacePresenceUpdate(attempt.face_status, Boolean(attempt.face_absence_started_at), body.status);
+      if (decision.clearStartedAt) {
+        // Kembali terdeteksi: kosongkan penanda awal ketidakhadiran.
+        await connection.execute("UPDATE exam_attempts SET face_status='OK', face_absence_started_at=NULL, updated_at=UTC_TIMESTAMP(3) WHERE id=?", [attempt.id]);
+      } else if (decision.setStartedAt) {
+        // Transisi OK/UNKNOWN -> ABSENT/CAMERA_OFF: catat waktu awal dari server.
+        await connection.execute('UPDATE exam_attempts SET face_status=?, face_absence_started_at=UTC_TIMESTAMP(3), updated_at=UTC_TIMESTAMP(3) WHERE id=?', [body.status, attempt.id]);
+      } else {
+        // Masih episode gangguan yang sama (termasuk ABSENT -> CAMERA_OFF dari
+        // satu kejadian kamera): pertahankan waktu awal, jangan reset.
+        await connection.execute('UPDATE exam_attempts SET face_status=?, updated_at=UTC_TIMESTAMP(3) WHERE id=?', [body.status, attempt.id]);
+      }
+      const [after] = await connection.execute<RowDataPacket[]>('SELECT face_status,face_absence_started_at,TIMESTAMPDIFF(SECOND,face_absence_started_at,UTC_TIMESTAMP(3)) absence_seconds FROM exam_attempts WHERE id=?', [attempt.id]);
+      const row = after[0];
+      if (!row) throw Object.assign(new Error('Sesi ujian tidak ditemukan'), { statusCode: 404 });
+      await connection.commit();
+      return { ok: true, status: row.face_status, absence_started_at: row.face_absence_started_at ?? null, absence_seconds: row.absence_seconds == null ? null : Number(row.absence_seconds) };
+    } catch (error) {
+      try { await connection.rollback(); } catch { /* transaksi sudah tertutup */ }
+      throw error;
+    } finally {
+      connection.release();
+    }
   });
   app.post<{ Params: { id: string } }>('/api/student/exams/:id/submit', { config: { rateLimit: { max: 10, timeWindow: '1 minute', keyGenerator: rateLimitKey } } }, async (request) => {
     const started=performance.now();

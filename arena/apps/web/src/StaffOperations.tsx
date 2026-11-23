@@ -109,11 +109,11 @@ function ProctorOverview({
       void Promise.all([
         api<Row[]>('/api/teacher/live-sessions?page=1'),
         api<Row[]>('/api/staff/support-tickets'),
-        api<Row[]>('/api/staff/face-absence?limit=200').catch(() => [] as Row[]),
+        api<Row[] | null>('/api/staff/face-absence?limit=200').catch(() => null),
       ])
         .then(([sessions, tickets, faceRows]) => {
           if (!active) return;
-          setSummary({
+          setSummary((prev) => ({
             sessions: sessions.filter((row) => row.status === 'IN_PROGRESS').length,
             online: sessions.filter(
               (row) =>
@@ -123,8 +123,10 @@ function ProctorOverview({
             ).length,
             open: tickets.filter((row) => row.status === 'OPEN').length,
             handling: tickets.filter((row) => row.status === 'IN_PROGRESS').length,
-            faceAbsent: Array.isArray(faceRows) ? faceRows.length : 0,
-          });
+            // Endpoint gagal (mis. migration belum jalan) → pertahankan angka
+            // terakhir yang valid, jangan menampilkan 0 seolah aman.
+            faceAbsent: faceRows === null ? prev.faceAbsent : faceRows.length,
+          }));
         })
         .catch((e) => {
           if (active) setError((e as Error).message);
@@ -461,7 +463,9 @@ export function StaffOperations({
       if (document.hidden) return;
       api<Row[]>('/api/staff/face-absence?limit=200')
         .then((rows) => { if (active) setFaceAbsence(Array.isArray(rows) ? rows : []); })
-        .catch(() => { if (active) setFaceAbsence([]); });
+        // Gagal sementara bukan alasan menghapus daftar terakhir yang valid:
+        // biarkan data lama tampil sampai polling berikutnya berhasil.
+        .catch(() => { /* pertahankan data valid terakhir */ });
     };
     refresh();
     const timer = window.setInterval(refresh, 20_000);
