@@ -2,6 +2,8 @@ package id.man1palembang.arena;
 
 import android.app.Activity;
 import android.app.ActivityManager;
+import android.Manifest;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.net.Uri;
@@ -18,6 +20,7 @@ import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
+import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -47,6 +50,11 @@ public final class MainActivity extends Activity {
     // Dialog konfirmasi screen pinning mengambil fokus jendela; jangan sampai
     // episode itu tercatat sebagai pelanggaran siswa. Diisi saat startLockTask.
     private long pinningGraceUntil = 0L;
+    // Dialog izin kamera (untuk pengawasan wajah) juga mengambil fokus jendela.
+    // Sama seperti dialog pinning, episode itu tidak boleh dihitung pelanggaran.
+    private static final int CAMERA_PERMISSION_REQUEST = 71;
+    private long cameraSetupGraceUntil = 0L;
+    private PermissionRequest pendingCameraRequest;
     private int lockRetries = 0;
     // Grace fokus 1 detik: dialog sistem (volume, notifikasi, kamera) mengembalikan
     // fokus dalam sekejap dan tidak dihitung; overlay/aplikasi lain yang benar-benar
@@ -144,7 +152,37 @@ public final class MainActivity extends Activity {
         CookieManager cookies = CookieManager.getInstance();
         cookies.setAcceptCookie(true);
         cookies.setAcceptThirdPartyCookies(webView, false);
-        webView.setWebChromeClient(new WebChromeClient());
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override public void onPermissionRequest(final PermissionRequest request) {
+                runOnUiThread(() -> {
+                    boolean wantsVideo = false;
+                    for (String resource : request.getResources()) {
+                        if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resource)) wantsVideo = true;
+                    }
+                    // Hanya kamera untuk origin Arena yang diizinkan. Mikrofon dan
+                    // resource lain tetap ditolak.
+                    if (!wantsVideo || request.getOrigin() == null || !isArenaUrl(request.getOrigin())) {
+                        try { request.deny(); } catch (RuntimeException ignored) { /* request sudah selesai */ }
+                        return;
+                    }
+                    if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                        try { request.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE}); }
+                        catch (RuntimeException ignored) { /* request sudah selesai */ }
+                        return;
+                    }
+                    if (pendingCameraRequest != null) {
+                        try { pendingCameraRequest.deny(); } catch (RuntimeException ignored) { /* request lama */ }
+                    }
+                    pendingCameraRequest = request;
+                    cameraSetupGraceUntil = SystemClock.uptimeMillis() + 15000L;
+                    requestPermissions(new String[]{Manifest.permission.CAMERA}, CAMERA_PERMISSION_REQUEST);
+                });
+            }
+
+            @Override public void onPermissionRequestCanceled(PermissionRequest request) {
+                if (pendingCameraRequest == request) pendingCameraRequest = null;
+            }
+        });
         webView.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 return request.isForMainFrame() && !isArenaUrl(request.getUrl());
@@ -215,11 +253,25 @@ public final class MainActivity extends Activity {
         }
     }
     @Override protected void onSaveInstanceState(Bundle state) { if (webView != null) webView.saveState(state); super.onSaveInstanceState(state); }
+    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != CAMERA_PERMISSION_REQUEST) return;
+        PermissionRequest pending = pendingCameraRequest;
+        pendingCameraRequest = null;
+        if (pending == null) return;
+        boolean granted = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+        try {
+            if (granted) pending.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});
+            else pending.deny();
+        } catch (RuntimeException ignored) { /* request sudah dibatalkan WebView */ }
+    }
     private void notifyHostHidden() {
         if (webView == null) return;
         // Saat mode ujian baru dimulai, dialog pinning sistem boleh mengambil
         // fokus tanpa dihitung sebagai upaya keluar siswa.
         if (examMode && SystemClock.uptimeMillis() < pinningGraceUntil) return;
+        // Dialog izin kamera juga jendela sistem: jangan catat APP_OVERLAY.
+        if (SystemClock.uptimeMillis() < cameraSetupGraceUntil) return;
         try {
             webView.evaluateJavascript("try{document.dispatchEvent(new CustomEvent('arena-host-hidden'))}catch(e){}", null);
         } catch (RuntimeException ignored) { /* detached webview or during teardown */ }

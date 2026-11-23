@@ -12,13 +12,16 @@ import { deferredError, isDeferredError } from './exam-submission.js';
  */
 export type SubmitOptions = { onBehalfOfSubmission?: boolean; statusOverride?: string | null };
 
-const violationTypes = new Set(['TAB_HIDDEN','WINDOW_BLUR','FULLSCREEN_EXIT','SCREENSHOT_ATTEMPT','COPY_ATTEMPT','PASTE_ATTEMPT','CUT_ATTEMPT','CONTEXT_MENU_ATTEMPT','DEVTOOLS_SHORTCUT','BROWSER_SHORTCUT','SPLIT_SCREEN_SUSPECTED','MULTI_TAB','TEXT_SELECTION','APP_OVERLAY','OTHER']);
+const violationTypes = new Set(['TAB_HIDDEN','WINDOW_BLUR','FULLSCREEN_EXIT','SCREENSHOT_ATTEMPT','COPY_ATTEMPT','PASTE_ATTEMPT','CUT_ATTEMPT','CONTEXT_MENU_ATTEMPT','DEVTOOLS_SHORTCUT','BROWSER_SHORTCUT','SPLIT_SCREEN_SUSPECTED','MULTI_TAB','TEXT_SELECTION','APP_OVERLAY','FACE_ABSENT','FACE_CAMERA_OFF','OTHER']);
 // Counted types decide automatic termination. WINDOW_BLUR / MULTI_TAB / SPLIT_SCREEN_SUSPECTED
 // are counted since session 2026: opening a second window/tab, mirroring to another device via
 // a focused second app, or snapping the exam window into a split layout are all cheat signals.
 // APP_OVERLAY: Android assistant/overlay (Gemini, facial quick intent) appearing above the exam
 // — injected by the secure Android shell every time the host leaves focus or pauses.
 const thresholdTypes = new Set(['TAB_HIDDEN','WINDOW_BLUR','FULLSCREEN_EXIT','SCREENSHOT_ATTEMPT','COPY_ATTEMPT','MULTI_TAB','SPLIT_SCREEN_SUSPECTED','APP_OVERLAY']);
+// FACE_ABSENT / FACE_CAMERA_OFF berasal dari deteksi wajah lokal di perangkat.
+// Keduanya hanya dicatat untuk ditinjau pengawas dan TIDAK dihitung menuju
+// terminasi otomatis, karena kamera/redup cahaya bisa menghasilkan false alarm.
 // Low-confidence signals (e.g. long-press text selection on Android, blocked context menu)
 // are logged for proctors, but every ROLLUP_SIZE events of the same type in one attempt
 // roll up into a single counted violation so persistent offenders still get terminated.

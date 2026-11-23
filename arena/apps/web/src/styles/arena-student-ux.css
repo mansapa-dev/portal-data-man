@@ -841,3 +841,81 @@ body:has(.student-exam) {
     grid-template-columns: 1fr;
   }
 }
+
+/* --- PENGAWASAN KEHADIRAN WAJAH (deteksi lokal, tanpa unggah gambar) --- */
+.student-exam .face-guard-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.student-exam .face-guard-chip.face-ok {
+  color: #166534;
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.student-exam .face-guard-chip.face-absent {
+  color: #991b1b;
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.student-exam .face-guard-chip.face-blocked,
+.student-exam .face-guard-chip.face-error {
+  color: #92400e;
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.student-exam .face-guard-chip.face-unavailable {
+  opacity: 0.65;
+}
+
+.student-exam .exam-face-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 10px 0 0;
+  padding: 11px 14px;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  background: #eff6ff;
+  color: #1e3a8a;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.student-exam .exam-face-warning.is-absent {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.student-exam .exam-face-warning i {
+  margin-top: 2px;
+}
+
+@media (max-width: 560px) {
+  .student-exam .face-guard-chip span {
+    display: none;
+  }
+
+  .student-exam .face-guard-chip {
+    width: 36px;
+    height: 36px;
+    min-height: 36px;
+    padding: 0;
+    justify-content: center;
+  }
+}

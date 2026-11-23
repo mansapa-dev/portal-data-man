@@ -2,6 +2,9 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api, beacon, mutationId } from './lib/api';
 import { submitJitterMs } from './lib/load-shape';
 import { setExamMode } from './lib/exam-mode';
+import { createFacePresence, type FacePresenceStatus } from './lib/face-presence';
+
+type ViolationType = 'TAB_HIDDEN'|'WINDOW_BLUR'|'FULLSCREEN_EXIT'|'SCREENSHOT_ATTEMPT'|'COPY_ATTEMPT'|'PASTE_ATTEMPT'|'CUT_ATTEMPT'|'CONTEXT_MENU_ATTEMPT'|'DEVTOOLS_SHORTCUT'|'BROWSER_SHORTCUT'|'SPLIT_SCREEN_SUSPECTED'|'MULTI_TAB'|'TEXT_SELECTION'|'APP_OVERLAY'|'FACE_ABSENT'|'FACE_CAMERA_OFF'|'OTHER';
 
 type MathJaxEngine = { startup?: { promise?: Promise<unknown> }; typesetPromise?: (elements: HTMLElement[]) => Promise<void>; typesetClear?: (elements: HTMLElement[]) => void };
 let mathQueue: Promise<void> = Promise.resolve();
@@ -53,6 +56,15 @@ export type ExamResult={status?:string;nilai?:number|string|null;benar?:number|n
 
 export function StudentExam({attempt,studentName,studentNisn,answers,flags,busy,saveState='saved',message,change,toggleFlag,retrySave,submit,onTerminated,onHelp,helpOpen=false,children}:{attempt:ExamAttempt;studentName:string;studentNisn?:string;answers:Record<number,string>;flags:Record<number,boolean>;busy:boolean;saveState?:'saved'|'saving'|'error';message?:string;change:(question:ExamQuestion,value:string)=>void;toggleFlag:(question:ExamQuestion)=>void;retrySave:()=>Promise<void>;submit:(finalizeOnly?:boolean)=>Promise<void>;onTerminated:(result:ExamResult|null)=>void;onHelp:()=>void;helpOpen?:boolean;children?:React.ReactNode}){
  const [remaining,setRemaining]=useState(()=>Math.max(0,Math.ceil((Date.parse(attempt.expires_at)-Date.now()-(attempt.server_time?Date.parse(attempt.server_time)-Date.now():0))/1000))),[warning,setWarning]=useState(''),[current,setCurrent]=useState(0),[submitOpen,setSubmitOpen]=useState(false),[expiryFailed,setExpiryFailed]=useState(false),[mapOpen,setMapOpen]=useState(false);const lastEvent=useRef<Record<string,number>>({}),submitting=useRef(false),fullscreenRequested=useRef(false),submitRef=useRef(submit),terminationRef=useRef(onTerminated);
+ // Pengawasan kehadiran wajah berjalan lokal di perangkat. Status dipakai untuk
+ // chip & banner; recordRef menjadi jembatan ke pencatat pelanggaran di bawah.
+ const [faceStatus,setFaceStatus]=useState<FacePresenceStatus>('starting');
+ const [faceNotice,setFaceNotice]=useState('');
+ const recordRef=useRef<((type:ViolationType)=>void)|null>(null);
+ // Dialog izin kamera Android memindahkan fokus jendela sesaat. Beri jeda agar
+ // dialog sistem tidak salah dihitung sebagai siswa keluar dari layar ujian.
+ const faceSetupGrace=useRef(Date.now()+20_000);
+ const faceInfoShown=useRef(false);
  // Escape episodes (tekan tombol home, overlay aplikasi lain, blur) sering
  // memicu beberapa sinyal hampir bersamaan (vitamin TAB_HIDDEN + APP_OVERLAY +
  // WINDOW_BLUR). Semua sinyal dalam satu episode memakai satu event_key yang sama
@@ -115,8 +127,11 @@ export function StudentExam({attempt,studentName,studentNisn,answers,flags,busy,
  },[attempt.attempt_id]);
  useEffect(()=>{
   let active=true,constrained=false,wasFullscreen=false,blurTimer=0,hiddenTimer=0,pingTimer=0,viewportTimer=0,multiTabCooldown=0,leaving=false;
-  const record=(type:'TAB_HIDDEN'|'WINDOW_BLUR'|'FULLSCREEN_EXIT'|'SCREENSHOT_ATTEMPT'|'COPY_ATTEMPT'|'PASTE_ATTEMPT'|'CUT_ATTEMPT'|'CONTEXT_MENU_ATTEMPT'|'DEVTOOLS_SHORTCUT'|'BROWSER_SHORTCUT'|'SPLIT_SCREEN_SUSPECTED'|'MULTI_TAB'|'TEXT_SELECTION'|'APP_OVERLAY'|'OTHER')=>{
+  const record=(type:ViolationType)=>{
    if(submitting.current||leaving)return;
+   // Dialog izin kamera Android memunculkan jendela sistem yang membuat halaman
+   // kehilangan fokus. Jangan catat sinyal keluar-layar selama kamera disiapkan.
+   if(Date.now()<faceSetupGrace.current&&(type==='TAB_HIDDEN'||type==='WINDOW_BLUR'||type==='APP_OVERLAY'||type==='FULLSCREEN_EXIT'))return;
    const now=Date.now();if(now-(lastEvent.current[type]??0)<5000)return;lastEvent.current[type]=now;
    // Satu episode "keluar dari layar" (tekan home, overlay asisten, blur) sering
    // memicu beberapa sinyal hampir bersamaan. Semua sinyal grup ini memakai satu
@@ -130,10 +145,12 @@ export function StudentExam({attempt,studentName,studentNisn,answers,flags,busy,
    void api<{count:number;threshold?:number;action?:string;terminated:boolean;hasil?:ExamResult}>(`/api/student/exams/${attempt.exam.id}/violations`,{method:'POST',keepalive:true,body:{event_key:eventKey,type,client_occurred_at:new Date().toISOString(),question_no:currentQuestion.current}}).then(result=>{
     if(!active)return;
     if(result.terminated){submitting.current=true;terminationRef.current({...result.hasil,status:'TERMINATED'});}
+    else if(type==='FACE_ABSENT'||type==='FACE_CAMERA_OFF'){/* banner kamera yang menangani pesan */}
     else if(['PASTE_ATTEMPT','CUT_ATTEMPT','CONTEXT_MENU_ATTEMPT','DEVTOOLS_SHORTCUT','BROWSER_SHORTCUT','TEXT_SELECTION'].includes(type))setWarning(`Sinyal dicatat untuk ditinjau pengawas; setiap tiga kejadian serupa dihitung satu pelanggaran (${result.count}/${result.threshold??3}).`);
     else setWarning(`Pelanggaran tercatat (${result.count}/${result.threshold??3}). Tetap di halaman ujian dan ikuti arahan pengawas.`);
-   }).catch(error=>{if(active){beacon(`/api/student/exams/${attempt.exam.id}/violations`,{event_key:eventKey,type,client_occurred_at:new Date().toISOString(),question_no:currentQuestion.current});setWarning(`Sinyal belum tercatat: ${(error as Error).message}`);}});
+   }).catch(error=>{if(active){beacon(`/api/student/exams/${attempt.exam.id}/violations`,{event_key:eventKey,type,client_occurred_at:new Date().toISOString(),question_no:currentQuestion.current});if(type!=='FACE_ABSENT'&&type!=='FACE_CAMERA_OFF')setWarning(`Sinyal belum tercatat: ${(error as Error).message}`);}});
   };
+  recordRef.current=record;
   const visibility=()=>{
    window.clearTimeout(hiddenTimer);
    // Beri jeda singkat sebelum mencatat tab tersembunyi. Refresh/reload memang
@@ -234,7 +251,7 @@ export function StudentExam({attempt,studentName,studentNisn,answers,flags,busy,
   window.visualViewport?.addEventListener('resize',viewport);
   window.visualViewport?.addEventListener('scroll',viewport);
   window.addEventListener('blur',blur);window.addEventListener('focus',focus);viewport();
-  return()=>{active=false;document.removeEventListener('visibilitychange',visibility);document.removeEventListener('arena-host-hidden',hostHidden);document.removeEventListener('copy',copy,true);document.removeEventListener('paste',paste,true);document.removeEventListener('cut',cut,true);document.removeEventListener('contextmenu',contextMenu,true);document.removeEventListener('selectstart',blockSelection,true);document.removeEventListener('dragstart',blockSelection,true);document.removeEventListener('selectionchange',selectionChange);document.removeEventListener('gesturestart',blockGesture);document.removeEventListener('gesturechange',blockGesture);document.removeEventListener('keydown',keydown,true);document.removeEventListener('fullscreenchange',fullscreenchange);window.removeEventListener('resize',viewport);window.removeEventListener('orientationchange',orientation);window.removeEventListener('pagehide',leavingPage);window.removeEventListener('beforeunload',leavingPage);window.clearTimeout(hiddenTimer);window.visualViewport?.removeEventListener('resize',viewport);window.visualViewport?.removeEventListener('scroll',viewport);window.removeEventListener('blur',blur);window.removeEventListener('focus',focus);window.clearTimeout(viewportTimer);window.clearTimeout(blurTimer);window.clearInterval(pingTimer);try{channel?.close();}catch{/* already closed */}};
+  return()=>{active=false;recordRef.current=null;document.removeEventListener('visibilitychange',visibility);document.removeEventListener('arena-host-hidden',hostHidden);document.removeEventListener('copy',copy,true);document.removeEventListener('paste',paste,true);document.removeEventListener('cut',cut,true);document.removeEventListener('contextmenu',contextMenu,true);document.removeEventListener('selectstart',blockSelection,true);document.removeEventListener('dragstart',blockSelection,true);document.removeEventListener('selectionchange',selectionChange);document.removeEventListener('gesturestart',blockGesture);document.removeEventListener('gesturechange',blockGesture);document.removeEventListener('keydown',keydown,true);document.removeEventListener('fullscreenchange',fullscreenchange);window.removeEventListener('resize',viewport);window.removeEventListener('orientationchange',orientation);window.removeEventListener('pagehide',leavingPage);window.removeEventListener('beforeunload',leavingPage);window.clearTimeout(hiddenTimer);window.visualViewport?.removeEventListener('resize',viewport);window.visualViewport?.removeEventListener('scroll',viewport);window.removeEventListener('blur',blur);window.removeEventListener('focus',focus);window.clearTimeout(viewportTimer);window.clearTimeout(blurTimer);window.clearInterval(pingTimer);try{channel?.close();}catch{/* already closed */}};
  },[attempt.attempt_id]);
  // Mode ujian: kunci navigasi + fullscreen selama attempt aktif. Dilepas saat
  // siswa membuka bantuan, ada error simpan, waktu habis, atau sesi berakhir —
@@ -242,6 +259,43 @@ export function StudentExam({attempt,studentName,studentNisn,answers,flags,busy,
  const expired=remaining===0;
  useEffect(()=>{const active=!helpOpen&&!expired&&saveState!=='error';fullscreenRequested.current=active;setExamMode(active);},[attempt.attempt_id,helpOpen,expired,saveState]);
  useEffect(()=>()=>{fullscreenRequested.current=false;setExamMode(false);},[]);
+ // Pengawasan kehadiran wajah: kamera diproses sepenuhnya di perangkat siswa.
+ // Server hanya menerima sinyal "wajah tidak terlihat"/"kamera mati", maksimal
+ // sekali per episode, tanpa foto atau video.
+ useEffect(()=>{
+  if(expired)return;
+  const privacyInfo='Kamera depan memantau kehadiran wajah. Gambar hanya diproses di perangkat ini dan tidak dikirim ke server.';
+  let infoTimer=0;
+  const hideInfo=()=>{window.clearTimeout(infoTimer);infoTimer=0;setFaceNotice(notice=>notice===privacyInfo?'':notice);};
+  const showInfoOnce=()=>{
+   if(faceInfoShown.current)return;
+   faceInfoShown.current=true;
+   setFaceNotice(privacyInfo);
+   infoTimer=window.setTimeout(hideInfo,8000);
+  };
+  const monitor=createFacePresence({
+   onStatus:(status,detail)=>{
+    setFaceStatus(status);
+    if(status==='starting'){showInfoOnce();return;}
+    hideInfo();
+    if(status==='ok')setFaceNotice('');
+    else if(status==='blocked')setFaceNotice('Izin kamera tidak diberikan. Pengawasan wajah tidak berjalan; hubungi pengawas bila kamera bermasalah.');
+    else if(status==='unavailable')setFaceNotice('');
+    else if(status==='error'&&detail?.reason==='model')setFaceNotice('');
+    else if(status==='error'&&detail?.reason==='ended')setFaceNotice('Kamera terputus. Arahkan kamera ke wajah atau hubungi pengawas.');
+    else if(status==='error')setFaceNotice('Kamera pengawasan belum siap. Bila wajah tidak terpantau, muat ulang halaman atau hubungi pengawas.');
+   },
+   onAbsent:()=>{
+    setFaceNotice('Wajah tidak terdeteksi. Hadapkan wajah ke kamera dan jangan meninggalkan perangkat. Sinyal ini tercatat untuk pengawas.');
+    recordRef.current?.('FACE_ABSENT');
+   },
+   onCameraProblem:(reason)=>{
+    if(reason==='permission'||reason==='ended')recordRef.current?.('FACE_CAMERA_OFF');
+   },
+  });
+  void monitor.start();
+  return ()=>{window.clearTimeout(infoTimer);monitor.stop();};
+ },[attempt.attempt_id,expired]);
  // Muat lebih awal gambar pada dua soal berikutnya supaya perpindahan soal
  // tidak menunggu unduhan, tanpa membebani jaringan saat ujian baru dimulai.
  const preloaded=useRef<HTMLImageElement[]>([]);
@@ -272,8 +326,8 @@ export function StudentExam({attempt,studentName,studentNisn,answers,flags,busy,
  const saveText=saveState==='error'?'Jawaban belum tersimpan':saveState==='saving'?'Menyimpan jawaban…':'Semua perubahan tersimpan';
  const retryExpiredResult=()=>{if(submitting.current)return;submitting.current=true;setExpiryFailed(false);void submit(true).catch(()=>{submitting.current=false;setExpiryFailed(true);});};
  const requestFinish=(event:React.MouseEvent<HTMLButtonElement>)=>{if(remaining===0)return;if(saveState==='error'){setWarning('Ada jawaban yang belum tersimpan. Periksa koneksi sebelum menyelesaikan ujian.');return;}submitTrigger.current=event.currentTarget;setSubmitOpen(true);};
- return <section className="cbt-wrapper student-exam">{watermark.current&&<div aria-hidden="true" className="student-exam-watermark" style={{backgroundImage:watermark.current}}/>}<header className="cbt-header"><div className="cbt-identity"><div className="id-item"><span className="id-label">Mata Pelajaran</span><span className="id-val">{attempt.exam.nama_ujian}</span></div><div className="id-item"><span className="id-label">Peserta</span><span className="id-val">{studentName}</span></div><div className="id-item"><span className="id-label">No. Ujian</span><span className="id-val">{attempt.exam.id}</span></div><div className="id-item"><span className="id-label">Status</span><span className="id-val">{answered} dari {attempt.soal.length} dijawab</span></div></div><div className={remaining>0&&remaining<=300?'timer-box danger':'timer-box'}><span className="id-label">SISA WAKTU</span><span className="timer-time" aria-live="off">{String(minutes).padStart(2,'0')}:{String(seconds).padStart(2,'0')}</span></div><div className="student-exam-header-actions"><button className="cbt-help-button" type="button" onClick={onHelp}><i className="fa-solid fa-headset"/> Bantuan</button><button className="student-fullscreen-button" type="button" aria-label="Layar penuh" title="Layar penuh" onClick={()=>{fullscreenRequested.current=true;setExamMode(true);}}><i className="fa-solid fa-expand"/></button></div></header>
- <div className="student-exam-progress"><div><span>{answered} soal dijawab</span><span>{attempt.soal.length} soal</span></div><progress aria-label="Progres jawaban" max={attempt.soal.length||1} value={answered}/></div>{warning&&<p className="exam-warning" role="status">{warning}</p>}{message&&saveState!=='error'&&<p className="exam-warning" role="alert">{message}</p>}{remaining>0&&saveState==='error'&&<div className="exam-save-error" role="alert"><span>Jawaban belum tersimpan. {message||'Periksa koneksi sebelum menyelesaikan ujian.'}</span><button type="button" onClick={()=>void retrySave()}>Coba simpan lagi</button></div>}
+ return <section className="cbt-wrapper student-exam">{watermark.current&&<div aria-hidden="true" className="student-exam-watermark" style={{backgroundImage:watermark.current}}/>}<header className="cbt-header"><div className="cbt-identity"><div className="id-item"><span className="id-label">Mata Pelajaran</span><span className="id-val">{attempt.exam.nama_ujian}</span></div><div className="id-item"><span className="id-label">Peserta</span><span className="id-val">{studentName}</span></div><div className="id-item"><span className="id-label">No. Ujian</span><span className="id-val">{attempt.exam.id}</span></div><div className="id-item"><span className="id-label">Status</span><span className="id-val">{answered} dari {attempt.soal.length} dijawab</span></div></div><div className={remaining>0&&remaining<=300?'timer-box danger':'timer-box'}><span className="id-label">SISA WAKTU</span><span className="timer-time" aria-live="off">{String(minutes).padStart(2,'0')}:{String(seconds).padStart(2,'0')}</span></div><div className="student-exam-header-actions"><span className={`face-guard-chip face-${faceStatus}`} title="Kamera hanya memproses wajah di perangkat ini; tidak ada foto atau video yang dikirim ke server."><i className={`fa-solid ${faceStatus==='ok'?'fa-face-smile':faceStatus==='absent'?'fa-face-frown':faceStatus==='blocked'?'fa-camera-slash':faceStatus==='unavailable'?'fa-video-slash':faceStatus==='error'?'fa-triangle-exclamation':'fa-camera'}`}/><span>{faceStatus==='ok'?'Wajah terpantau':faceStatus==='absent'?'Wajah tidak terlihat':faceStatus==='blocked'?'Kamera nonaktif':faceStatus==='unavailable'?'Tanpa kamera':faceStatus==='error'?'Kamera bermasalah':'Menyiapkan kamera'}</span></span><button className="cbt-help-button" type="button" onClick={onHelp}><i className="fa-solid fa-headset"/> Bantuan</button><button className="student-fullscreen-button" type="button" aria-label="Layar penuh" title="Layar penuh" onClick={()=>{fullscreenRequested.current=true;setExamMode(true);}}><i className="fa-solid fa-expand"/></button></div></header>
+ <div className="student-exam-progress"><div><span>{answered} soal dijawab</span><span>{attempt.soal.length} soal</span></div><progress aria-label="Progres jawaban" max={attempt.soal.length||1} value={answered}/></div>{faceNotice&&<div className={`exam-face-warning ${faceStatus==='absent'?'is-absent':'is-info'}`} role="alert"><i className={`fa-solid ${faceStatus==='absent'?'fa-face-frown':'fa-camera'}`}/><span>{faceNotice}</span></div>}{warning&&<p className="exam-warning" role="status">{warning}</p>}{message&&saveState!=='error'&&<p className="exam-warning" role="alert">{message}</p>}{remaining>0&&saveState==='error'&&<div className="exam-save-error" role="alert"><span>Jawaban belum tersimpan. {message||'Periksa koneksi sebelum menyelesaikan ujian.'}</span><button type="button" onClick={()=>void retrySave()}>Coba simpan lagi</button></div>}
  {remaining===0&&<div className="exam-expired-note" role="status"><span>Waktu ujian habis. Hasil dihitung dari jawaban yang sudah tersimpan.</span>{expiryFailed&&<button type="button" disabled={busy} onClick={retryExpiredResult}>Coba muat hasil lagi</button>}</div>}<button className="student-map-toggle btn btn-secondary" type="button" aria-expanded={mapOpen} aria-controls="student-question-map" onClick={()=>{if(!mapOpen)window.setTimeout(()=>document.getElementById('student-question-map')?.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'}),0);setMapOpen(open=>!open);}}><i className="fa-solid fa-border-all"/> {mapOpen?'Tutup peta soal':'Peta soal ('+answered+'/'+attempt.soal.length+' dijawab)'}</button><div className="cbt-grid">{question&&<article className="q-panel"><div className="q-meta"><span className="q-num">Soal {current+1} dari {attempt.soal.length}</span><span role="status" aria-live="polite" className={`student-save-badge state-${saveState}`}><i className={`fa-solid ${saveState==='error'?'fa-triangle-exclamation':saveState==='saving'?'fa-arrows-rotate fa-spin':'fa-cloud-arrow-up'}`}/> {saveText}</span></div><ActiveQuestionMath key={question.id} question={question}><div className="q-text question-rich-content" dir="auto" dangerouslySetInnerHTML={{__html:question.pertanyaan}}/>{question.tipe==='SHORT_ANSWER'?<input className="short-answer" aria-label="Jawaban singkat" dir="auto" maxLength={500} value={answers[question.id]??''} disabled={busy} onChange={e=>change(question,e.target.value)}/>:<div className="opt-list">{question.opsi.map(option=><label className={`opt-btn ${(answers[question.id]??'').split(',').includes(option.key)?'selected':''}`} key={option.key}><input className="exam-option-input" type={question.tipe==='MULTIPLE_RESPONSE'?'checkbox':'radio'} name={`question-${question.id}`} checked={(answers[question.id]??'').split(',').includes(option.key)} disabled={busy} onChange={e=>{const selected=new Set((answers[question.id]??'').split(',').filter(Boolean));if(question.tipe==='MULTIPLE_RESPONSE')e.target.checked?selected.add(option.key):selected.delete(option.key);else{selected.clear();selected.add(option.key);}change(question,[...selected].sort().join(','));}}/><span className="opt-text" dir="auto" dangerouslySetInnerHTML={{__html:option.text}}/></label>)}</div>}</ActiveQuestionMath><div className="q-nav-actions"><button className="btn btn-secondary" disabled={busy||current===0} onClick={()=>setCurrent(current-1)}><i className="fa-solid fa-chevron-left"/> Sebelumnya</button><button className="btn btn-warning" type="button" disabled={busy} aria-pressed={flags[question.id]??false} onClick={()=>toggleFlag(question)}><i className="fa-solid fa-flag"/> {flags[question.id]?'Hapus ragu':'Ragu-ragu'}</button><button className="btn btn-primary" disabled={busy} onClick={current>=attempt.soal.length-1?requestFinish:()=>setCurrent(current+1)}>{current>=attempt.soal.length-1?'Selesai ujian':'Berikutnya'} <i className={`fa-solid ${current>=attempt.soal.length-1?'fa-paper-plane':'fa-chevron-right'}`}/></button></div></article>}
  <aside id="student-question-map" className={'nav-panel student-question-map '+(mapOpen?'is-open':'')}><div className="nav-panel-title"><b><i className="fa-solid fa-border-all"/> Peta soal</b><span>Pilih nomor soal</span></div><div className="student-map-legend"><span>Hijau: dijawab</span><span>Kuning: ragu</span></div><nav className="nav-grid" aria-label="Nomor soal">{attempt.soal.map((item,index)=><button type="button" key={item.id} className={`btn-num ${answers[item.id]?.trim()?'answered ':''}${flags[item.id]?'flagged ':''}${index===current?'active':''}`} aria-label={'Soal '+(index+1)+(answers[item.id]?.trim()?', dijawab':', belum dijawab')+(flags[item.id]?', ragu-ragu':'')} aria-current={index===current?'step':undefined} onClick={()=>{setCurrent(index);setMapOpen(false);window.setTimeout(()=>document.querySelector('.student-exam .q-panel')?.scrollIntoView({behavior:'auto',block:'start'}),0);}}>{index+1}</button>)}</nav><hr/><button className="btn btn-danger finish-exam" type="button" disabled={busy||remaining===0} onClick={requestFinish}><i className="fa-solid fa-paper-plane"/> SELESAI UJIAN</button></aside></div>{children}{submitOpen&&<div className="modal show student-submit-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setSubmitOpen(false);}}><div className="modal-content student-submit-dialog" role="dialog" aria-modal="true" aria-labelledby="student-submit-title"><div className="student-submit-symbol"><i className="fa-solid fa-circle-exclamation"/></div><h2 id="student-submit-title">Kumpulkan Ujian?</h2><p>{unanswered>0?`${unanswered} soal belum dijawab. Periksa kembali sebelum mengumpulkan.`:'Semua soal telah dijawab. Pastikan jawaban Anda sudah sesuai.'}</p><div className="student-submit-counts"><span><i className="fa-solid fa-check"/> {answered} dijawab</span><span><i className="fa-solid fa-circle-question"/> {unanswered} kosong</span><span><i className="fa-solid fa-flag"/> {flagged} ragu-ragu</span></div><p className="student-submit-note">Setelah dikumpulkan, jawaban tidak dapat diubah.</p><div className="student-submit-actions"><button ref={submitCancelButton} className="btn btn-secondary" type="button" disabled={busy} onClick={()=>setSubmitOpen(false)}>Periksa Lagi</button><button className="btn btn-primary" type="button" disabled={busy||saveState!=='saved'} onClick={()=>{submitting.current=true;void submit(false).catch(()=>{submitting.current=false;setSubmitOpen(false);});}}>Ya, Kumpulkan</button></div></div></div>}</section>;
 }

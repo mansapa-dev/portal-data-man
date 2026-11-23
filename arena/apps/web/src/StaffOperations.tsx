@@ -41,6 +41,8 @@ const VIOLATION_TYPE_OPTIONS = [
   'TAB_HIDDEN',
   'WINDOW_BLUR',
   'APP_OVERLAY',
+  'FACE_ABSENT',
+  'FACE_CAMERA_OFF',
   'FULLSCREEN_EXIT',
   'MULTI_TAB',
   'SPLIT_SCREEN_SUSPECTED',
@@ -72,6 +74,8 @@ function getViolationLabel(value: unknown): string {
     BROWSER_SHORTCUT: 'Shortcut navigasi browser',
     SPLIT_SCREEN_SUSPECTED: 'Terindikasi layar ganda (split-screen)',
     APP_OVERLAY: 'Overlay asisten (Gemini) muncul di atas layar ujian',
+    FACE_ABSENT: 'Wajah peserta tidak terdeteksi di depan kamera',
+    FACE_CAMERA_OFF: 'Kamera pengawasan wajah tidak aktif / terputus',
     OTHER: 'Aktivitas mencurigakan lainnya',
   };
   return map[type] ?? type;
