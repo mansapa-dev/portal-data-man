@@ -54,6 +54,9 @@ public final class MainActivity extends Activity {
     // Sama seperti dialog pinning, episode itu tidak boleh dihitung pelanggaran.
     private static final int CAMERA_PERMISSION_REQUEST = 71;
     private long cameraSetupGraceUntil = 0L;
+    // Waktu native saat host mulai pergi. Dipakai untuk mengukur durasi sebenarnya
+    // ketika layar mati/aplikasi ditinggalkan, karena timer WebView bisa dibekukan.
+    private long hostAwayStartedAt = 0L;
     private PermissionRequest pendingCameraRequest;
     private int lockRetries = 0;
     // Grace fokus 1 detik: dialog sistem (volume, notifikasi, kamera) mengembalikan
@@ -215,7 +218,7 @@ public final class MainActivity extends Activity {
     }
     @Override public void onMultiWindowModeChanged(boolean value) { super.onMultiWindowModeChanged(value); updateMultiWindowShield(); }
     @Override public void onMultiWindowModeChanged(boolean value, Configuration configuration) { super.onMultiWindowModeChanged(value, configuration); updateMultiWindowShield(); }
-    @Override protected void onResume() { super.onResume(); if (webView != null) webView.onResume(); if (multiWindowShield != null) updateMultiWindowShield(); startExamProbe(); }
+    @Override protected void onResume() { super.onResume(); if (webView != null) webView.onResume(); if (multiWindowShield != null) updateMultiWindowShield(); notifyHostAwayResolved(); notifyHostVisible(); startExamProbe(); }
     @Override protected void onPause() {
         // Suntik event sebelum webView.onPause() supaya halaman sempat mengirim
         // pelanggaran lewat fetch keepalive. Salah satu pesan di pause/resume/fokus
@@ -237,6 +240,9 @@ public final class MainActivity extends Activity {
             pendingFocusLoss = new Runnable() { @Override public void run() { notifyHostHidden(); } };
             focusHandler.postDelayed(pendingFocusLoss, 1000L);
         } else if (examMode) {
+            // Fokus kembali normal: batalkan timer hidden di halaman ujian. Halaman
+            // sendiri mencatat pelanggaran hanya bila host benar-benar pergi >5 detik.
+            notifyHostVisible();
             // System bar bisa muncul lagi setelah dialog/overlay; paksa sembunyi.
             applyExamSystemUi(true);
             // Setelah pinning diterima, fokus kembali normal: hentikan grace agar
@@ -272,8 +278,29 @@ public final class MainActivity extends Activity {
         if (examMode && SystemClock.uptimeMillis() < pinningGraceUntil) return;
         // Dialog izin kamera juga jendela sistem: jangan catat APP_OVERLAY.
         if (SystemClock.uptimeMillis() < cameraSetupGraceUntil) return;
+        // Simpan waktu host mulai pergi untuk diukur saat kembali. Timer JS bisa
+        // dibekukan saat layar mati, jadi durasi sebenarnya dihitung native.
+        // elapsedRealtime dipakai agar tetap menghitung saat perangkat deep sleep.
+        if (hostAwayStartedAt == 0L) hostAwayStartedAt = SystemClock.elapsedRealtime();
         try {
             webView.evaluateJavascript("try{document.dispatchEvent(new CustomEvent('arena-host-hidden'))}catch(e){}", null);
+        } catch (RuntimeException ignored) { /* detached webview or during teardown */ }
+    }
+    /** Kirim durasi host pergi bila melewati ambang 5 detik (layar mati/pindah app). */
+    private void notifyHostAwayResolved() {
+        long started = hostAwayStartedAt;
+        hostAwayStartedAt = 0L;
+        if (webView == null || started == 0L) return;
+        long duration = SystemClock.elapsedRealtime() - started;
+        if (duration < 5000L) return;
+        try {
+            webView.evaluateJavascript("try{document.dispatchEvent(new CustomEvent('arena-host-away',{detail:{durationMs:" + duration + "}}))}catch(e){}", null);
+        } catch (RuntimeException ignored) { /* detached webview or during teardown */ }
+    }
+    private void notifyHostVisible() {
+        if (webView == null) return;
+        try {
+            webView.evaluateJavascript("try{document.dispatchEvent(new CustomEvent('arena-host-visible'))}catch(e){}", null);
         } catch (RuntimeException ignored) { /* detached webview or during teardown */ }
     }
     /** Sembunyikan/tampilkan status bar & navigation bar (mode immersive). */

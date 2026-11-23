@@ -871,3 +871,26 @@
     padding: 12px 14px;
   }
 }
+
+/* Progres jawaban peserta pada tabel Monitoring Sesi Berlangsung. */
+.answer-progress {
+  margin-top: 6px;
+  height: 6px;
+  width: 100%;
+  min-width: 90px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.28);
+  overflow: hidden;
+}
+
+.answer-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2563eb, #22c55e);
+  transition: width 300ms ease;
+}
+
+:root[data-theme=dark] .answer-progress {
+  background: rgba(148, 163, 184, 0.22);
+}

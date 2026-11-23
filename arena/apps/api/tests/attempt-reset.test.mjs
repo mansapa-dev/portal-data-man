@@ -27,16 +27,26 @@ test('reset hanya untuk aktor aktif dengan role yang masih cocok', async () => {
   assert.equal(connection.statements.length, 1);
 });
 
-test('guru/petugas piket tidak lagi diizinkan mereset sesi (admin saja)', async () => {
-  const connection = connectionWith({
+test('guru tanpa hak piket ditolak, sedangkan petugas piket aktif boleh mereset', async () => {
+  const denied = connectionWith({
     'SELECT id,role,teacher_id,employee_id': [{ id: 5, role: 'TEACHER', teacher_id: 2, employee_id: null }],
+    'SELECT (': [{ ok: 0 }],
   });
   await assert.rejects(
-    resetTerminatedAttemptInTransaction(connection, 12, 3, { id: 5, role: 'TEACHER' }, 'alasan reset'),
+    resetTerminatedAttemptInTransaction(denied, 12, 3, { id: 5, role: 'TEACHER' }, 'alasan reset'),
     { statusCode: 403 },
   );
-  // Tidak ada lagi query izin proktor; penolakan terjadi langsung setelah validasi akun.
-  assert.equal(connection.statements.length, 1);
+  assert.equal(denied.statements.length, 2, 'validasi akun + cek hak piket');
+
+  const allowed = connectionWith({
+    'SELECT id,role,teacher_id,employee_id': [{ id: 6, role: 'EMPLOYEE', teacher_id: null, employee_id: 7 }],
+    'SELECT (': [{ ok: 1 }],
+    'SELECT a.*,s.is_active,s.cbt_status': [{ id: 31, public_id: 'attempt-public', status: 'TERMINATED', violation_count: 0, expires_at: '2030-01-01 13:00:00', completed_at: new Date(Date.now() - 60_000), is_active: 1, cbt_status: 'ACTIVE' }],
+    'SELECT MAX(occurred_at)': [{ stopped_at: null }],
+    'SELECT score, maximum_points, earned_points': [{ score: 0, maximum_points: 100, earned_points: 0 }],
+  });
+  const result = await resetTerminatedAttemptInTransaction(allowed, 12, 3, { id: 6, role: 'EMPLOYEE' }, 'pulihkan sesi');
+  assert.equal(result.attempt_id, 'attempt-public');
 });
 
 test('attempt TERMINATED manual oleh admin (completed_at) dipulihkan tanpa syarat pelanggaran', async () => {
@@ -115,9 +125,64 @@ test('reset menyimpan nilai lama di audit dan menulis perubahan dalam transaksi 
   });
   const result = await resetTerminatedAttemptInTransaction(connection, 12, 3, { id: 8, role: 'ADMIN' }, 'siswa datang ke pengawas');
   assert.equal(result.attempt_id, 'attempt-public');
-  const audit = connection.statements.find((statement) => statement.sql.includes("'CBT_ATTEMPT_RESUMED'"));
+  const audit = connection.statements.find((statement) => statement.sql.startsWith('INSERT INTO audit_logs') && statement.params[2] === 'CBT_ATTEMPT_RESUMED');
   assert.ok(audit);
-  assert.match(audit.params[3], /"score":72/);
+  assert.match(audit.params[4], /"score":72/);
   assert.ok(connection.statements.some((statement) => statement.sql.startsWith('DELETE FROM exam_results')));
   assert.ok(connection.statements.some((statement) => statement.sql.startsWith('UPDATE exam_attempts')));
+});
+
+test('reset nilai menolak attempt yang masih IN_PROGRESS', async () => {
+  const connection = connectionWith({
+    'SELECT id,role,teacher_id,employee_id': [{ id: 8, role: 'ADMIN', teacher_id: null, employee_id: null }],
+    'SELECT a.*,s.is_active,s.cbt_status': [{ id: 31, public_id: 'attempt-public', status: 'IN_PROGRESS', violation_count: 0, started_at: '2026-01-01 12:00:00', expires_at: '2030-01-01 13:00:00', is_active: 1, cbt_status: 'ACTIVE' }],
+  });
+  await assert.rejects(
+    resetTerminatedAttemptInTransaction(connection, 12, 3, { id: 8, role: 'ADMIN' }, 'reset nilai', {
+      clearAnswers: true,
+      restartFullDuration: true,
+      requireFinished: true,
+    }),
+    { statusCode: 409 },
+  );
+  assert.ok(!connection.statements.some((statement) => statement.sql.startsWith('DELETE FROM student_answers')));
+});
+
+test('reset nilai menghapus jawaban dan memberi durasi penuh walau jadwal ujian sudah tutup', async () => {
+  const past = new Date(Date.now() - 24 * 60 * 60_000);
+  const connection = connectionWith({
+    'SELECT id,role,teacher_id,employee_id': [{ id: 8, role: 'ADMIN', teacher_id: null, employee_id: null }],
+    'SELECT a.*,s.is_active,s.cbt_status': [{
+      id: 31,
+      public_id: 'attempt-public',
+      status: 'COMPLETED',
+      violation_count: 4,
+      started_at: '2026-01-01 12:00:00',
+      expires_at: past,
+      completed_at: past,
+      exam_ends_at: past,
+      exam_duration_minutes: 45,
+      is_active: 1,
+      cbt_status: 'ACTIVE',
+    }],
+    'SELECT MAX(occurred_at)': [{ stopped_at: past }],
+    'SELECT score, maximum_points, earned_points': [{ score: 72, maximum_points: 100, earned_points: 72 }],
+    'SELECT COUNT(*) total FROM student_answers': [{ total: 9 }],
+  });
+  const before = Date.now();
+  const result = await resetTerminatedAttemptInTransaction(connection, 12, 3, { id: 8, role: 'ADMIN' }, 'reset nilai ujian', {
+    clearAnswers: true,
+    restartFullDuration: true,
+    requireFinished: true,
+  });
+  const minutes = (new Date(String(result.expires_at).replace('Z', 'Z')).getTime() - before) / 60_000;
+  assert.ok(minutes > 44 && minutes < 47, `durasi baru harus mengikuti 45 menit ujian, dapat ${minutes}`);
+  assert.ok(connection.statements.some((statement) => statement.sql.startsWith('DELETE FROM student_answers')));
+  assert.ok(connection.statements.some((statement) => statement.sql.startsWith('DELETE FROM answer_write_versions')));
+  const update = connection.statements.find((statement) => statement.sql.startsWith('UPDATE exam_attempts') && statement.sql.includes("status='IN_PROGRESS'"));
+  assert.ok(update, 'attempt harus dikembalikan ke IN_PROGRESS');
+  assert.match(update.sql, /started_at=UTC_TIMESTAMP\(3\)/);
+  const audit = connection.statements.find((statement) => statement.sql.startsWith('INSERT INTO audit_logs') && statement.params[2] === 'CBT_SCORE_RESET');
+  assert.ok(audit, 'audit reset nilai wajib tercatat');
+  assert.match(audit.params[4], /"answer_count":9/);
 });

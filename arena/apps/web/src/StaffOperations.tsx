@@ -7,6 +7,8 @@ type Row = Record<string, unknown>;
 
 /** Status sesi yang boleh dipulihkan admin/petugas piket — semuanya bebas, tanpa syarat pelanggaran. */
 const RECOVERABLE_ATTEMPT_STATUSES = ['TERMINATED', 'EXPIRED', 'COMPLETED', 'IN_PROGRESS'];
+/** Reset NILAI hanya untuk peserta yang sudah benar-benar selesai mengerjakan. */
+const SCORE_RESET_STATUSES = ['COMPLETED', 'EXPIRED', 'TERMINATED'];
 
 function getRowValue(row: Row, key: string): string {
   return String(row[key] ?? '—');
@@ -631,6 +633,33 @@ export function StaffOperations({
     }
   }
 
+  /** Reset NILAI untuk peserta yang sudah selesai: jawaban & hasil dihapus,
+   * attempt diberi durasi penuh baru sehingga peserta bisa mengerjakan ulang. */
+  async function resetScore(studentId: number, examId: number, studentName?: string) {
+    const label = studentName ? `siswa ${studentName}` : 'siswa ini';
+    if (!window.confirm(`Reset NILAI untuk ${label}?\n\nJawaban lama, nilai, dan hasil ujian akan DIHAPUS. Peserta mulai dari kosong dengan durasi penuh baru.`)) return;
+    const reason = window.prompt('Tuliskan alasan reset nilai (minimal 3 karakter):');
+    if (reason === null) return;
+    if (reason.trim().length < 3) {
+      setNotice('Alasan reset nilai minimal 3 karakter.');
+      return;
+    }
+    setBusy(true);
+    setNotice('');
+    try {
+      await api(`/api/staff/students/${studentId}/reset-score`, {
+        method: 'POST',
+        body: { exam_id: examId, reason: reason.trim() },
+      });
+      setNotice('Nilai berhasil direset. Jawaban lama dihapus dan siswa dapat mengerjakan ulang dengan durasi penuh.');
+      await report(selectedExam, 1);
+    } catch (e) {
+      setNotice((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function restoreKey(studentId: unknown, examId: unknown): string {
     return `${Number(studentId)}:${Number(examId)}`;
   }
@@ -928,6 +957,7 @@ export function StaffOperations({
                       <th>Benar</th>
                       <th>Salah</th>
                       <th>Kosong</th>
+                      <th>Aksi</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -949,6 +979,27 @@ export function StaffOperations({
                         <td style={{ color: '#16a34a', fontWeight: 700 }}>{getRowValue(row, 'correct_count')}</td>
                         <td style={{ color: '#dc2626', fontWeight: 700 }}>{getRowValue(row, 'wrong_count')}</td>
                         <td style={{ color: '#6b7280' }}>{getRowValue(row, 'blank_count')}</td>
+                        <td>
+                          {(admin || canProctor) &&
+                            SCORE_RESET_STATUSES.includes(String(row.status ?? '').toUpperCase()) &&
+                            row.student_id != null &&
+                            row.exam_id != null && (
+                              <button
+                                type="button"
+                                className="btn-table btn-table-danger"
+                                disabled={busy}
+                                onClick={() =>
+                                  void resetScore(
+                                    Number(row.student_id),
+                                    Number(row.exam_id),
+                                    String(row.name_snapshot ?? ''),
+                                  )
+                                }
+                              >
+                                <i className="fa-solid fa-rotate-left" /> Reset Nilai
+                              </button>
+                            )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -1111,6 +1162,7 @@ export function StaffOperations({
                   <th>Peserta</th>
                   <th>Kelas</th>
                   <th>Ujian & Sesi</th>
+                  <th>Progres Jawaban</th>
                   <th>Status</th>
                   <th>Waktu Mulai</th>
                   <th>Batas Waktu</th>
@@ -1132,6 +1184,30 @@ export function StaffOperations({
                       </td>
                       <td>{getRowValue(row, 'class_snapshot')}</td>
                       <td>{getRowValue(row, 'exam_name')}</td>
+                      <td>
+                        {(() => {
+                          const total = Number(row.total_questions ?? 0);
+                          const answered = Number(row.answered_questions ?? 0);
+                          if (total <= 0) {
+                            return <small style={{ color: 'var(--text-muted)' }}>—</small>;
+                          }
+                          const remaining = Math.max(0, total - answered);
+                          const percent = Math.min(100, Math.round((answered / total) * 100));
+                          return (
+                            <>
+                              <strong>{answered}</strong>
+                              <span style={{ color: 'var(--text-muted)' }}> / {total} soal</span>
+                              <br />
+                              <small style={{ color: remaining > 0 ? '#b45309' : '#16a34a', fontWeight: 600 }}>
+                                {remaining > 0 ? `${remaining} belum dijawab` : 'Semua terjawab'}
+                              </small>
+                              <div className="answer-progress" aria-hidden="true">
+                                <span style={{ width: `${percent}%` }} />
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </td>
                       <td>
                         <span className={`badge-status is-${String(row.status).toLowerCase()}`}>
                           {getStatusLabel(row.status)}
