@@ -111,16 +111,21 @@ export async function recordingRoutes(
         throw Object.assign(new Error(`Tipe rekaman tidak didukung: ${body.mime_type}`), { statusCode: 422 });
       }
 
-      // Verify session ownership
+      // Verify session ownership and that the underlying attempt is still active.
+      // Defense-in-depth: waitingRoom.authorize() already checked Redis state,
+      // but we also enforce the DB attempt status so stale/finished attempts
+      // cannot upload new segments even if their Redis token were somehow reused.
       const [sessions] = await pool.execute<RowDataPacket[]>(
         `SELECT s.id, s.attempt_id, s.status
          FROM exam_recording_sessions s
          JOIN exam_attempts a ON a.id = s.attempt_id
          WHERE s.public_id = ? AND s.student_id = ? AND s.exam_id = ?
+           AND a.status = 'IN_PROGRESS'
+           AND a.expires_at > UTC_TIMESTAMP(3)
          LIMIT 1`,
         [body.session_id, claims.sub, examId],
       );
-      if (!sessions[0]) throw Object.assign(new Error('Sesi rekaman tidak ditemukan'), { statusCode: 404 });
+      if (!sessions[0]) throw Object.assign(new Error('Sesi rekaman tidak ditemukan atau sesi ujian sudah berakhir'), { statusCode: 404 });
       if (sessions[0].status !== 'ACTIVE') throw Object.assign(new Error('Sesi rekaman tidak aktif'), { statusCode: 409 });
 
       const sessionDbId = sessions[0].id as number;
