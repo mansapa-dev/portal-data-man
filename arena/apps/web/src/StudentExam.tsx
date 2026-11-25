@@ -155,16 +155,18 @@ export function StudentExam({attempt,studentName,studentNisn,answers,flags,busy,
    const now=Date.now();if(now-(lastEvent.current[type]??0)<5000)return;lastEvent.current[type]=now;
    // Satu episode "keluar dari layar" (tekan home, overlay asisten, blur) sering
    // memicu beberapa sinyal hampir bersamaan. Semua sinyal grup ini memakai satu
-   // event_key yang sama dalam jendela 4 detik, sehingga unik (attempt,event_key)
-   // di server menghitung episode itu hanya SATU pelanggaran.
+   // event_key yang sama dalam jendela 12 detik, sehingga unik (attempt,event_key)
+   // di server menghitung episode itu hanya SATU pelanggaran. Jendela cukup lebar
+   // untuk menampung semua timer 5 detik (blur/hidden/host) yang bisa melebar.
    let eventKey: string;
    if(type==='TAB_HIDDEN'||type==='WINDOW_BLUR'||type==='FULLSCREEN_EXIT'||type==='MULTI_TAB'||type==='SPLIT_SCREEN_SUSPECTED'||type==='APP_OVERLAY'){
-    if(now-escapeKeyAt.current>4000){escapeKey.current=mutationId();escapeKeyAt.current=now;}
+    if(now-escapeKeyAt.current>12000){escapeKey.current=mutationId();escapeKeyAt.current=now;}
     eventKey=escapeKey.current;
    } else eventKey=mutationId();
-   void api<{count:number;threshold?:number;action?:string;terminated:boolean;hasil?:ExamResult}>(`/api/student/exams/${attempt.exam.id}/violations`,{method:'POST',keepalive:true,body:{event_key:eventKey,type,client_occurred_at:new Date().toISOString(),question_no:currentQuestion.current}}).then(result=>{
+   void api<{count:number;threshold?:number;action?:string;recorded?:boolean;terminated:boolean;hasil?:ExamResult}>(`/api/student/exams/${attempt.exam.id}/violations`,{method:'POST',keepalive:true,body:{event_key:eventKey,type,client_occurred_at:new Date().toISOString(),question_no:currentQuestion.current}}).then(result=>{
     if(!active)return;
     if(result.terminated){submitting.current=true;terminationRef.current({...result.hasil,status:'TERMINATED'});}
+    else if(!result.recorded){/* dedup server-side: jangan spam warning */}
     else if(type==='FACE_ABSENT'||type==='FACE_CAMERA_OFF'){/* banner kamera yang menangani pesan */}
     else if(['PASTE_ATTEMPT','CUT_ATTEMPT','CONTEXT_MENU_ATTEMPT','DEVTOOLS_SHORTCUT','BROWSER_SHORTCUT','TEXT_SELECTION'].includes(type))setWarning(`Sinyal dicatat untuk ditinjau pengawas; setiap tiga kejadian serupa dihitung satu pelanggaran (${result.count}/${result.threshold??3}).`);
     else setWarning(`Pelanggaran tercatat (${result.count}/${result.threshold??3}). Tetap di halaman ujian dan ikuti arahan pengawas.`);

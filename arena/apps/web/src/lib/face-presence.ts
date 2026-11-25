@@ -32,8 +32,10 @@ export type FacePresenceMonitor = {
 };
 
 const DEFAULTS = {
-  absentAfterMs: 25_000,
-  sampleEveryMs: 8_000,
+  /** Wajah boleh tidak terlihat selama 5 detik sebelum dianggap hilang (cepat, konsisten aturan 5 detik keluar layar). */
+  absentAfterMs: 5_000,
+  /** Sampel tiap 1,5 detik agar deteksi hilang/dual wajah responsif tanpa membebani CPU berlebihan. */
+  sampleEveryMs: 1_500,
   frameWidth: 160,
   frameHeight: 160,
 };
@@ -62,6 +64,7 @@ export function createFacePresence(options: FacePresenceOptions): FacePresenceMo
   let stopped = false;
   let lastSeenAt = 0;
   let absentReported = false;
+  let multipleFacesReported = false;
   let current: FacePresenceStatus = 'starting';
 
   const setStatus = (status: FacePresenceStatus, detail?: FacePresenceDetail) => {
@@ -183,7 +186,14 @@ export function createFacePresence(options: FacePresenceOptions): FacePresenceMo
     }
 
     if (faces > 1) {
-      options.onMultipleFaces?.({ faces });
+      // Laporan sekali per episode dual/multi wajah agar tidak membanjir
+      // event ke server saat wajah tetap lebih dari satu berturut-turut.
+      if (!multipleFacesReported) {
+        multipleFacesReported = true;
+        options.onMultipleFaces?.({ faces });
+      }
+    } else {
+      multipleFacesReported = false;
     }
 
     if (faces > 0) {
@@ -353,6 +363,8 @@ export function createFacePresence(options: FacePresenceOptions): FacePresenceMo
     }
     document.removeEventListener('visibilitychange', onVisibility);
     releaseStream();
+    absentReported = false;
+    multipleFacesReported = false;
   };
 
   return { start, stop, status: () => current, getStream: () => stream };

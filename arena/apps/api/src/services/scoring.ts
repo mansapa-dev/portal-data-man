@@ -231,8 +231,30 @@ export class ScoringService {
       const recordedType = violationTypes.has(type) ? type : 'OTHER';
       const policy = await readViolationPolicy(connection);
       const questionNo = Number.isSafeInteger(metadata.questionNo) ? Math.min(2000, Math.max(0, Number(metadata.questionNo))) : null;
-      const [result] = await connection.execute('INSERT IGNORE INTO violations(attempt_id,event_key,type,occurred_at,client_occurred_at,ip_address,user_agent,question_no,rolled_up) VALUES(?,?,?,UTC_TIMESTAMP(3),?,?,?,?,0)', [attempt.id, eventKey, recordedType, metadata.clientOccurredAt ? new Date(metadata.clientOccurredAt) : null, (metadata.ip ?? '').slice(0,45) || null, (metadata.userAgent ?? '').slice(0,500) || null, questionNo]);
-      const inserted = (result as { affectedRows: number }).affectedRows > 0;
+      // Safety-net dedup: client already debounces 5s per type and groups escape
+      // events by event_key (12s window), but network retries, multi-source timers,
+      // or stale clients can still produce near-identical rows. 3s is short enough
+      // to never block legitimate separate violations. Escape-group types are also
+      // deduped across each other (TAB_HIDDEN/WINDOW_BLUR/APP_OVERLAY etc.) because
+      // one physical "left screen" incident should not create 2-3 rows.
+      const escapeGroup = new Set(['TAB_HIDDEN','WINDOW_BLUR','FULLSCREEN_EXIT','MULTI_TAB','SPLIT_SCREEN_SUSPECTED','APP_OVERLAY']);
+      const [recentDupes] = escapeGroup.has(recordedType)
+        ? await connection.execute<RowDataPacket[]>(
+            `SELECT id FROM violations
+             WHERE attempt_id=? AND type IN ('TAB_HIDDEN','WINDOW_BLUR','FULLSCREEN_EXIT','MULTI_TAB','SPLIT_SCREEN_SUSPECTED','APP_OVERLAY')
+               AND occurred_at >= UTC_TIMESTAMP(3) - INTERVAL 3 SECOND
+             LIMIT 1`,
+            [attempt.id],
+          )
+        : await connection.execute<RowDataPacket[]>(
+            'SELECT id FROM violations WHERE attempt_id=? AND type=? AND occurred_at >= UTC_TIMESTAMP(3) - INTERVAL 3 SECOND LIMIT 1',
+            [attempt.id, recordedType],
+          );
+      let inserted = false;
+      if (!recentDupes[0]) {
+        const [result] = await connection.execute('INSERT IGNORE INTO violations(attempt_id,event_key,type,occurred_at,client_occurred_at,ip_address,user_agent,question_no,rolled_up) VALUES(?,?,?,UTC_TIMESTAMP(3),?,?,?,?,0)', [attempt.id, eventKey, recordedType, metadata.clientOccurredAt ? new Date(metadata.clientOccurredAt) : null, (metadata.ip ?? '').slice(0,45) || null, (metadata.userAgent ?? '').slice(0,500) || null, questionNo]);
+        inserted = (result as { affectedRows: number }).affectedRows > 0;
+      }
       let counted = inserted && thresholdTypes.has(recordedType);
       if (inserted && rollupTypes.has(recordedType)) {
         // Logged signal, but every ROLLUP_SIZE occurrences in one attempt become a
