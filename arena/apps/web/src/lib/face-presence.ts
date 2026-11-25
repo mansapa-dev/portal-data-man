@@ -11,7 +11,11 @@ export type FacePresenceOptions = {
   onAbsent: (detail: { missingMs: number }) => void;
   /** Dipanggil sekali saat wajah kembali terdeteksi setelah sebelumnya hilang. */
   onRecovered?: () => void;
-  onCameraProblem?: (reason: 'permission' | 'ended' | 'unsupported' | 'no-camera' | 'error') => void;
+  /** Dipanggil saat terdeteksi lebih dari satu wajah secara konsisten. */
+  onMultipleFaces?: (detail: { faces: number }) => void;
+  onCameraProblem?: (reason: 'permission' | 'ended' | 'unsupported' | 'no-camera' | 'error' | 'muted' | 'frozen') => void;
+  /** Stream kamera yang sudah dibuka (mis. dari preflight) agar tidak membuka ulang. */
+  initialStream?: MediaStream | null;
   /** Berapa lama wajah boleh tidak terlihat sebelum dianggap hilang. */
   absentAfterMs?: number;
   /** Jarak antar sampel. Deteksi berjalan lokal, tidak memanggil server. */
@@ -24,6 +28,7 @@ export type FacePresenceMonitor = {
   start: () => Promise<void>;
   stop: () => void;
   status: () => FacePresenceStatus;
+  getStream: () => MediaStream | null;
 };
 
 const DEFAULTS = {
@@ -177,6 +182,10 @@ export function createFacePresence(options: FacePresenceOptions): FacePresenceMo
       return;
     }
 
+    if (faces > 1) {
+      options.onMultipleFaces?.({ faces });
+    }
+
     if (faces > 0) {
       lastSeenAt = now;
       if (absentReported) {
@@ -233,33 +242,37 @@ export function createFacePresence(options: FacePresenceOptions): FacePresenceMo
 
     setStatus('starting');
 
-    try {
-      stream = await media.getUserMedia({
-        audio: false,
-        video: {
-          facingMode: 'user',
-          width: { ideal: 320 },
-          height: { ideal: 240 },
-          frameRate: { ideal: 10, max: 15 },
-        },
-      });
-    } catch (error) {
-      const name = (error as { name?: string }).name ?? '';
-      if (name === 'NotAllowedError' || name === 'SecurityError') {
-        setStatus('blocked', { reason: 'permission' });
-        options.onCameraProblem?.('permission');
-      } else if (name === 'NotFoundError' || name === 'OverconstrainedError') {
-        setStatus('unavailable', { reason: 'no-camera' });
-        options.onCameraProblem?.('no-camera');
-      } else if (name === 'NotReadableError' || name === 'AbortError') {
-        // Kamera dipakai proses lain / perangkat gagal membuka stream.
-        setStatus('error', { reason: name });
-        options.onCameraProblem?.('error');
-      } else {
-        setStatus('error', { reason: name || 'error' });
-        options.onCameraProblem?.('error');
+    if (options.initialStream && options.initialStream.getVideoTracks().some((t) => t.readyState === 'live')) {
+      stream = options.initialStream;
+    } else {
+      try {
+        stream = await media.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: 'user',
+            width: { ideal: 320 },
+            height: { ideal: 240 },
+            frameRate: { ideal: 10, max: 15 },
+          },
+        });
+      } catch (error) {
+        const name = (error as { name?: string }).name ?? '';
+        if (name === 'NotAllowedError' || name === 'SecurityError') {
+          setStatus('blocked', { reason: 'permission' });
+          options.onCameraProblem?.('permission');
+        } else if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+          setStatus('unavailable', { reason: 'no-camera' });
+          options.onCameraProblem?.('no-camera');
+        } else if (name === 'NotReadableError' || name === 'AbortError') {
+          // Kamera dipakai proses lain / perangkat gagal membuka stream.
+          setStatus('error', { reason: name });
+          options.onCameraProblem?.('error');
+        } else {
+          setStatus('error', { reason: name || 'error' });
+          options.onCameraProblem?.('error');
+        }
+        return;
       }
-      return;
     }
 
     if (stopped) {
@@ -302,6 +315,16 @@ export function createFacePresence(options: FacePresenceOptions): FacePresenceMo
       setStatus('error', { reason: 'ended' });
       options.onCameraProblem?.('ended');
     });
+    track?.addEventListener('mute', () => {
+      if (stopped) return;
+      setStatus('error', { reason: 'muted' });
+      options.onCameraProblem?.('muted');
+    });
+    track?.addEventListener('unmute', () => {
+      if (stopped) return;
+      setStatus('ok');
+      options.onRecovered?.();
+    });
 
     lastSeenAt = 0;
     absentReported = false;
@@ -332,5 +355,5 @@ export function createFacePresence(options: FacePresenceOptions): FacePresenceMo
     releaseStream();
   };
 
-  return { start, stop, status: () => current };
+  return { start, stop, status: () => current, getStream: () => stream };
 }

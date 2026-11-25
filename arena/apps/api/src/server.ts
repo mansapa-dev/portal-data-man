@@ -19,6 +19,10 @@ import { rateLimitKey } from './lib/auth.js';
 import { buildAppOptions } from './lib/app-options.js';
 import { setupRoutes } from './routes/setup.js';
 import { staffRoutes } from './routes/staff.js';
+import { staffMonitoringRoutes } from './routes/staff-monitoring.js';
+import { recordingRoutes } from './routes/recording.js';
+import { securityEventRoutes } from './routes/security-events.js';
+import { deviceSessionRoutes } from './routes/device-session.js';
 import { questionImageRoutes } from './routes/question-images.js';
 import { ScoringService } from './services/scoring.js';
 import { ExpiredAttemptFinalizer } from './services/expired-attempt-finalizer.js';
@@ -146,6 +150,10 @@ if (pool) {
   await app.register(supportRoutes);
   await app.register(portalSyncRoutes);
   await app.register(staffRoutes);
+  await app.register(staffMonitoringRoutes);
+  await app.register(recordingRoutes);
+  await app.register(securityEventRoutes);
+  await app.register(deviceSessionRoutes);
   await app.register(questionImageRoutes);
 }
 

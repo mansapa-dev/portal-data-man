@@ -51,13 +51,44 @@ const blockNavigationKeys = (event: KeyboardEvent) => {
   }
 };
 
-const requestFullscreen = () => {
-  const root = document.documentElement;
-  if (document.fullscreenElement || typeof root.requestFullscreen !== 'function') return;
-  void root.requestFullscreen().catch(() => {
-    /* Butuh gesture pengguna atau tidak didukung (mis. iPhone Safari). */
-  });
+type FullscreenElement = HTMLElement & {
+  webkitRequestFullscreen?: () => Promise<void> | void;
 };
+
+type FullscreenDocument = Document & {
+  webkitFullscreenElement?: Element | null;
+  webkitExitFullscreen?: () => Promise<void> | void;
+};
+
+export function isFullscreenSupported(): boolean {
+  const root = document.documentElement as FullscreenElement;
+  return typeof root.requestFullscreen === 'function' || typeof root.webkitRequestFullscreen === 'function';
+}
+
+export function isFullscreenActive(): boolean {
+  const doc = document as FullscreenDocument;
+  return Boolean(doc.fullscreenElement || doc.webkitFullscreenElement);
+}
+
+const requestFullscreen = () => {
+  const root = document.documentElement as FullscreenElement;
+  if (isFullscreenActive()) return;
+  if (typeof root.requestFullscreen === 'function') {
+    void root.requestFullscreen().catch(() => {
+      /* Butuh gesture pengguna atau tidak didukung (mis. iPhone Safari). */
+    });
+  } else if (typeof root.webkitRequestFullscreen === 'function') {
+    try {
+      void Promise.resolve(root.webkitRequestFullscreen()).catch(() => {});
+    } catch {
+      /* abaikan */
+    }
+  }
+};
+
+export function enterFullscreenNow(): void {
+  requestFullscreen();
+}
 
 // Browser mewajibkan gesture pengguna untuk fullscreen. Saat mode ujian aktif,
 // ketukan/penekanan tombol pertama dipakai untuk masuk fullscreen otomatis.
@@ -66,17 +97,20 @@ const requestFullscreen = () => {
 // kesempatan berikutnya tanpa mengetuk ulang layar.
 const firstGestureFullscreen = () => {
   if (!examModeActive) return;
-  const root = document.documentElement;
   const detach = () => {
     window.removeEventListener('pointerdown', firstGestureFullscreen, true);
     window.removeEventListener('keydown', firstGestureFullscreen, true);
   };
-  if (document.fullscreenElement || typeof root.requestFullscreen !== 'function') {
+  if (isFullscreenActive() || !isFullscreenSupported()) {
     detach();
     return;
   }
-  void root.requestFullscreen().then(() => {
-    if (document.fullscreenElement) detach();
+  const root = document.documentElement as FullscreenElement;
+  const req = typeof root.requestFullscreen === 'function'
+    ? root.requestFullscreen()
+    : Promise.resolve(root.webkitRequestFullscreen?.());
+  void Promise.resolve(req).then(() => {
+    if (isFullscreenActive()) detach();
   }).catch(() => {
     /* coba lagi pada gesture berikutnya */
   });
@@ -87,7 +121,7 @@ const firstGestureFullscreen = () => {
 // Begitu mode ujian masih aktif, pasang lagi pemicu gesture supaya siswa cukup
 // menyentuh layar sekali untuk kembali terkunci, tanpa perlu keluar ujian.
 const rearmFullscreenGesture = () => {
-  if (!examModeActive || document.fullscreenElement) return;
+  if (!examModeActive || isFullscreenActive()) return;
   window.removeEventListener('pointerdown', firstGestureFullscreen, true);
   window.removeEventListener('keydown', firstGestureFullscreen, true);
   window.addEventListener('pointerdown', firstGestureFullscreen, true);
@@ -143,6 +177,7 @@ export function setExamMode(enabled: boolean): void {
     window.addEventListener('keydown', firstGestureFullscreen, true);
     document.addEventListener('keydown', blockNavigationKeys, true);
     document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
     document.addEventListener('visibilitychange', onVisibilityForFullscreen);
     requestFullscreen();
   } else {
@@ -152,10 +187,13 @@ export function setExamMode(enabled: boolean): void {
     window.removeEventListener('keydown', firstGestureFullscreen, true);
     document.removeEventListener('keydown', blockNavigationKeys, true);
     document.removeEventListener('fullscreenchange', onFullscreenChange);
+    document.removeEventListener('webkitfullscreenchange', onFullscreenChange);
     document.removeEventListener('visibilitychange', onVisibilityForFullscreen);
     historyTrapped = false;
     try {
-      if (document.fullscreenElement) void document.exitFullscreen?.().catch(() => {});
+      const doc = document as FullscreenDocument;
+      if (doc.fullscreenElement) void doc.exitFullscreen?.().catch(() => {});
+      else if (doc.webkitFullscreenElement) void Promise.resolve(doc.webkitExitFullscreen?.()).catch(() => {});
     } catch {
       /* fullscreen sudah dilepas */
     }

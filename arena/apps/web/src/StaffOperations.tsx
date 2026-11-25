@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { api } from './lib/api';
 import { exportExcel, safeFilename } from './lib/spreadsheet';
 import { AdminOverview } from './AdminOverview';
+import { StaffSecurityReview } from './StaffSecurityReview';
 
 type Row = Record<string, unknown>;
 
@@ -279,6 +280,7 @@ export function StaffOperations({
   const [restoreSelection, setRestoreSelection] = useState<string[]>([]);
   // Pemantauan kehadiran wajah: peserta yang sedang wajahnya tidak terdeteksi.
   const [faceAbsence, setFaceAbsence] = useState<Row[]>([]);
+  const [showSecurityReview, setShowSecurityReview] = useState(false);
 
   // Filter Monitoring Sesi
   const [sessionExam, setSessionExam] = useState('');
@@ -1040,6 +1042,18 @@ export function StaffOperations({
       {/* View: Monitoring Sesi Berlangsung */}
       {view === 'sessions' && (
         <div className="operations-monitor staff-workspace-container">
+          <div className="operations-status-summary-bar">
+            <button
+              type="button"
+              className={showSecurityReview ? 'btn btn-primary' : 'btn btn-secondary'}
+              onClick={() => setShowSecurityReview((prev) => !prev)}
+              style={{ marginLeft: 'auto' }}
+            >
+              <i className="fa-solid fa-shield-halved" /> {showSecurityReview ? 'Tutup Tinjauan Keamanan & Rekaman' : 'Tinjauan Keamanan & Rekaman'}
+            </button>
+          </div>
+          {showSecurityReview && <StaffSecurityReview />}
+
           {/* Status Pills */}
           <div className="operations-status-summary-bar">
             <span className="status-pill neutral">
