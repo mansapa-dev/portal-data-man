@@ -4,11 +4,10 @@
  * Design decisions:
  * - Uses the same camera stream as face presence monitoring.
  * - 60-second segments by default (configurable).
- * - No audio capture.
- * - No screen recording.
+ * - No audio capture, no screen recording.
  * - Bounded memory: each segment is finalized before the next starts.
- * - Handles browser suspension, camera interruption, and MediaRecorder failure.
- * - Does NOT upload — that's the UploadQueue's job.
+ * - Detects camera track termination, MediaRecorder errors, and visibility suspension.
+ * - Supports deterministic stopAndFlush() so final segment is never lost on submit.
  */
 
 export interface RecorderConfig {
@@ -40,6 +39,7 @@ export interface RecordingSegment {
 export interface ExamRecorder {
   start(): void;
   stop(): void;
+  stopAndFlush(): Promise<RecordingSegment | null>;
   readonly isRecording: boolean;
   readonly segmentCount: number;
 }
@@ -55,9 +55,11 @@ export function createExamRecorder(config: RecorderConfig): ExamRecorder {
   let segmentTimer = 0;
   let stopped = false;
   let recording = false;
+  let flushResolve: ((seg: RecordingSegment | null) => void) | null = null;
+  let watchedTrack: MediaStreamTrack | null = null;
 
-  const finishSegment = () => {
-    if (!recorder || chunks.length === 0 || !segmentStartedAt) return;
+  const finishSegment = (): RecordingSegment | null => {
+    if (chunks.length === 0 || !segmentStartedAt) return null;
     const endedAt = new Date();
     const blob = new Blob(chunks, { type: config.mimeType });
     chunks = [];
@@ -65,27 +67,63 @@ export function createExamRecorder(config: RecorderConfig): ExamRecorder {
     const startedAt = segmentStartedAt;
     segmentStartedAt = null;
 
-    config.onSegment({
+    const segment: RecordingSegment = {
       blob,
       mimeType: config.mimeType,
       sequenceNumber: seq,
       startedAt,
       endedAt,
       durationMs: endedAt.getTime() - startedAt.getTime(),
-    });
+    };
+    config.onSegment(segment);
+    return segment;
+  };
+
+  const onTrackEnded = () => {
+    if (stopped) return;
+    recording = false;
+    if (segmentTimer) { window.clearTimeout(segmentTimer); segmentTimer = 0; }
+    config.onError(new Error('Camera track ended during recording'));
+  };
+
+  const onVisibilityChange = () => {
+    if (stopped || document.hidden) return;
+    const track = config.stream.getVideoTracks()[0];
+    if (!track || track.readyState !== 'live') {
+      onTrackEnded();
+      return;
+    }
+    if (recording && recorder && recorder.state === 'inactive') {
+      recording = false;
+      config.onStopped();
+    }
+  };
+
+  const cleanupListeners = () => {
+    if (watchedTrack) {
+      watchedTrack.removeEventListener('ended', onTrackEnded);
+      watchedTrack = null;
+    }
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    }
   };
 
   const startNewSegment = () => {
     if (stopped || !recorder) return;
-    // Clear any existing segment timer
     if (segmentTimer) window.clearTimeout(segmentTimer);
 
-    // Request available data before starting a new segment
     try {
       if (recorder.state === 'recording') {
         recorder.requestData();
       }
-    } catch { /* non-fatal */ }
+    } catch {
+      /* non-fatal */
+    }
+
+    if (chunks.length > 0 && segmentStartedAt) {
+      finishSegment();
+    }
 
     segmentStartedAt = new Date();
     segmentTimer = window.setTimeout(() => {
@@ -95,11 +133,11 @@ export function createExamRecorder(config: RecorderConfig): ExamRecorder {
   };
 
   const startRecorder = () => {
-    if (stopped) return;
+    if (stopped || (recorder && recorder.state !== 'inactive')) return;
 
-    // Verify camera track is still active
     const videoTracks = config.stream.getVideoTracks();
-    if (videoTracks.length === 0 || videoTracks[0]!.readyState !== 'live') {
+    const track = videoTracks[0];
+    if (!track || track.readyState !== 'live') {
       config.onError(new Error('Camera track not available'));
       return;
     }
@@ -114,6 +152,12 @@ export function createExamRecorder(config: RecorderConfig): ExamRecorder {
       return;
     }
 
+    watchedTrack = track;
+    track.addEventListener('ended', onTrackEnded);
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibilityChange);
+    }
+
     recorder.ondataavailable = (event) => {
       if (event.data && event.data.size > 0) {
         chunks.push(event.data);
@@ -121,15 +165,21 @@ export function createExamRecorder(config: RecorderConfig): ExamRecorder {
     };
 
     recorder.onstop = () => {
-      // Finalize whatever data we have
-      finishSegment();
+      recording = false;
+      const finalSegment = finishSegment();
+      cleanupListeners();
+      if (flushResolve) {
+        const resolve = flushResolve;
+        flushResolve = null;
+        resolve(finalSegment);
+      }
       if (!stopped) {
-        // Unexpected stop — report
         config.onStopped();
       }
     };
 
     recorder.onerror = (event) => {
+      recording = false;
       const error = (event as Event & { error?: Error }).error;
       config.onError(error || new Error('MediaRecorder error'));
     };
@@ -139,25 +189,33 @@ export function createExamRecorder(config: RecorderConfig): ExamRecorder {
     recording = true;
 
     try {
-      // Use timeslice to get periodic data events, but don't rely on them
-      // being exactly on time (mobile OS may delay them).
-      recorder.start(10_000); // 10s timeslice
+      recorder.start(10_000);
     } catch (error) {
-      config.onError(error instanceof Error ? error : new Error(String(error)));
       recording = false;
+      cleanupListeners();
+      config.onError(error instanceof Error ? error : new Error(String(error)));
       return;
     }
 
-    startNewSegment();
+    segmentTimer = window.setTimeout(() => {
+      if (stopped) return;
+      startNewSegment();
+    }, segmentDurationMs);
   };
 
   const stopRecorder = () => {
     if (segmentTimer) { window.clearTimeout(segmentTimer); segmentTimer = 0; }
     if (recorder && recorder.state !== 'inactive') {
-      try { recorder.stop(); } catch { /* ignore */ }
+      try {
+        recorder.stop();
+      } catch {
+        recording = false;
+        cleanupListeners();
+      }
+    } else {
+      recording = false;
+      cleanupListeners();
     }
-    recording = false;
-    recorder = null;
   };
 
   return {
@@ -168,6 +226,35 @@ export function createExamRecorder(config: RecorderConfig): ExamRecorder {
     stop() {
       stopped = true;
       stopRecorder();
+      recorder = null;
+    },
+    async stopAndFlush(): Promise<RecordingSegment | null> {
+      stopped = true;
+      if (segmentTimer) { window.clearTimeout(segmentTimer); segmentTimer = 0; }
+      if (!recorder || recorder.state === 'inactive') {
+        recording = false;
+        cleanupListeners();
+        return finishSegment();
+      }
+      return new Promise<RecordingSegment | null>((resolve) => {
+        const fallback = window.setTimeout(() => {
+          if (flushResolve) {
+            flushResolve = null;
+            resolve(finishSegment());
+          }
+        }, 2500);
+        flushResolve = (seg) => {
+          window.clearTimeout(fallback);
+          resolve(seg);
+        };
+        try {
+          recorder!.stop();
+        } catch {
+          window.clearTimeout(fallback);
+          flushResolve = null;
+          resolve(finishSegment());
+        }
+      });
     },
     get isRecording() { return recording; },
     get segmentCount() { return segmentCount; },

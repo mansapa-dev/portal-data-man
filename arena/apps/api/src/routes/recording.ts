@@ -16,6 +16,7 @@ import { claimsFromRequest } from '../lib/auth.js';
 import { requireRole } from '../lib/access.js';
 import { requirePool } from '../lib/db.js';
 import { getObjectStorage, ObjectStorageService } from '../services/object-storage.js';
+import { ensureRecordingSession, getRecordingPolicy } from '../services/recording-policy.js';
 import type { RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 
 // ULID-like public ID using crypto.randomUUID stripped of dashes (26 chars)
@@ -42,13 +43,7 @@ export async function recordingRoutes(app: FastifyInstance) {
   app.get('/api/student/recording/policy', async (request) => {
     const claims = claimsFromRequest(request);
     if (claims.role !== 'STUDENT') throw Object.assign(new Error('Sesi siswa diperlukan'), { statusCode: 403 });
-    return {
-      recording_enabled: RECORDING_ENABLED,
-      recording_required: RECORDING_REQUIRED,
-      segment_duration_seconds: SEGMENT_DURATION_SECONDS,
-      video_bitrate: Number(process.env.RECORDING_VIDEO_BITRATE ?? 500_000),
-      retention_days: Number(process.env.RECORDING_RETENTION_DAYS ?? 7),
-    };
+    return getRecordingPolicy();
   });
 
   if (!RECORDING_ENABLED) {
@@ -80,39 +75,7 @@ export async function recordingRoutes(app: FastifyInstance) {
       if (claims.role !== 'STUDENT') throw Object.assign(new Error('Sesi siswa diperlukan'), { statusCode: 403 });
 
       const examId = examIdSchema.parse(request.params.id);
-
-      // Verify attempt ownership and state
-      const [attempts] = await pool.execute<RowDataPacket[]>(
-        `SELECT a.id, a.public_id, a.status, a.student_id
-         FROM exam_attempts a
-         WHERE a.student_id = ? AND a.exam_id = ? AND a.status = 'IN_PROGRESS'
-         LIMIT 1`,
-        [claims.sub, examId],
-      );
-      if (!attempts[0]) throw Object.assign(new Error('Sesi ujian tidak ditemukan'), { statusCode: 404 });
-      const attempt = attempts[0];
-
-      // Check for existing active session (idempotent)
-      const [existing] = await pool.execute<RowDataPacket[]>(
-        `SELECT id, public_id, status FROM exam_recording_sessions
-         WHERE attempt_id = ? LIMIT 1`,
-        [attempt.id],
-      );
-
-      if (existing[0] && existing[0].status === 'ACTIVE') {
-        return { session_id: existing[0].public_id as string, resumed: true };
-      }
-
-      // Create new recording session
-      const sessionPublicId = newPublicId();
-      await pool.execute(
-        `INSERT INTO exam_recording_sessions
-           (public_id, attempt_id, exam_id, student_id, status, started_at)
-         VALUES (?, ?, ?, ?, 'ACTIVE', UTC_TIMESTAMP(3))`,
-        [sessionPublicId, attempt.id, examId, claims.sub],
-      );
-
-      return { session_id: sessionPublicId, resumed: false };
+      return ensureRecordingSession(pool, claims.sub, examId);
     },
   );
 
@@ -226,7 +189,7 @@ export async function recordingRoutes(app: FastifyInstance) {
 
       // Verify ownership through join chain
       const [segments] = await pool.execute<RowDataPacket[]>(
-        `SELECT seg.id, seg.object_key, seg.upload_status, seg.session_id
+        `SELECT seg.id, seg.object_key, seg.upload_status, seg.session_id, sess.status session_status
          FROM exam_recording_segments seg
          JOIN exam_recording_sessions sess ON sess.id = seg.session_id
          WHERE seg.id = ? AND sess.student_id = ? AND sess.exam_id = ?
@@ -236,15 +199,34 @@ export async function recordingRoutes(app: FastifyInstance) {
       if (!segments[0]) throw Object.assign(new Error('Segmen rekaman tidak ditemukan'), { statusCode: 404 });
 
       const seg = segments[0];
-
-      // Optionally verify the object actually exists in storage
-      let verifiedSize = body.file_size_bytes;
-      try {
-        const head = await store.headObject(seg.object_key as string);
-        if (head) verifiedSize = head.contentLength;
-      } catch {
-        // HeadObject failure is non-fatal; we trust client size for now
+      if (seg.upload_status === 'UPLOADED') {
+        return { confirmed: true, already_confirmed: true };
       }
+      if (!['ACTIVE', 'INTERRUPTED'].includes(String(seg.session_status))) {
+        throw Object.assign(new Error('Sesi rekaman sudah ditutup'), { statusCode: 409 });
+      }
+
+      // Strictly verify the uploaded object exists and is non-empty in object storage.
+      let head: { contentLength: number } | null = null;
+      try {
+        head = await store.headObject(seg.object_key as string);
+      } catch (error) {
+        await pool.execute(
+          `UPDATE exam_recording_segments SET upload_status = 'FAILED', retry_count = retry_count + 1 WHERE id = ?`,
+          [segmentId],
+        ).catch(() => {});
+        throw Object.assign(new Error('Gagal memverifikasi segmen di penyimpanan'), { statusCode: 502, cause: error });
+      }
+
+      if (!head || head.contentLength <= 0) {
+        await pool.execute(
+          `UPDATE exam_recording_segments SET upload_status = 'FAILED', retry_count = retry_count + 1 WHERE id = ?`,
+          [segmentId],
+        );
+        throw Object.assign(new Error('Objek rekaman belum ditemukan atau kosong di penyimpanan'), { statusCode: 422 });
+      }
+
+      const verifiedSize = head.contentLength;
 
       await pool.execute(
         `UPDATE exam_recording_segments
@@ -290,32 +272,57 @@ export async function recordingRoutes(app: FastifyInstance) {
       if (claims.role !== 'STUDENT') throw Object.assign(new Error('Sesi siswa diperlukan'), { statusCode: 403 });
 
       const examId = examIdSchema.parse(request.params.id);
-      const body = z.object({ session_id: z.string().length(26) }).strict().parse(request.body);
+      const body = z.object({
+        session_id: z.string().length(26),
+        incomplete: z.boolean().optional(),
+      }).strict().parse(request.body);
 
       const [sessions] = await pool.execute<RowDataPacket[]>(
-        `SELECT s.id FROM exam_recording_sessions s
+        `SELECT s.id, s.status FROM exam_recording_sessions s
          WHERE s.public_id = ? AND s.student_id = ? AND s.exam_id = ?
          LIMIT 1`,
         [body.session_id, claims.sub, examId],
       );
       if (!sessions[0]) throw Object.assign(new Error('Sesi rekaman tidak ditemukan'), { statusCode: 404 });
+      if (sessions[0].status === 'FINALIZED') {
+        return { finalized: true, already_finalized: true };
+      }
 
       const retentionDays = Number(process.env.RECORDING_RETENTION_DAYS ?? 7);
+      const sessionDbId = sessions[0].id as number;
+      const [counts] = await pool.execute<RowDataPacket[]>(
+        `SELECT
+           COUNT(*) total_cnt,
+           COALESCE(SUM(upload_status = 'UPLOADED'), 0) uploaded_cnt,
+           COALESCE(SUM(upload_status IN ('PENDING', 'FAILED')), 0) missing_cnt
+         FROM exam_recording_segments
+         WHERE session_id = ?`,
+        [sessionDbId],
+      );
+      const missingCount = Number(counts[0]?.missing_cnt ?? 0);
+      const targetStatus = body.incomplete || missingCount > 0 ? 'INTERRUPTED' : 'FINALIZED';
 
       await pool.execute(
         `UPDATE exam_recording_sessions
-         SET status = 'FINALIZED',
-             finalized_at = UTC_TIMESTAMP(3),
-             retain_until = DATE_ADD(UTC_TIMESTAMP(3), INTERVAL ? DAY),
+         SET status = ?,
+             finalized_at = COALESCE(finalized_at, UTC_TIMESTAMP(3)),
+             retain_until = COALESCE(retain_until, DATE_ADD(UTC_TIMESTAMP(3), INTERVAL ? DAY)),
              cleanup_status = 'PENDING',
-             total_segments = (SELECT COUNT(*) FROM exam_recording_segments WHERE session_id = ?),
-             uploaded_segments = (SELECT COUNT(*) FROM exam_recording_segments WHERE session_id = ? AND upload_status = 'UPLOADED'),
-             missing_segments = (SELECT COUNT(*) FROM exam_recording_segments WHERE session_id = ? AND upload_status IN ('PENDING','FAILED'))
+             total_segments = ?,
+             uploaded_segments = ?,
+             missing_segments = ?
          WHERE id = ?`,
-        [retentionDays, sessions[0].id, sessions[0].id, sessions[0].id, sessions[0].id],
+        [
+          targetStatus,
+          retentionDays,
+          Number(counts[0]?.total_cnt ?? 0),
+          Number(counts[0]?.uploaded_cnt ?? 0),
+          missingCount,
+          sessionDbId,
+        ],
       );
 
-      return { finalized: true };
+      return { finalized: targetStatus === 'FINALIZED', status: targetStatus, missing_segments: missingCount };
     },
   );
 

@@ -1,12 +1,13 @@
 /**
- * Segment upload queue with IndexedDB persistence.
+ * Segment upload queue with durable IndexedDB persistence.
  *
- * Segments are stored in IndexedDB before upload so they survive
- * browser suspension and page reloads. After successful upload
- * confirmation from the API, the segment is removed.
- *
- * Uses exponential backoff with jitter for retries.
- * Bounded queue — rejects new segments if too many are pending.
+ * - Segments are written to IndexedDB before upload so they survive browser
+ *   suspension and page reloads.
+ * - When `requireDurablePersistence` is true and IndexedDB is unavailable,
+ *   fails closed rather than pretending recording is durable.
+ * - Failed segments are NEVER deleted from IndexedDB after retry exhaustion;
+ *   they remain marked `failed: true` for controlled manual/reconnect retry.
+ * - Supports bounded `flush(timeoutMs)` for clean exam finalization.
  */
 
 export interface QueuedSegment {
@@ -20,6 +21,8 @@ export interface QueuedSegment {
   endedAt: string;
   retryCount: number;
   enqueuedAt: number; // Date.now()
+  failed?: boolean;
+  lastError?: string;
 }
 
 export interface UploadQueueConfig {
@@ -27,14 +30,17 @@ export interface UploadQueueConfig {
   examId: number;
   maxQueueSize?: number;
   maxRetries?: number;
+  requireDurablePersistence?: boolean;
   /** Called to get presigned URL for a segment */
   requestPresignedUrl: (segment: QueuedSegment) => Promise<{ upload_url: string; segment_id: number }>;
   /** Called after successful upload to confirm with API */
   confirmUpload: (segment: QueuedSegment, segmentId: number, fileSizeBytes: number) => Promise<void>;
-  /** Called when a segment is permanently failed */
+  /** Called when a segment exhausts retries or hits a permanent error */
   onPermanentFailure: (segment: QueuedSegment, error: Error) => void;
+  /** Called when durable IndexedDB storage is unavailable */
+  onStorageUnavailable?: (error: Error) => void;
   /** Called when upload status changes */
-  onStatusChange?: (pending: number, uploading: boolean) => void;
+  onStatusChange?: (pending: number, uploading: boolean, failed: number) => void;
 }
 
 const DB_NAME = 'arena-recording-queue';
@@ -44,25 +50,39 @@ const MAX_RETRY_DELAYS = [2000, 5000, 10000, 20000, 30000, 60000];
 
 export interface UploadQueue {
   enqueue(segment: Omit<QueuedSegment, 'retryCount' | 'enqueuedAt'>): Promise<void>;
-  start(): void;
+  start(): Promise<boolean>;
   stop(): void;
+  retryFailed(): void;
+  flush(timeoutMs?: number): Promise<{ pending: number; failed: number; timedOut: boolean }>;
   readonly pendingCount: number;
+  readonly failedCount: number;
+}
+
+class NonRetryableUploadError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NonRetryableUploadError';
+  }
 }
 
 async function openDb(): Promise<IDBDatabase | null> {
   if (typeof indexedDB === 'undefined') return null;
   return new Promise((resolve) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-        store.createIndex('sessionId', 'sessionId', { unique: false });
-        store.createIndex('enqueuedAt', 'enqueuedAt', { unique: false });
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => resolve(null); // Non-fatal: fall back to memory queue
+    try {
+      const request = indexedDB.open(DB_NAME, DB_VERSION);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+          const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+          store.createIndex('sessionId', 'sessionId', { unique: false });
+          store.createIndex('enqueuedAt', 'enqueuedAt', { unique: false });
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
   });
 }
 
@@ -71,12 +91,24 @@ export function createUploadQueue(config: UploadQueueConfig): UploadQueue {
   const maxRetries = config.maxRetries ?? 5;
 
   let db: IDBDatabase | null = null;
+  let dbChecked = false;
   let memoryQueue: QueuedSegment[] = [];
+  let failedQueue: QueuedSegment[] = [];
   let uploading = false;
   let running = false;
   let processTimer = 0;
+  const flushWaiters: Array<() => void> = [];
 
   const jitter = (baseMs: number) => baseMs + Math.floor(Math.random() * 1000);
+
+  const notifyStatus = () => {
+    config.onStatusChange?.(memoryQueue.length, uploading, failedQueue.length);
+    if (memoryQueue.length === 0 && !uploading) {
+      while (flushWaiters.length > 0) {
+        flushWaiters.shift()?.();
+      }
+    }
+  };
 
   const scheduleProcess = (delayMs = 0) => {
     if (!running) return;
@@ -87,12 +119,43 @@ export function createUploadQueue(config: UploadQueueConfig): UploadQueue {
     }, delayMs);
   };
 
+  const saveToDb = async (segment: QueuedSegment): Promise<boolean> => {
+    if (!db) return !config.requireDurablePersistence;
+    return new Promise<boolean>((resolve) => {
+      try {
+        const tx = db!.transaction(STORE_NAME, 'readwrite');
+        tx.objectStore(STORE_NAME).put(segment);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      } catch {
+        resolve(false);
+      }
+    });
+  };
+
+  const removeFromDb = async (id: string) => {
+    if (!db) return;
+    return new Promise<void>((resolve) => {
+      try {
+        const tx = db!.transaction(STORE_NAME, 'readwrite');
+        tx.objectStore(STORE_NAME).delete(id);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+      } catch {
+        resolve();
+      }
+    });
+  };
+
   const processNext = async () => {
-    if (!running || uploading || memoryQueue.length === 0) return;
+    if (!running || uploading || memoryQueue.length === 0) {
+      notifyStatus();
+      return;
+    }
 
     const segment = memoryQueue[0]!;
     uploading = true;
-    config.onStatusChange?.(memoryQueue.length, true);
+    notifyStatus();
 
     try {
       const { upload_url, segment_id } = await config.requestPresignedUrl(segment);
@@ -104,101 +167,126 @@ export function createUploadQueue(config: UploadQueueConfig): UploadQueue {
       });
 
       if (!response.ok) {
+        if (response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429) {
+          throw new NonRetryableUploadError(`Upload rejected (${response.status})`);
+        }
         throw new Error(`Upload failed: ${response.status}`);
       }
 
       await config.confirmUpload(segment, segment_id, segment.blob.size);
 
-      // Success — remove from queue
+      // Success — remove from active queue and IndexedDB
       memoryQueue.shift();
       await removeFromDb(segment.id);
-      config.onStatusChange?.(memoryQueue.length, false);
       uploading = false;
-      scheduleProcess(); // Process next
+      notifyStatus();
+      scheduleProcess();
     } catch (error) {
       uploading = false;
+      const err = error instanceof Error ? error : new Error(String(error));
+      const nonRetryable = error instanceof NonRetryableUploadError;
       segment.retryCount += 1;
+      segment.lastError = err.message;
 
-      if (segment.retryCount > maxRetries) {
-        // Permanent failure
+      if (nonRetryable || segment.retryCount > maxRetries) {
+        // Retain in IndexedDB with failed=true so evidence is never silently lost
         memoryQueue.shift();
-        await removeFromDb(segment.id);
-        config.onPermanentFailure(segment, error instanceof Error ? error : new Error(String(error)));
-        config.onStatusChange?.(memoryQueue.length, false);
+        segment.failed = true;
+        failedQueue.push(segment);
+        await saveToDb(segment);
+        config.onPermanentFailure(segment, err);
+        notifyStatus();
         scheduleProcess();
         return;
       }
 
+      await saveToDb(segment);
       const delay = jitter(MAX_RETRY_DELAYS[Math.min(segment.retryCount - 1, MAX_RETRY_DELAYS.length - 1)] ?? 60000);
-      config.onStatusChange?.(memoryQueue.length, false);
+      notifyStatus();
       scheduleProcess(delay);
     }
   };
 
-  const saveToDb = async (segment: QueuedSegment) => {
-    if (!db) return;
-    return new Promise<void>((resolve) => {
-      const tx = db!.transaction(STORE_NAME, 'readwrite');
-      tx.objectStore(STORE_NAME).put(segment);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => resolve(); // non-fatal
-    });
-  };
-
-  const removeFromDb = async (id: string) => {
-    if (!db) return;
-    return new Promise<void>((resolve) => {
-      const tx = db!.transaction(STORE_NAME, 'readwrite');
-      tx.objectStore(STORE_NAME).delete(id);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => resolve();
-    });
-  };
-
   return {
     async enqueue(segmentData) {
-      if (memoryQueue.length >= maxQueueSize) {
-        throw new Error('Upload queue full — segment dropped');
+      if (segmentData.sessionId !== config.sessionId || segmentData.examId !== config.examId) {
+        throw new Error('Segment session/exam mismatch');
       }
+      if (memoryQueue.length >= maxQueueSize) {
+        throw new Error('Upload queue full — backpressure limit reached');
+      }
+      if (dbChecked && !db && config.requireDurablePersistence) {
+        const err = new Error('IndexedDB durable persistence unavailable');
+        config.onStorageUnavailable?.(err);
+        throw err;
+      }
+
+      const duplicate = memoryQueue.some((s) => s.sequenceNumber === segmentData.sequenceNumber)
+        || failedQueue.some((s) => s.sequenceNumber === segmentData.sequenceNumber);
+      if (duplicate) return;
 
       const segment: QueuedSegment = {
         ...segmentData,
         retryCount: 0,
         enqueuedAt: Date.now(),
+        failed: false,
       };
 
+      const persisted = await saveToDb(segment);
+      if (!persisted && config.requireDurablePersistence) {
+        const err = new Error('Failed to persist segment to IndexedDB');
+        config.onStorageUnavailable?.(err);
+        throw err;
+      }
+
       memoryQueue.push(segment);
-      await saveToDb(segment);
-      config.onStatusChange?.(memoryQueue.length, uploading);
+      notifyStatus();
       scheduleProcess();
     },
 
-    start() {
+    async start(): Promise<boolean> {
       running = true;
-      void openDb().then((database) => {
-        db = database;
-        // Recover any segments from previous session
-        if (db) {
-          const tx = db.transaction(STORE_NAME, 'readonly');
-          const req = tx.objectStore(STORE_NAME).index('sessionId').getAll(config.sessionId);
-          req.onsuccess = () => {
-            const recovered = (req.result ?? []) as QueuedSegment[];
-            if (recovered.length > 0) {
+      const database = await openDb();
+      db = database;
+      dbChecked = true;
+
+      if (!db && config.requireDurablePersistence) {
+        running = false;
+        const err = new Error('IndexedDB unavailable for mandatory recording');
+        config.onStorageUnavailable?.(err);
+        return false;
+      }
+
+      if (db) {
+        await new Promise<void>((resolve) => {
+          try {
+            const tx = db!.transaction(STORE_NAME, 'readonly');
+            const req = tx.objectStore(STORE_NAME).index('sessionId').getAll(config.sessionId);
+            req.onsuccess = () => {
+              const recovered = ((req.result ?? []) as QueuedSegment[])
+                .filter((s) => s.examId === config.examId && s.sessionId === config.sessionId);
               recovered.sort((a, b) => a.enqueuedAt - b.enqueuedAt);
-              // Add recovered segments that aren't already in memory queue
-              const inQueue = new Set(memoryQueue.map((s) => s.id));
+              const known = new Set([...memoryQueue, ...failedQueue].map((s) => s.id));
               for (const seg of recovered) {
-                if (!inQueue.has(seg.id) && memoryQueue.length < maxQueueSize) {
+                if (known.has(seg.id)) continue;
+                if (seg.failed) {
+                  failedQueue.push(seg);
+                } else if (memoryQueue.length < maxQueueSize) {
                   memoryQueue.push(seg);
                 }
               }
-              config.onStatusChange?.(memoryQueue.length, false);
-              scheduleProcess();
-            }
-          };
-        }
-        scheduleProcess();
-      });
+              notifyStatus();
+              resolve();
+            };
+            req.onerror = () => resolve();
+          } catch {
+            resolve();
+          }
+        });
+      }
+
+      scheduleProcess();
+      return true;
     },
 
     stop() {
@@ -206,6 +294,35 @@ export function createUploadQueue(config: UploadQueueConfig): UploadQueue {
       if (processTimer) { window.clearTimeout(processTimer); processTimer = 0; }
     },
 
+    retryFailed() {
+      if (failedQueue.length === 0) return;
+      while (failedQueue.length > 0 && memoryQueue.length < maxQueueSize) {
+        const seg = failedQueue.shift()!;
+        seg.failed = false;
+        seg.retryCount = 0;
+        memoryQueue.push(seg);
+        void saveToDb(seg);
+      }
+      notifyStatus();
+      if (running) scheduleProcess(0);
+    },
+
+    async flush(timeoutMs = 15_000): Promise<{ pending: number; failed: number; timedOut: boolean }> {
+      if (memoryQueue.length === 0 && !uploading) {
+        return { pending: 0, failed: failedQueue.length, timedOut: false };
+      }
+      if (running) scheduleProcess(0);
+      const timedOut = await new Promise<boolean>((resolve) => {
+        const timer = window.setTimeout(() => resolve(true), timeoutMs);
+        flushWaiters.push(() => {
+          window.clearTimeout(timer);
+          resolve(false);
+        });
+      });
+      return { pending: memoryQueue.length, failed: failedQueue.length, timedOut };
+    },
+
     get pendingCount() { return memoryQueue.length; },
+    get failedCount() { return failedQueue.length; },
   };
 }

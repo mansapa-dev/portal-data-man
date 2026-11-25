@@ -61,12 +61,16 @@ export type ExamQuestion={id:number;tipe:string;pertanyaan:string;opsi:{key:stri
 export type ExamAttempt={attempt_id:string;exam:{id:number;nama_ujian:string};expires_at:string;server_time?:string;soal:ExamQuestion[];jawaban:{question_id:number;answer:string|null;is_flagged:boolean;revision:number}[]};
 export type ExamResult={status?:string;nilai?:number|string|null;benar?:number|null;salah?:number|null;kosong?:number|null;jumlah_soal?:number|null;is_remedial?:boolean;score_cap?:number|null;follow_up_type?:string|null;submission_state?:string|null};
 
-export function StudentExam({attempt,studentName,studentNisn,answers,flags,busy,saveState='saved',message,change,toggleFlag,retrySave,submit,onTerminated,onHelp,helpOpen=false,preflightResult=null,recordingEnabled=false,segmentDurationSeconds=60,videoBitrate=500_000,children}:{attempt:ExamAttempt;studentName:string;studentNisn?:string;answers:Record<number,string>;flags:Record<number,boolean>;busy:boolean;saveState?:'saved'|'saving'|'error';message?:string;change:(question:ExamQuestion,value:string)=>void;toggleFlag:(question:ExamQuestion)=>void;retrySave:()=>Promise<void>;submit:(finalizeOnly?:boolean)=>Promise<void>;onTerminated:(result:ExamResult|null)=>void;onHelp:()=>void;helpOpen?:boolean;preflightResult?:PreflightResult|null;recordingEnabled?:boolean;segmentDurationSeconds?:number;videoBitrate?:number;children?:React.ReactNode}){
+export function StudentExam({attempt,studentName,studentNisn,answers,flags,busy,saveState='saved',message,change,toggleFlag,retrySave,submit,onTerminated,onHelp,helpOpen=false,preflightResult=null,recordingSessionId=null,recordingEnabled=false,recordingRequired=false,segmentDurationSeconds=60,videoBitrate=500_000,children}:{attempt:ExamAttempt;studentName:string;studentNisn?:string;answers:Record<number,string>;flags:Record<number,boolean>;busy:boolean;saveState?:'saved'|'saving'|'error';message?:string;change:(question:ExamQuestion,value:string)=>void;toggleFlag:(question:ExamQuestion)=>void;retrySave:()=>Promise<void>;submit:(finalizeOnly?:boolean)=>Promise<void>;onTerminated:(result:ExamResult|null)=>void;onHelp:()=>void;helpOpen?:boolean;preflightResult?:PreflightResult|null;recordingSessionId?:string|null;recordingEnabled?:boolean;recordingRequired?:boolean;segmentDurationSeconds?:number;videoBitrate?:number;children?:React.ReactNode}){
  const [remaining,setRemaining]=useState(()=>Math.max(0,Math.ceil((Date.parse(attempt.expires_at)-Date.now()-(attempt.server_time?Date.parse(attempt.server_time)-Date.now():0))/1000))),[warning,setWarning]=useState(''),[current,setCurrent]=useState(0),[submitOpen,setSubmitOpen]=useState(false),[expiryFailed,setExpiryFailed]=useState(false),[mapOpen,setMapOpen]=useState(false);const lastEvent=useRef<Record<string,number>>({}),submitting=useRef(false),fullscreenRequested=useRef(false),submitRef=useRef(submit),terminationRef=useRef(onTerminated);
  const [uploadPending,setUploadPending]=useState(0);
+ const [uploadFailed,setUploadFailed]=useState(0);
  const [recordingActive,setRecordingActive]=useState(false);
+ const [recordingError,setRecordingError]=useState('');
  const [fullscreenActive,setFullscreenActive]=useState(()=>isFullscreenActive());
  const batcherRef=useRef<SecurityEventBatcher|null>(null);
+ const finalizeRecordingRef=useRef<(() => Promise<void>) | null>(null);
+ const retryUploadRef=useRef<(() => void) | null>(null);
  // Pengawasan kehadiran wajah berjalan lokal di perangkat. Status dipakai untuk
  // chip & banner; recordRef menjadi jembatan ke pencatat pelanggaran di bawah.
  const [faceStatus,setFaceStatus]=useState<FacePresenceStatus>('starting');
@@ -92,7 +96,7 @@ export function StudentExam({attempt,studentName,studentNisn,answers,flags,busy,
   // Tahap 3: attempts yang claim terlambat berbagi ends_at yang sama, sehingga
   // auto-submit bisa menumpuk jadi ribuan request pada satu detik. Sebarkan
   // 0..2 dtk; server tetap memfinalisasi hanya jawaban yang sudah tersimpan.
-  const fire=()=>{void submitRef.current(true).catch(()=>{submitting.current=false;setExpiryFailed(true);setWarning('Waktu habis. Hasil dihitung dari jawaban yang berhasil tersimpan.');});};
+  const fire=()=>{void (finalizeRecordingRef.current?.()??Promise.resolve()).catch(()=>{}).then(()=>submitRef.current(true)).catch(()=>{submitting.current=false;setExpiryFailed(true);setWarning('Waktu habis. Hasil dihitung dari jawaban yang berhasil tersimpan.');});};
   const jitter=submitJitterMs();
   if(jitter>0)expiryTimer=window.setTimeout(fire,jitter);else fire();}};tick();const timer=window.setInterval(tick,1000);return()=>{clearInterval(timer);window.clearTimeout(expiryTimer);};},[attempt.attempt_id]);
  // Anti layar mati sendiri: selama attempt aktif, minta shell Android menahan
@@ -416,77 +420,141 @@ export function StudentExam({attempt,studentName,studentNisn,answers,flags,busy,
  },[attempt.attempt_id,expired]);
  // Perekaman video segmen 60 detik langsung ke Linode Object Storage (jika diaktifkan).
  useEffect(()=>{
-  if(expired||!recordingEnabled||!preflightResult?.cameraStream||!preflightResult.recordingMimeType)return;
+  if(expired||!recordingEnabled)return;
+  if(!preflightResult?.cameraStream||!preflightResult.recordingMimeType){
+   if(recordingRequired)setRecordingError('Kamera atau format rekaman tidak tersedia.');
+   return;
+  }
   let cancelled=false;
+  let finalized=false;
   let recorder:ReturnType<typeof createExamRecorder>|null=null;
   let queue:ReturnType<typeof createUploadQueue>|null=null;
-  let sessionId='';
+  let sessionId=recordingSessionId??'';
   const mimeType=preflightResult.recordingMimeType;
   const stream=preflightResult.cameraStream;
-  void api<{session_id:string}>(`/api/student/exams/${attempt.exam.id}/recording/session`,{method:'POST',body:{}}).then(({session_id})=>{
-   if(cancelled)return;
-   sessionId=session_id;
-   queue=createUploadQueue({
-    sessionId,
-    examId:attempt.exam.id,
-    requestPresignedUrl:(seg)=>api<{upload_url:string;segment_id:number}>(`/api/student/exams/${attempt.exam.id}/recording/segment`,{
-     method:'POST',
-     body:{session_id:sessionId,sequence_number:seg.sequenceNumber,mime_type:seg.mimeType,segment_started_at:seg.startedAt},
-    }),
-    confirmUpload:(_seg,segmentId,fileSizeBytes)=>api(`/api/student/exams/${attempt.exam.id}/recording/segment/${segmentId}`,{
-     method:'PATCH',
-     body:{file_size_bytes:fileSizeBytes,segment_ended_at:new Date().toISOString()},
-    }).then(()=>undefined),
-    onPermanentFailure:(seg)=>{
-     batcherRef.current?.push({
-      event_key:makeEventKey('RECORDING_UPLOAD_FAILED'),
-      event_type:'RECORDING_UPLOAD_FAILED',
-      client_occurred_at:new Date().toISOString(),
-      metadata:{sequence:seg.sequenceNumber},
-     });
-    },
-    onStatusChange:(pending)=>setUploadPending(pending),
-   });
-   queue.start();
-   recorder=createExamRecorder({
-    stream,
-    mimeType,
-    videoBitsPerSecond:videoBitrate,
-    segmentDurationMs:segmentDurationSeconds*1000,
-    onSegment:(seg)=>{
-     void queue?.enqueue({
-      id:`${sessionId}_${seg.sequenceNumber}`,
-      blob:seg.blob,
-      mimeType:seg.mimeType,
-      sequenceNumber:seg.sequenceNumber,
-      sessionId,
-      examId:attempt.exam.id,
-      startedAt:seg.startedAt.toISOString(),
-      endedAt:seg.endedAt.toISOString(),
-     }).catch(()=>{/* queue full */});
-    },
-    onError:()=>{
-     setRecordingActive(false);
-     batcherRef.current?.push({event_key:makeEventKey('RECORDING_INTERRUPTED'),event_type:'RECORDING_INTERRUPTED',client_occurred_at:new Date().toISOString()});
-    },
-    onStopped:()=>{
-     setRecordingActive(false);
-    },
-   });
-   recorder.start();
-   setRecordingActive(true);
-   batcherRef.current?.push({event_key:makeEventKey('RECORDING_STARTED'),event_type:'RECORDING_STARTED',client_occurred_at:new Date().toISOString()});
-  }).catch(()=>{/* recording initialization failed */});
-  return()=>{
-   cancelled=true;
-   recorder?.stop();
-   queue?.stop();
+
+  const finalizeSession=async()=>{
+   if(finalized)return;
+   finalized=true;
+   if(recorder){
+    await recorder.stopAndFlush().catch(()=>{/* non-fatal */});
+   }
+   let pending=queue?.pendingCount??0;
+   let failed=queue?.failedCount??0;
+   if(queue){
+    const flushed=await queue.flush(15_000).catch(()=>({pending:queue!.pendingCount,failed:queue!.failedCount,timedOut:true}));
+    pending=flushed.pending;
+    failed=flushed.failed;
+    queue.stop();
+   }
    setRecordingActive(false);
    if(sessionId){
-    void api(`/api/student/exams/${attempt.exam.id}/recording/finalize`,{method:'POST',keepalive:true,body:{session_id:sessionId}}).catch(()=>{/* non-fatal */});
+    await api(`/api/student/exams/${attempt.exam.id}/recording/finalize`,{
+     method:'POST',
+     keepalive:true,
+     body:{session_id:sessionId,incomplete:pending>0||failed>0},
+    }).catch(()=>{/* non-fatal: server retains partial metadata */});
    }
   };
- },[attempt.attempt_id,attempt.exam.id,expired,recordingEnabled,preflightResult,segmentDurationSeconds,videoBitrate]);
+  finalizeRecordingRef.current=finalizeSession;
+
+  const init=async()=>{
+   try{
+    if(!sessionId){
+     const res=await api<{session_id:string}>(`/api/student/exams/${attempt.exam.id}/recording/session`,{method:'POST',body:{}});
+     sessionId=res.session_id;
+    }
+    if(cancelled)return;
+    const q=createUploadQueue({
+     sessionId,
+     examId:attempt.exam.id,
+     requireDurablePersistence:recordingRequired,
+     requestPresignedUrl:(seg)=>api<{upload_url:string;segment_id:number}>(`/api/student/exams/${attempt.exam.id}/recording/segment`,{
+      method:'POST',
+      body:{session_id:sessionId,sequence_number:seg.sequenceNumber,mime_type:seg.mimeType,segment_started_at:seg.startedAt},
+     }),
+     confirmUpload:(_seg,segmentId,fileSizeBytes)=>api(`/api/student/exams/${attempt.exam.id}/recording/segment/${segmentId}`,{
+      method:'PATCH',
+      body:{file_size_bytes:fileSizeBytes,segment_ended_at:new Date().toISOString()},
+     }).then(()=>undefined),
+     onPermanentFailure:(seg)=>{
+      batcherRef.current?.push({
+       event_key:makeEventKey('RECORDING_UPLOAD_FAILED'),
+       event_type:'RECORDING_UPLOAD_FAILED',
+       client_occurred_at:new Date().toISOString(),
+       metadata:{sequence:seg.sequenceNumber},
+      });
+     },
+     onStorageUnavailable:()=>{
+      setRecordingError('Penyimpanan sementara browser (IndexedDB) tidak tersedia untuk rekaman wajib.');
+     },
+     onStatusChange:(pending,_uploading,failed)=>{setUploadPending(pending);setUploadFailed(failed);},
+    });
+    const started=await q.start();
+    if(cancelled){q.stop();return;}
+    if(!started&&recordingRequired){
+     setRecordingError('Gagal mengaktifkan penyimpanan lokal rekaman.');
+     return;
+    }
+    queue=q;
+    retryUploadRef.current=()=>q.retryFailed();
+    const rec=createExamRecorder({
+     stream,
+     mimeType,
+     videoBitsPerSecond:videoBitrate,
+     segmentDurationMs:segmentDurationSeconds*1000,
+     onSegment:(seg)=>{
+      void q.enqueue({
+       id:`${sessionId}_${seg.sequenceNumber}`,
+       blob:seg.blob,
+       mimeType:seg.mimeType,
+       sequenceNumber:seg.sequenceNumber,
+       sessionId,
+       examId:attempt.exam.id,
+       startedAt:seg.startedAt.toISOString(),
+       endedAt:seg.endedAt.toISOString(),
+      }).catch(()=>{
+       setRecordingError('Antrean unggah rekaman penuh atau gagal disimpan.');
+      });
+     },
+     onError:(err)=>{
+      setRecordingActive(false);
+      setRecordingError(`Perekaman terganggu: ${err.message}`);
+      batcherRef.current?.push({event_key:makeEventKey('RECORDING_INTERRUPTED'),event_type:'RECORDING_INTERRUPTED',client_occurred_at:new Date().toISOString()});
+     },
+     onStopped:()=>{
+      setRecordingActive(false);
+     },
+    });
+    rec.start();
+    if(!rec.isRecording){
+     setRecordingError('Perekam video gagal dimulai.');
+     return;
+    }
+    recorder=rec;
+    setRecordingActive(true);
+    setRecordingError('');
+    batcherRef.current?.push({event_key:makeEventKey('RECORDING_STARTED'),event_type:'RECORDING_STARTED',client_occurred_at:new Date().toISOString()});
+   }catch(err){
+    if(!cancelled){
+     setRecordingActive(false);
+     setRecordingError(err instanceof Error?err.message:'Gagal memulai perekaman ujian.');
+    }
+   }
+  };
+  void init();
+
+  return()=>{
+   cancelled=true;
+   finalizeRecordingRef.current=null;
+   retryUploadRef.current=null;
+   if(!finalized){
+    recorder?.stop();
+    queue?.stop();
+    setRecordingActive(false);
+   }
+  };
+ },[attempt.attempt_id,attempt.exam.id,expired,recordingEnabled,recordingRequired,recordingSessionId,preflightResult,segmentDurationSeconds,videoBitrate]);
  // Muat lebih awal gambar pada dua soal berikutnya supaya perpindahan soal
  // tidak menunggu unduhan, tanpa membebani jaringan saat ujian baru dimulai.
  const preloaded=useRef<HTMLImageElement[]>([]);
@@ -520,9 +588,9 @@ export function StudentExam({attempt,studentName,studentNisn,answers,flags,busy,
  const retryExpiredResult=()=>{if(submitting.current)return;submitting.current=true;setExpiryFailed(false);void submit(true).catch(()=>{submitting.current=false;setExpiryFailed(true);});};
  const requestFinish=(event:React.MouseEvent<HTMLButtonElement>)=>{if(remaining===0)return;if(saveState==='error'){setWarning('Ada jawaban yang belum tersimpan. Periksa koneksi sebelum menyelesaikan ujian.');return;}submitTrigger.current=event.currentTarget;setSubmitOpen(true);};
  return <section className="cbt-wrapper student-exam notranslate" translate="no" lang="id">{watermark.current&&<div aria-hidden="true" className="student-exam-watermark" style={{backgroundImage:watermark.current}}/>}<header className="cbt-header"><div className="cbt-identity"><div className="id-item"><span className="id-label">Mata Pelajaran</span><span className="id-val">{attempt.exam.nama_ujian}</span></div><div className="id-item"><span className="id-label">Peserta</span><span className="id-val">{studentName}</span></div><div className="id-item"><span className="id-label">No. Ujian</span><span className="id-val">{attempt.exam.id}</span></div><div className="id-item"><span className="id-label">Status</span><span className="id-val">{answered} dari {attempt.soal.length} dijawab</span></div></div><div className={remaining>0&&remaining<=300?'timer-box danger':'timer-box'}><span className="id-label">SISA WAKTU</span><span className="timer-time" aria-live="off">{String(minutes).padStart(2,'0')}:{String(seconds).padStart(2,'0')}</span></div><div className="student-exam-header-actions">{(recordingActive||uploadPending>0)&&<span className="face-guard-chip face-ok" title="Status perekaman ujian"><i className="fa-solid fa-record-vinyl"/><span>{uploadPending>0?`Mengunggah (${uploadPending})`:'Merekam'}</span></span>}<span className={`face-guard-chip face-${faceStatus}`} title="Kamera hanya memproses wajah di perangkat ini; tidak ada foto atau video yang dikirim ke server."><i className={`fa-solid ${faceStatus==='ok'?'fa-face-smile':faceStatus==='absent'?'fa-face-frown':faceStatus==='blocked'?'fa-camera-slash':faceStatus==='unavailable'?'fa-video-slash':faceStatus==='model-error'?'fa-shield-halved':faceStatus==='error'?'fa-triangle-exclamation':'fa-camera'}`}/><span>{faceStatus==='ok'?'Wajah terpantau':faceStatus==='absent'?'Wajah tidak terlihat':faceStatus==='blocked'?'Kamera nonaktif':faceStatus==='unavailable'?'Tanpa kamera':faceStatus==='model-error'?'Pemantauan terganggu':faceStatus==='error'?'Kamera bermasalah':'Menyiapkan kamera'}</span></span><button className="cbt-help-button" type="button" onClick={onHelp}><i className="fa-solid fa-headset"/> Bantuan</button><button className="student-fullscreen-button" type="button" aria-label="Layar penuh" title="Layar penuh" onClick={()=>{fullscreenRequested.current=true;setExamMode(true);}}><i className="fa-solid fa-expand"/></button></div></header>
- <div className="student-exam-progress"><div><span>{answered} soal dijawab</span><span>{attempt.soal.length} soal</span></div><progress aria-label="Progres jawaban" max={attempt.soal.length||1} value={answered}/></div>{faceNotice&&<div className={`exam-face-warning ${faceStatus==='absent'?'is-absent':'is-info'}`} role="alert"><i className={`fa-solid ${faceStatus==='absent'?'fa-face-frown':faceStatus==='model-error'?'fa-triangle-exclamation':'fa-camera'}`}/><span>{faceNotice}</span></div>}{warning&&<p className="exam-warning" role="status">{warning}</p>}{message&&saveState!=='error'&&<p className="exam-warning" role="alert">{message}</p>}{remaining>0&&saveState==='error'&&<div className="exam-save-error" role="alert"><span>Jawaban belum tersimpan. {message||'Periksa koneksi sebelum menyelesaikan ujian.'}</span><button type="button" onClick={()=>void retrySave()}>Coba simpan lagi</button></div>}
+ <div className="student-exam-progress"><div><span>{answered} soal dijawab</span><span>{attempt.soal.length} soal</span></div><progress aria-label="Progres jawaban" max={attempt.soal.length||1} value={answered}/></div>{(recordingError||uploadFailed>0)&&<div className="exam-save-error" role="alert"><span>{recordingError||`${uploadFailed} segmen rekaman belum berhasil diunggah.`}</span>{uploadFailed>0&&<button type="button" onClick={()=>retryUploadRef.current?.()}>Coba unggah lagi</button>}</div>}{faceNotice&&<div className={`exam-face-warning ${faceStatus==='absent'?'is-absent':'is-info'}`} role="alert"><i className={`fa-solid ${faceStatus==='absent'?'fa-face-frown':faceStatus==='model-error'?'fa-triangle-exclamation':'fa-camera'}`}/><span>{faceNotice}</span></div>}{warning&&<p className="exam-warning" role="status">{warning}</p>}{message&&saveState!=='error'&&<p className="exam-warning" role="alert">{message}</p>}{remaining>0&&saveState==='error'&&<div className="exam-save-error" role="alert"><span>Jawaban belum tersimpan. {message||'Periksa koneksi sebelum menyelesaikan ujian.'}</span><button type="button" onClick={()=>void retrySave()}>Coba simpan lagi</button></div>}
  {remaining===0&&<div className="exam-expired-note" role="status"><span>Waktu ujian habis. Hasil dihitung dari jawaban yang sudah tersimpan.</span>{expiryFailed&&<button type="button" disabled={busy} onClick={retryExpiredResult}>Coba muat hasil lagi</button>}</div>}<button className="student-map-toggle btn btn-secondary" type="button" aria-expanded={mapOpen} aria-controls="student-question-map" onClick={()=>{if(!mapOpen)window.setTimeout(()=>document.getElementById('student-question-map')?.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'}),0);setMapOpen(open=>!open);}}><i className="fa-solid fa-border-all"/> {mapOpen?'Tutup peta soal':'Peta soal ('+answered+'/'+attempt.soal.length+' dijawab)'}</button><div className="cbt-grid">{question&&<article className="q-panel"><div className="q-meta"><span className="q-num">Soal {current+1} dari {attempt.soal.length}</span><span role="status" aria-live="polite" className={`student-save-badge state-${saveState}`}><i className={`fa-solid ${saveState==='error'?'fa-triangle-exclamation':saveState==='saving'?'fa-arrows-rotate fa-spin':'fa-cloud-arrow-up'}`}/> {saveText}</span></div><ActiveQuestionMath key={question.id} question={question}><div className="q-text question-rich-content" dir="auto" dangerouslySetInnerHTML={{__html:question.pertanyaan}}/>{question.tipe==='SHORT_ANSWER'?<input className="short-answer" aria-label="Jawaban singkat" dir="auto" maxLength={500} value={answers[question.id]??''} disabled={busy} onChange={e=>change(question,e.target.value)}/>:<div className="opt-list">{question.opsi.map(option=><label className={`opt-btn ${(answers[question.id]??'').split(',').includes(option.key)?'selected':''}`} key={option.key}><input className="exam-option-input" type={question.tipe==='MULTIPLE_RESPONSE'?'checkbox':'radio'} name={`question-${question.id}`} checked={(answers[question.id]??'').split(',').includes(option.key)} disabled={busy} onChange={e=>{const selected=new Set((answers[question.id]??'').split(',').filter(Boolean));if(question.tipe==='MULTIPLE_RESPONSE')e.target.checked?selected.add(option.key):selected.delete(option.key);else{selected.clear();selected.add(option.key);}change(question,[...selected].sort().join(','));}}/><span className="opt-text" dir="auto" dangerouslySetInnerHTML={{__html:option.text}}/></label>)}</div>}</ActiveQuestionMath><div className="q-nav-actions"><button className="btn btn-secondary" disabled={busy||current===0} onClick={()=>setCurrent(current-1)}><i className="fa-solid fa-chevron-left"/> Sebelumnya</button><button className="btn btn-warning" type="button" disabled={busy} aria-pressed={flags[question.id]??false} onClick={()=>toggleFlag(question)}><i className="fa-solid fa-flag"/> {flags[question.id]?'Hapus ragu':'Ragu-ragu'}</button><button className="btn btn-primary" disabled={busy} onClick={current>=attempt.soal.length-1?requestFinish:()=>setCurrent(current+1)}>{current>=attempt.soal.length-1?'Selesai ujian':'Berikutnya'} <i className={`fa-solid ${current>=attempt.soal.length-1?'fa-paper-plane':'fa-chevron-right'}`}/></button></div></article>}
- <aside id="student-question-map" className={'nav-panel student-question-map '+(mapOpen?'is-open':'')}><div className="nav-panel-title"><b><i className="fa-solid fa-border-all"/> Peta soal</b><span>Pilih nomor soal</span></div><div className="student-map-legend"><span>Hijau: dijawab</span><span>Kuning: ragu</span></div><nav className="nav-grid" aria-label="Nomor soal">{attempt.soal.map((item,index)=><button type="button" key={item.id} className={`btn-num ${answers[item.id]?.trim()?'answered ':''}${flags[item.id]?'flagged ':''}${index===current?'active':''}`} aria-label={'Soal '+(index+1)+(answers[item.id]?.trim()?', dijawab':', belum dijawab')+(flags[item.id]?', ragu-ragu':'')} aria-current={index===current?'step':undefined} onClick={()=>{setCurrent(index);setMapOpen(false);window.setTimeout(()=>document.querySelector('.student-exam .q-panel')?.scrollIntoView({behavior:'auto',block:'start'}),0);}}>{index+1}</button>)}</nav><hr/><button className="btn btn-danger finish-exam" type="button" disabled={busy||remaining===0} onClick={requestFinish}><i className="fa-solid fa-paper-plane"/> SELESAI UJIAN</button></aside></div>{children}{requireFullscreenGuard&&<div className="modal show student-submit-backdrop" role="presentation"><div className="modal-content student-submit-dialog" role="dialog" aria-modal="true" aria-labelledby="student-fullscreen-guard-title"><div className="student-submit-symbol"><i className="fa-solid fa-expand"/></div><h2 id="student-fullscreen-guard-title">Mode Layar Penuh Wajib Aktif</h2><p>Selama ujian berlangsung, layar penuh harus aktif. Keluar dari layar penuh dicatat dan dilaporkan ke pengawas.</p><p className="student-submit-note">Jika mengalami kendala jaringan atau sesi terkunci, buka menu Bantuan untuk mengirim tiket ke pengawas.</p><div className="student-submit-actions"><button className="btn btn-secondary" type="button" onClick={onHelp}><i className="fa-solid fa-headset"/> Bantuan Pengawas</button><button className="btn btn-primary" type="button" onClick={()=>{fullscreenRequested.current=true;setExamMode(true);enterFullscreenNow();}}><i className="fa-solid fa-expand"/> Aktifkan Layar Penuh</button></div></div></div>}{submitOpen&&<div className="modal show student-submit-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setSubmitOpen(false);}}><div className="modal-content student-submit-dialog" role="dialog" aria-modal="true" aria-labelledby="student-submit-title"><div className="student-submit-symbol"><i className="fa-solid fa-circle-exclamation"/></div><h2 id="student-submit-title">Kumpulkan Ujian?</h2><p>{unanswered>0?`${unanswered} soal belum dijawab. Periksa kembali sebelum mengumpulkan.`:'Semua soal telah dijawab. Pastikan jawaban Anda sudah sesuai.'}</p><div className="student-submit-counts"><span><i className="fa-solid fa-check"/> {answered} dijawab</span><span><i className="fa-solid fa-circle-question"/> {unanswered} kosong</span><span><i className="fa-solid fa-flag"/> {flagged} ragu-ragu</span></div><p className="student-submit-note">Setelah dikumpulkan, jawaban tidak dapat diubah.</p><div className="student-submit-actions"><button ref={submitCancelButton} className="btn btn-secondary" type="button" disabled={busy} onClick={()=>setSubmitOpen(false)}>Periksa Lagi</button><button className="btn btn-primary" type="button" disabled={busy||saveState!=='saved'} onClick={()=>{submitting.current=true;void submit(false).catch(()=>{submitting.current=false;setSubmitOpen(false);});}}>Ya, Kumpulkan</button></div></div></div>}</section>;
+ <aside id="student-question-map" className={'nav-panel student-question-map '+(mapOpen?'is-open':'')}><div className="nav-panel-title"><b><i className="fa-solid fa-border-all"/> Peta soal</b><span>Pilih nomor soal</span></div><div className="student-map-legend"><span>Hijau: dijawab</span><span>Kuning: ragu</span></div><nav className="nav-grid" aria-label="Nomor soal">{attempt.soal.map((item,index)=><button type="button" key={item.id} className={`btn-num ${answers[item.id]?.trim()?'answered ':''}${flags[item.id]?'flagged ':''}${index===current?'active':''}`} aria-label={'Soal '+(index+1)+(answers[item.id]?.trim()?', dijawab':', belum dijawab')+(flags[item.id]?', ragu-ragu':'')} aria-current={index===current?'step':undefined} onClick={()=>{setCurrent(index);setMapOpen(false);window.setTimeout(()=>document.querySelector('.student-exam .q-panel')?.scrollIntoView({behavior:'auto',block:'start'}),0);}}>{index+1}</button>)}</nav><hr/><button className="btn btn-danger finish-exam" type="button" disabled={busy||remaining===0} onClick={requestFinish}><i className="fa-solid fa-paper-plane"/> SELESAI UJIAN</button></aside></div>{children}{requireFullscreenGuard&&<div className="modal show student-submit-backdrop" role="presentation"><div className="modal-content student-submit-dialog" role="dialog" aria-modal="true" aria-labelledby="student-fullscreen-guard-title"><div className="student-submit-symbol"><i className="fa-solid fa-expand"/></div><h2 id="student-fullscreen-guard-title">Mode Layar Penuh Wajib Aktif</h2><p>Selama ujian berlangsung, layar penuh harus aktif. Keluar dari layar penuh dicatat dan dilaporkan ke pengawas.</p><p className="student-submit-note">Jika mengalami kendala jaringan atau sesi terkunci, buka menu Bantuan untuk mengirim tiket ke pengawas.</p><div className="student-submit-actions"><button className="btn btn-secondary" type="button" onClick={onHelp}><i className="fa-solid fa-headset"/> Bantuan Pengawas</button><button className="btn btn-primary" type="button" onClick={()=>{fullscreenRequested.current=true;setExamMode(true);enterFullscreenNow();}}><i className="fa-solid fa-expand"/> Aktifkan Layar Penuh</button></div></div></div>}{submitOpen&&<div className="modal show student-submit-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setSubmitOpen(false);}}><div className="modal-content student-submit-dialog" role="dialog" aria-modal="true" aria-labelledby="student-submit-title"><div className="student-submit-symbol"><i className="fa-solid fa-circle-exclamation"/></div><h2 id="student-submit-title">Kumpulkan Ujian?</h2><p>{unanswered>0?`${unanswered} soal belum dijawab. Periksa kembali sebelum mengumpulkan.`:'Semua soal telah dijawab. Pastikan jawaban Anda sudah sesuai.'}</p><div className="student-submit-counts"><span><i className="fa-solid fa-check"/> {answered} dijawab</span><span><i className="fa-solid fa-circle-question"/> {unanswered} kosong</span><span><i className="fa-solid fa-flag"/> {flagged} ragu-ragu</span></div><p className="student-submit-note">Setelah dikumpulkan, jawaban tidak dapat diubah.</p><div className="student-submit-actions"><button ref={submitCancelButton} className="btn btn-secondary" type="button" disabled={busy} onClick={()=>setSubmitOpen(false)}>Periksa Lagi</button><button className="btn btn-primary" type="button" disabled={busy||saveState!=='saved'} onClick={()=>{submitting.current=true;void (finalizeRecordingRef.current?.()??Promise.resolve()).catch(()=>{}).then(()=>submit(false)).catch(()=>{submitting.current=false;setSubmitOpen(false);});}}>Ya, Kumpulkan</button></div></div></div>}</section>;
 }
 
 export function StudentResult({examName,result,review,reviewLoading=false,reviewError='',onReview,onClose,onHelp}:{examName:string;result:ExamResult;review:{soal:{id:number;pertanyaan?:string;status:string}[]}|null;reviewLoading?:boolean;reviewError?:string;onReview:()=>Promise<void>;onClose:()=>void;onHelp:()=>void}){

@@ -15,6 +15,7 @@ import Fastify from 'fastify';
 import { buildAppOptions } from '../dist/lib/app-options.js';
 import { ObjectStorageService } from '../dist/services/object-storage.js';
 import { riskWeight, classifySeverity, computeEventWeight } from '../dist/services/risk-scoring.js';
+import { assertRecordingReadyForAdmission, ensureRecordingSession } from '../dist/services/recording-policy.js';
 
 // ---- Minimal in-memory mock pool ----
 
@@ -145,5 +146,94 @@ describe('Security event deduplication', () => {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE id=id`;
     assert.ok(sql.includes('ON DUPLICATE KEY UPDATE id=id'));
+  });
+});
+
+describe('Recording policy & admission enforcement', () => {
+  test('rejects admission when recording is required but disabled', async () => {
+    const prevEnabled = process.env.RECORDING_ENABLED;
+    const prevRequired = process.env.RECORDING_REQUIRED;
+    process.env.RECORDING_ENABLED = 'false';
+    process.env.RECORDING_REQUIRED = 'true';
+    try {
+      await assert.rejects(
+        () => assertRecordingReadyForAdmission(null, 42, 7, { storage: null }),
+        (err) => err.statusCode === 503 && err.code === 'RECORDING_DISABLED',
+      );
+    } finally {
+      process.env.RECORDING_ENABLED = prevEnabled;
+      process.env.RECORDING_REQUIRED = prevRequired;
+    }
+  });
+
+  test('rejects admission when recording is required and enabled but storage unavailable', async () => {
+    const prevEnabled = process.env.RECORDING_ENABLED;
+    const prevRequired = process.env.RECORDING_REQUIRED;
+    process.env.RECORDING_ENABLED = 'true';
+    process.env.RECORDING_REQUIRED = 'true';
+    try {
+      await assert.rejects(
+        () => assertRecordingReadyForAdmission(null, 42, 7, { storage: null }),
+        (err) => err.statusCode === 503 && err.code === 'RECORDING_STORAGE_UNAVAILABLE',
+      );
+    } finally {
+      process.env.RECORDING_ENABLED = prevEnabled;
+      process.env.RECORDING_REQUIRED = prevRequired;
+    }
+  });
+
+  test('rejects resume when attempt recording session is already FINALIZED', async () => {
+    const prevEnabled = process.env.RECORDING_ENABLED;
+    const prevRequired = process.env.RECORDING_REQUIRED;
+    process.env.RECORDING_ENABLED = 'true';
+    process.env.RECORDING_REQUIRED = 'true';
+    const fakePool = {
+      execute: async () => [[{ id: 1, attempt_status: 'IN_PROGRESS', rec_status: 'FINALIZED' }], []],
+    };
+    try {
+      await assert.rejects(
+        () => assertRecordingReadyForAdmission(fakePool, 42, 7, { storage: new MockStorage(), checkExistingAttempt: true }),
+        (err) => err.statusCode === 409 && err.code === 'RECORDING_SESSION_CLOSED',
+      );
+    } finally {
+      process.env.RECORDING_ENABLED = prevEnabled;
+      process.env.RECORDING_REQUIRED = prevRequired;
+    }
+  });
+
+  test('ensureRecordingSession is idempotent for ACTIVE sessions and resumes INTERRUPTED sessions', async () => {
+    const makeTxPool = (recStatus) => {
+      const updates = [];
+      const conn = {
+        beginTransaction: async () => {},
+        commit: async () => {},
+        rollback: async () => {},
+        release: () => {},
+        execute: async (sql) => {
+          if (/FROM exam_attempts/.test(sql)) return [[{ id: 10, status: 'IN_PROGRESS' }], []];
+          if (/FROM exam_recording_sessions/.test(sql)) return [[{ id: 5, public_id: 'REC_SESSION_01234567890123', status: recStatus }], []];
+          if (/UPDATE exam_recording_sessions/.test(sql)) { updates.push(sql); return [{ affectedRows: 1 }, []]; }
+          return [{ insertId: 5 }, []];
+        },
+      };
+      return { getConnection: async () => conn, updates };
+    };
+
+    const activePool = makeTxPool('ACTIVE');
+    const r1 = await ensureRecordingSession(activePool, 42, 7);
+    assert.equal(r1.session_id, 'REC_SESSION_01234567890123');
+    assert.equal(r1.resumed, true);
+    assert.equal(activePool.updates.length, 0);
+
+    const interruptedPool = makeTxPool('INTERRUPTED');
+    const r2 = await ensureRecordingSession(interruptedPool, 42, 7);
+    assert.equal(r2.resumed, true);
+    assert.equal(interruptedPool.updates.length, 1);
+
+    const finalizedPool = makeTxPool('FINALIZED');
+    await assert.rejects(
+      () => ensureRecordingSession(finalizedPool, 42, 7),
+      (err) => err.statusCode === 409 && err.code === 'RECORDING_SESSION_CLOSED',
+    );
   });
 });

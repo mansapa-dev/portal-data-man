@@ -11,6 +11,7 @@ import { StudentCards } from './StudentCards';
 import { StudentExam, StudentResult } from './StudentExam';
 import { ExamPreflight, type PreflightResult } from './ExamPreflight';
 import { enterFullscreenNow } from './lib/exam-mode';
+import { evaluateRecordingPolicy, type ServerRecordingPolicy } from './lib/preflight-policy';
 import { StudentDashboard, StudentSupportModal } from './StudentDashboard';
 import { ExamWaitingRoom } from './ExamWaitingRoom';
 import { ExamAdmissionControl } from './ExamAdmissionControl';
@@ -120,7 +121,9 @@ function App() {
   const [darkMode, setDarkMode] = useState(()=>localStorage.getItem('mansapa-cbt-theme-v2')==='dark');
   const [preflightExam, setPreflightExam] = useState<{ examId: number; name: string; resume: boolean; requireCamera: boolean; requireRecording: boolean } | null>(null);
   const [preflightResult, setPreflightResult] = useState<PreflightResult | null>(null);
-  const [recordingPolicy, setRecordingPolicy] = useState<{ recording_enabled: boolean; recording_required: boolean; segment_duration_seconds: number; video_bitrate: number }>({ recording_enabled: false, recording_required: false, segment_duration_seconds: 60, video_bitrate: 500_000 });
+  const preflightResultRef = useRef<PreflightResult | null>(null);
+  const [recordingSessionId, setRecordingSessionId] = useState<string | null>(null);
+  const [recordingPolicy, setRecordingPolicy] = useState<ServerRecordingPolicy>({ recording_enabled: false, recording_required: false, storage_available: false, segment_duration_seconds: 60, video_bitrate: 500_000 });
   useEffect(()=>{document.documentElement.dataset.theme=darkMode?'dark':'';localStorage.setItem('mansapa-cbt-theme-v2',darkMode?'dark':'light');},[darkMode]);
   const timers = useRef(new Map<number, number>());
   const retryTimers = useRef(new Map<number, number>());
@@ -224,24 +227,26 @@ function App() {
     setMessage(''); setBusy(true);
     const exam = exams.find(item => item.id === examId);
     try {
-      if (!skipPreflight && !preflightResult) {
-        const policy = await api<typeof recordingPolicy>('/api/student/recording/policy').catch(() => recordingPolicy);
-        setRecordingPolicy(policy);
-        if (policy.recording_enabled) {
-          setPreflightExam({
-            examId,
-            name: exam?.nama_ujian ?? 'Ujian',
-            resume: resume || exam?.status_attempt === 'IN_PROGRESS',
-            requireCamera: true,
-            requireRecording: policy.recording_required,
-          });
-          setBusy(false);
-          return;
-        }
+      const policy = await api<ServerRecordingPolicy>('/api/student/recording/policy', { timeoutMs: 10000 });
+      setRecordingPolicy(policy);
+      const evaluation = evaluateRecordingPolicy(policy);
+      if (!evaluation.allowed) {
+        setMessage(evaluation.errorMessage ?? 'Ujian tidak dapat dimulai saat ini.');
+        return;
+      }
+      if (!skipPreflight && !preflightResultRef.current) {
+        setPreflightExam({
+          examId,
+          name: exam?.nama_ujian ?? 'Ujian',
+          resume: resume || exam?.status_attempt === 'IN_PROGRESS',
+          requireCamera: evaluation.requireCamera,
+          requireRecording: evaluation.requireRecording,
+        });
+        return;
       }
       enterFullscreenNow();
       const state=await api<WaitingView>(`/api/student/exams/${examId}/waiting/${resume || exam?.status_attempt==='IN_PROGRESS'?'resume':'join'}`,{method:'POST',body:{},timeoutMs:10000});
-      if(state.status==='IN_EXAM' && state.admit_token){await openAttempt(examId,state.admit_token);return;}
+      if(state.status==='IN_EXAM' && state.admit_token){await openAttempt(examId,state.admit_token,policy);return;}
       if(state.status==='FINISHED'){if(state.admit_token)setExamToken(examId,state.admit_token);await showResult(examId);return;}
       setWaitingExam({examId,initial:state,name:exam?.nama_ujian ?? 'Ujian'});
       if(student){
@@ -252,12 +257,47 @@ function App() {
       setMessage(error instanceof Error ? error.message : 'Tidak dapat membuka ujian');
     } finally { setBusy(false); }
   }
-  async function openAttempt(examId: number, admitToken?:string) {
+  async function openAttempt(examId: number, admitToken?:string, policyOverride?: ServerRecordingPolicy) {
     setBusy(true); setMessage('');
     try {
+      const activePolicy = policyOverride ?? await api<ServerRecordingPolicy>('/api/student/recording/policy', { timeoutMs: 10000 });
+      setRecordingPolicy(activePolicy);
+      const evaluation = evaluateRecordingPolicy(activePolicy);
+      if (!evaluation.allowed) {
+        throw new Error(evaluation.errorMessage ?? 'Ujian tidak dapat dimulai saat ini.');
+      }
+
       setResult(null); setResultExamId(null); setReview(null); setReviewError(''); setExamHelpOpen(false);
       if(admitToken)setExamToken(examId,admitToken);
       const result = await api<Attempt>(`/api/student/exams/${examId}/waiting/claim`, { method: 'POST', body: {}, timeoutMs: 20000 });
+
+      let preparedSessionId: string | null = null;
+      if (evaluation.recordingActive) {
+        const currentPreflight = preflightResultRef.current;
+        const hasLiveTrack = Boolean(currentPreflight?.cameraStream?.getVideoTracks().some((t) => t.readyState === 'live'));
+        if (!hasLiveTrack || !currentPreflight?.recordingMimeType) {
+          if (evaluation.requireRecording) {
+            throw new Error('Kamera atau format perekaman belum siap. Ulangi pemeriksaan awal sebelum masuk ujian.');
+          }
+        } else {
+          try {
+            const recRes = await api<{ session_id: string }>(`/api/student/exams/${examId}/recording/session`, { method: 'POST', body: {}, timeoutMs: 10000 });
+            if (typeof recRes.session_id !== 'string' || recRes.session_id.length !== 26) {
+              throw new Error('ID sesi rekaman tidak valid');
+            }
+            preparedSessionId = recRes.session_id;
+          } catch (recErr) {
+            if (evaluation.requireRecording) {
+              currentPreflight.cameraStream?.getTracks().forEach((t) => { try { t.stop(); } catch {} });
+              preflightResultRef.current = null;
+              setPreflightResult(null);
+              throw new Error(recErr instanceof Error ? recErr.message : 'Gagal menyiapkan sesi perekaman wajib. Silakan coba lagi.');
+            }
+          }
+        }
+      }
+
+      setRecordingSessionId(preparedSessionId);
       try{sessionStorage.removeItem('arena_waiting_exam');}catch{/* storage may be disabled */}
       setWaitingExam(null);
       setAttempt(result);
@@ -553,9 +593,9 @@ setMessage('Ujian sudah dikirim. Nilai ditampilkan setelah penilaian selesai.');
      {!staff&&<header className="topbar public-topbar"><div className="dashboard-home-brand"><img src="/assets/img/logo-man1-palembang.png" alt="Lambang MAN 1 Palembang"/><div><strong>MANSAPA ARENA</strong><span>Area Evaluasi dan Asesmen</span></div></div><div className="public-topbar-actions"><button type="button" className="theme-toggle" aria-label={darkMode?'Aktifkan mode terang':'Aktifkan mode gelap'} aria-pressed={darkMode} onClick={()=>setDarkMode(current=>!current)}>◐</button><a href="/auth/sso/start" className="topbar-guru-link"><i className="fa-solid fa-chalkboard-user"/><span className="hide-on-mobile">Portal Guru</span></a>{student?<button className="btn btn-danger" onClick={() => void logout()}><i className="fa-solid fa-arrow-right-from-bracket"/><span className="hide-on-mobile">Keluar</span></button>:<button className="admin-lock" type="button" aria-label="Login pengelola" title="Login Pengelola" onClick={()=>setStaffLoginOpen(true)}><i className="fa-solid fa-lock"/></button>}</div></header>}
     {message && !attempt && <p role="status" style={{ ...card, background: '#fff8e1' }}>{message}</p>}
     {staff ? <StaffPanel staff={staff} onLogout={()=>void logout()} darkMode={darkMode} onToggleTheme={()=>setDarkMode(current=>!current)} /> : student ? attempt ?
-      <StudentExam attempt={attempt} studentName={student.nama} studentNisn={student.nisn} answers={answers} flags={flags} busy={busy} saveState={saveState} message={message} change={change} toggleFlag={toggleFlag} retrySave={retrySave} submit={submit} onTerminated={terminated} onHelp={()=>setExamHelpOpen(true)} helpOpen={examHelpOpen} preflightResult={preflightResult} recordingEnabled={recordingPolicy.recording_enabled} segmentDurationSeconds={recordingPolicy.segment_duration_seconds} videoBitrate={recordingPolicy.video_bitrate}>{examHelpOpen&&<StudentSupportModal examId={attempt.exam.id} onClose={()=>setExamHelpOpen(false)}/>}</StudentExam>
+      <StudentExam attempt={attempt} studentName={student.nama} studentNisn={student.nisn} answers={answers} flags={flags} busy={busy} saveState={saveState} message={message} change={change} toggleFlag={toggleFlag} retrySave={retrySave} submit={submit} onTerminated={terminated} onHelp={()=>setExamHelpOpen(true)} helpOpen={examHelpOpen} preflightResult={preflightResult} recordingSessionId={recordingSessionId} recordingEnabled={recordingPolicy.recording_enabled && recordingPolicy.storage_available !== false} recordingRequired={recordingPolicy.recording_required} segmentDurationSeconds={recordingPolicy.segment_duration_seconds} videoBitrate={recordingPolicy.video_bitrate}>{examHelpOpen&&<StudentSupportModal examId={attempt.exam.id} onClose={()=>setExamHelpOpen(false)}/>}</StudentExam>
       : result ? <><StudentResult onHelp={()=>setExamHelpOpen(true)} examName={resultExamName} result={result} review={review} reviewLoading={reviewLoading} reviewError={reviewError} onReview={loadReview} onClose={()=>{setResult(null);setResultExamId(null);setReview(null);setReviewError('');setReviewLoading(false);setExamHelpOpen(false);}}/>{examHelpOpen&&<StudentSupportModal examId={resultExamId} initialCategory="EXAM_LOCKED" onClose={()=>setExamHelpOpen(false)}/>}</>
-      : preflightExam ? <ExamPreflight examName={preflightExam.name} requireCamera={preflightExam.requireCamera} requireRecording={preflightExam.requireRecording} onCancel={()=>{setPreflightExam(null);}} onReady={(res)=>{enterFullscreenNow();setPreflightResult(res);const target=preflightExam;setPreflightExam(null);void start(target.examId,target.resume,true);}}/>
+      : preflightExam ? <ExamPreflight examName={preflightExam.name} requireCamera={preflightExam.requireCamera} requireRecording={preflightExam.requireRecording} onCancel={()=>{preflightResultRef.current=null;setPreflightResult(null);setPreflightExam(null);}} onReady={(res)=>{enterFullscreenNow();preflightResultRef.current=res;setPreflightResult(res);const target=preflightExam;setPreflightExam(null);void start(target.examId,target.resume,true);}}/>
       : waitingExam ? <ExamWaitingRoom examId={waitingExam.examId} initial={waitingExam.initial} examName={waitingExam.name} onReady={openWaitingAttempt} onCancel={async() => { await api(`/api/student/exams/${waitingExam.examId}/waiting/leave`,{method:'POST',body:{},timeoutMs:10000}).catch(()=>{});setWaitingExam(null);try{sessionStorage.removeItem('arena_waiting_exam');}catch{}void loadExams().catch(error => setMessage(error instanceof Error ? error.message : 'Jadwal gagal diperbarui')); }}/>
       : <StudentDashboard student={student} exams={exams} busy={busy} start={start} showResult={showResult}/>
       : <main className="center-wrapper"><div className="auth-card"><div className="auth-header"><i className="fa-solid fa-user-graduate auth-icon"/><span className="student-eyebrow">MANSAPA ARENA</span><h2>Siap untuk ujian?</h2><p>Masuk dengan nomor peserta dan PIN dari petugas.</p></div>{message&&<p className="arena-notice" role="alert">{message}</p>}<form onSubmit={(event) => void login(event)} autoComplete="off"><div className="input-group"><label className="ui-label" htmlFor="studentNisn">Nomor Peserta (NISN)</label><div className="input-wrapper"><i className="fa-regular fa-id-badge left-icon"/><input id="studentNisn" name="student_nisn" required inputMode="numeric" pattern="[0-9]*" maxLength={20} autoComplete="off" autoCapitalize="off" spellCheck={false} data-lpignore="true" value={nisn} onChange={(event) => setNisn(event.target.value)} placeholder="Masukkan NISN" /></div></div><div className="input-group"><label className="ui-label" htmlFor="studentPin">PIN Ujian (4 Digit)</label><div className="input-wrapper"><i className="fa-solid fa-key left-icon"/><input id="studentPin" name="student_pin" required type={showPin?'text':'password'} inputMode="numeric" pattern="[0-9]*" maxLength={12} autoComplete="new-password" autoCapitalize="off" spellCheck={false} data-lpignore="true" value={pin} onChange={(event) => setPin(event.target.value)} placeholder="••••"/><button className="toggle-pw" type="button" aria-label={showPin?'Sembunyikan PIN':'Tampilkan PIN'} onClick={()=>setShowPin(value=>!value)}><i className={`fa-regular ${showPin?'fa-eye-slash':'fa-eye'}`}/></button></div></div><button className="ui-button btn btn-primary student-login-button" disabled={busy}>{busy ? 'Memproses…' : 'Masuk Ujian'} <i className="fa-solid fa-arrow-right"/></button></form><button type="button" className="support-link-button" onClick={()=>setLoginHelpOpen(true)}><i className="fa-solid fa-headset"/> Tidak bisa masuk? Kirim tiket bantuan</button></div></main>}

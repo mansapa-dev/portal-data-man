@@ -40,7 +40,8 @@ async function runCleanup(): Promise<void> {
 
   const storage = getObjectStorage();
   if (!storage) {
-    console.warn('[cleanup] Object storage not configured — skipping object deletion');
+    console.error('[cleanup] Object storage not configured — aborting cleanup to prevent false completion');
+    process.exit(1);
   }
 
   console.log(`[cleanup] Starting recording cleanup (dry_run=${DRY_RUN}, batch=${BATCH_SIZE})`);
@@ -85,26 +86,24 @@ async function runCleanup(): Promise<void> {
         continue;
       }
 
-      if (storage) {
-        try {
-          await storage.deleteObject(seg.object_key);
-          totalObjectsDeleted++;
-        } catch (error) {
-          console.error(`[cleanup] Failed to delete object ${seg.object_key}:`, error);
-          totalFailures++;
-          sessionFailed = true;
-          continue;
-        }
+      try {
+        await storage.deleteObject(seg.object_key);
+        totalObjectsDeleted++;
+      } catch (error) {
+        console.error(`[cleanup] Failed to delete object ${seg.object_key}:`, error);
+        totalFailures++;
+        sessionFailed = true;
+        continue;
       }
 
-      // Mark segment as deleted
+      // Mark segment as deleted only after storage deletion succeeds
       await pool.execute(
         `UPDATE exam_recording_segments SET upload_status = 'MISSING' WHERE id = ?`,
         [seg.id],
-      ).catch((e: unknown) => console.error('[cleanup] Failed to update segment status:', e));
+      );
     }
 
-    // Update session cleanup status
+    // Update session cleanup status (do not swallow DB errors)
     if (!DRY_RUN) {
       const newStatus = sessionFailed ? 'FAILED' : 'COMPLETED';
       await pool.execute(
@@ -112,7 +111,7 @@ async function runCleanup(): Promise<void> {
          SET cleanup_status = ?, cleanup_attempted_at = UTC_TIMESTAMP(3)
          WHERE id = ?`,
         [newStatus, session.id],
-      ).catch((e: unknown) => console.error('[cleanup] Failed to update session status:', e));
+      );
 
       if (!sessionFailed) totalSessionsCleaned++;
     }

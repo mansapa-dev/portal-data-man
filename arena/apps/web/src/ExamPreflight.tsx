@@ -62,6 +62,15 @@ export function ExamPreflight({ examName, requireCamera, requireRecording, onRea
   const [recordingMimeType, setRecordingMimeType] = useState<string | null>(null);
   const [preflightDone, setPreflightDone] = useState(false);
   const videoPreviewRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const handedOffRef = useRef(false);
+
+  const stopStream = useCallback((s: MediaStream | null) => {
+    if (!s) return;
+    for (const track of s.getTracks()) {
+      try { track.stop(); } catch { /* already stopped */ }
+    }
+  }, []);
 
   const updateCheck = useCallback((id: string, update: Partial<CheckItem>) => {
     setChecks((prev) => prev.map((c) => (c.id === id ? { ...c, ...update } : c)));
@@ -69,6 +78,13 @@ export function ExamPreflight({ examName, requireCamera, requireRecording, onRea
 
   const runChecks = useCallback(async () => {
     setRunningChecks(true);
+    setPreflightDone(false);
+    handedOffRef.current = false;
+    if (streamRef.current) {
+      stopStream(streamRef.current);
+      streamRef.current = null;
+      setCameraStream(null);
+    }
 
     const caps = detectCapabilities();
 
@@ -128,7 +144,14 @@ export function ExamPreflight({ examName, requireCamera, requireRecording, onRea
               stream.getTracks().forEach((t) => t.stop());
             } else {
               updateCheck('camera_stream', { status: 'pass' });
+              streamRef.current = stream;
               setCameraStream(stream);
+
+              videoTrack.addEventListener('ended', () => {
+                updateCheck('camera_stream', { status: 'fail', message: 'Aliran kamera terputus. Periksa kamera dan coba ulang.' });
+                setCameraStream(null);
+                streamRef.current = null;
+              });
 
               // Connect preview
               if (videoPreviewRef.current) {
@@ -168,6 +191,8 @@ export function ExamPreflight({ examName, requireCamera, requireRecording, onRea
         updateCheck('recording', { status: 'fail', message: 'Browser tidak mendukung perekaman video. Gunakan Chrome, Edge, Firefox, atau Samsung Internet versi terbaru.' });
       } else if (!caps.bestRecordingMimeType) {
         updateCheck('recording', { status: 'fail', message: 'Tidak ada format rekaman yang didukung browser ini. Perbarui browser Anda.' });
+      } else if (!caps.indexedDB) {
+        updateCheck('recording', { status: 'fail', message: 'Penyimpanan sementara browser (IndexedDB) tidak tersedia. Nonaktifkan mode privat/penyamaran atau ganti browser.' });
       } else {
         setRecordingMimeType(caps.bestRecordingMimeType);
         updateCheck('recording', { status: 'pass', message: `Format: ${caps.bestRecordingMimeType}` });
@@ -191,23 +216,39 @@ export function ExamPreflight({ examName, requireCamera, requireRecording, onRea
 
     setRunningChecks(false);
     setPreflightDone(true);
-  }, [requireCamera, requireRecording, updateCheck]);
+  }, [requireCamera, requireRecording, stopStream, updateCheck]);
 
   useEffect(() => {
     void runChecks();
     return () => {
-      // Cleanup camera stream on unmount (if exam wasn't started)
+      if (!handedOffRef.current && streamRef.current) {
+        stopStream(streamRef.current);
+        streamRef.current = null;
+      }
     };
-  }, [runChecks]);
+  }, [runChecks, stopStream]);
 
   const allRequiredPassed = checks.every((c) => !c.required || c.status === 'pass' || c.status === 'warning');
   const anyRequiredFailed = checks.some((c) => c.required && c.status === 'fail');
 
   const handleStart = () => {
     const caps = detectCapabilities();
+    const activeStream = streamRef.current;
+    if (requireCamera) {
+      const liveTrack = activeStream?.getVideoTracks().find((t) => t.readyState === 'live');
+      if (!activeStream || !liveTrack) {
+        updateCheck('camera_stream', { status: 'fail', message: 'Kamera tidak aktif. Klik Coba ulang untuk menyambungkan kamera.' });
+        return;
+      }
+    }
+    if (requireRecording && (!recordingMimeType || !caps.indexedDB)) {
+      updateCheck('recording', { status: 'fail', message: 'Persiapan perekaman belum memenuhi syarat.' });
+      return;
+    }
+    handedOffRef.current = true;
     onReady({
       passed: true,
-      cameraStream,
+      cameraStream: activeStream,
       recordingMimeType,
       deviceInfo: caps,
     });
@@ -282,7 +323,14 @@ export function ExamPreflight({ examName, requireCamera, requireRecording, onRea
         <button
           type="button"
           className="btn btn-secondary"
-          onClick={onCancel}
+          onClick={() => {
+            if (streamRef.current) {
+              stopStream(streamRef.current);
+              streamRef.current = null;
+              setCameraStream(null);
+            }
+            onCancel();
+          }}
           disabled={runningChecks}
         >
           Batal

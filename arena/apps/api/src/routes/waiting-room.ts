@@ -5,6 +5,7 @@ import { requireRole } from '../lib/access.js';
 import { waitingRoom } from '../lib/waiting-room.js';
 import { requirePool } from '../lib/db.js';
 import { audit } from '../services/audit.js';
+import { assertRecordingReadyForAdmission } from '../services/recording-policy.js';
 import type { WaitingRoomService } from '../services/waiting-room.js';
 import type { WaitingRoomEvents } from '../services/waiting-room-events.js';
 
@@ -24,6 +25,7 @@ export async function waitingRoomRoutes(app:FastifyInstance,options:{service?:Wa
   app.post<{Params:{id:string}}>('/api/student/exams/:id/waiting/join',{config:limit(12)},async request=>{
     const claims=student(request,true),examId=id.parse(request.params.id);
     const body=z.object({rejoin:z.boolean().optional()}).strict().parse(request.body ?? {});
+    await assertRecordingReadyForAdmission(null,claims.sub,examId);
     return service.publicView(await service.join(examId,claims.sub,body.rejoin),examId,claims.sub,claims.exp);
   });
   app.get<{Params:{id:string}}>('/api/student/exams/:id/waiting/status',{config:limit(24)},async request=>{
@@ -40,6 +42,7 @@ export async function waitingRoomRoutes(app:FastifyInstance,options:{service?:Wa
   });
   app.post<{Params:{id:string}}>('/api/student/exams/:id/waiting/resume',{config:limit(12)},async request=>{
     const claims=student(request,true),examId=id.parse(request.params.id);
+    await assertRecordingReadyForAdmission(null,claims.sub,examId);
     return service.publicView(await service.resume(examId,claims.sub),examId,claims.sub,claims.exp);
   });
   app.get<{Params:{id:string}}>('/api/student/exams/:id/waiting/events',{config:limit(12)},async(request,reply)=>{
