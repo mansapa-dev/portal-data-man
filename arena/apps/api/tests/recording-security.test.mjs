@@ -20,6 +20,7 @@ import {
   assertRecordingReadyForAdmission,
   checkStorageReadiness,
   ensureRecordingSession,
+  getRecordingRuntimeLimits,
   invalidateStorageReadinessCache,
 } from '../dist/services/recording-policy.js';
 import { recordingRoutes } from '../dist/routes/recording.js';
@@ -335,6 +336,244 @@ describe('Recording policy & admission enforcement', () => {
         payload: { file_size_bytes: 1234 },
       });
       assert.equal(unverified.statusCode, 422);
+    } finally {
+      process.env.RECORDING_ENABLED = prevEnabled;
+      await app.close();
+    }
+  });
+});
+
+// ---- Helpers for the hardening tests below ----
+
+const STUDENT_CSRF = 'c'.repeat(32);
+const STUDENT_TOKEN = () => issueToken({
+  sub: 42,
+  role: 'STUDENT',
+  csrf: STUDENT_CSRF,
+  exp: Math.floor(Date.now() / 1000) + 3600,
+});
+const VALID_EXAM_TOKEN = 'valid_exam_token_123456789012345678901234';
+
+function buildHardeningApp({ pool, storage, role = 'STUDENT', sub = 42 }) {
+  const app = Fastify();
+  app.setErrorHandler((err, _req, reply) => {
+    void reply.status(err.statusCode ?? 500).send({ error: err.message });
+  });
+  const token = issueToken({
+    sub,
+    role,
+    csrf: STUDENT_CSRF,
+    exp: Math.floor(Date.now() / 1000) + 3600,
+  });
+  const waiting = {
+    authorize: async () => ({ status: 'IN_EXAM' }),
+  };
+  return app.register(recordingRoutes, { pool, waiting, storage }).then(() => ({ app, token }));
+}
+
+function storageMock(overrides = {}) {
+  let presignCalls = 0;
+  const base = {
+    uploadUrlExpiresSeconds: 300,
+    playbackUrlExpiresSeconds: 300,
+    presignedUploadUrl: async () => {
+      presignCalls += 1;
+      return 'https://mock.linodeobjects.com/put';
+    },
+    presignedPlaybackUrl: async () => 'https://mock.linodeobjects.com/get',
+    headObject: async () => ({ contentLength: 1024 }),
+    deleteObject: async () => {},
+    checkBucketReadiness: async () => ({ ready: true }),
+  };
+  const storage = { ...base, ...overrides };
+  return { storage, presignCalls: () => presignCalls };
+}
+
+describe('Recording hardening', () => {
+  test('runtime limits clamp unsafe environment values', () => {
+    const keys = [
+      'RECORDING_SEGMENT_DURATION_SECONDS',
+      'RECORDING_VIDEO_BITRATE',
+      'RECORDING_RETENTION_DAYS',
+      'RECORDING_MAX_SEGMENT_BYTES',
+      'RECORDING_MAX_SEGMENTS_PER_SESSION',
+    ];
+    const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+    try {
+      process.env.RECORDING_SEGMENT_DURATION_SECONDS = '0';
+      process.env.RECORDING_VIDEO_BITRATE = '99999999';
+      process.env.RECORDING_RETENTION_DAYS = 'abc';
+      process.env.RECORDING_MAX_SEGMENT_BYTES = '1';
+      process.env.RECORDING_MAX_SEGMENTS_PER_SESSION = '0';
+
+      const limits = getRecordingRuntimeLimits();
+      assert.equal(limits.segment_duration_seconds, 10);
+      assert.equal(limits.video_bitrate, 1_500_000);
+      assert.equal(limits.retention_days, 7);
+      assert.equal(limits.max_segment_bytes, 1_048_576);
+      assert.equal(limits.max_segments_per_session, 1);
+    } finally {
+      for (const key of keys) {
+        if (previous[key] === undefined) delete process.env[key];
+        else process.env[key] = previous[key];
+      }
+    }
+  });
+
+  test('confirm rejects and deletes an oversized object without marking it UPLOADED', async () => {
+    const prevEnabled = process.env.RECORDING_ENABLED;
+    const prevMax = process.env.RECORDING_MAX_SEGMENT_BYTES;
+    process.env.RECORDING_ENABLED = 'true';
+    process.env.RECORDING_MAX_SEGMENT_BYTES = '1048576';
+
+    let deletedKey = null;
+    let markedUploaded = false;
+    const { storage } = storageMock({
+      headObject: async () => ({ contentLength: 2_000_000 }),
+      deleteObject: async (key) => { deletedKey = key; },
+    });
+    const pool = {
+      execute: async (sql) => {
+        if (/FROM exam_recording_segments seg/.test(String(sql))) {
+          return [[{ id: 10, object_key: 'recordings/7/1/S/segment-0000.webm', upload_status: 'PENDING', session_id: 5, session_status: 'ACTIVE' }], []];
+        }
+        if (/SET upload_status = 'UPLOADED'/.test(String(sql))) markedUploaded = true;
+        return [{ affectedRows: 1 }, []];
+      },
+    };
+
+    const { app, token } = await buildHardeningApp({ pool, storage });
+    try {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/api/student/exams/7/recording/segment/10',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'x-csrf-token': STUDENT_CSRF,
+          'x-exam-token': VALID_EXAM_TOKEN,
+        },
+        payload: { file_size_bytes: 2_000_000 },
+      });
+      assert.equal(response.statusCode, 413);
+      assert.equal(deletedKey, 'recordings/7/1/S/segment-0000.webm');
+      assert.equal(markedUploaded, false);
+    } finally {
+      process.env.RECORDING_ENABLED = prevEnabled;
+      if (prevMax === undefined) delete process.env.RECORDING_MAX_SEGMENT_BYTES;
+      else process.env.RECORDING_MAX_SEGMENT_BYTES = prevMax;
+      await app.close();
+    }
+  });
+
+  test('does not issue a new upload URL for an already UPLOADED segment', async () => {
+    const prevEnabled = process.env.RECORDING_ENABLED;
+    process.env.RECORDING_ENABLED = 'true';
+    const { storage, presignCalls } = storageMock();
+    const pool = {
+      execute: async (sql) => {
+        const text = String(sql);
+        if (/FROM exam_recording_sessions s[\s\S]*JOIN exam_attempts a/.test(text)) {
+          return [[{ id: 5, attempt_id: 1, status: 'ACTIVE' }], []];
+        }
+        if (/FROM exam_recording_segments[\s\S]*WHERE session_id/.test(text)) {
+          return [[{ id: 10, object_key: 'recordings/7/1/S/segment-0000.webm', upload_status: 'UPLOADED' }], []];
+        }
+        return [{ affectedRows: 1 }, []];
+      },
+    };
+
+    const { app, token } = await buildHardeningApp({ pool, storage });
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/student/exams/7/recording/segment',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'x-csrf-token': STUDENT_CSRF,
+          'x-exam-token': VALID_EXAM_TOKEN,
+        },
+        payload: {
+          session_id: 'SESSION0123456789012345678',
+          sequence_number: 0,
+          mime_type: 'video/webm',
+        },
+      });
+      assert.equal(response.statusCode, 200);
+      const body = JSON.parse(response.body);
+      assert.equal(body.already_uploaded, true);
+      assert.equal(body.upload_url, '');
+      assert.equal(presignCalls(), 0);
+    } finally {
+      process.env.RECORDING_ENABLED = prevEnabled;
+      await app.close();
+    }
+  });
+
+  test('recording evidence listing is denied for staff not assigned to the exam', async () => {
+    const prevEnabled = process.env.RECORDING_ENABLED;
+    process.env.RECORDING_ENABLED = 'true';
+    const { storage } = storageMock();
+    const scopeCalls = [];
+    const pool = {
+      execute: async (sql, params) => {
+        const text = String(sql);
+        if (/FROM exam_recording_sessions s[\s\S]*JOIN exam_attempts a/.test(text)) {
+          return [[{ id: 5, public_id: 'SESSION0123456789012345678', status: 'FINALIZED', exam_id: 7 }], []];
+        }
+        if (/FROM teacher_exam_assignments/.test(text)) {
+          scopeCalls.push(params);
+          return [[], []]; // teacher is not assigned to exam 7
+        }
+        return [[], []];
+      },
+    };
+
+    const { app, token } = await buildHardeningApp({ pool, storage, role: 'TEACHER', sub: 77 });
+    try {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/teacher/recording/ATTEMPT0123456789012345678',
+        headers: { authorization: `Bearer ${token}` },
+      });
+      assert.equal(response.statusCode, 403);
+      assert.equal(scopeCalls.length, 1);
+      assert.deepEqual(scopeCalls[0], [77, 7]);
+    } finally {
+      process.env.RECORDING_ENABLED = prevEnabled;
+      await app.close();
+    }
+  });
+
+  test('playback URL is not generated for staff outside the exam scope', async () => {
+    const prevEnabled = process.env.RECORDING_ENABLED;
+    process.env.RECORDING_ENABLED = 'true';
+    let playbackSigned = false;
+    const { storage } = storageMock({
+      presignedPlaybackUrl: async () => {
+        playbackSigned = true;
+        return 'https://mock.linodeobjects.com/get';
+      },
+    });
+    const pool = {
+      execute: async (sql) => {
+        const text = String(sql);
+        if (/FROM exam_recording_segments seg/.test(text)) {
+          return [[{ id: 10, object_key: 'recordings/7/1/S/segment-0000.webm', upload_status: 'UPLOADED', exam_id: 7 }], []];
+        }
+        if (/FROM teacher_exam_assignments/.test(text)) return [[], []];
+        return [{ affectedRows: 1 }, []];
+      },
+    };
+
+    const { app, token } = await buildHardeningApp({ pool, storage, role: 'EMPLOYEE', sub: 88 });
+    try {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/teacher/recording/segment/10/url',
+        headers: { authorization: `Bearer ${token}` },
+      });
+      assert.equal(response.statusCode, 403);
+      assert.equal(playbackSigned, false);
     } finally {
       process.env.RECORDING_ENABLED = prevEnabled;
       await app.close();

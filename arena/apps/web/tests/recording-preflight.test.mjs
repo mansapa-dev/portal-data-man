@@ -191,3 +191,95 @@ test('createExamRecorder detects camera track ended and supports stopAndFlush', 
     globalThis.MediaRecorder = originalMR;
   }
 });
+
+test('createUploadQueue aborts a stalled PUT and marks it failed after retries', async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCalls = 0;
+  globalThis.fetch = (_url, options) => new Promise((_resolve, reject) => {
+    fetchCalls += 1;
+    const signal = options?.signal;
+    const abort = () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+    if (signal) {
+      if (signal.aborted) abort();
+      else signal.addEventListener('abort', abort);
+    }
+  });
+
+  try {
+    const queue = createUploadQueue({
+      sessionId: 'SESSION0123456789012345678',
+      examId: 7,
+      requireDurablePersistence: false,
+      maxRetries: 0,
+      uploadTimeoutMs: 20,
+      uploadStartJitterMs: 0,
+      requestPresignedUrl: async () => ({ upload_url: 'https://example.com/put', segment_id: 12 }),
+      confirmUpload: async () => {},
+      onPermanentFailure: () => {},
+    });
+
+    await queue.start();
+    await queue.enqueue({
+      id: 'seg-timeout',
+      blob: new Blob(['video']),
+      mimeType: 'video/webm',
+      sequenceNumber: 1,
+      sessionId: 'SESSION0123456789012345678',
+      examId: 7,
+      startedAt: new Date().toISOString(),
+      endedAt: new Date().toISOString(),
+    });
+
+    const result = await queue.flush(2000);
+    assert.equal(result.timedOut, false);
+    assert.equal(result.failed, 1);
+    assert.equal(queue.pendingCount, 0);
+    assert.ok(fetchCalls >= 1);
+    queue.stop();
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('createUploadQueue skips the PUT when the server reports already_uploaded', async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCalls = 0;
+  let confirms = 0;
+  globalThis.fetch = async () => {
+    fetchCalls += 1;
+    return { ok: true, status: 200 };
+  };
+
+  try {
+    const queue = createUploadQueue({
+      sessionId: 'SESSION0123456789012345678',
+      examId: 7,
+      requireDurablePersistence: false,
+      uploadStartJitterMs: 0,
+      requestPresignedUrl: async () => ({ upload_url: '', segment_id: 13, already_uploaded: true }),
+      confirmUpload: async () => { confirms += 1; },
+      onPermanentFailure: () => {},
+    });
+
+    await queue.start();
+    await queue.enqueue({
+      id: 'seg-already-uploaded',
+      blob: new Blob(['video']),
+      mimeType: 'video/webm',
+      sequenceNumber: 2,
+      sessionId: 'SESSION0123456789012345678',
+      examId: 7,
+      startedAt: new Date().toISOString(),
+      endedAt: new Date().toISOString(),
+    });
+
+    const result = await queue.flush(2000);
+    assert.equal(result.timedOut, false);
+    assert.equal(result.pending, 0);
+    assert.equal(fetchCalls, 0);
+    assert.equal(confirms, 1);
+    queue.stop();
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

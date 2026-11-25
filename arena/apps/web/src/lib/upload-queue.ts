@@ -30,9 +30,18 @@ export interface UploadQueueConfig {
   examId: number;
   maxQueueSize?: number;
   maxRetries?: number;
+  /** Abort a stalled PUT after this many ms and retry with backoff. Default 60000. */
+  uploadTimeoutMs?: number;
+  /** Random delay (0..N ms) before the first upload of a segment. Default 3000. */
+  uploadStartJitterMs?: number;
   requireDurablePersistence?: boolean;
   /** Called to get presigned URL for a segment */
-  requestPresignedUrl: (segment: QueuedSegment) => Promise<{ upload_url: string; segment_id: number }>;
+  requestPresignedUrl: (segment: QueuedSegment) => Promise<{
+    upload_url: string;
+    segment_id: number;
+    /** Server already has a confirmed object for this sequence; skip the PUT. */
+    already_uploaded?: boolean;
+  }>;
   /** Called after successful upload to confirm with API */
   confirmUpload: (segment: QueuedSegment, segmentId: number, fileSizeBytes: number) => Promise<void>;
   /** Called when a segment exhausts retries or hits a permanent error */
@@ -89,6 +98,8 @@ async function openDb(): Promise<IDBDatabase | null> {
 export function createUploadQueue(config: UploadQueueConfig): UploadQueue {
   const maxQueueSize = config.maxQueueSize ?? 20;
   const maxRetries = config.maxRetries ?? 5;
+  const uploadTimeoutMs = config.uploadTimeoutMs ?? 60_000;
+  const uploadStartJitterMs = config.uploadStartJitterMs ?? 3_000;
 
   let db: IDBDatabase | null = null;
   let dbChecked = false;
@@ -100,6 +111,11 @@ export function createUploadQueue(config: UploadQueueConfig): UploadQueue {
   const flushWaiters: Array<() => void> = [];
 
   const jitter = (baseMs: number) => baseMs + Math.floor(Math.random() * 1000);
+  // Spread the first upload of each segment so 1,200 students who started at
+  // the same time do not hit Object Storage in one synchronized burst.
+  const initialDelay = () => uploadStartJitterMs > 0
+    ? Math.floor(Math.random() * uploadStartJitterMs)
+    : 0;
 
   const notifyStatus = () => {
     config.onStatusChange?.(memoryQueue.length, uploading, failedQueue.length);
@@ -158,19 +174,31 @@ export function createUploadQueue(config: UploadQueueConfig): UploadQueue {
     notifyStatus();
 
     try {
-      const { upload_url, segment_id } = await config.requestPresignedUrl(segment);
+      const { upload_url, segment_id, already_uploaded } = await config.requestPresignedUrl(segment);
 
-      const response = await fetch(upload_url, {
-        method: 'PUT',
-        body: segment.blob,
-        headers: { 'Content-Type': segment.mimeType },
-      });
-
-      if (!response.ok) {
-        if (response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429) {
-          throw new NonRetryableUploadError(`Upload rejected (${response.status})`);
+      // The server already holds a confirmed object for this sequence. Do not
+      // overwrite evidence with a fresh PUT; just re-confirm and drain the queue.
+      if (!already_uploaded) {
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), uploadTimeoutMs);
+        let response: Response;
+        try {
+          response = await fetch(upload_url, {
+            method: 'PUT',
+            body: segment.blob,
+            headers: { 'Content-Type': segment.mimeType },
+            signal: controller.signal,
+          });
+        } finally {
+          window.clearTimeout(timeout);
         }
-        throw new Error(`Upload failed: ${response.status}`);
+
+        if (!response.ok) {
+          if (response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429) {
+            throw new NonRetryableUploadError(`Upload rejected (${response.status})`);
+          }
+          throw new Error(`Upload failed: ${response.status}`);
+        }
       }
 
       await config.confirmUpload(segment, segment_id, segment.blob.size);
@@ -241,7 +269,7 @@ export function createUploadQueue(config: UploadQueueConfig): UploadQueue {
 
       memoryQueue.push(segment);
       notifyStatus();
-      scheduleProcess();
+      scheduleProcess(initialDelay());
     },
 
     async start(): Promise<boolean> {
@@ -285,7 +313,7 @@ export function createUploadQueue(config: UploadQueueConfig): UploadQueue {
         });
       }
 
-      scheduleProcess();
+      scheduleProcess(initialDelay());
       return true;
     },
 

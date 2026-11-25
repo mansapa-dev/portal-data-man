@@ -75,6 +75,39 @@ export async function checkStorageReadiness(
   return inFlightProbe;
 }
 
+function envInt(name: string, fallback: number, min: number, max: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === '') return fallback;
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, Math.trunc(value)));
+}
+
+export interface RecordingRuntimeLimits {
+  segment_duration_seconds: number;
+  video_bitrate: number;
+  retention_days: number;
+  /** Hard cap for a single uploaded segment (bytes). Oversized objects are rejected and deleted. */
+  max_segment_bytes: number;
+  /** Upper bound for client-supplied sequence numbers per recording session. */
+  max_segments_per_session: number;
+}
+
+/**
+ * Bounded recording configuration. Values are clamped so a typo in the
+ * environment (0, negative, NaN, or an absurdly large bitrate) cannot turn
+ * on a runaway recorder or an unbounded storage bill.
+ */
+export function getRecordingRuntimeLimits(): RecordingRuntimeLimits {
+  return {
+    segment_duration_seconds: envInt('RECORDING_SEGMENT_DURATION_SECONDS', 60, 10, 300),
+    video_bitrate: envInt('RECORDING_VIDEO_BITRATE', 500_000, 200_000, 1_500_000),
+    retention_days: envInt('RECORDING_RETENTION_DAYS', 7, 1, 365),
+    max_segment_bytes: envInt('RECORDING_MAX_SEGMENT_BYTES', 8_388_608, 1_048_576, 52_428_800),
+    max_segments_per_session: envInt('RECORDING_MAX_SEGMENTS_PER_SESSION', 300, 1, 900),
+  };
+}
+
 export async function getRecordingPolicy(storageOverride?: ObjectStorageService | null): Promise<RecordingPolicy> {
   const recordingEnabled = process.env.RECORDING_ENABLED === 'true';
   const recordingRequired = process.env.RECORDING_REQUIRED === 'true';
@@ -83,15 +116,16 @@ export async function getRecordingPolicy(storageOverride?: ObjectStorageService 
   const storageAvailable = recordingEnabled && storageConfigured
     ? await checkStorageReadiness(storage)
     : false;
+  const limits = getRecordingRuntimeLimits();
 
   return {
     recording_enabled: recordingEnabled,
     recording_required: recordingRequired,
     storage_configured: storageConfigured,
     storage_available: storageAvailable,
-    segment_duration_seconds: Number(process.env.RECORDING_SEGMENT_DURATION_SECONDS ?? 60),
-    video_bitrate: Number(process.env.RECORDING_VIDEO_BITRATE ?? 500_000),
-    retention_days: Number(process.env.RECORDING_RETENTION_DAYS ?? 7),
+    segment_duration_seconds: limits.segment_duration_seconds,
+    video_bitrate: limits.video_bitrate,
+    retention_days: limits.retention_days,
   };
 }
 

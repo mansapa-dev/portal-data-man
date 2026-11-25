@@ -17,11 +17,39 @@ import { requirePool } from '../lib/db.js';
 import { waitingRoom } from '../lib/waiting-room.js';
 import type { WaitingRoomService } from '../services/waiting-room.js';
 import { getObjectStorage, ObjectStorageService } from '../services/object-storage.js';
-import { ensureRecordingSession, getRecordingPolicy } from '../services/recording-policy.js';
+import {
+  ensureRecordingSession,
+  getRecordingPolicy,
+  getRecordingRuntimeLimits,
+} from '../services/recording-policy.js';
 import type { Pool, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 
 const examIdSchema = z.coerce.number().int().positive();
-const MAX_SEGMENTS_PER_SESSION = 300; // 5 hours at 60s segments
+
+/**
+ * Staff access to recording evidence is limited to exams they are assigned to.
+ * Global proctors (duty_role=PROCTOR, exam_id NULL) keep their existing access.
+ * ADMIN is unrestricted. Mirrors the scope rule used by /api/teacher/live-sessions.
+ */
+async function assertStaffExamScope(
+  pool: Pool,
+  claims: { role: string; sub: number },
+  examId: number,
+): Promise<void> {
+  if (claims.role === 'ADMIN') return;
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT 1 FROM teacher_exam_assignments x
+     JOIN users u ON ((u.teacher_id IS NOT NULL AND u.teacher_id = x.teacher_id)
+                   OR (u.employee_id IS NOT NULL AND u.employee_id = x.employee_id))
+     WHERE u.id = ? AND u.status = 'ACTIVE'
+       AND (x.exam_id = ? OR (x.duty_role = 'PROCTOR' AND x.exam_id IS NULL))
+     LIMIT 1`,
+    [claims.sub, examId],
+  );
+  if (!rows[0]) {
+    throw Object.assign(new Error('Ujian ini tidak ditugaskan kepada Anda'), { statusCode: 403 });
+  }
+}
 
 export async function recordingRoutes(
   app: FastifyInstance,
@@ -100,9 +128,10 @@ export async function recordingRoutes(
       const pool = resolvePool();
       const examId = examIdSchema.parse(request.params.id);
       const claims = await authorizeStudent(request, examId);
+      const limits = getRecordingRuntimeLimits();
       const body = z.object({
         session_id: z.string().length(26),
-        sequence_number: z.number().int().min(0).max(MAX_SEGMENTS_PER_SESSION),
+        sequence_number: z.number().int().min(0).max(limits.max_segments_per_session),
         mime_type: z.string().max(100),
         segment_started_at: z.string().datetime({ offset: true }).optional(),
       }).strict().parse(request.body);
@@ -145,6 +174,17 @@ export async function recordingRoutes(
       if (existing[0]) {
         objectKey = existing[0].object_key as string;
         segmentDbId = existing[0].id as number;
+        // Never mint a fresh PUT URL for evidence that is already confirmed:
+        // a student must not be able to overwrite an uploaded segment.
+        if (existing[0].upload_status === 'UPLOADED') {
+          return {
+            segment_id: segmentDbId,
+            object_key: objectKey,
+            upload_url: '',
+            already_uploaded: true,
+            expires_in_seconds: 0,
+          };
+        }
       } else {
         objectKey = ObjectStorageService.buildSegmentKey(
           examId,
@@ -238,6 +278,24 @@ export async function recordingRoutes(
       }
 
       const verifiedSize = head.contentLength;
+      const { max_segment_bytes: maxSegmentBytes } = getRecordingRuntimeLimits();
+
+      if (verifiedSize > maxSegmentBytes) {
+        // Reject and remove the oversized object so a stuck or malicious
+        // recorder cannot accumulate unbounded storage cost. Best-effort:
+        // the DB row is still marked FAILED even if the delete call fails.
+        await store.deleteObject(seg.object_key as string).catch(() => {});
+        await pool.execute(
+          `UPDATE exam_recording_segments
+           SET upload_status = 'FAILED', retry_count = retry_count + 1
+           WHERE id = ?`,
+          [segmentId],
+        );
+        throw Object.assign(
+          new Error(`Objek rekaman melebihi batas ${maxSegmentBytes} byte`),
+          { statusCode: 413 },
+        );
+      }
 
       await pool.execute(
         `UPDATE exam_recording_segments
@@ -299,7 +357,7 @@ export async function recordingRoutes(
         return { finalized: true, already_finalized: true };
       }
 
-      const retentionDays = Number(process.env.RECORDING_RETENTION_DAYS ?? 7);
+      const retentionDays = getRecordingRuntimeLimits().retention_days;
       const sessionDbId = sessions[0].id as number;
       const [counts] = await pool.execute<RowDataPacket[]>(
         `SELECT
@@ -344,15 +402,15 @@ export async function recordingRoutes(
   app.get<{ Params: { attemptPublicId: string } }>(
     '/api/teacher/recording/:attemptPublicId',
     async (request) => {
-      requireRole(request, ['ADMIN', 'TEACHER', 'EMPLOYEE']);
-      const pool = requirePool();
+      const claims = requireRole(request, ['ADMIN', 'TEACHER', 'EMPLOYEE']);
+      const pool = resolvePool();
 
       const attemptPublicId = z.string().length(26).parse(request.params.attemptPublicId);
 
       const [sessions] = await pool.execute<RowDataPacket[]>(
         `SELECT s.id, s.public_id, s.status, s.started_at, s.finalized_at,
                 s.total_segments, s.uploaded_segments, s.missing_segments,
-                a.public_id attempt_id
+                a.public_id attempt_id, a.exam_id
          FROM exam_recording_sessions s
          JOIN exam_attempts a ON a.id = s.attempt_id
          WHERE a.public_id = ?
@@ -360,6 +418,8 @@ export async function recordingRoutes(
         [attemptPublicId],
       );
       if (!sessions[0]) return { session: null, segments: [] };
+
+      await assertStaffExamScope(pool, claims, Number(sessions[0].exam_id));
 
       const [segments] = await pool.execute<RowDataPacket[]>(
         `SELECT id, sequence_number, mime_type, file_size_bytes,
@@ -384,16 +444,20 @@ export async function recordingRoutes(
     async (request) => {
       const store = requireStorage();
       const claims = requireRole(request, ['ADMIN', 'TEACHER', 'EMPLOYEE']);
-      const pool = requirePool();
+      const pool = resolvePool();
 
       const segmentId = z.coerce.number().int().positive().parse(request.params.segmentId);
 
       const [segments] = await pool.execute<RowDataPacket[]>(
-        `SELECT id, object_key, upload_status FROM exam_recording_segments
-         WHERE id = ? AND upload_status = 'UPLOADED' LIMIT 1`,
+        `SELECT seg.id, seg.object_key, seg.upload_status, sess.exam_id
+         FROM exam_recording_segments seg
+         JOIN exam_recording_sessions sess ON sess.id = seg.session_id
+         WHERE seg.id = ? AND seg.upload_status = 'UPLOADED' LIMIT 1`,
         [segmentId],
       );
       if (!segments[0]) throw Object.assign(new Error('Segmen tidak tersedia'), { statusCode: 404 });
+
+      await assertStaffExamScope(pool, claims, Number(segments[0].exam_id));
 
       const seg = segments[0];
       const url = await store.presignedPlaybackUrl(seg.object_key as string);
