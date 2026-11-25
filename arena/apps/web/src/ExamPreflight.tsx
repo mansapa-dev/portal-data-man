@@ -193,9 +193,22 @@ export function ExamPreflight({ examName, requireCamera, requireRecording, onRea
         updateCheck('recording', { status: 'fail', message: 'Tidak ada format rekaman yang didukung browser ini. Perbarui browser Anda.' });
       } else if (!caps.indexedDB) {
         updateCheck('recording', { status: 'fail', message: 'Penyimpanan sementara browser (IndexedDB) tidak tersedia. Nonaktifkan mode privat/penyamaran atau ganti browser.' });
+      } else if (!streamRef.current) {
+        updateCheck('recording', { status: 'fail', message: 'Kamera harus aktif sebelum perekaman dapat disiapkan.' });
       } else {
-        setRecordingMimeType(caps.bestRecordingMimeType);
-        updateCheck('recording', { status: 'pass', message: `Format: ${caps.bestRecordingMimeType}` });
+        try {
+          const probe = new MediaRecorder(streamRef.current, { mimeType: caps.bestRecordingMimeType });
+          probe.start();
+          if (probe.state !== 'recording') {
+            throw new Error('MediaRecorder failed to enter recording state');
+          }
+          probe.stop();
+          setRecordingMimeType(caps.bestRecordingMimeType);
+          updateCheck('recording', { status: 'pass', message: `Format siap: ${caps.bestRecordingMimeType}` });
+        } catch {
+          setRecordingMimeType(null);
+          updateCheck('recording', { status: 'fail', message: 'Browser gagal memulai perekaman video dari kamera. Gunakan Chrome, Edge, atau Firefox terbaru.' });
+        }
       }
     } else {
       updateCheck('recording', { status: 'skipped' });
