@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { claimsFromRequest } from '../lib/auth.js';
+import { assertCsrf, claimsFromRequest } from '../lib/auth.js';
 import { requirePool } from '../lib/db.js';
+import { waitingRoom } from '../lib/waiting-room.js';
 import type { RowDataPacket } from 'mysql2/promise';
 
 const examIdSchema = z.coerce.number().int().positive();
@@ -20,6 +21,9 @@ export async function deviceSessionRoutes(app: FastifyInstance) {
       if (claims.role !== 'STUDENT') throw Object.assign(new Error('Sesi siswa diperlukan'), { statusCode: 403 });
 
       const examId = examIdSchema.parse(request.params.id);
+      const header = request.headers['x-exam-token'];
+      await waitingRoom.authorize(examId, claims.sub, typeof header === 'string' ? header : '', true);
+      assertCsrf(request, claims);
       const body = z.object({
         attempt_id: z.string().length(26),
         device_category: z.enum(['MOBILE','TABLET','DESKTOP','UNKNOWN']).default('UNKNOWN'),

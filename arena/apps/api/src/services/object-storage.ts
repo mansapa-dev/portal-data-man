@@ -6,7 +6,7 @@
  *
  * Object naming: recordings/{examId}/{attemptId}/{sessionId}/segment-{seq:04d}.{ext}
  */
-import { S3Client, DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, DeleteObjectCommand, HeadObjectCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 
@@ -131,6 +131,23 @@ export class ObjectStorageService {
       const name = (error as { name?: string }).name ?? '';
       if (name === 'NotFound' || name === 'NoSuchKey') return null;
       throw error;
+    }
+  }
+
+  /**
+   * Non-destructive bucket readiness check (HeadBucket) with bounded timeout.
+   * Proves network reachability and bucket access without creating objects.
+   */
+  async checkBucketReadiness(timeoutMs = 2500): Promise<{ ready: boolean; reason?: string }> {
+    try {
+      await this.client.send(
+        new HeadBucketCommand({ Bucket: this.bucket }),
+        { abortSignal: AbortSignal.timeout(timeoutMs) },
+      );
+      return { ready: true };
+    } catch (error) {
+      const name = (error as { name?: string }).name ?? 'StorageError';
+      return { ready: false, reason: name };
     }
   }
 

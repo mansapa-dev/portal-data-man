@@ -37,7 +37,7 @@ import './styles/preflight.css';
 
 type Student = { id: number; nisn: string; nama: string; kelas: string | null; tingkat: string | null };
 type Question = { id: number; tipe: string; pertanyaan: string; opsi: { key: string; text: string }[]; poin: number };
-type Attempt = { attempt_id: string; exam: { id: number; nama_ujian: string }; expires_at: string; server_time?: string; soal: Question[]; jawaban: { question_id: number; answer: string | null; is_flagged: boolean; revision: number }[] };
+type Attempt = { attempt_id: string; recording_session_id?: string | null; exam: { id: number; nama_ujian: string }; expires_at: string; server_time?: string; soal: Question[]; jawaban: { question_id: number; answer: string | null; is_flagged: boolean; revision: number }[] };
 type Staff = { id: number; nama: string; username?: string; role: string; capabilities?: {teacher:boolean;proctor:boolean;tickets?:boolean} };
 type ExamDraft = { id?:number; name:string; grade:string; duration_minutes:number; session_number:number; starts_at:string; ends_at:string; academic_year:string; semester:'ODD'|'EVEN'; subject_name:string; status:'DRAFT'|'ACTIVE'|'INACTIVE'|'ARCHIVED'; target_class_ids:string[]; target_student_ids:number[] };
 type UserDraft = {id?:number;role:'ADMIN'|'TEACHER'|'EMPLOYEE';teacher_id:number|null;employee_id:number|null;username:string;name:string;password:string;status:'ACTIVE'|'DISABLED'};
@@ -271,7 +271,9 @@ function App() {
       if(admitToken)setExamToken(examId,admitToken);
       const result = await api<Attempt>(`/api/student/exams/${examId}/waiting/claim`, { method: 'POST', body: {}, timeoutMs: 20000 });
 
-      let preparedSessionId: string | null = null;
+      let preparedSessionId: string | null = typeof result.recording_session_id === 'string' && result.recording_session_id.length === 26
+        ? result.recording_session_id
+        : null;
       if (evaluation.recordingActive) {
         const currentPreflight = preflightResultRef.current;
         const hasLiveTrack = Boolean(currentPreflight?.cameraStream?.getVideoTracks().some((t) => t.readyState === 'live'));
@@ -279,7 +281,7 @@ function App() {
           if (evaluation.requireRecording) {
             throw new Error('Kamera atau format perekaman belum siap. Ulangi pemeriksaan awal sebelum masuk ujian.');
           }
-        } else {
+        } else if (!preparedSessionId) {
           try {
             const recRes = await api<{ session_id: string }>(`/api/student/exams/${examId}/recording/session`, { method: 'POST', body: {}, timeoutMs: 10000 });
             if (typeof recRes.session_id !== 'string' || recRes.session_id.length !== 26) {

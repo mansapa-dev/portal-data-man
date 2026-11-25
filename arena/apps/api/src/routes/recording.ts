@@ -9,33 +9,45 @@
  * - Object keys never contain PII.
  * - All staff playback access is audit-logged.
  */
-import { randomUUID } from 'node:crypto';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { claimsFromRequest } from '../lib/auth.js';
+import { assertCsrf, claimsFromRequest } from '../lib/auth.js';
 import { requireRole } from '../lib/access.js';
 import { requirePool } from '../lib/db.js';
+import { waitingRoom } from '../lib/waiting-room.js';
+import type { WaitingRoomService } from '../services/waiting-room.js';
 import { getObjectStorage, ObjectStorageService } from '../services/object-storage.js';
 import { ensureRecordingSession, getRecordingPolicy } from '../services/recording-policy.js';
-import type { RowDataPacket, ResultSetHeader } from 'mysql2/promise';
-
-// ULID-like public ID using crypto.randomUUID stripped of dashes (26 chars)
-function newPublicId(): string {
-  return randomUUID().replace(/-/g, '').slice(0, 26).toUpperCase();
-}
+import type { Pool, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 
 const examIdSchema = z.coerce.number().int().positive();
-
-const RECORDING_ENABLED = process.env.RECORDING_ENABLED === 'true';
-const RECORDING_REQUIRED = process.env.RECORDING_REQUIRED === 'true';
-const SEGMENT_DURATION_SECONDS = Number(process.env.RECORDING_SEGMENT_DURATION_SECONDS ?? 60);
 const MAX_SEGMENTS_PER_SESSION = 300; // 5 hours at 60s segments
 
-// Suppress unused variable warning — SEGMENT_DURATION_SECONDS is intentionally
-// exported for downstream consumers (e.g. frontend config endpoint).
-void SEGMENT_DURATION_SECONDS;
+export async function recordingRoutes(
+  app: FastifyInstance,
+  options: { pool?: Pool; waiting?: WaitingRoomService; storage?: ObjectStorageService | null } = {},
+) {
+  const waiting = options.waiting ?? waitingRoom;
+  const resolvePool = () => options.pool ?? requirePool();
 
-export async function recordingRoutes(app: FastifyInstance) {
+  const authorizeStudent = async (
+    request: FastifyRequest,
+    examId: number,
+    opts: { finished?: boolean; allowBodyToken?: boolean } = {},
+  ) => {
+    const claims = claimsFromRequest(request);
+    if (claims.role !== 'STUDENT') throw Object.assign(new Error('Sesi siswa diperlukan'), { statusCode: 403 });
+    const header = request.headers['x-exam-token'];
+    const token = typeof header === 'string'
+      ? header
+      : opts.allowBodyToken && typeof request.body === 'object' && request.body !== null
+        ? String((request.body as { exam_token?: string }).exam_token ?? '')
+        : '';
+    await waiting.authorize(examId, claims.sub, token, opts.finished ?? false);
+    assertCsrf(request, claims, { allowBodyToken: opts.allowBodyToken });
+    return claims;
+  };
+
   /**
    * GET /api/student/recording/policy
    * Returns backend-configured recording policy (no secrets).
@@ -43,15 +55,15 @@ export async function recordingRoutes(app: FastifyInstance) {
   app.get('/api/student/recording/policy', async (request) => {
     const claims = claimsFromRequest(request);
     if (claims.role !== 'STUDENT') throw Object.assign(new Error('Sesi siswa diperlukan'), { statusCode: 403 });
-    return getRecordingPolicy();
+    return getRecordingPolicy(options.storage);
   });
 
-  if (!RECORDING_ENABLED) {
+  if (process.env.RECORDING_ENABLED !== 'true') {
     app.log.info('Recording disabled via RECORDING_ENABLED=false');
     return;
   }
 
-  const storage = getObjectStorage();
+  const storage = options.storage !== undefined ? options.storage : getObjectStorage();
   if (!storage) {
     app.log.warn('Object storage not configured — recording routes will return 503');
   }
@@ -69,12 +81,10 @@ export async function recordingRoutes(app: FastifyInstance) {
     '/api/student/exams/:id/recording/session',
     async (request) => {
       const store = requireStorage();
-      void store; // used for the 503 guard above
-      const pool = requirePool();
-      const claims = claimsFromRequest(request);
-      if (claims.role !== 'STUDENT') throw Object.assign(new Error('Sesi siswa diperlukan'), { statusCode: 403 });
-
+      void store;
+      const pool = resolvePool();
       const examId = examIdSchema.parse(request.params.id);
+      const claims = await authorizeStudent(request, examId);
       return ensureRecordingSession(pool, claims.sub, examId);
     },
   );
@@ -87,11 +97,9 @@ export async function recordingRoutes(app: FastifyInstance) {
     '/api/student/exams/:id/recording/segment',
     async (request) => {
       const store = requireStorage();
-      const pool = requirePool();
-      const claims = claimsFromRequest(request);
-      if (claims.role !== 'STUDENT') throw Object.assign(new Error('Sesi siswa diperlukan'), { statusCode: 403 });
-
+      const pool = resolvePool();
       const examId = examIdSchema.parse(request.params.id);
+      const claims = await authorizeStudent(request, examId);
       const body = z.object({
         session_id: z.string().length(26),
         sequence_number: z.number().int().min(0).max(MAX_SEGMENTS_PER_SESSION),
@@ -176,11 +184,9 @@ export async function recordingRoutes(app: FastifyInstance) {
     '/api/student/exams/:id/recording/segment/:segmentId',
     async (request) => {
       const store = requireStorage();
-      const pool = requirePool();
-      const claims = claimsFromRequest(request);
-      if (claims.role !== 'STUDENT') throw Object.assign(new Error('Sesi siswa diperlukan'), { statusCode: 403 });
-
+      const pool = resolvePool();
       const examId = examIdSchema.parse(request.params.id);
+      const claims = await authorizeStudent(request, examId, { finished: true });
       const segmentId = z.coerce.number().int().positive().parse(request.params.segmentId);
       const body = z.object({
         file_size_bytes: z.number().int().nonnegative().max(500_000_000),
@@ -267,14 +273,14 @@ export async function recordingRoutes(app: FastifyInstance) {
   app.post<{ Params: { id: string } }>(
     '/api/student/exams/:id/recording/finalize',
     async (request) => {
-      const pool = requirePool();
-      const claims = claimsFromRequest(request);
-      if (claims.role !== 'STUDENT') throw Object.assign(new Error('Sesi siswa diperlukan'), { statusCode: 403 });
-
+      const pool = resolvePool();
       const examId = examIdSchema.parse(request.params.id);
+      const claims = await authorizeStudent(request, examId, { finished: true, allowBodyToken: true });
       const body = z.object({
         session_id: z.string().length(26),
         incomplete: z.boolean().optional(),
+        csrf_token: z.string().min(32).max(128).optional(),
+        exam_token: z.string().max(64).optional(),
       }).strict().parse(request.body);
 
       const [sessions] = await pool.execute<RowDataPacket[]>(

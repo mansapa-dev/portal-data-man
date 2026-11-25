@@ -13,9 +13,16 @@ import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import Fastify from 'fastify';
 import { buildAppOptions } from '../dist/lib/app-options.js';
+import { issueToken } from '../dist/lib/auth.js';
 import { ObjectStorageService } from '../dist/services/object-storage.js';
 import { riskWeight, classifySeverity, computeEventWeight } from '../dist/services/risk-scoring.js';
-import { assertRecordingReadyForAdmission, ensureRecordingSession } from '../dist/services/recording-policy.js';
+import {
+  assertRecordingReadyForAdmission,
+  checkStorageReadiness,
+  ensureRecordingSession,
+  invalidateStorageReadinessCache,
+} from '../dist/services/recording-policy.js';
+import { recordingRoutes } from '../dist/routes/recording.js';
 
 // ---- Minimal in-memory mock pool ----
 
@@ -235,5 +242,102 @@ describe('Recording policy & admission enforcement', () => {
       () => ensureRecordingSession(finalizedPool, 42, 7),
       (err) => err.statusCode === 409 && err.code === 'RECORDING_SESSION_CLOSED',
     );
+  });
+
+  test('checkStorageReadiness caches and deduplicates concurrent HeadBucket probes', async () => {
+    invalidateStorageReadinessCache();
+    let probeCalls = 0;
+    const mockStorage = {
+      checkBucketReadiness: async () => {
+        probeCalls += 1;
+        await new Promise((r) => setTimeout(r, 10));
+        return { ready: true };
+      },
+    };
+
+    const results = await Promise.all([
+      checkStorageReadiness(mockStorage),
+      checkStorageReadiness(mockStorage),
+      checkStorageReadiness(mockStorage),
+    ]);
+    assert.deepEqual(results, [true, true, true]);
+    assert.equal(probeCalls, 1);
+
+    // Subsequent call hits TTL cache
+    assert.equal(await checkStorageReadiness(mockStorage), true);
+    assert.equal(probeCalls, 1);
+
+    // Unhealthy storage fails closed
+    invalidateStorageReadinessCache();
+    const unhealthyStorage = { checkBucketReadiness: async () => ({ ready: false, reason: 'TimeoutError' }) };
+    assert.equal(await checkStorageReadiness(unhealthyStorage), false);
+    invalidateStorageReadinessCache();
+  });
+
+  test('recordingRoutes enforces waiting.authorize and HeadObject verification', async () => {
+    const prevEnabled = process.env.RECORDING_ENABLED;
+    process.env.RECORDING_ENABLED = 'true';
+    const csrf = 'c'.repeat(32);
+    const token = issueToken({ sub: 42, role: 'STUDENT', csrf, exp: Math.floor(Date.now() / 1000) + 3600 });
+
+    const mockStorage = {
+      uploadUrlExpiresSeconds: 300,
+      playbackUrlExpiresSeconds: 300,
+      presignedUploadUrl: async () => 'https://mock.linodeobjects.com/put',
+      presignedPlaybackUrl: async () => 'https://mock.linodeobjects.com/get',
+      headObject: async () => null, // Missing in storage
+      checkBucketReadiness: async () => ({ ready: true }),
+    };
+
+    const mockPool = {
+      execute: async (sql) => {
+        if (/FROM exam_recording_segments seg/.test(sql)) {
+          return [[{ id: 10, object_key: 'recordings/7/1/S/segment-0000.webm', upload_status: 'PENDING', session_id: 5, session_status: 'ACTIVE' }], []];
+        }
+        return [{ affectedRows: 1 }, []];
+      },
+    };
+
+    const mockWaiting = {
+      authorize: async (_examId, _studentId, examToken) => {
+        if (examToken !== 'valid_exam_token_123456789012345678901234') {
+          throw Object.assign(new Error('Token masuk diperlukan'), { statusCode: 403 });
+        }
+        return { status: 'IN_EXAM' };
+      },
+    };
+
+    const app = Fastify();
+    app.setErrorHandler((err, _req, reply) => {
+      void reply.status(err.statusCode ?? 500).send({ error: err.message });
+    });
+    await app.register(recordingRoutes, { pool: mockPool, waiting: mockWaiting, storage: mockStorage });
+
+    try {
+      // Missing exam token -> 403
+      const noToken = await app.inject({
+        method: 'POST',
+        url: '/api/student/exams/7/recording/session',
+        headers: { authorization: `Bearer ${token}`, 'x-csrf-token': csrf },
+        payload: {},
+      });
+      assert.equal(noToken.statusCode, 403);
+
+      // HeadObject returns null -> 422 (never marks UPLOADED)
+      const unverified = await app.inject({
+        method: 'PATCH',
+        url: '/api/student/exams/7/recording/segment/10',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'x-csrf-token': csrf,
+          'x-exam-token': 'valid_exam_token_123456789012345678901234',
+        },
+        payload: { file_size_bytes: 1234 },
+      });
+      assert.equal(unverified.statusCode, 422);
+    } finally {
+      process.env.RECORDING_ENABLED = prevEnabled;
+      await app.close();
+    }
   });
 });

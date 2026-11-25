@@ -1,32 +1,94 @@
 /**
- * Server-side recording policy & session integrity service.
+ * Server-side recording policy, storage operational readiness, and
+ * transaction-safe recording session orchestration.
  *
- * Enforces mandatory recording requirements at admission time
- * (/waiting/join, /waiting/resume, /waiting/claim) and provides
- * transaction-safe, idempotent recording session creation.
+ * Readiness semantics:
+ * - `storage_configured`: S3 env vars are present and ObjectStorageService instantiated.
+ * - `storage_available`: Bounded, cached operational readiness (HeadBucket with 2.5s timeout).
+ *   Proves S3 endpoint reachability and bucket permissions without creating objects.
+ *   Does NOT issue a HeadBucket per student (single-flight + 30s healthy / 10s unhealthy TTL).
  */
 import { randomUUID } from 'node:crypto';
-import type { Pool, RowDataPacket } from 'mysql2/promise';
+import type { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise';
 import { getObjectStorage, type ObjectStorageService } from './object-storage.js';
 
 export interface RecordingPolicy {
   recording_enabled: boolean;
   recording_required: boolean;
+  storage_configured: boolean;
   storage_available: boolean;
   segment_duration_seconds: number;
   video_bitrate: number;
   retention_days: number;
 }
 
-export function getRecordingPolicy(storageOverride?: ObjectStorageService | null): RecordingPolicy {
+const HEALTHY_CACHE_TTL_MS = 30_000;
+const UNHEALTHY_CACHE_TTL_MS = 10_000;
+
+let cachedReadiness: { ready: boolean; checkedAt: number } | null = null;
+let inFlightProbe: Promise<boolean> | null = null;
+
+export function invalidateStorageReadinessCache(): void {
+  cachedReadiness = null;
+  inFlightProbe = null;
+}
+
+/**
+ * Bounded, single-flight cached storage readiness check.
+ * Safe for 1,200+ concurrent students: at most 1 HeadBucket probe per TTL window.
+ */
+export async function checkStorageReadiness(
+  storage: ObjectStorageService | null,
+  options: { bypassCache?: boolean } = {},
+): Promise<boolean> {
+  if (!storage) return false;
+
+  // Support lightweight unit-test mocks that don't implement checkBucketReadiness
+  if (typeof storage.checkBucketReadiness !== 'function') {
+    return true;
+  }
+
+  const now = Date.now();
+  if (!options.bypassCache && cachedReadiness) {
+    const ttl = cachedReadiness.ready ? HEALTHY_CACHE_TTL_MS : UNHEALTHY_CACHE_TTL_MS;
+    if (now - cachedReadiness.checkedAt < ttl) {
+      return cachedReadiness.ready;
+    }
+  }
+
+  if (inFlightProbe) return inFlightProbe;
+
+  inFlightProbe = storage
+    .checkBucketReadiness(2500)
+    .then((res) => {
+      cachedReadiness = { ready: res.ready, checkedAt: Date.now() };
+      return res.ready;
+    })
+    .catch(() => {
+      cachedReadiness = { ready: false, checkedAt: Date.now() };
+      return false;
+    })
+    .finally(() => {
+      inFlightProbe = null;
+    });
+
+  return inFlightProbe;
+}
+
+export async function getRecordingPolicy(storageOverride?: ObjectStorageService | null): Promise<RecordingPolicy> {
   const recordingEnabled = process.env.RECORDING_ENABLED === 'true';
   const recordingRequired = process.env.RECORDING_REQUIRED === 'true';
   const storage = storageOverride !== undefined ? storageOverride : getObjectStorage();
+  const storageConfigured = Boolean(storage);
+  const storageAvailable = recordingEnabled && storageConfigured
+    ? await checkStorageReadiness(storage)
+    : false;
 
   return {
     recording_enabled: recordingEnabled,
     recording_required: recordingRequired,
-    storage_available: Boolean(storage),
+    storage_configured: storageConfigured,
+    storage_available: storageAvailable,
     segment_duration_seconds: Number(process.env.RECORDING_SEGMENT_DURATION_SECONDS ?? 60),
     video_bitrate: Number(process.env.RECORDING_VIDEO_BITRATE ?? 500_000),
     retention_days: Number(process.env.RECORDING_RETENTION_DAYS ?? 7),
@@ -38,7 +100,7 @@ export function getRecordingPolicy(storageOverride?: ObjectStorageService | null
  *
  * When RECORDING_REQUIRED=true:
  * - Rejects if RECORDING_ENABLED is not true.
- * - Rejects if Object Storage is not configured.
+ * - Rejects if Object Storage is unconfigured or operationally unreachable.
  * - On resume (or when an IN_PROGRESS attempt already exists), ensures no
  *   FINALIZED/ABANDONED recording session blocks resumption.
  */
@@ -48,7 +110,7 @@ export async function assertRecordingReadyForAdmission(
   examId: number,
   options: { storage?: ObjectStorageService | null; checkExistingAttempt?: boolean } = {},
 ): Promise<RecordingPolicy> {
-  const policy = getRecordingPolicy(options.storage);
+  const policy = await getRecordingPolicy(options.storage);
   if (!policy.recording_required) {
     return policy;
   }
@@ -60,9 +122,9 @@ export async function assertRecordingReadyForAdmission(
     );
   }
 
-  if (!policy.storage_available) {
+  if (!policy.storage_configured || !policy.storage_available) {
     throw Object.assign(
-      new Error('Penyimpanan rekaman ujian belum tersedia. Hubungi pengawas.'),
+      new Error('Penyimpanan rekaman ujian tidak tersedia saat ini. Hubungi pengawas.'),
       { statusCode: 503, code: 'RECORDING_STORAGE_UNAVAILABLE' },
     );
   }
@@ -93,6 +155,54 @@ export function newRecordingPublicId(): string {
 }
 
 /**
+ * Ensures an ACTIVE recording session exists for `attemptId` inside an active
+ * MySQL transaction. If the transaction rolls back, no orphaned session remains.
+ */
+export async function ensureRecordingSessionInTransaction(
+  connection: PoolConnection,
+  studentId: number,
+  examId: number,
+  attemptId: number,
+): Promise<{ session_id: string; resumed: boolean }> {
+  const [existing] = await connection.execute<RowDataPacket[]>(
+    `SELECT id, public_id, status
+     FROM exam_recording_sessions
+     WHERE attempt_id = ?
+     LIMIT 1
+     FOR UPDATE`,
+    [attemptId],
+  );
+
+  if (existing[0]) {
+    const status = String(existing[0].status);
+    if (status === 'ACTIVE') {
+      return { session_id: String(existing[0].public_id), resumed: true };
+    }
+    if (status === 'INTERRUPTED') {
+      await connection.execute(
+        `UPDATE exam_recording_sessions SET status = 'ACTIVE', updated_at = UTC_TIMESTAMP(3) WHERE id = ?`,
+        [existing[0].id],
+      );
+      return { session_id: String(existing[0].public_id), resumed: true };
+    }
+    throw Object.assign(
+      new Error('Sesi rekaman sudah difinalisasi atau ditutup'),
+      { statusCode: 409, code: 'RECORDING_SESSION_CLOSED' },
+    );
+  }
+
+  const sessionPublicId = newRecordingPublicId();
+  await connection.execute(
+    `INSERT INTO exam_recording_sessions
+       (public_id, attempt_id, exam_id, student_id, status, started_at)
+     VALUES (?, ?, ?, ?, 'ACTIVE', UTC_TIMESTAMP(3))`,
+    [sessionPublicId, attemptId, examId, studentId],
+  );
+
+  return { session_id: sessionPublicId, resumed: false };
+}
+
+/**
  * Transaction-safe, idempotent recording session creation/resumption
  * for an IN_PROGRESS attempt belonging to (studentId, examId).
  */
@@ -120,47 +230,15 @@ export async function ensureRecordingSession(
       throw Object.assign(new Error('Sesi ujian sudah tidak aktif'), { statusCode: 409 });
     }
 
-    const attemptId = Number(attempts[0].id);
-
-    const [existing] = await connection.execute<RowDataPacket[]>(
-      `SELECT id, public_id, status
-       FROM exam_recording_sessions
-       WHERE attempt_id = ?
-       LIMIT 1
-       FOR UPDATE`,
-      [attemptId],
-    );
-
-    if (existing[0]) {
-      const status = String(existing[0].status);
-      if (status === 'ACTIVE') {
-        await connection.commit();
-        return { session_id: String(existing[0].public_id), resumed: true };
-      }
-      if (status === 'INTERRUPTED') {
-        await connection.execute(
-          `UPDATE exam_recording_sessions SET status = 'ACTIVE', updated_at = UTC_TIMESTAMP(3) WHERE id = ?`,
-          [existing[0].id],
-        );
-        await connection.commit();
-        return { session_id: String(existing[0].public_id), resumed: true };
-      }
-      throw Object.assign(
-        new Error('Sesi rekaman sudah difinalisasi atau ditutup'),
-        { statusCode: 409, code: 'RECORDING_SESSION_CLOSED' },
-      );
-    }
-
-    const sessionPublicId = newRecordingPublicId();
-    await connection.execute(
-      `INSERT INTO exam_recording_sessions
-         (public_id, attempt_id, exam_id, student_id, status, started_at)
-       VALUES (?, ?, ?, ?, 'ACTIVE', UTC_TIMESTAMP(3))`,
-      [sessionPublicId, attemptId, examId, studentId],
+    const result = await ensureRecordingSessionInTransaction(
+      connection,
+      studentId,
+      examId,
+      Number(attempts[0].id),
     );
 
     await connection.commit();
-    return { session_id: sessionPublicId, resumed: false };
+    return result;
   } catch (error) {
     await connection.rollback().catch(() => {});
     throw error;

@@ -4,6 +4,7 @@ import type { Claims } from '../lib/auth.js';
 import type { FastifyBaseLogger } from 'fastify';
 import { performance } from 'node:perf_hooks';
 import { loadExamQuestionSource } from './exam-question-source.js';
+import { ensureRecordingSessionInTransaction, getRecordingPolicy } from './recording-policy.js';
 import type { ExamAdmissionService } from './exam-admission.js';
 import type { WaitingClaimReceipt } from './waiting-room.js';
 
@@ -200,10 +201,20 @@ export class StudentExamService {
         return rows;
       }, Number(revisionRows[0]?.source_revision));
     }
+    const recordingPolicy = await getRecordingPolicy();
+    if (recordingPolicy.recording_required) {
+      if (!recordingPolicy.recording_enabled) {
+        throw Object.assign(new Error('Perekaman video wajib untuk ujian ini, tetapi layanan perekaman sedang nonaktif. Hubungi pengawas.'), { statusCode: 503, code: 'RECORDING_DISABLED' });
+      }
+      if (!recordingPolicy.storage_configured || !recordingPolicy.storage_available) {
+        throw Object.assign(new Error('Penyimpanan rekaman ujian tidak tersedia saat ini. Hubungi pengawas.'), { statusCode: 503, code: 'RECORDING_STORAGE_UNAVAILABLE' });
+      }
+    }
+    const shouldPrepareRecording = recordingPolicy.recording_required || (recordingPolicy.recording_enabled && recordingPolicy.storage_available);
     const acquireStarted = performance.now();
     const connection = await this.pool.getConnection();
     const poolWaitMs = performance.now() - acquireStarted;
-    let state: { attempt: RowDataPacket; exam: RowDataPacket; questions: RowDataPacket[]; answers: RowDataPacket[] } | undefined;
+    let state: { attempt: RowDataPacket; exam: RowDataPacket; questions: RowDataPacket[]; answers: RowDataPacket[]; recordingSessionId: string | null } | undefined;
     try {
       await connection.beginTransaction();
       let attempt: RowDataPacket | undefined;
@@ -280,13 +291,18 @@ export class StudentExamService {
         if (claims[0] && claims[0].token_hash!==receipt.tokenHash) throw Object.assign(new Error('Token sesi ujian berubah. Pulihkan sesi dari jadwal.'),{statusCode:409});
         if (!claims[0]) await connection.execute("INSERT INTO exam_waiting_claims(exam_id,student_id,attempt_id,token_hash,queue_sequence,state) VALUES(?,?,?,?,?,'IN_EXAM')",[examId,studentId,activeAttempt.id,receipt.tokenHash,receipt.sequence]);
       }
+      let recordingSessionId: string | null = null;
+      if (shouldPrepareRecording) {
+        const rec = await ensureRecordingSessionInTransaction(connection, studentId, examId, Number(activeAttempt.id));
+        recordingSessionId = rec.session_id;
+      }
       await connection.commit();
-      state = { attempt: activeAttempt, exam, questions, answers };
+      state = { attempt: activeAttempt, exam, questions, answers, recordingSessionId };
     } catch (error) {
       try { await connection.rollback(); } catch { /* no active transaction */ }
       throw error;
     } finally { connection.release(); }
-    const { attempt, exam, questions, answers } = state!;
+    const { attempt, exam, questions, answers, recordingSessionId } = state!;
     // Count only after COMMIT. SADD is idempotent on retries/resume, including
     // a retry after the DB committed but the Redis acknowledgement was lost.
     try {
@@ -306,7 +322,7 @@ export class StudentExamService {
       return { id: Number(q.id), tipe: type, pertanyaan: q.question_text, opsi: choices, poin: Number(q.points) };
     }).filter(Boolean);
     this.recordDiagnostic('exam_start', { resumed: hasExistingAttempt, question_count: ordered.length, pool_wait_ms: Number(poolWaitMs.toFixed(2)), total_ms: Number((performance.now() - startedAt).toFixed(2)) });
-    return { attempt_id: attempt.public_id, exam: { id: Number(exam.id), nama_ujian: exam.name }, expires_at: attempt.expires_at, server_time: new Date().toISOString(), soal: ordered, jawaban: answers.map((a) => ({ question_id: Number(a.question_id), answer: a.answer, is_flagged: Boolean(a.is_flagged), revision: Number(a.revision) })) };
+    return { attempt_id: attempt.public_id, ...(recordingSessionId ? { recording_session_id: recordingSessionId } : {}), exam: { id: Number(exam.id), nama_ujian: exam.name }, expires_at: attempt.expires_at, server_time: new Date().toISOString(), soal: ordered, jawaban: answers.map((a) => ({ question_id: Number(a.question_id), answer: a.answer, is_flagged: Boolean(a.is_flagged), revision: Number(a.revision) })) };
   }
 
   async heartbeat(studentId: number, examId: number) {

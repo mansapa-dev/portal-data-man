@@ -7,7 +7,7 @@ import { ScoringService } from '../services/scoring.js';
 import { StudentExamService } from '../services/student-exam.js';
 import { acceptSubmission } from '../services/exam-submission.js';
 import { nextFacePresenceUpdate } from '../services/face-presence.js';
-import { assertRecordingReadyForAdmission, ensureRecordingSession } from '../services/recording-policy.js';
+import { assertRecordingReadyForAdmission } from '../services/recording-policy.js';
 import { dispatchFinalization, isSubmitAsyncEnabled } from '../services/submission-dispatch.js';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 import { waitingRoom } from '../lib/waiting-room.js';
@@ -26,6 +26,7 @@ export const studentStartResponseSchema = {
   required: ['attempt_id', 'exam', 'expires_at', 'server_time', 'soal', 'jawaban'],
   properties: {
     attempt_id: { type: 'string' },
+    recording_session_id: { type: ['string', 'null'] },
     exam: { type: 'object', additionalProperties: false, required: ['id', 'nama_ujian'], properties: { id: { type: 'integer' }, nama_ujian: { type: 'string' } } },
     expires_at: { type: 'string' }, server_time: { type: 'string' },
     soal: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'tipe', 'pertanyaan', 'opsi', 'poin'], properties: {
@@ -73,11 +74,8 @@ export async function studentExamRoutes(app: FastifyInstance, options:{pool?:Poo
     z.object({}).strict().parse(request.body ?? {});
     const exam=examId.parse(request.params.id),header=request.headers['x-exam-token'];
     try {
-      const policy = await assertRecordingReadyForAdmission(pool, claims.sub, exam, { checkExistingAttempt: true });
+      await assertRecordingReadyForAdmission(pool, claims.sub, exam, { checkExistingAttempt: true });
       const result=await waiting.claim(exam,claims.sub,typeof header==='string'?header:'',receipt=>exams.start(claims.sub,exam,0,receipt));
-      if (policy.recording_required) {
-        await ensureRecordingSession(pool, claims.sub, exam);
-      }
       loadDiagnostics.record('waiting_claim',{outcome:'ok',total_ms:Number((performance.now()-started).toFixed(2))});
       return result;
     } catch(error) {
