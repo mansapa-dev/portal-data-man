@@ -283,3 +283,62 @@ test('createUploadQueue skips the PUT when the server reports already_uploaded',
     globalThis.fetch = originalFetch;
   }
 });
+
+test('createExamRecorder restarts MediaRecorder so every segment is standalone', async () => {
+  const listeners = new Map();
+  const fakeTrack = {
+    readyState: 'live',
+    addEventListener: (ev, fn) => listeners.set(ev, fn),
+    removeEventListener: (ev) => listeners.delete(ev),
+  };
+  const fakeStream = { getVideoTracks: () => [fakeTrack] };
+
+  const originalMR = globalThis.MediaRecorder;
+  const instances = [];
+  globalThis.MediaRecorder = class FakeMediaRecorder {
+    constructor() {
+      this.state = 'inactive';
+      instances.push(this);
+    }
+    start() {
+      this.state = 'recording';
+      setTimeout(() => {
+        if (this.state === 'recording') {
+          this.ondataavailable?.({ data: new Blob([`chunk-${instances.length}`]) });
+        }
+      }, 2);
+    }
+    stop() {
+      this.state = 'inactive';
+      this.ondataavailable?.({ data: new Blob([`tail-${instances.length}`]) });
+      this.onstop?.();
+    }
+  };
+
+  try {
+    const segments = [];
+    const rec = createExamRecorder({
+      stream: fakeStream,
+      mimeType: 'video/webm',
+      segmentDurationMs: 10,
+      onSegment: (s) => segments.push(s),
+      onError: () => { throw new Error('recorder reported an unexpected error'); },
+      onStopped: () => {},
+    });
+
+    rec.start();
+    await new Promise((r) => setTimeout(r, 60));
+
+    // Each rotation must create a new MediaRecorder instance; reusing the same
+    // instance would produce headerless (unplayable) blobs after the first.
+    assert.ok(segments.length >= 2, `expected >=2 segments, got ${segments.length}`);
+    assert.ok(instances.length >= 2, `expected >=2 recorder instances, got ${instances.length}`);
+    assert.equal(rec.isRecording, true);
+
+    const finalSegment = await rec.stopAndFlush();
+    assert.ok(finalSegment !== null);
+    assert.equal(rec.isRecording, false);
+  } finally {
+    globalThis.MediaRecorder = originalMR;
+  }
+});

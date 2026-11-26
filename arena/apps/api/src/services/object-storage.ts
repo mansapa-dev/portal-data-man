@@ -102,14 +102,26 @@ export class ObjectStorageService {
 
   /**
    * Generate a presigned GET URL for authorized staff playback.
+   *
+   * `contentType` is pinned through the response override so the browser never
+   * rejects a valid WebM/MP4 object because object storage stored a generic
+   * `application/octet-stream` or a codec-qualified value it does not sniff.
+   * Segments are standalone files, so inline playback is safe.
    */
   async presignedPlaybackUrl(
     objectKey: string,
     expiresInSeconds?: number,
+    contentType?: string,
   ): Promise<string> {
     const command = new GetObjectCommand({
       Bucket: this.bucket,
       Key: objectKey,
+      ...(contentType
+        ? {
+            ResponseContentType: contentType,
+            ResponseContentDisposition: 'inline',
+          }
+        : {}),
     });
     return getSignedUrl(this.client, command, {
       expiresIn: expiresInSeconds ?? this.playbackUrlExpiresSeconds,

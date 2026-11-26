@@ -447,18 +447,27 @@ export async function recordingRoutes(
       const segmentId = z.coerce.number().int().positive().parse(request.params.segmentId);
 
       const [segments] = await pool.execute<RowDataPacket[]>(
-        `SELECT seg.id, seg.object_key, seg.upload_status, sess.exam_id
+        `SELECT seg.id, seg.object_key, seg.mime_type, seg.upload_status, sess.exam_id
          FROM exam_recording_segments seg
          JOIN exam_recording_sessions sess ON sess.id = seg.session_id
          WHERE seg.id = ? AND seg.upload_status = 'UPLOADED' LIMIT 1`,
         [segmentId],
       );
-      if (!segments[0]) throw Object.assign(new Error('Segmen tidak tersedia'), { statusCode: 404 });
-
-      await assertStaffExamScope(pool, claims, Number(segments[0].exam_id));
-
       const seg = segments[0];
-      const url = await store.presignedPlaybackUrl(seg.object_key as string);
+      if (!seg) throw Object.assign(new Error('Segmen tidak tersedia'), { statusCode: 404 });
+
+      // Strip codec parameters for the HTTP response header; browsers only
+      // need the container MIME (`video/webm`, `video/mp4`, `video/ogg`).
+      const rawMime = typeof seg.mime_type === 'string' ? seg.mime_type : '';
+      const contentType = (rawMime.split(';')[0] ?? '').trim().toLowerCase();
+
+      await assertStaffExamScope(pool, claims, Number(seg.exam_id));
+
+      const url = await store.presignedPlaybackUrl(
+        seg.object_key as string,
+        undefined,
+        /^video\/(webm|mp4|ogg)$/.test(contentType) ? contentType : 'video/webm',
+      );
 
       // Audit log every access
       const ip = typeof request.ip === 'string' ? request.ip : null;
