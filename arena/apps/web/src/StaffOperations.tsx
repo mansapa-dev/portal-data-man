@@ -281,6 +281,10 @@ export function StaffOperations({
   // Pemantauan kehadiran wajah: peserta yang sedang wajahnya tidak terdeteksi.
   const [faceAbsence, setFaceAbsence] = useState<Row[]>([]);
   const [showSecurityReview, setShowSecurityReview] = useState(false);
+  // Rekap nilai per mapel untuk portal guru. Tidak bergantung pada penugasan
+  // pengampu per-ujian karena satu guru bisa mengampu banyak mapel.
+  const [teacherSubjects, setTeacherSubjects] = useState<Array<{ name: string; exam_count: number }>>([]);
+  const [subjectExport, setSubjectExport] = useState('');
 
   // Filter Monitoring Sesi
   const [sessionExam, setSessionExam] = useState('');
@@ -483,6 +487,18 @@ export function StaffOperations({
     };
   }, [view]);
 
+  // Daftar mapel untuk tombol unduh rekap di portal guru. Endpoint hanya
+  // mengembalikan mapel yang benar-benar ada pada ujian; tidak memeriksa
+  // penugasan pengampu.
+  useEffect(() => {
+    if (view !== 'teacherResults' || admin) { setTeacherSubjects([]); return; }
+    let active = true;
+    api<Array<{ name: string; exam_count: number }>>('/api/teacher/subjects')
+      .then((data) => { if (active) setTeacherSubjects(Array.isArray(data) ? data : []); })
+      .catch(() => { if (active) setTeacherSubjects([]); });
+    return () => { active = false; };
+  }, [view, admin]);
+
   async function report(id: string, nextPage = 1) {
     setSelectedExam(id);
     if (!id) {
@@ -544,6 +560,55 @@ export function StaffOperations({
         },
       ]);
       setNotice(`${all.length} hasil ujian peserta berhasil diekspor ke Excel.`);
+    } catch (e) {
+      setNotice((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function exportSubjectResults() {
+    if (!subjectExport) {
+      setNotice('Pilih mata pelajaran terlebih dahulu.');
+      return;
+    }
+    setBusy(true);
+    setNotice(`Menyiapkan rekap nilai mapel ${subjectExport}…`);
+    try {
+      const all: Row[] = [];
+      let cursor = 0;
+      for (let next = 0; next < 10000; next++) {
+        const response = await api<{ items: Row[]; next_cursor: number | null }>(
+          `/api/teacher/results-by-subject?subject_name=${encodeURIComponent(subjectExport)}&cursor=${cursor}&limit=200`,
+        );
+        all.push(...response.items);
+        if (response.next_cursor === null) break;
+        cursor = response.next_cursor;
+      }
+      if (!all.length) throw new Error(`Belum ada hasil untuk mapel ${subjectExport}.`);
+      await exportExcel(`rekap-${safeFilename(subjectExport)}.xlsx`, [
+        {
+          name: 'Rekap Mapel',
+          rows: [
+            ['NISN', 'Nama Siswa', 'Kelas', 'Mata Pelajaran', 'Ujian', 'Status', 'Nilai', 'Benar', 'Salah', 'Kosong', 'Waktu Selesai'],
+            ...all.map((row) => [
+              row.nisn,
+              row.name_snapshot,
+              row.class_snapshot,
+              row.subject_name,
+              row.exam_name,
+              row.status,
+              row.score,
+              row.correct_count,
+              row.wrong_count,
+              row.blank_count,
+              row.completed_at,
+            ]),
+          ],
+          widths: [18, 32, 18, 24, 36, 16, 12, 10, 10, 10, 24],
+        },
+      ]);
+      setNotice(`${all.length} hasil mapel ${subjectExport} berhasil diekspor ke Excel.`);
     } catch (e) {
       setNotice((e as Error).message);
     } finally {
@@ -886,6 +951,38 @@ export function StaffOperations({
                 </button>
               )}
             </header>
+
+            {view === 'teacherResults' && (
+              <div className="operations-filter-card" style={{ marginBottom: 16 }}>
+                <div className="operations-filter-grid">
+                  <label>
+                    Mata Pelajaran
+                    <select value={subjectExport} onChange={(e) => setSubjectExport(e.target.value)}>
+                      <option value="">Pilih mapel</option>
+                      {teacherSubjects.map((subject) => (
+                        <option key={subject.name} value={subject.name}>
+                          {subject.name} ({subject.exam_count} ujian)
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={busy || !subjectExport || !teacherSubjects.length}
+                      onClick={() => void exportSubjectResults()}
+                    >
+                      <i className="fa-solid fa-file-excel" /> Unduh Rekap Mapel
+                    </button>
+                  </div>
+                </div>
+                <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
+                  Unduhan mencakup seluruh ujian pada mapel terpilih, tanpa memeriksa penugasan pengampu.
+                  {!teacherSubjects.length && ' Belum ada mata pelajaran pada ujian.'}
+                </p>
+              </div>
+            )}
 
             {examRows.length ? (
               <div className="teacher-exam-grid">
