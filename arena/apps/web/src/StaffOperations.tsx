@@ -281,10 +281,12 @@ export function StaffOperations({
   // Pemantauan kehadiran wajah: peserta yang sedang wajahnya tidak terdeteksi.
   const [faceAbsence, setFaceAbsence] = useState<Row[]>([]);
   const [showSecurityReview, setShowSecurityReview] = useState(false);
-  // Rekap nilai per mapel untuk portal guru. Tidak bergantung pada penugasan
-  // pengampu per-ujian karena satu guru bisa mengampu banyak mapel.
+  // Rekap nilai per mapel untuk portal guru. Kelas diprioritaskan sesuai
+  // penugasan pengampu; bila penugasan kosong, fallback ke seluruh kelas mapel.
   const [teacherSubjects, setTeacherSubjects] = useState<Array<{ name: string; exam_count: number }>>([]);
   const [subjectExport, setSubjectExport] = useState('');
+  const [subjectClasses, setSubjectClasses] = useState<Array<{ name: string; result_count: number }>>([]);
+  const [subjectClassExport, setSubjectClassExport] = useState('');
 
   // Filter Monitoring Sesi
   const [sessionExam, setSessionExam] = useState('');
@@ -499,6 +501,24 @@ export function StaffOperations({
     return () => { active = false; };
   }, [view, admin]);
 
+  // Kelas untuk mapel terpilih. Diprioritaskan sesuai penugasan guru; jika
+  // tidak ada penugasan, endpoint fallback ke seluruh kelas mapel.
+  useEffect(() => {
+    if (view !== 'teacherResults' || admin || !subjectExport) {
+      setSubjectClasses([]);
+      setSubjectClassExport('');
+      return;
+    }
+    let active = true;
+    setSubjectClassExport('');
+    api<{ items: Array<{ name: string; result_count: number }>; scoped: boolean }>(
+      `/api/teacher/subject-classes?subject_name=${encodeURIComponent(subjectExport)}`,
+    )
+      .then((data) => { if (active) setSubjectClasses(Array.isArray(data?.items) ? data.items : []); })
+      .catch(() => { if (active) setSubjectClasses([]); });
+    return () => { active = false; };
+  }, [view, admin, subjectExport]);
+
   async function report(id: string, nextPage = 1) {
     setSelectedExam(id);
     if (!id) {
@@ -573,20 +593,25 @@ export function StaffOperations({
       return;
     }
     setBusy(true);
-    setNotice(`Menyiapkan rekap nilai mapel ${subjectExport}…`);
+    const classLabel = subjectClassExport ? ` kelas ${subjectClassExport}` : '';
+    setNotice(`Menyiapkan rekap nilai mapel ${subjectExport}${classLabel}…`);
     try {
       const all: Row[] = [];
       let cursor = 0;
       for (let next = 0; next < 10000; next++) {
+        const classParam = subjectClassExport ? `&class_name=${encodeURIComponent(subjectClassExport)}` : '';
         const response = await api<{ items: Row[]; next_cursor: number | null }>(
-          `/api/teacher/results-by-subject?subject_name=${encodeURIComponent(subjectExport)}&cursor=${cursor}&limit=200`,
+          `/api/teacher/results-by-subject?subject_name=${encodeURIComponent(subjectExport)}${classParam}&cursor=${cursor}&limit=200`,
         );
         all.push(...response.items);
         if (response.next_cursor === null) break;
         cursor = response.next_cursor;
       }
-      if (!all.length) throw new Error(`Belum ada hasil untuk mapel ${subjectExport}.`);
-      await exportExcel(`rekap-${safeFilename(subjectExport)}.xlsx`, [
+      if (!all.length) throw new Error(`Belum ada hasil untuk mapel ${subjectExport}${classLabel}.`);
+      const fileBase = subjectClassExport
+        ? `rekap-${safeFilename(subjectExport)}-${safeFilename(subjectClassExport)}`
+        : `rekap-${safeFilename(subjectExport)}`;
+      await exportExcel(`${fileBase}.xlsx`, [
         {
           name: 'Rekap Mapel',
           rows: [
@@ -608,7 +633,7 @@ export function StaffOperations({
           widths: [18, 32, 18, 24, 36, 16, 12, 10, 10, 10, 24],
         },
       ]);
-      setNotice(`${all.length} hasil mapel ${subjectExport} berhasil diekspor ke Excel.`);
+      setNotice(`${all.length} hasil mapel ${subjectExport}${classLabel} berhasil diekspor ke Excel.`);
     } catch (e) {
       setNotice((e as Error).message);
     } finally {
@@ -966,6 +991,21 @@ export function StaffOperations({
                       ))}
                     </select>
                   </label>
+                  <label>
+                    Kelas
+                    <select
+                      value={subjectClassExport}
+                      onChange={(e) => setSubjectClassExport(e.target.value)}
+                      disabled={!subjectExport}
+                    >
+                      <option value="">Semua kelas</option>
+                      {subjectClasses.map((cls) => (
+                        <option key={cls.name} value={cls.name}>
+                          {cls.name} ({cls.result_count} hasil)
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <div style={{ display: 'flex', alignItems: 'flex-end' }}>
                     <button
                       type="button"
@@ -978,7 +1018,8 @@ export function StaffOperations({
                   </div>
                 </div>
                 <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
-                  Unduhan mencakup seluruh ujian pada mapel terpilih, tanpa memeriksa penugasan pengampu.
+                  Kelas diprioritaskan sesuai penugasan pengampu. Jika penugasan mapel belum ada, semua kelas pada mapel ditampilkan.
+                  {subjectClassExport ? ` Rekap akan difilter ke kelas ${subjectClassExport}.` : ' Pilih kelas untuk mempersempit rekap, atau biarkan "Semua kelas".'}
                   {!teacherSubjects.length && ' Belum ada mata pelajaran pada ujian.'}
                 </p>
               </div>

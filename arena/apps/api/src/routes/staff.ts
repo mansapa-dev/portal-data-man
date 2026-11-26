@@ -24,13 +24,34 @@ export async function staffRoutes(app:FastifyInstance){
   const[rows]=await requirePool().query<RowDataPacket[]>(`SELECT e.subject_name name,COUNT(*) exam_count FROM exams e WHERE e.subject_name IS NOT NULL AND TRIM(e.subject_name)<>'' GROUP BY e.subject_name ORDER BY e.subject_name`);
   return rows.map(row=>({name:String(row.name),exam_count:Number(row.exam_count??0)}));
  });
+ app.get('/api/teacher/subject-classes',async(request)=>{
+  // Kelas untuk filter rekap mapel. Prioritaskan kelas pada ujian mapel yang
+  // ditugaskan ke guru (sesuai pengampu). Bila penugasan belum ada, fallback ke
+  // seluruh kelas yang memiliki hasil pada mapel tersebut agar guru tetap bisa
+  // mengunduh rekap.
+  const claims=requireRole(request,['ADMIN','TEACHER','EMPLOYEE']);
+  const query=z.object({subject_name:z.string().trim().min(1).max(100)}).parse(request.query);
+  const pool=requirePool();
+  const mapRows=(rows:RowDataPacket[])=>rows.map(row=>({name:String(row.name),result_count:Number(row.result_count??0)}));
+  if(claims.role!=='ADMIN'){
+    const[assigned]=await pool.execute<RowDataPacket[]>(`SELECT DISTINCT s.class_snapshot name,COUNT(*) result_count FROM exam_attempts a JOIN students s ON s.id=a.student_id JOIN exams e ON e.id=a.exam_id JOIN teacher_exam_assignments x ON x.exam_id=e.id JOIN users u ON u.id=? AND ((x.teacher_id IS NOT NULL AND x.teacher_id=u.teacher_id) OR (x.employee_id IS NOT NULL AND x.employee_id=u.employee_id)) WHERE e.subject_name=? AND s.class_snapshot IS NOT NULL AND TRIM(s.class_snapshot)<>'' GROUP BY s.class_snapshot ORDER BY s.class_snapshot`,[claims.sub,query.subject_name]);
+    if(assigned.length) return{items:mapRows(assigned),scoped:true};
+  }
+  const[rows]=await pool.execute<RowDataPacket[]>(`SELECT DISTINCT s.class_snapshot name,COUNT(*) result_count FROM exam_attempts a JOIN students s ON s.id=a.student_id JOIN exams e ON e.id=a.exam_id WHERE e.subject_name=? AND s.class_snapshot IS NOT NULL AND TRIM(s.class_snapshot)<>'' GROUP BY s.class_snapshot ORDER BY s.class_snapshot`,[query.subject_name]);
+  return{items:mapRows(rows),scoped:false};
+ });
  app.get('/api/teacher/results-by-subject',async(request)=>{
   // Rekap nilai lintas ujian untuk satu mapel. Akses sengaja TIDAK memakai
-  // teacher_exam_assignments: penugasan per-ujian sering tidak lengkap padahal
-  // guru mengampu banyak mapel. Cukup GET sebagai staf yang login.
+  // teacher_exam_assignments sebagai hard filter: penugasan per-ujian sering
+  // tidak lengkap padahal guru mengampu banyak mapel. class_name opsional untuk
+  // filter kelas.
   requireRole(request,['ADMIN','TEACHER','EMPLOYEE']);
-  const query=z.object({subject_name:z.string().trim().min(1).max(100),cursor:z.coerce.number().int().min(0).optional(),limit:z.coerce.number().int().min(1).max(200).default(200)}).parse(request.query);
-  const[rows]=await requirePool().execute<RowDataPacket[]>(`SELECT a.id attempt_row_id,s.id student_id,a.exam_id,e.name exam_name,e.subject_name,e.grade,s.nisn,s.name_snapshot,s.class_snapshot,a.status,r.score,r.correct_count,r.wrong_count,r.blank_count,a.completed_at FROM exam_attempts a JOIN students s ON s.id=a.student_id JOIN exams e ON e.id=a.exam_id LEFT JOIN exam_results r ON r.attempt_id=a.id WHERE e.subject_name=? AND a.id>? ORDER BY a.id LIMIT ?`,[query.subject_name,query.cursor??0,query.limit]);
+  const query=z.object({subject_name:z.string().trim().min(1).max(100),class_name:z.string().trim().min(1).max(100).optional(),cursor:z.coerce.number().int().min(0).optional(),limit:z.coerce.number().int().min(1).max(200).default(200)}).parse(request.query);
+  const classFilter=query.class_name?' AND s.class_snapshot=?':'';
+  const params:(string|number)[]=[query.subject_name];
+  if(query.class_name) params.push(query.class_name);
+  params.push(query.cursor??0,query.limit);
+  const[rows]=await requirePool().execute<RowDataPacket[]>(`SELECT a.id attempt_row_id,s.id student_id,a.exam_id,e.name exam_name,e.subject_name,e.grade,s.nisn,s.name_snapshot,s.class_snapshot,a.status,r.score,r.correct_count,r.wrong_count,r.blank_count,a.completed_at FROM exam_attempts a JOIN students s ON s.id=a.student_id JOIN exams e ON e.id=a.exam_id LEFT JOIN exam_results r ON r.attempt_id=a.id WHERE e.subject_name=?${classFilter} AND a.id>? ORDER BY a.id LIMIT ?`,params);
   const items=rows.map(({attempt_row_id:_,...row})=>row);
   return{items,next_cursor:rows.length===query.limit?Number(rows[rows.length-1]!.attempt_row_id):null,limit:query.limit};
  });
