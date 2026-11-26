@@ -76,6 +76,7 @@ const FILTER_LABELS: Array<{ key: FilterKey; label: string }> = [
 
 export function StaffSecurityReview() {
   const [filter, setFilter] = useState<FilterKey>('all');
+  const [search, setSearch] = useState('');
   const [sessions, setSessions] = useState<LiveSessionV2[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -153,6 +154,14 @@ export function StaffSecurityReview() {
     }
   };
 
+  const searchNeedle = search.trim().toLowerCase();
+  const visibleSessions = searchNeedle
+    ? sessions.filter((s) => {
+        const haystack = `${s.name_snapshot} ${s.nisn} ${s.class_snapshot ?? ''} ${s.exam_name}`.toLowerCase();
+        return haystack.includes(searchNeedle);
+      })
+    : sessions;
+
   return (
     <section className="staff-security-review" aria-label="Pengawasan Keamanan dan Rekaman">
       <div className="staff-security-toolbar" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem', alignItems: 'center' }}>
@@ -169,6 +178,19 @@ export function StaffSecurityReview() {
         <button type="button" className="btn btn-secondary" onClick={() => void loadSessions()} disabled={loading}>
           {loading ? 'Memuat…' : 'Segarkan'}
         </button>
+        <div style={{ display: 'flex', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Cari nama, NISN, kelas, atau ujian"
+            aria-label="Cari sesi tinjauan keamanan"
+            style={{ minWidth: 260 }}
+          />
+          <button type="button" className="btn btn-secondary" onClick={() => setSearch((v) => v.trim())}>
+            <i className="fa-solid fa-magnifying-glass" /> Cari
+          </button>
+        </div>
       </div>
 
       {error && <p className="exam-warning" role="alert">{error}</p>}
@@ -187,14 +209,14 @@ export function StaffSecurityReview() {
             </tr>
           </thead>
           <tbody>
-            {sessions.length === 0 ? (
+            {visibleSessions.length === 0 ? (
               <tr>
                 <td colSpan={7} style={{ textAlign: 'center', padding: '1.5rem' }}>
-                  {loading ? 'Memuat data pengawasan…' : 'Tidak ada sesi yang cocok dengan filter.'}
+                  {loading ? 'Memuat data pengawasan…' : 'Tidak ada sesi yang cocok dengan filter/pencarian.'}
                 </td>
               </tr>
             ) : (
-              sessions.map((s) => (
+              visibleSessions.map((s) => (
                 <tr key={s.public_id}>
                   <td>
                     <strong>{s.name_snapshot}</strong>

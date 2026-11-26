@@ -289,6 +289,7 @@ export function StaffOperations({
   const [sessionSubject, setSessionSubject] = useState('');
   const [sessionStatus, setSessionStatus] = useState('IN_PROGRESS');
   const [sessionConnection, setSessionConnection] = useState('ALL');
+  const [sessionSearch, setSessionSearch] = useState('');
 
   // Filter Log Pelanggaran (server-side agar pagination tetap akurat).
   const [violationFilters, setViolationFilters] = useState({ exam: '', class: '', grade: '', type: '', q: '' });
@@ -740,15 +741,20 @@ export function StaffOperations({
   const sessionGrades = [...new Set(rows.map((row) => String(row.grade ?? '')).filter(Boolean))].sort();
   const sessionSubjects = [...new Set(rows.map((row) => String(row.subject_name ?? '')).filter(Boolean))].sort();
 
-  const visibleSessions = rows.filter(
-    (row) =>
-      (!sessionExam || String(row.exam_id) === sessionExam) &&
-      (!sessionClass || String(row.class_snapshot) === sessionClass) &&
-      (!sessionGrade || String(row.grade) === sessionGrade) &&
-      (!sessionSubject || String(row.subject_name) === sessionSubject) &&
-      (sessionStatus === 'ALL' || String(row.status) === sessionStatus) &&
-      (sessionConnection === 'ALL' || (sessionConnection === 'ONLINE') === isSessionConnected(row))
-  );
+  const sessionSearchNeedle = sessionSearch.trim().toLowerCase();
+  const visibleSessions = rows.filter((row) => {
+    if (sessionExam && String(row.exam_id) !== sessionExam) return false;
+    if (sessionClass && String(row.class_snapshot) !== sessionClass) return false;
+    if (sessionGrade && String(row.grade) !== sessionGrade) return false;
+    if (sessionSubject && String(row.subject_name) !== sessionSubject) return false;
+    if (sessionStatus !== 'ALL' && String(row.status) !== sessionStatus) return false;
+    if (sessionConnection !== 'ALL' && (sessionConnection === 'ONLINE') !== isSessionConnected(row)) return false;
+    if (sessionSearchNeedle) {
+      const haystack = `${getRowValue(row, 'name_snapshot')} ${getRowValue(row, 'nisn')} ${getRowValue(row, 'class_snapshot')} ${getRowValue(row, 'exam_name')}`.toLowerCase();
+      if (!haystack.includes(sessionSearchNeedle)) return false;
+    }
+    return true;
+  });
 
   const viewTitles: Record<string, string> = {
     dashboard: 'Ringkasan & Beranda',
@@ -1164,6 +1170,22 @@ export function StaffOperations({
                   <option value="ONLINE">Terhubung (Aktif)</option>
                   <option value="OFFLINE">Terputus (&gt;90s)</option>
                 </select>
+              </label>
+
+              <label>
+                Cari Peserta
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    type="search"
+                    value={sessionSearch}
+                    onChange={(e) => setSessionSearch(e.target.value)}
+                    placeholder="Nama, NISN, kelas, atau ujian"
+                    aria-label="Cari peserta sesi berlangsung"
+                  />
+                  <button type="button" className="btn btn-secondary" onClick={() => setSessionSearch((v) => v.trim())}>
+                    <i className="fa-solid fa-magnifying-glass" /> Cari
+                  </button>
+                </div>
               </label>
             </div>
           </div>
