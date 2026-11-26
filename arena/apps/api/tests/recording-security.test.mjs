@@ -190,7 +190,7 @@ describe('Recording policy & admission enforcement', () => {
     }
   });
 
-  test('rejects resume when attempt recording session is already FINALIZED', async () => {
+  test('allows resume when attempt recording session is FINALIZED (reopenable retake)', async () => {
     const prevEnabled = process.env.RECORDING_ENABLED;
     const prevRequired = process.env.RECORDING_REQUIRED;
     process.env.RECORDING_ENABLED = 'true';
@@ -199,17 +199,15 @@ describe('Recording policy & admission enforcement', () => {
       execute: async () => [[{ id: 1, attempt_status: 'IN_PROGRESS', rec_status: 'FINALIZED' }], []],
     };
     try {
-      await assert.rejects(
-        () => assertRecordingReadyForAdmission(fakePool, 42, 7, { storage: new MockStorage(), checkExistingAttempt: true }),
-        (err) => err.statusCode === 409 && err.code === 'RECORDING_SESSION_CLOSED',
-      );
+      const policy = await assertRecordingReadyForAdmission(fakePool, 42, 7, { storage: new MockStorage(), checkExistingAttempt: true });
+      assert.equal(policy.recording_required, true);
     } finally {
       process.env.RECORDING_ENABLED = prevEnabled;
       process.env.RECORDING_REQUIRED = prevRequired;
     }
   });
 
-  test('ensureRecordingSession is idempotent for ACTIVE sessions and resumes INTERRUPTED sessions', async () => {
+  test('ensureRecordingSession is idempotent for ACTIVE sessions and reopens INTERRUPTED/FINALIZED/ABANDONED sessions', async () => {
     const makeTxPool = (recStatus) => {
       const updates = [];
       const conn = {
@@ -239,10 +237,14 @@ describe('Recording policy & admission enforcement', () => {
     assert.equal(interruptedPool.updates.length, 1);
 
     const finalizedPool = makeTxPool('FINALIZED');
-    await assert.rejects(
-      () => ensureRecordingSession(finalizedPool, 42, 7),
-      (err) => err.statusCode === 409 && err.code === 'RECORDING_SESSION_CLOSED',
-    );
+    const r3 = await ensureRecordingSession(finalizedPool, 42, 7);
+    assert.equal(r3.resumed, true);
+    assert.equal(finalizedPool.updates.length, 1);
+
+    const abandonedPool = makeTxPool('ABANDONED');
+    const r4 = await ensureRecordingSession(abandonedPool, 42, 7);
+    assert.equal(r4.resumed, true);
+    assert.equal(abandonedPool.updates.length, 1);
   });
 
   test('checkStorageReadiness caches and deduplicates concurrent HeadBucket probes', async () => {
@@ -409,7 +411,7 @@ describe('Recording hardening', () => {
       const limits = getRecordingRuntimeLimits();
       assert.equal(limits.segment_duration_seconds, 10);
       assert.equal(limits.video_bitrate, 1_500_000);
-      assert.equal(limits.retention_days, 7);
+      assert.equal(limits.retention_days, 1);
       assert.equal(limits.max_segment_bytes, 1_048_576);
       assert.equal(limits.max_segments_per_session, 1);
     } finally {

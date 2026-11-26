@@ -124,6 +124,9 @@ export async function resetTerminatedAttemptInTransaction(
   // mengembalikan hasil yang ditulisnya.
   await connection.execute('DELETE FROM exam_submissions WHERE attempt_id=?', [attempt.id]);
   await connection.execute('DELETE FROM exam_results WHERE attempt_id=?', [attempt.id]);
+  // Hapus klaim waiting room lama agar siswa bisa masuk ulang lewat antrian
+  // baru tanpa ditolak "Token sesi ujian berubah".
+  await connection.execute('DELETE FROM exam_waiting_claims WHERE exam_id=? AND student_id=?', [examId, studentId]);
   let clearedAnswers = 0;
   if (options.clearAnswers) {
     const [answerRows] = await connection.execute<RowDataPacket[]>(

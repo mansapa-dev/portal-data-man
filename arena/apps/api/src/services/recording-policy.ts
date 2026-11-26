@@ -102,7 +102,7 @@ export function getRecordingRuntimeLimits(): RecordingRuntimeLimits {
   return {
     segment_duration_seconds: envInt('RECORDING_SEGMENT_DURATION_SECONDS', 60, 10, 300),
     video_bitrate: envInt('RECORDING_VIDEO_BITRATE', 500_000, 200_000, 1_500_000),
-    retention_days: envInt('RECORDING_RETENTION_DAYS', 7, 1, 365),
+    retention_days: envInt('RECORDING_RETENTION_DAYS', 1, 1, 365),
     max_segment_bytes: envInt('RECORDING_MAX_SEGMENT_BYTES', 8_388_608, 1_048_576, 52_428_800),
     max_segments_per_session: envInt('RECORDING_MAX_SEGMENTS_PER_SESSION', 300, 1, 900),
   };
@@ -173,9 +173,9 @@ export async function assertRecordingReadyForAdmission(
       [studentId, examId],
     );
     const row = rows[0];
-    if (row && row.attempt_status === 'IN_PROGRESS' && row.rec_status && !['ACTIVE', 'INTERRUPTED'].includes(String(row.rec_status))) {
+    if (row && row.attempt_status === 'IN_PROGRESS' && row.rec_status && !['ACTIVE', 'INTERRUPTED', 'FINALIZED', 'ABANDONED'].includes(String(row.rec_status))) {
       throw Object.assign(
-        new Error('Sesi rekaman ujian sudah ditutup dan tidak dapat dilanjutkan. Hubungi pengawas.'),
+        new Error('Sesi rekaman ujian dalam status tidak valid. Hubungi pengawas.'),
         { statusCode: 409, code: 'RECORDING_SESSION_CLOSED' },
       );
     }
@@ -212,15 +212,22 @@ export async function ensureRecordingSessionInTransaction(
     if (status === 'ACTIVE') {
       return { session_id: String(existing[0].public_id), resumed: true };
     }
-    if (status === 'INTERRUPTED') {
+    if (['INTERRUPTED', 'FINALIZED', 'ABANDONED'].includes(status)) {
+      // Retake/reset dapat mengaktifkan attempt yang sama lagi. Buka ulang sesi
+      // rekaman agar siswa tidak terblokir; segmen lama akan terpangkas oleh
+      // rolling window saat segmen baru terkonfirmasi.
       await connection.execute(
-        `UPDATE exam_recording_sessions SET status = 'ACTIVE', updated_at = UTC_TIMESTAMP(3) WHERE id = ?`,
+        `UPDATE exam_recording_sessions
+         SET status = 'ACTIVE', finalized_at = NULL,
+             cleanup_status = 'PENDING', retain_until = NULL,
+             updated_at = UTC_TIMESTAMP(3)
+         WHERE id = ?`,
         [existing[0].id],
       );
       return { session_id: String(existing[0].public_id), resumed: true };
     }
     throw Object.assign(
-      new Error('Sesi rekaman sudah difinalisasi atau ditutup'),
+      new Error('Sesi rekaman dalam status tidak valid'),
       { statusCode: 409, code: 'RECORDING_SESSION_CLOSED' },
     );
   }

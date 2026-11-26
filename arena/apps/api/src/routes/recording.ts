@@ -323,6 +323,48 @@ export async function recordingRoutes(
         [seg.session_id, seg.session_id, seg.session_id],
       );
 
+      // Simpan hanya 5 segmen UPLOADED terakhir per sesi. Segmen lama langsung
+      // dihapus dari object storage untuk menekan biaya.
+      const KEEP_LAST_SEGMENTS = 5;
+      try {
+        const [oldSegments] = await pool.execute<RowDataPacket[]>(
+          `SELECT id, object_key FROM exam_recording_segments
+           WHERE session_id = ? AND upload_status = 'UPLOADED'
+           ORDER BY sequence_number DESC
+           LIMIT 18446744073709551615 OFFSET ?`,
+          [seg.session_id, KEEP_LAST_SEGMENTS],
+        );
+        for (const old of oldSegments as Array<{ id: number; object_key: string }>) {
+          try {
+            await store.deleteObject(old.object_key);
+            await pool.execute(
+              `UPDATE exam_recording_segments SET upload_status = 'MISSING' WHERE id = ? AND upload_status = 'UPLOADED'`,
+              [old.id],
+            );
+          } catch {
+            // Best-effort: jangan gagalkan confirm; segmen akan dicoba lagi oleh
+            // prune berikutnya atau cleanup worker/lifecycle bucket.
+          }
+        }
+        if (oldSegments.length > 0) {
+          await pool.execute(
+            `UPDATE exam_recording_sessions
+             SET uploaded_segments = (
+               SELECT COUNT(*) FROM exam_recording_segments
+               WHERE session_id = ? AND upload_status = 'UPLOADED'
+             ),
+             missing_segments = (
+               SELECT COUNT(*) FROM exam_recording_segments
+               WHERE session_id = ? AND upload_status = 'MISSING'
+             )
+             WHERE id = ?`,
+            [seg.session_id, seg.session_id, seg.session_id],
+          );
+        }
+      } catch {
+        // Pruning non-fatal; confirm sudah sukses.
+      }
+
       return { confirmed: true };
     },
   );
@@ -424,11 +466,12 @@ export async function recordingRoutes(
                 upload_status, segment_started_at, segment_ended_at, upload_confirmed_at
          FROM exam_recording_segments
          WHERE session_id = ?
-         ORDER BY sequence_number ASC`,
+         ORDER BY sequence_number DESC
+         LIMIT 5`,
         [sessions[0].id],
       );
 
-      return { session: sessions[0], segments };
+      return { session: sessions[0], segments: [...segments].reverse() };
     },
   );
 
@@ -447,7 +490,7 @@ export async function recordingRoutes(
       const segmentId = z.coerce.number().int().positive().parse(request.params.segmentId);
 
       const [segments] = await pool.execute<RowDataPacket[]>(
-        `SELECT seg.id, seg.object_key, seg.mime_type, seg.upload_status, sess.exam_id
+        `SELECT seg.id, seg.object_key, seg.mime_type, seg.upload_status, sess.exam_id, sess.id session_id
          FROM exam_recording_segments seg
          JOIN exam_recording_sessions sess ON sess.id = seg.session_id
          WHERE seg.id = ? AND seg.upload_status = 'UPLOADED' LIMIT 1`,
@@ -476,6 +519,16 @@ export async function recordingRoutes(
            (segment_id, accessed_by, access_type, ip_address)
          VALUES (?, ?, 'PRESIGNED_URL_GENERATED', ?)`,
         [segmentId, claims.sub, ip],
+      ).catch(() => { /* non-fatal */ });
+
+      // Akses playback memperpanjang retensi 24 jam. Jika 24 jam tidak ada akses,
+      // cleanup worker/lifecycle dapat menghapus object.
+      await pool.execute(
+        `UPDATE exam_recording_sessions
+         SET retain_until = DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 1 DAY),
+             cleanup_status = 'PENDING'
+         WHERE id = ?`,
+        [seg.session_id],
       ).catch(() => { /* non-fatal */ });
 
       return { url, expires_in_seconds: store.playbackUrlExpiresSeconds };
